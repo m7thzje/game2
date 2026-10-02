@@ -294,7 +294,7 @@ export function buildWorld(ctx, rng) {
   }
 
   // ---- de dorpspoort ----
-  const gate = new THREE.Group(); gate.position.set(GATE_X, roadY(GATE_X), 0); scene.add(gate);
+  const gate = new THREE.Group(); gate.position.set(GATE_X, roadY(GATE_X), 0); gate.scale.setScalar(0.8); scene.add(gate);
   {
     const stone = new THREE.MeshStandardMaterial({ map: tex.stone(2, 3), roughness: 0.95, flatShading: true });
     for (const sz of [-1, 1]) {

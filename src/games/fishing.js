@@ -50,7 +50,7 @@ export default {
   pay: 1.1,
   music: 'puzzle',
   blurb: 'Visser Floris wil vis voor het avondeten! Eén is <b>hengelaar</b>: gooi uit, wacht op de hap, en <b>reel</b> in zonder dat de lijn knapt. De ander is <b>nettenman</b> in de boot: houd het net <b>onder de lijn</b> en <b>schep</b> de vis. Halverwege wisselen jullie! Pas op voor de oude laars...',
-  controls: ['Hengelaar: {move} richten, {a} gooien (houd) / reelen', 'Nettenman: {move} boot sturen, {a} scheppen', '{b} lijn terughalen'],
+  controls: ['Hengelaar: {a} houden = gooien / reelen', 'Nettenman: {move} boot, {a} scheppen', '{b} lijn terughalen'],
   tip: 'Een gouden vis is 60 punten, de reuzenvis 150: die moeten jullie samen om en om reelen!',
 
   create(ctx) {
@@ -299,7 +299,7 @@ export default {
       // reus plannen
       if (!giant && started) { giantT -= dt; if (giantT <= 0 && phase !== 'fight' && phase !== 'net') {
         const left = Math.random() < 0.5; giant = spawnFish('giant', left ? -24 : 24, rand(-18, -12)); giant.dir = left ? 1 : -1; giant.life = 36; giant.hd = left ? 0 : Math.PI; giant.tgx = left ? 26 : -26; giant.tgz = giant.z + rand(-1.5, 1.5);
-        fx.texts.add('Een grote schaduw!', left ? -14 : 14, 1.5, giant.z, '#9ad8ff', 1.6); audio.sfx('bell', { vol: 0.5 }); giantT = 999;
+        fx.texts.add('Grote schaduw!', left ? -14 : 14, 1.5, giant.z, '#9ad8ff', 1.6); audio.sfx('bell', { vol: 0.5 }); giantT = 999;
         say('Kijk! Een enorme schaduw in het meer... dat is de oude meerval!');
       } }
       for (let i = respawn.length - 1; i >= 0; i--) { respawn[i].t -= dt; if (respawn[i].t <= 0) { const r = respawn.splice(i, 1)[0]; const f = spawnFish(r.kind, rand(WATER.x0, WATER.x1), rand(WATER.z0, WATER.z1 + 4)); f.g.visible = true; } }
@@ -475,7 +475,7 @@ export default {
           } else if (bob.sub === 'bite') {
             bob.biteT -= dt; bob.dip = 0.45 + Math.sin(t * 30) * 0.05;
             if (A.aP) { hookFish(); break; }
-            if (bob.biteT <= 0) { bob.F.spook = 6; bob.F.committed = false; retract(bob.F.kind === KINDS.boot ? 'Laars drijft weg' : 'Te laat!', bob.F.kind === KINDS.boot ? null : 'late'); audio.sfx('miss'); break; }
+            if (bob.biteT <= 0) { bob.F.spook = 6; bob.F.committed = false; retract(bob.F.kind === KINDS.boot ? 'Laars weg' : 'Te laat!', bob.F.kind === KINDS.boot ? null : 'late'); audio.sfx('miss'); break; }
           }
           if (B.bP || A.bP) { if (bob.sub !== 'bite') { retract('', null); audio.sfx('whoosh', { vol: 0.5 }); break; } }
           // dobber
@@ -580,7 +580,7 @@ export default {
       if (H.T > 0.8) { warnBeep -= dt; if (warnBeep <= 0) { warnBeep = 0.16; audio.tone(1100 + H.T * 400, 0.05, { type: 'square', vol: 0.06 }); } }
       // netman op de goede plek? kleine hulp-feedback
       B.x;
-      if (H.T >= 1) { audio.sfx('hurt'); fx.particles.burst(rodTip.x, rodTip.y, rodTip.z, { count: 10, speed: 3, size: 0.2, color: 0xffffff, life: 0.5 }); fishLost('Lijn gebroken!', 'snap'); return; }
+      if (H.T >= 1) { audio.sfx('hurt'); fx.particles.burst(rodTip.x, rodTip.y, rodTip.z, { count: 10, speed: 3, size: 0.2, color: 0xffffff, life: 0.5 }); fishLost('Lijn knapt!', 'snap'); return; }
       if (H.D <= NET_D + 0.02) { enterNet(); }
     }
     function enterNet() {
@@ -615,7 +615,7 @@ export default {
       vb.set(F.x, H.leapT >= 0 ? leapObj.position.y : 0.08, F.z); setLine(rodTip, vb, 0.4 * (1 - H.T), 0.045);
       rodBend = 0.15 + H.T * 0.4; rodTargetPitch = 0.9;
       setGaugePos(); gauge.visible = true; drawGauge(giantFight ? 'giant' : 'tension', clamp(H.T, 0, 1), 0);
-      if (!giantFight && H.T >= 1) { fishLost('Lijn gebroken!', 'snap'); return; }
+      if (!giantFight && H.T >= 1) { fishLost('Lijn knapt!', 'snap'); return; }
       // scheppen
       if (scoopAnim < 0 && H.cool <= 0) {
         let go = false;
@@ -632,11 +632,11 @@ export default {
           H.scoopT = -1; const dx = boatS.x - F.x; const tol = K.tol * (giantFight ? 1 : 1);
           if (Math.abs(dx) <= tol) { splash(boatS.x, LANE_Z, 16, 4); landed(F); return; }
           H.misses++; H.cool = 0.6; fx.texts.add('Mis!', boatS.x, 2.2, LANE_Z + 0.5, '#ff9a8a', 1.2); audio.sfx('miss'); splash(boatS.x, LANE_Z, 6, 2.5); say(pick(SAY.miss));
-          if (H.misses >= 3) { if (leapObj) leapObj.visible = false; fishLost('Hij is ontsnapt!', 'late'); return; }
+          if (H.misses >= 3) { if (leapObj) leapObj.visible = false; fishLost('Ontsnapt!', 'late'); return; }
         }
       }
       // te lang wachten?
-      if (H.netT > (giantFight ? 10 : 7.5)) { if (leapObj) leapObj.visible = false; fishLost(K === KINDS.boot ? 'Laars viel af' : 'Van de haak!', K === KINDS.boot ? null : 'late'); return; }
+      if (H.netT > (giantFight ? 10 : 7.5)) { if (leapObj) leapObj.visible = false; fishLost(K === KINDS.boot ? 'Laars viel af' : 'Eraf!', K === KINDS.boot ? null : 'late'); return; }
     }
 
     function onStart() { started = true; say(pick(SAY.start)); setTimeout(() => { if (!done && phase === 'cast') say(pick(SAY.cast)); }, 4200); pinfo(); }

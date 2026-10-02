@@ -465,7 +465,7 @@ export default {
       wantL.set(camX + 1.2, camY + ly, 0);
       if (phase === 4) {
         const y8 = roadY(GATE_X);
-        wantP.set(GATE_X - 15, y8 + 6.0, 17); wantL.set(GATE_X - 2.5, y8 + 2.6, 0); k = 2.0;
+        wantP.set(GATE_X - 15, y8 + 6.0, 17); wantL.set(GATE_X - 2.0, y8 + 3.4, 0); k = 2.0;
       }
       if (!camInit) { camP.copy(wantP); camL.copy(wantL); camInit = true; }
       const f = 1 - Math.exp(-k * dt);
