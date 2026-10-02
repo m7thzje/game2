@@ -52,6 +52,7 @@ export const PATHS = [
   [[14, -4], [24, -20], [38, -39]],
   [[-14, 0], [-28, 4], [-33, 8], [-48, 6], [-56, 4]],
   [[-18, -8], [-30, -15], [-34, -17]],
+  [[-24, -48], [-44, -50], [-58, -52]],
 ];
 
 // zones waar GEEN bomen/struiken mogen staan: {x,z,r}
@@ -61,6 +62,7 @@ export const KEEPOUT = [
   { x: 56, z: -12, r: 10 }, { x: -2, z: -48, r: 15 }, { x: -24, z: -48, r: 9 }, { x: 38, z: -39, r: 9 }, { x: ICE.x, z: ICE.z, r: ICE.r + 2 },
   { x: CASTLE.x, z: CASTLE.z + 10, r: 30 }, { x: 0, z: -63, r: 6 }, { x: 9, z: -5, r: 4 }, { x: 11, z: 6.5, r: 7 }, { x: 0, z: -9, r: 9 },
   { x: BRIDGE.x, z: BRIDGE.z, r: 13 },
+  { x: -66, z: -54, r: 17 }, { x: -53, z: -51, r: 9 }, { x: -43, z: -49, r: 6 },
 ];
 
 // verspreide verzamelobjecten: gouden deurknoppen (8) en schatkisten
@@ -88,6 +90,9 @@ export function coinTrail() {
   }
   return out;
 }
+
+// Speelhal van Koning Klopper: ingang in de berg (noordwesten)
+export const ARCADE = { x: -66, z: -54, yaw: Math.atan2(66, 54) };
 
 export const TICKET_PRICE = 600;
 export const VIP_PRICE = 400;

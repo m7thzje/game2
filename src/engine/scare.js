@@ -83,7 +83,7 @@ export const scare = {
     const lvl = this.level();
     cv.style.display = 'block';
     audio.duck(true); audio.sfx('creak');
-    let t = 0, open = 0, last = performance.now(); let caught = false; let phase = 0; let phaseT = 0; let hb = 0;
+    let t = 0, open = 0, last = performance.now(); let caught = false; let movers = [false, false]; let phase = 0; let phaseT = 0; let hb = 0;
     ui.setVignette(0.6);
     const banner = h('div', { class: 'hud-big', style: { color: '#ff4a4a', top: '14%', fontSize: 'min(9vw,84px)' } }, label); ui.screens.append(banner);
     while (true) {
@@ -93,7 +93,7 @@ export const scare = {
       else if (phase === 1) {
         hb -= dt; if (hb <= 0) { audio.sfx('heartbeat'); hb = 0.75; }
         open = 1;
-        if (phaseT > 0.35 && (input.p[0].any || input.p[1].any)) { caught = true; break; }
+        if (phaseT > 0.35 && (input.p[0].any || input.p[1].any)) { caught = true; movers = [input.p[0].any, input.p[1].any]; break; }
         if (phaseT > hold) break;
       }
       const flick = lvl >= 2 && phase === 1;
@@ -112,7 +112,7 @@ export const scare = {
     cv.style.display = 'none'; g.clearRect(0, 0, cv.width, cv.height);
     ui.setVignette(0); audio.duck(false); input.reset();
     this.active = false;
-    return { caught };
+    return { caught, movers };
   },
   // lichten gaan even uit / flikkeren zonder gevolg (sfeer)
   async flicker(n = 4) {

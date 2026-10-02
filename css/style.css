@@ -95,3 +95,7 @@ kbd{display:inline-block;min-width:24px;padding:0 6px;text-align:center;border-r
 .hud-deur{position:absolute;left:50%;top:78px;transform:translateX(-50%);width:300px;padding:4px 12px;border-radius:12px;background:rgba(20,0,0,.72);border:2px solid #7a1d1d;text-align:center;font-size:15px}
 .hud-deur .bar{height:10px;margin-top:3px;border-radius:6px;background:#2a0a0a;overflow:hidden}
 .hud-deur .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ffe14a,#fff)}
+
+.twist{margin:10px 0;padding:10px 16px;border-radius:14px;background:linear-gradient(90deg,#ffe14a,#ff9a3a);color:#3a1a00;text-align:center;border:3px solid #7a3a00;animation:pop .5s}
+.twist b{display:block;font-size:20px}.twist span{font-size:16px}
+.card.pvp .vs{display:flex;justify-content:center;gap:22px;font-size:34px;font-weight:700;margin:6px 0 10px}

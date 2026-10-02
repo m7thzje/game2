@@ -4,14 +4,14 @@ import { tex } from '../engine/textures.js';
 import * as P from '../engine/props.js';
 import { Animal, makeNPC } from '../engine/chars.js';
 import { groundY } from './terrain.js';
-import { JOBS, JOB_BY_ID, HOME, PLAZA, BOOTH, BOARD, CAVE, CASTLE, CONCERT_GATE, ICE, SWAMP, FARM, PASTURE, BRIDGE, riverX } from './layout.js';
+import { JOBS, JOB_BY_ID, ARCADE, HOME, PLAZA, BOOTH, BOARD, CAVE, CASTLE, CONCERT_GATE, ICE, SWAMP, FARM, PASTURE, BRIDGE, riverX } from './layout.js';
 import { stall, tent, bench, table, mug, cart, milkCan, scarecrow, dummy, target, wheelbarrow, snowman, brazier, cabbageRows, stripedTex } from './build.js';
 
 const PI = Math.PI;
 
 export function buildVillage(W) {
   buildPlaza(W); buildHome(W); buildBakery(W); buildTavern(W); buildWarehouse(W); buildFarm(W); buildMud(W); buildPasture(W);
-  buildPier(W); buildWitch(W); buildCave(W); buildCastleYard(W); buildCastle(W); buildWall(W); buildIce(W); buildBridge(W);
+  buildPier(W); buildArcadeGate(W); buildWitch(W); buildCave(W); buildCastleYard(W); buildCastle(W); buildWall(W); buildIce(W); buildBridge(W);
   buildJobNpcs(W);
 }
 
@@ -201,6 +201,42 @@ function buildPier(W) {
   const bk = P.bucket(); W.put(bk, -35, -15.5, 0); for (let i = 0; i < 3; i++) { const f = P.fish(); f.scale.setScalar(0.8); f.position.set(-35 + i * 0.05, groundY(-35, -15.5) + 0.35 + i * 0.05, -15.5); f.rotation.y = i; W.add(f); }
   // lelies
   for (let i = 0; i < 18; i++) { const lz = -40 + Math.random() * 70; const lx = riverX(lz) + (Math.random() - 0.5) * 6; const lp = mesh(new THREE.CircleGeometry(0.5 + Math.random() * 0.3, 8, 0, TAU * 0.92), mat(0x3b9a45, { side: THREE.DoubleSide }), { cast: false, pos: [lx, -0.58, lz], rot: [-PI / 2, 0, Math.random() * 6] }); W.add(lp); if (Math.random() < 0.4) W.add(Object.assign(mesh(new THREE.SphereGeometry(0.15, 6, 5), mat(0xff9ad5), { cast: false }), {})).position.set(lx, -0.45, lz); }
+}
+
+// ---------------------------------------------------------------- speelhal in de berg
+function buildArcadeGate(W) {
+  const g = new THREE.Group(); const sm = new THREE.MeshStandardMaterial({ map: tex.stone(4, 2), roughness: 0.95, flatShading: true, emissive: 0x3a3a52, emissiveIntensity: 0.9 });
+  const rock = new THREE.MeshStandardMaterial({ color: 0x77727c, roughness: 1, flatShading: true, emissive: 0x2c2a34, emissiveIntensity: 0.9 });
+  // rotsmassief achter de gevel (loopt over in de berg)
+  for (const [rx, rz, r, hh] of [[0, -9, 12, 20], [-13, -7, 10, 17], [13, -7, 10, 17], [-22, -4, 8, 12], [22, -4, 8, 12], [0, -16, 14, 26]]) g.add(mesh(new THREE.DodecahedronGeometry(r, 0), rock, { pos: [rx, hh * 0.3, rz], scale: [1, hh / r * 0.6, 1.1] }));
+  // gevel
+  g.add(mesh(new THREE.BoxGeometry(24, 9, 3), sm, { pos: [0, 4.5, -2] }));
+  for (let i = 0; i < 12; i++) g.add(mesh(new THREE.BoxGeometry(1.4, 1.1, 1.6), sm, { pos: [-11 + i * 2, 9.5, -2] }));
+  for (const sx of [-1, 1]) {
+    const t = P.tower(13, 2.8); t.position.set(sx * 12.5, 0, -1.5); g.add(t);
+    for (let k = 0; k < 3; k++) { const w = mesh(new THREE.BoxGeometry(0.9, 1.5, 0.3), glow([0xff5ad8, 0x5ad8ff, 0xffe14a][k], 1.6), { cast: false, pos: [sx * 12.5, 4 + k * 3, 1.4] }); g.add(w); W.glowMats.push(w.material); }
+  }
+  // grote boog-poort met gloed
+  g.add(mesh(new THREE.BoxGeometry(7, 7, 0.6), new THREE.MeshBasicMaterial({ map: (() => { const c = document.createElement('canvas'); c.width = 64; c.height = 128; const x = c.getContext('2d'); const gr = x.createLinearGradient(0, 0, 0, 128); gr.addColorStop(0, '#ff5ad8'); gr.addColorStop(0.5, '#7a3bff'); gr.addColorStop(1, '#ffe14a'); x.fillStyle = gr; x.fillRect(0, 0, 64, 128); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })() }), { cast: false, pos: [0, 3.5, -0.3] }));
+  g.add(mesh(new THREE.TorusGeometry(3.5, 0.7, 6, 16, PI), sm, { pos: [0, 7, -0.2] }));
+  for (const sx of [-1, 1]) g.add(mesh(new THREE.BoxGeometry(1.4, 7.5, 1.6), sm, { pos: [sx * 3.9, 3.75, -0.2] }));
+  // neonbord
+  g.add(mesh(new THREE.PlaneGeometry(14, 2.4), new THREE.MeshBasicMaterial({ map: tex.sign('🎮 SPEELHAL 🎮\nKoning Klopper', { w: 1024, h: 180, size: 64, bg: '#1a0a3a', fg: '#ff9aef', border: '#5ad8ff' }), fog: false }), { cast: false, pos: [0, 12.2, -0.4] }));
+  // lampionnen langs de ingang
+  for (let i = 0; i < 9; i++) { const l = mesh(new THREE.SphereGeometry(0.32, 8, 6), glow([0xff5a5a, 0xffd23f, 0x5ab4ff, 0x7be07b, 0xd86bff][i % 5], 1.4), { cast: false, pos: [-8 + i * 2, 10.8 + Math.sin(i * 1.2) * 0.2, 0.3] }); g.add(l); W.glowMats.push(l.material); }
+  // beelden: draak links, ridder rechts (grappig: de ridder houdt een joystick vast)
+  const dr = new THREE.Group(); dr.add(mesh(new THREE.CylinderGeometry(0.9, 1.1, 1.6, 8), sm, { pos: [0, 0.8, 0] })); dr.add(mesh(new THREE.SphereGeometry(0.8, 8, 6), mat(0x8a6aff), { pos: [0, 2.3, 0] })); dr.add(mesh(new THREE.ConeGeometry(0.2, 0.8, 5), mat(0xf5ecd0), { pos: [0.4, 3.0, 0], rot: [0, 0, -0.4] })); dr.add(mesh(new THREE.ConeGeometry(0.2, 0.8, 5), mat(0xf5ecd0), { pos: [-0.4, 3.0, 0], rot: [0, 0, 0.4] }));
+  dr.position.set(-7, 0, 3); g.add(dr);
+  const kn = new THREE.Group(); kn.add(mesh(new THREE.CylinderGeometry(0.9, 1.1, 1.6, 8), sm, { pos: [0, 0.8, 0] })); kn.add(mesh(new THREE.CylinderGeometry(0.5, 0.6, 1.6, 8), mat(0xb7bcc6, { metalness: 0.7 }), { pos: [0, 2.4, 0] })); kn.add(mesh(new THREE.SphereGeometry(0.45, 8, 6), mat(0xb7bcc6, { metalness: 0.7 }), { pos: [0, 3.5, 0] })); kn.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 5), mat(0x222222), { pos: [0.7, 2.6, 0.4] })); kn.add(mesh(new THREE.SphereGeometry(0.2, 8, 6), mat(0xd8372c), { pos: [0.7, 3.3, 0.4] }));
+  kn.position.set(7, 0, 3); g.add(kn);
+  for (const sx of [-1, 1]) { const b = P.banner(0x7a2fd4, 5.5, 1.5); b.position.set(sx * 9, 3, 0.6); g.add(b); W.updaters.push((dt, t) => P.animateBanner(b, t + sx)); }
+  W.put(g, ARCADE.x, ARCADE.z, ARCADE.yaw);
+  const L = (lx, lz) => W.local(ARCADE.x, ARCADE.z, ARCADE.yaw, lx, lz);
+  for (const [lx, lz, w, d] of [[0, -2, 24, 3], [-12.5, -1.5, 5, 5], [12.5, -1.5, 5, 5], [-3.9, -0.2, 1.8, 1.8], [3.9, -0.2, 1.8, 1.8], [-7, 3, 2.2, 2.2], [7, 3, 2.2, 2.2]]) { const [wx, wz] = L(lx, lz); W.box(wx, wz, w, d, ARCADE.yaw); }
+  const [ix, iz] = L(0, 5); W.interact.push({ type: 'arcade', x: ix, z: iz, r: 5.5, label: 'Naar de Speelhal' });
+  const [bx, bz] = L(0, 2); W.arcadeDoor = { x: bx, z: bz };
+  // sfeer: gekleurde gloed voor de poort
+  W.glowMats.push(...[]);
 }
 
 // ---------------------------------------------------------------- heksenhut

@@ -16,7 +16,7 @@ import { Sky } from './sky.js';
 import { Life } from './life.js';
 import { Pickups } from './pickups.js';
 import { HubDeurman } from './hubdeur.js';
-import { JOBS, JOB_BY_ID, HOME, SPAWN, BOOTH, BOARD, CONCERT_GATE, PATHS, riverX, TICKET_PRICE, VIP_PRICE, DOORKNOBS, ICE, PLAZA, CAVE } from './layout.js';
+import { JOBS, JOB_BY_ID, ARCADE, HOME, SPAWN, BOOTH, BOARD, CONCERT_GATE, PATHS, riverX, TICKET_PRICE, VIP_PRICE, DOORKNOBS, ICE, PLAZA, CAVE } from './layout.js';
 import * as STORY from './story.js';
 import { openSettings, openOnline } from './menu.js';
 import { mergeStatic } from './merge.js';
@@ -127,6 +127,7 @@ export class HubMode {
     // spelers neerzetten
     let sx = S.hubPos?.x ?? SPAWN.x, sz = S.hubPos?.z ?? SPAWN.z;
     if (o.from) { const j = JOB_BY_ID[o.from]; if (j) { sx = j.x + Math.sin(j.yaw) * 3; sz = j.z + Math.cos(j.yaw) * 3; } }
+    if (o.fromArcade) { sx = ARCADE.x + Math.sin(ARCADE.yaw) * 9; sz = ARCADE.z + Math.cos(ARCADE.yaw) * 9; }
     if (o.newGame) { sx = SPAWN.x; sz = SPAWN.z; }
     this.players.forEach((p, i) => { [p.x, p.z] = this.safeSpot(sx + (i ? 1.2 : -1.2), sz); p.lastSafe = [p.x, p.z]; p.y = groundY(p.x, p.z); p.vx = p.vz = 0; p.vy = 0; p.yaw = Math.PI; p.c.targetYaw = p.c.yaw = Math.PI; p.lantern = false; p.c.group.visible = true; });
     this.updateMid(); this.camPos.set(this.mid.x, this.mid.y + 16, this.mid.z + 20); this.camLook.copy(this.mid);
@@ -187,7 +188,7 @@ export class HubMode {
     const toS = (wx, wz) => [N / 2 + (wx - this.mid.x) * z, N / 2 + (wz - this.mid.z) * z];
     const night = this.sky.isNight();
     for (const j of JOBS) { const [x, y] = toS(j.x, j.z); const d = S.jobs[j.id]; g.fillStyle = d ? '#7bd88f' : (j.when === 'nacht' && !night ? '#6a6a8a' : '#ffd23f'); g.strokeStyle = '#2a1a0a'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, d ? 6 : 9, 0, TAU); g.fill(); g.stroke(); if (!d) { g.fillStyle = '#2a1a0a'; g.font = 'bold 14px sans-serif'; g.textAlign = 'center'; g.fillText('!', x, y + 5); } }
-    { const [x, y] = toS(BOOTH.x, BOOTH.z); g.font = '18px sans-serif'; g.textAlign = 'center'; g.fillText('🎟️', x, y + 6); const [gx, gy] = toS(CONCERT_GATE.x, CONCERT_GATE.z); g.fillText(S.ticket ? '🎤' : '🏰', gx, gy + 6); }
+    { const [ax, ay] = toS(ARCADE.x, ARCADE.z); g.font = '18px sans-serif'; g.textAlign = 'center'; g.fillText('🎮', ax, ay + 6); const [x, y] = toS(BOOTH.x, BOOTH.z); g.font = '18px sans-serif'; g.textAlign = 'center'; g.fillText('🎟️', x, y + 6); const [gx, gy] = toS(CONCERT_GATE.x, CONCERT_GATE.z); g.fillText(S.ticket ? '🎤' : '🏰', gx, gy + 6); }
     this.players.forEach((p, i) => { const [x, y] = toS(p.x, p.z); g.fillStyle = PLAYER_CSS[i]; g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 8, 0, TAU); g.fill(); g.stroke(); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(x + Math.sin(p.yaw) * 14, y + Math.cos(p.yaw) * 14); g.lineTo(x + Math.sin(p.yaw + 2.6) * 8, y + Math.cos(p.yaw + 2.6) * 8); g.lineTo(x + Math.sin(p.yaw - 2.6) * 8, y + Math.cos(p.yaw - 2.6) * 8); g.fill(); });
     if (this.deur.state === 'chase' || this.deur.state === 'door') { const [x, y] = toS(this.deur.m.group.position.x, this.deur.m.group.position.z); g.fillStyle = '#ff2a2a'; g.beginPath(); g.arc(x, y, 7, 0, TAU); g.fill(); }
     g.restore();
@@ -296,6 +297,7 @@ export class HubMode {
       else if (it.type === 'booth') await this.booth();
       else if (it.type === 'fountain') await this.fountain();
       else if (it.type === 'gate') await this.gate();
+      else if (it.type === 'arcade') await this.arcadeGate();
     } finally { this.busy = false; input.reset(); }
   }
   async talkJob(it, p) {
@@ -394,6 +396,15 @@ export class HubMode {
     S.coins--; this.onCoinsChanged(); audio.sfx('splash'); this.fx.burst(0, 1.5, 1, { count: 20, color: 0xa8e0ff, speed: 3, life: 0.8, size: 0.25 });
     await this.say([{ text: pick(STORY.WISHES) }]);
     if (Math.random() < 0.12) { S.coins += 5; this.onCoinsChanged(); audio.sfx('coin'); ui.hud.toast('De fontein spuugt 5 heitjes terug!', 2000); }
+  }
+  async arcadeGate() {
+    const first = !S.flags.met_arcade; S.flags.met_arcade = true;
+    if (first) await this.say([{ text: 'Een enorme poort in de berg, vol neon en lampionnen. Boven de ingang staat: SPEELHAL — Koning Klopper.' }, { who: 'Wes', text: 'Een speelhal in een berg?!' }, { who: 'Jor', text: 'Duels tegen elkaar! Dit wordt GEWELDIG. Ik ga winnen.' }, { who: 'Wes', text: 'In je dromen.' }]);
+    const A = S.arcade; const c = await this.choose('🎮 Speelhal van Koning Klopper', ['Naar binnen!', 'Nog niet'], `Stand: ${S.names[0]} ${A.wins[0]} – ${A.wins[1]} ${S.names[1]}`);
+    if (c !== 0) return;
+    S.hubPos = { x: this.mid.x, z: this.mid.z }; persist(); audio.sfx('powerup'); await ui.fade(1, 500);
+    this.busy = false; this.app.goArcade({});
+    await new Promise(() => {});
   }
   async gate() {
     if (!S.ticket) { await this.say([{ who: 'Wachter', text: 'Alleen met kaartje! Ga naar het loket op het plein.' }]); return; }
