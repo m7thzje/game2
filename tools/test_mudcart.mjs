@@ -91,9 +91,9 @@ for (const name of scen) {
             if (pt != null && st.T >= pt && st.T < pt + dt * 1.5 && !plan.get('done' + key)) { inp.virtual[i].a = true; plan.set('done' + key, true); }
           }
         }
-        if (!sk.nolever && !(sk.drop && st.sub === 'seg' && st.segHits === 2 && st.seg === 1 && !window.__dropped) && st.phase === 2 && (st.sub === 'seg' || st.sub === 'swap' || st.sub === 'approach')) { if (st.sub === 'swap') { inp.virtual[0].b = true; inp.virtual[1].b = true; } else inp.virtual[st.leverP].b = true; }
+        if (!sk.nolever && !(sk.drop && window.__dropT != null && st.T < window.__dropT + 1.6) && st.phase === 2 && (st.sub === 'seg' || st.sub === 'swap' || st.sub === 'approach')) { if (st.sub === 'swap') { inp.virtual[0].b = true; inp.virtual[1].b = true; } else inp.virtual[st.leverP].b = true; }
       }
-      if (sk.drop && st.sub === 'seg' && st.segHits === 2 && st.seg === 1) window.__dropped = true;
+      if (sk.drop && window.__dropT == null && st.sub === 'seg' && st.segHits === 2 && st.seg === 1) window.__dropT = st.T;
       inp.update(); mode.update(dt);
     }
     const st = inst.dbg.state();

@@ -48,6 +48,19 @@ if (scen === 'showcase') {
   await fin(); process.exit(0);
 }
 
+if (scen.startsWith('r_')) {
+  await step(10);
+  const calls = await page.evaluate(() => { window.__fin = 0; const m = window.__app.mode, orig = m.ctx.finish; m.ctx.finish = (r) => { window.__fin++; window.__finRes = r; return orig(r); }; return 1; });
+  if (scen === 'r_ko') await page.evaluate(() => { const d = window.__app.mode.instance.debug; d.ko(0); d.ko(1); });
+  if (scen === 'r_sheep') await page.evaluate(() => { window.__app.mode.instance.debug.loseAll(); });
+  if (scen === 'r_timeout') await page.evaluate(() => { window.__app.mode.instance.debug.advance(500); });
+  if (scen === 'r_win') await page.evaluate(() => { window.__app.mode.instance.debug.killKing(); });
+  await step(120);
+  console.log(scen, JSON.stringify(await page.evaluate(() => ({ fin: window.__fin, res: window.__finRes, st: window.__app.mode.state }))));
+  await step(40);
+  console.log('after more steps fin =', await page.evaluate(() => window.__fin));
+  await fin(); process.exit(0);
+}
 const botSrc = (await import('./goblins_bot.mjs')).botFn.toString();
 const lookSrc = `() => { const i = window.__app.input; const T = window.__app.mode.t; i.virtual[0].x = Math.sin(T / 0.9); i.virtual[0].y = Math.cos(T / 1.3); i.virtual[0].a = true; i.virtual[1].x = -Math.sin(T / 0.8); i.virtual[1].y = 0.3; i.virtual[1].a = true; }`;
 if (scen === 'zoo') {

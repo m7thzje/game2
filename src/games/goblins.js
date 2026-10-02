@@ -934,7 +934,7 @@ export default {
       resultUpdate(dt) { t += dt; ambient(dt); pl.forEach((p) => { p.c.update(dt); }); for (const s of sheep) updateSheep(s, dt); for (const e of enemies.slice()) updateEnemy(e, dt); },
       onResize() { setCam(camera.aspect); },
       dispose() {},
-      debug: { pl, sheep, enemies, bombs, pickups, ko: (i) => { const p = pl[i]; for (let k = 0; k < 3; k++) { p.inv = 0; p.roll = 0; hurtPlayer(p, p.x + 1, p.z, 'x'); } }, drop: (x, z, k) => dropPickup(x, z, k), spawn: (ty, x, z) => spawnEnemy(ty, x, z), get state() { return { wave, stage, waveT, sheepLeft, score, over, outcome, kills: killsMain, spawned: spawnedMain, hitsTaken, hitSrc: JSON.stringify(hitSrc), king: king && king.active ? king.hp : null }; }, set zoom(v) { zoomMul = v; }, set god(v) { pl.forEach((p) => { p.hp = 3; p.inv = 1e6; }); } },
+      debug: { pl, sheep, enemies, bombs, loseAll: () => sheep.forEach((q) => loseSheep(q, null)), advance: (v) => { gameT += v; }, killKing: () => { const k = spawnEnemy('king', 0, -8); if (k) { k.hp = 1; k.state = 'seek'; hitEnemy(k, 1, 0, 1); } }, pickups, ko: (i) => { const p = pl[i]; for (let k = 0; k < 3; k++) { p.inv = 0; p.roll = 0; hurtPlayer(p, p.x + 1, p.z, 'x'); } }, drop: (x, z, k) => dropPickup(x, z, k), spawn: (ty, x, z) => spawnEnemy(ty, x, z), get state() { return { wave, stage, waveT, sheepLeft, score, over, outcome, kills: killsMain, spawned: spawnedMain, hitsTaken, hitSrc: JSON.stringify(hitSrc), king: king && king.active ? king.hp : null }; }, set zoom(v) { zoomMul = v; }, set god(v) { pl.forEach((p) => { p.hp = 3; p.inv = 1e6; }); } },
     };
   },
 };

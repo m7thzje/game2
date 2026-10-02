@@ -380,7 +380,7 @@ export default {
       if (win) {
         phaseTimes.p3 = el;
         const left = timeLeft;
-        const stars = left >= 15 && bestCombo >= 8 ? 3 : left >= 5 ? 2 : 1;
+        const stars = left >= 19 && bestCombo >= 12 ? 3 : left >= 6 ? 2 : 1;
         pl.forEach((p) => { p.c.pose = 'cheer'; });
         for (const n of world.crowd) n.pose = 'cheer';
         world.npcs.koen.pose = 'cheer'; world.npcs.koen.group.position.set(GATE_X - 9, roadY(GATE_X - 9), 7); world.npcs.koen.faceDir(1, -1);
