@@ -22,6 +22,7 @@ void main(){
 
 // Zacht-bolletjes-deeltjessysteem. burst(), emit(), update(dt)
 export class Particles {
+  static ratio = 1;   // pixel ratio van de renderer, voor punt-groottes
   constructor(max = 1500, { additive = false } = {}) {
     this.max = max;
     this.pos = new Float32Array(max * 3);
@@ -47,7 +48,7 @@ export class Particles {
     this.points.renderOrder = 10;
     for (let i = 0; i < max; i++) this.pos[i * 3 + 1] = -9999;
   }
-  setViewportHeight(h) { this.mat.uniforms.scale.value = h * 0.9; }
+  setViewportHeight(h) { this.mat.uniforms.scale.value = h * 0.9 * Particles.ratio; }
   emit(x, y, z, vx, vy, vz, { life = 1, size = 0.3, color = 0xffffff, gravity = 0, shrink = true } = {}) {
     const i = this.next; this.next = (this.next + 1) % this.max;
     const c = new THREE.Color(color);

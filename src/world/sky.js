@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { clamp, lerp, smoothstep, mesh, mat, glow, TAU, rand, canvasTex } from '../engine/util.js';
 import * as P from '../engine/props.js';
 import { Dragon } from '../engine/chars.js';
+import { Particles } from '../engine/particles.js';
 import { CASTLE, ICE, WORLD } from './layout.js';
 
 const skyVS = `varying vec3 vDir; void main(){ vDir = normalize(position); vec4 p = modelViewMatrix * vec4(position,1.0); gl_Position = projectionMatrix * p; gl_Position.z = gl_Position.w; }`;
@@ -41,15 +42,20 @@ export class Sky {
     this.mat = new THREE.ShaderMaterial({ vertexShader: skyVS, fragmentShader: skyFS, side: THREE.BackSide, depthWrite: false, fog: false, uniforms: { top: { value: new THREE.Color() }, mid: { value: new THREE.Color() }, bottom: { value: new THREE.Color() }, sunDir: { value: new THREE.Vector3(0, 1, 0) }, sunCol: { value: new THREE.Color() }, night: { value: 0 }, time: { value: 0 }, moonDir: { value: new THREE.Vector3(0, -1, 0) } } });
     this.dome = new THREE.Mesh(new THREE.SphereGeometry(500, 24, 16), this.mat); this.dome.frustumCulled = false; this.dome.renderOrder = -10; scene.add(this.dome);
     this.hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 1); scene.add(this.hemi);
-    this.sun = new THREE.DirectionalLight(0xffffff, 2); this.sun.castShadow = true; this.sun.shadow.mapSize.set(2048, 2048);
+    this.sun = new THREE.DirectionalLight(0xffffff, 2); this.sun.castShadow = true; this.sun.shadow.mapSize.set(1024, 1024);
     const c = this.sun.shadow.camera; c.left = -34; c.right = 34; c.top = 34; c.bottom = -34; c.near = 1; c.far = 220; this.sun.shadow.bias = -0.0005; this.sun.shadow.normalBias = 0.05;
     scene.add(this.sun); scene.add(this.sun.target);
     scene.fog = new THREE.Fog(0xcfeaff, 70, 260);
     this.tod = 0.12; this.night = 0; this.sunHeight = 1; this.clouds = []; this.cloudMats = [];
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 11; i++) {
       const cl = P.cloud(2 + Math.random() * 3); cl.position.set(rand(-220, 220), rand(65, 100), rand(-220, 220)); cl.userData.sp = rand(0.8, 2.4);
-      cl.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); this.cloudMats.push(o.material); } });
-      scene.add(cl); this.clouds.push(cl);
+      // één mesh per wolk (draw calls sparen)
+      const parts = []; cl.updateMatrixWorld(true); cl.children.forEach((o) => { const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone(); g.applyMatrix4(o.matrix); parts.push(g); });
+      const n = parts.reduce((a, g) => a + g.attributes.position.count, 0); const pos = new Float32Array(n * 3); let off = 0; parts.forEach((g) => { pos.set(g.attributes.position.array, off * 3); off += g.attributes.position.count; });
+      const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      const mm = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.92, fog: false });
+      const one = new THREE.Mesh(mg, mm); one.position.copy(cl.position); one.userData.sp = cl.userData.sp; this.cloudMats.push(mm);
+      scene.add(one); this.clouds.push(one);
     }
     this.islands = [];
     const spots = [[-120, 62, -90], [135, 75, -70], [70, 55, 135], [-90, 80, 110], [0, 95, -150]];
@@ -109,7 +115,7 @@ export class Sky {
       fragmentShader: `uniform float vis; void main(){ float r = length(gl_PointCoord-0.5); if(r>0.5) discard; gl_FragColor = vec4(1.0,1.0,1.0,smoothstep(0.5,0.1,r)*vis); }` });
     const pts = new THREE.Points(geo, m); pts.frustumCulled = false; pts.visible = false; this.scene.add(pts); return pts;
   }
-  setViewportHeight(hh) { this.fireflies.material.uniforms.scale.value = hh * 0.9; this.snow.material.uniforms.scale.value = hh * 0.9; }
+  setViewportHeight(hh) { const r = Particles.ratio; this.fireflies.material.uniforms.scale.value = hh * 0.9 * r; this.snow.material.uniforms.scale.value = hh * 0.9 * r; }
 
   // t: 0..1 (0 = zonsopgang, 0.25 = middag, 0.5 = zonsondergang, 0.75 = middernacht)
   setTime(t) { this.tod = ((t % 1) + 1) % 1; }

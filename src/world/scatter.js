@@ -26,29 +26,30 @@ const M4 = (x = 0, y = 0, z = 0, sx = 1, sy = sx, sz = sx, ry = 0, rx = 0, rz = 
 
 function oakGeo() {
   return mergeGeos([
-    { geo: new THREE.CylinderGeometry(0.28, 0.42, 2.6, 7), color: 0x6b4a2e, m: M4(0, 1.3, 0) },
-    { geo: new THREE.IcosahedronGeometry(1.9, 1), color: 0x46a63e, m: M4(0, 3.9, 0) },
-    { geo: new THREE.IcosahedronGeometry(1.35, 1), color: 0x3b9438, m: M4(1.2, 3.1, 0.5) },
-    { geo: new THREE.IcosahedronGeometry(1.25, 1), color: 0x52b447, m: M4(-1.2, 3.3, -0.4) },
-    { geo: new THREE.IcosahedronGeometry(1.0, 1), color: 0x4aa83f, m: M4(0.2, 5.1, 0.4) },
+    { geo: new THREE.CylinderGeometry(0.28, 0.42, 2.6, 5), color: 0x6b4a2e, m: M4(0, 1.3, 0) },
+    { geo: new THREE.IcosahedronGeometry(1.9, 0), color: 0x46a63e, m: M4(0, 3.9, 0) },
+    { geo: new THREE.IcosahedronGeometry(1.35, 0), color: 0x3b9438, m: M4(1.2, 3.1, 0.5) },
+    { geo: new THREE.IcosahedronGeometry(1.25, 0), color: 0x52b447, m: M4(-1.2, 3.3, -0.4) },
+    { geo: new THREE.IcosahedronGeometry(1.0, 0), color: 0x4aa83f, m: M4(0.2, 5.1, 0.4) },
   ]);
 }
 function pineGeo(snow = false) {
   const parts = [{ geo: new THREE.CylinderGeometry(0.22, 0.38, 2.2, 6), color: 0x5b3d24, m: M4(0, 1.1, 0) }];
   for (let i = 0; i < 4; i++) {
     const r = 2.1 - i * 0.42, y = 2.0 + i * 1.35;
-    parts.push({ geo: new THREE.ConeGeometry(r, 2.2, 8), color: i % 2 ? 0x2c7a4b : 0x24694a, m: M4(0, y + 1.0, 0) });
-    if (snow) parts.push({ geo: new THREE.ConeGeometry(r * 0.78, 1.5, 8), color: 0xf2f8ff, m: M4(0, y + 1.45, 0) });
+    parts.push({ geo: new THREE.ConeGeometry(r, 2.2, 6), color: i % 2 ? 0x2c7a4b : 0x24694a, m: M4(0, y + 1.0, 0) });
+    if (snow) parts.push({ geo: new THREE.ConeGeometry(r * 0.78, 1.5, 6), color: 0xf2f8ff, m: M4(0, y + 1.45, 0) });
   }
   return mergeGeos(parts);
 }
-function bushGeo() { return mergeGeos([{ geo: new THREE.IcosahedronGeometry(0.9, 1), color: 0x3f9e3c, m: M4(0, 0.6, 0, 1, 0.8, 1) }, { geo: new THREE.IcosahedronGeometry(0.65, 1), color: 0x56b84a, m: M4(0.7, 0.45, 0.2) }, { geo: new THREE.IcosahedronGeometry(0.6, 1), color: 0x35903a, m: M4(-0.6, 0.4, -0.2) }]); }
+function bushGeo() { return mergeGeos([{ geo: new THREE.IcosahedronGeometry(0.9, 0), color: 0x3f9e3c, m: M4(0, 0.6, 0, 1, 0.8, 1) }, { geo: new THREE.IcosahedronGeometry(0.65, 0), color: 0x56b84a, m: M4(0.7, 0.45, 0.2) }, { geo: new THREE.IcosahedronGeometry(0.6, 0), color: 0x35903a, m: M4(-0.6, 0.4, -0.2) }]); }
 function rockGeo() { return mergeGeos([{ geo: new THREE.DodecahedronGeometry(1, 0), color: 0x8e9098, m: M4(0, 0.5, 0, 1, 0.7, 0.85) }, { geo: new THREE.DodecahedronGeometry(0.6, 0), color: 0x7c7e86, m: M4(0.8, 0.25, 0.3) }]); }
 function flowerGeo() {
-  const parts = [{ geo: new THREE.CylinderGeometry(0.02, 0.025, 0.35, 4), color: 0x3b8a3a, m: M4(0, 0.17, 0) }];
-  for (let i = 0; i < 5; i++) parts.push({ geo: new THREE.SphereGeometry(0.07, 5, 4), color: 0xffffff, m: M4(Math.cos(i / 5 * TAU) * 0.08, 0.37, Math.sin(i / 5 * TAU) * 0.08) });
-  parts.push({ geo: new THREE.SphereGeometry(0.05, 5, 4), color: 0xffd23f, m: M4(0, 0.38, 0) });
-  return mergeGeos(parts);
+  return mergeGeos([
+    { geo: new THREE.CylinderGeometry(0.02, 0.025, 0.35, 3), color: 0x3b8a3a, m: M4(0, 0.17, 0) },
+    { geo: new THREE.OctahedronGeometry(0.13, 0), color: 0xffffff, m: M4(0, 0.38, 0, 1, 0.55, 1) },
+    { geo: new THREE.OctahedronGeometry(0.06, 0), color: 0xffd23f, m: M4(0, 0.43, 0) },
+  ]);
 }
 function tuftGeo() {
   const parts = [];
@@ -65,16 +66,29 @@ function tuftGeo() {
 function mushGeo() { return mergeGeos([{ geo: new THREE.CylinderGeometry(0.1, 0.14, 0.5, 6), color: 0xf4ecd8, m: M4(0, 0.25, 0) }, { geo: new THREE.SphereGeometry(0.4, 8, 6, 0, TAU, 0, Math.PI / 2), color: 0xd8403a, m: M4(0, 0.5, 0) }, { geo: new THREE.SphereGeometry(0.06, 4, 3), color: 0xffffff, m: M4(0.18, 0.78, 0.1) }, { geo: new THREE.SphereGeometry(0.06, 4, 3), color: 0xffffff, m: M4(-0.12, 0.82, -0.14) }]); }
 function reedGeo() { const parts = []; for (let i = 0; i < 5; i++) parts.push({ geo: new THREE.CylinderGeometry(0.015, 0.03, 1.4, 4), color: 0x7a9a45, m: M4(Math.cos(i * 1.7) * 0.12, 0.7, Math.sin(i * 1.7) * 0.12, 1, 0.7 + i * 0.12, 1, 0, Math.sin(i) * 0.15, Math.cos(i) * 0.15) }); parts.push({ geo: new THREE.CylinderGeometry(0.05, 0.05, 0.3, 5), color: 0x5a3a20, m: M4(0.05, 1.2, 0.0) }); return mergeGeos(parts); }
 
+// Instances worden per ruimtecel (CELL x CELL) in een eigen InstancedMesh gezet, zodat three.js alles buiten beeld overslaat.
+const CELL = 30;
 function inst(scene, geo, count, { flat = true, shadow = true, rough = 0.9, material = null } = {}) {
   const m = material || new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: flat, roughness: rough, side: material ? THREE.FrontSide : THREE.DoubleSide });
-  const im = new THREE.InstancedMesh(geo, m, count); im.castShadow = shadow; im.receiveShadow = true; im.count = 0;
-  scene.add(im); return im;
+  return { scene, geo, mat: m, shadow, count: 0, max: count, cells: new Map() };
 }
 const D = new THREE.Object3D(); const C = new THREE.Color();
-function put(im, x, y, z, s, ry, tint, sy = s) {
+function put(w, x, y, z, s, ry, tint, sy = s) {
   D.position.set(x, y, z); D.rotation.set(0, ry, 0); D.scale.set(s, sy, s); D.updateMatrix();
-  im.setMatrixAt(im.count, D.matrix); if (tint) { C.setHSL(tint[0], tint[1], tint[2]); im.setColorAt(im.count, C); } else { C.setRGB(1, 1, 1); im.setColorAt(im.count, C); }
-  im.count++;
+  if (tint) C.setHSL(tint[0], tint[1], tint[2]); else C.setRGB(1, 1, 1);
+  const key = Math.floor(x / CELL) + ',' + Math.floor(z / CELL);
+  let cell = w.cells.get(key); if (!cell) { cell = { m: [], c: [] }; w.cells.set(key, cell); }
+  cell.m.push(D.matrix.clone()); cell.c.push(C.clone());
+  w.count++;
+}
+function flush(w) {
+  for (const cell of w.cells.values()) {
+    const im = new THREE.InstancedMesh(w.geo, w.mat, cell.m.length); im.castShadow = w.shadow; im.receiveShadow = true;
+    cell.m.forEach((mx, i) => { im.setMatrixAt(i, mx); im.setColorAt(i, cell.c[i]); });
+    im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    im.computeBoundingSphere(); w.scene.add(im);
+  }
+  w.cells.clear();
 }
 
 function distToPath(x, z) {
@@ -94,7 +108,7 @@ export function blockedByLayout(x, z, margin = 0) {
 export function scatterWorld(scene, quality = 'high') {
   const rng = mulberry32(2024); const R = () => rng();
   const colliders = [];
-  const MAXOAK = 300, MAXPINE = 520, MAXSNOW = 90, MAXBUSH = 260, MAXROCK = 220, MAXFLOWER = quality === 'low' ? 300 : 900, MAXTUFT = quality === 'low' ? 1200 : 4200, MAXMUSH = 90, MAXREED = 160;
+  const MAXOAK = 260, MAXPINE = 440, MAXSNOW = 80, MAXBUSH = 200, MAXROCK = 180, MAXFLOWER = quality === 'low' ? 250 : 650, MAXTUFT = quality === 'low' ? 1000 : 3000, MAXMUSH = 90, MAXREED = 160;
   const oaks = inst(scene, oakGeo(), MAXOAK), pines = inst(scene, pineGeo(false), MAXPINE), snows = inst(scene, pineGeo(true), MAXSNOW);
   const bushes = inst(scene, bushGeo(), MAXBUSH), rocks = inst(scene, rockGeo(), MAXROCK), flowers = inst(scene, flowerGeo(), MAXFLOWER, { shadow: false });
   const tufts = inst(scene, tuftGeo(), MAXTUFT, { shadow: false }), mush = inst(scene, mushGeo(), MAXMUSH), reeds = inst(scene, reedGeo(), MAXREED, { shadow: false });
@@ -147,6 +161,6 @@ export function scatterWorld(scene, quality = 'high') {
     const z = (R() - 0.5) * 220; const x = riverX(z) + (R() < 0.5 ? -1 : 1) * (6 + R() * 2.2); if (isWater(x, z) || blockedByLayout(x, z, 0)) continue;
     put(reeds, x, heightAt(x, z), z, 0.8 + R() * 0.7, R() * TAU);
   }
-  for (const im of [oaks, pines, snows, bushes, rocks, flowers, tufts, mush, reeds]) { im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
+  for (const im of [oaks, pines, snows, bushes, rocks, flowers, tufts, mush, reeds]) flush(im);
   return { colliders };
 }

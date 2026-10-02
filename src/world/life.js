@@ -37,7 +37,7 @@ export class Life {
     const near = (x, z, r) => Math.hypot(x - camFocus.x, z - camFocus.z) < r;
     // dieren
     for (const a of this.W.animals || []) {
-      if (!near(a.group.position.x, a.group.position.z, 90)) continue;
+      const av = near(a.group.position.x, a.group.position.z, 60); a.group.visible = av; if (!av) continue;
       a.wait = (a.wait ?? rand(0, 3)) - dt;
       if (a.wait <= 0 && !a.tgt) { const r = a.kind === 'cow' ? 3 : 5; a.tgt = { x: a.home.x + rand(-r, r), z: a.home.z + rand(-r, r) }; }
       if (a.tgt) {
@@ -50,7 +50,7 @@ export class Life {
     // dorpelingen
     for (const v of this.villagers) {
       const p = v.group.position; const w = v.walk;
-      if (!near(p.x, p.z, 100)) continue;
+      const vis = near(p.x, p.z, 42); v.group.visible = vis; if (!vis) continue;
       let talking = false;
       for (const pl of players) if (Math.hypot(pl.x - p.x, pl.z - p.z) < 3.2) talking = true;
       if (talking) { v.speed = 0; const pl = players.reduce((a, b) => (Math.hypot(a.x - p.x, a.z - p.z) < Math.hypot(b.x - p.x, b.z - p.z) ? a : b)); v.faceTowards(pl.x, pl.z); }

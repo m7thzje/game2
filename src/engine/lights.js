@@ -26,7 +26,7 @@ export function setupLights(scene, mood = 'day', { shadow = 24, fog = true, fogN
   sun.position.set(center[0] + m.sunPos[0], center[1] + m.sunPos[1], center[2] + m.sunPos[2]);
   sun.target.position.set(...center); scene.add(sun.target);
   if (shadows) {
-    sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+    sun.castShadow = true; sun.shadow.mapSize.set(1024, 1024);
     const c = sun.shadow.camera; c.left = -shadow; c.right = shadow; c.top = shadow; c.bottom = -shadow; c.near = 1; c.far = 160;
     sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.04;
   }

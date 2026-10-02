@@ -48,7 +48,7 @@ function buildWorld(app) {
   const players = [0, 1].map((i) => {
     const c = makeBrother(i); scene.add(c.group);
     const label = floatLabel(i ? 'Jor' : 'Wes', '', i ? '#7fb2ff' : '#6bf09a'); label.scale.set(2.6, 0.8, 1); label.position.y = c.height + 0.95; c.group.add(label); label.material.depthTest = false;
-    const spot = new THREE.SpotLight(0xfff0c0, 0, 32, 0.46, 0.6, 1.1); spot.position.set(0, 1.5, 0.3); const tg = new THREE.Object3D(); tg.position.set(0, 0.6, 12); c.group.add(spot); c.group.add(tg); spot.target = tg;
+    const spot = new THREE.SpotLight(0xfff0c0, 260, 32, 0.46, 0.6, 1.1); spot.visible = false; spot.position.set(0, 1.5, 0.3); const tg = new THREE.Object3D(); tg.position.set(0, 0.6, 12); c.group.add(spot); c.group.add(tg); spot.target = tg;
     const cg = new THREE.CylinderGeometry(5.2, 0.12, 15, 18, 1, true); cg.rotateX(Math.PI / 2); cg.translate(0, 0, 7.5);
     const cone = new THREE.Mesh(cg, new THREE.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0.1, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); cone.position.set(0, 1.4, 0.3); cone.visible = false; c.group.add(cone);
     const ring = mesh(new THREE.RingGeometry(0.75, 0.95, 24), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.6, depthWrite: false }), { cast: false, receive: false, rot: [-Math.PI / 2, 0, 0] }); scene.add(ring);
@@ -61,6 +61,9 @@ function buildWorld(app) {
     const r = c.t === 'c' ? c.r : Math.hypot(c.hw, c.hd);
     for (let ix = Math.floor((c.x - r) / CS); ix <= Math.floor((c.x + r) / CS); ix++) for (let iz = Math.floor((c.z - r) / CS); iz <= Math.floor((c.z + r) / CS); iz++) { const k = keyOf(ix, iz); (grid.get(k) || grid.set(k, []).get(k)).push(c); }
   }
+  // lantaarn-lichten één keer voorcompileren, anders hapert het spel de eerste keer dat je B indrukt
+  try { players.forEach((p) => (p.spot.visible = true)); app.renderer.compile(scene, camera); } catch (e) { console.warn(e); }
+  players.forEach((p) => (p.spot.visible = false));
   const mini = makeMiniBg();
   return { scene, camera, sky, water, fx, W, life, players, grid, CS, keyOf, mini, colliders, pickups: null };
 }
@@ -418,7 +421,7 @@ export class HubMode {
       } else p.lantern = false;
       this.movePlayer(p, dt, frozen);
       if (p.lantern && (this.deur.state === 'chase' || this.deur.state === 'door') && this.deur.m.group.visible) { const g = this.deur.m.group.position; const dx = g.x - p.x, dz = g.z - p.z; if (Math.hypot(dx, dz) < 26) { const ta = Math.atan2(dx, dz); let df = ta - p.yaw; df = Math.atan2(Math.sin(df), Math.cos(df)); if (Math.abs(df) < 1.7) { p.yaw = dampAngle(p.yaw, ta, 7, dt); p.c.targetYaw = p.yaw; } } }
-      p.spot.intensity = damp(p.spot.intensity, p.lantern ? 260 : 0, 20, dt); p.cone.visible = p.lantern; if (p.lantern) p.cone.material.opacity = 0.09 + Math.sin(t * 25) * 0.01;
+      p.spot.visible = p.lantern; p.cone.visible = p.lantern; if (p.lantern) p.cone.material.opacity = 0.09 + Math.sin(t * 25) * 0.01;
       p.c.pose = (p.lantern ? 'point' : 'idle'); p.c.update(dt);
     }
     if (!frozen && (input.pressed('Escape') && !this._esc)) { this._esc = true; this.pauseMenu(); }
@@ -467,9 +470,9 @@ export class HubMode {
     const near = (n) => { let bd = 1e9, bp = null; for (const p of this.players) { const d = Math.hypot(p.x - n.group.position.x, p.z - n.group.position.z); if (d < bd) { bd = d; bp = p; } } return [bd, bp]; };
     for (const n of this.W.npcs) {
       const [d, p] = near(n);
-      n.group.visible = d < 95; if (!n.group.visible) continue;
+      n.group.visible = d < 44; if (!n.group.visible) continue;
       if (d < n.lookR) { n.faceTowards(p.x, p.z); n.pose = d < 6 ? 'wave' : 'idle'; } else { n.targetYaw = n.home.yaw; n.pose = 'idle'; }
-      if (d < 60) n.update(dt);
+      n.update(dt);
       const lbl = n.userData?.label; if (lbl) lbl.visible = d < 30; if (n.userData?.mark) { n.userData.mark.visible = d < 55; n.userData.mark.position.y = n.height + 2.7 + Math.sin(t * 3) * 0.18; }
     }
     // jongleur-ballen van Nar Nico

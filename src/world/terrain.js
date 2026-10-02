@@ -110,7 +110,7 @@ function detailTexture() {
 }
 
 export function buildTerrain() {
-  const seg = 150;
+  const seg = 110;
   const geo = new THREE.PlaneGeometry(WORLD, WORLD, seg, seg);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;

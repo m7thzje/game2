@@ -1,0 +1,30 @@
+import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
+const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+const server = http.createServer((req, res) => { let p = decodeURIComponent(req.url.split('?')[0]); if (p === '/') p = '/index.html'; const f = path.join(root, p); if (!f.startsWith(root) || !fs.existsSync(f)) { res.writeHead(404); res.end(); return; } res.writeHead(200, { 'content-type': mime[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(res); });
+await new Promise((r) => server.listen(0, r)); const port = server.address().port;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
+await page.goto(`http://localhost:${port}/?hub`);
+await page.waitForFunction(() => window.__app?.mode?.players, null, { timeout: 120000 });
+await page.evaluate(() => { window.__app.S.flags.intro = true; });
+await page.waitForTimeout(3000);
+const out = await page.evaluate(() => {
+  const m = window.__app.mode; const THREE_Frustum = m.camera.constructor; const cam = m.camera; cam.updateMatrixWorld();
+  const proj = cam.projectionMatrix.clone().multiply(cam.matrixWorldInverse);
+  // frustum uit matrix
+  const planes = []; const e = proj.elements;
+  const mk = (a, b, c, d) => { const l = Math.hypot(a, b, c); return [a / l, b / l, c / l, d / l]; };
+  planes.push(mk(e[3] + e[0], e[7] + e[4], e[11] + e[8], e[15] + e[12]), mk(e[3] - e[0], e[7] - e[4], e[11] - e[8], e[15] - e[12]), mk(e[3] + e[1], e[7] + e[5], e[11] + e[9], e[15] + e[13]), mk(e[3] - e[1], e[7] - e[5], e[11] - e[9], e[15] - e[13]), mk(e[3] - e[2], e[7] - e[6], e[11] - e[10], e[15] - e[14]));
+  const inF = (o) => { if (!o.geometry) return true; if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere(); const b = o.isInstancedMesh && o.boundingSphere ? o.boundingSphere.clone() : o.geometry.boundingSphere.clone(); b.applyMatrix4(o.matrixWorld); return planes.every((p) => p[0] * b.center.x + p[1] * b.center.y + p[2] * b.center.z + p[3] >= -b.radius); };
+  const cats = {}; let total = 0;
+  const vis = (o) => { for (let p = o; p; p = p.parent) if (!p.visible) return false; return true; };
+  m.scene.traverse((o) => { if (!o.isMesh && !o.isPoints) return; if (!vis(o) || !inF(o)) return; total++;
+    let top = o; while (top.parent && top.parent !== m.scene) top = top.parent;
+    const key = o.isInstancedMesh ? 'instanced' : o.isPoints ? 'points' : (top.userData?.dynamic ? 'dynamic-char' : top.type + ':' + (o.parent === m.scene ? 'merged/direct' : 'grouped'));
+    cats[key] = (cats[key] || 0) + 1; });
+  return { total, cats, calls: window.__app.renderer.info.render.calls, programs: window.__app.renderer.info.programs.length };
+});
+console.log(JSON.stringify(out, null, 1));
+await browser.close(); server.close();

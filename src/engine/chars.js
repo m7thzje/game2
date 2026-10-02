@@ -7,6 +7,7 @@ import { mat, glow, mesh, clamp, damp, dampAngle, TAU, canvasTex, lerp } from '.
 //   elke frame:  c.speed = 0..1;  c.faceDir(dx, dz);  c.update(dt);
 //   c.pose = 'idle'|'cheer'|'sad'|'carry'|'push'|'scared'|'wave'|'point';  c.swing();  c.jump();
 // ============================================================================
+const BAKED = {};
 export class Character {
   constructor(spec = {}) {
     const s = spec.scale ?? 1;
@@ -75,9 +76,9 @@ export class Character {
     for (const sd of [1, -1]) {
       const e = new THREE.Group(); e.position.set(sd * 0.105 * s, eyeY + 0.04 * s, eyeZ);
       e.add(mesh(new THREE.SphereGeometry(0.052 * s * (spec.eyeScale ?? 1), 8, 6), spec.eyeColor ? mat(spec.eyeColor) : eyeMat, { cast: false, scale: [1, 1.2, 0.6] }));
-      e.add(mesh(new THREE.SphereGeometry(0.016 * s, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffffff }), { cast: false, pos: [0.015 * s, 0.025 * s, 0.03 * s] }));
+      e.add(mesh(new THREE.SphereGeometry(0.016 * s, 6, 4), mat(0xffffff, { flatShading: false, roughness: 0.3 }), { cast: false, pos: [0.015 * s, 0.025 * s, 0.03 * s] }));
       headG.add(e); this.eyes.push(e);
-      headG.add(mesh(new THREE.CircleGeometry(0.045 * s, 8), new THREE.MeshBasicMaterial({ color: 0xff8f8f, transparent: true, opacity: 0.45 }), { cast: false, pos: [sd * 0.19 * s, eyeY - 0.04 * s, hr * 0.84], rot: [0, sd * 0.45, 0] }));
+      headG.add(mesh(new THREE.CircleGeometry(0.045 * s, 6), mat(0xf4a0a0, { side: THREE.DoubleSide }), { cast: false, pos: [sd * 0.19 * s, eyeY - 0.04 * s, hr * 0.85], rot: [0, sd * 0.45, 0] }));
     }
     if (spec.glasses) {
       for (const sd of [1, -1]) headG.add(mesh(new THREE.TorusGeometry(0.075 * s, 0.01 * s, 5, 12), mat(spec.glasses), { cast: false, pos: [sd * 0.105 * s, eyeY + 0.04 * s, eyeZ + 0.03 * s] }));
@@ -120,8 +121,32 @@ export class Character {
     this.speed = 0; this.pose = 'idle'; this.air = false; this.t = Math.random() * 10; this.phase = 0;
     this.swingT = 0; this.jumpT = 0; this.yaw = 0; this.targetYaw = 0; this.squash = 0; this.blinkT = 2 + Math.random() * 3;
     this.mood = 'happy';
-    root.traverse((o) => { if (o.isMesh) o.castShadow = false; });
-    for (const part of [this.legL, this.legR, this.torso, this.head, this.armL, this.armR]) { const m = part.children.find((c) => c.isMesh); if (m) m.castShadow = true; }
+    this.bake();
+  }
+  // Voegt de vaste onderdelen per lichaamsdeel samen tot één mesh (veel minder draw calls)
+  bake() {
+    const skip = new Set([this.mouth, this.scarfTail, this.cape]);
+    for (const g of [this.legL, this.legR, this.torso, this.head, this.armL, this.armR, ...this.eyes]) {
+      const buckets = new Map();
+      for (const c of [...g.children]) {
+        if (!c.isMesh || skip.has(c)) continue;
+        const m = c.material; if (!m || Array.isArray(m) || m.isMeshBasicMaterial || m.transparent) continue;
+        c.updateMatrix();
+        const key = (m.flatShading ? 'f' : 's') + ((m.metalness || 0) > 0.3 ? 'm' : '') + (m.side === THREE.DoubleSide ? 'd' : '');
+        (buckets.get(key) || buckets.set(key, []).get(key)).push(c);
+      }
+      for (const [key, list] of buckets) {
+        if (list.length < 2) { list.forEach((c) => (c.castShadow = true)); continue; }
+        const geos = list.map((c) => { const gg = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone(); gg.applyMatrix4(c.matrix); return [gg, c.material.color]; });
+        const n = geos.reduce((a, [gg]) => a + gg.attributes.position.count, 0);
+        const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3); let o = 0;
+        for (const [gg, color] of geos) { const k = gg.attributes.position.count; pos.set(gg.attributes.position.array, o * 3); nor.set(gg.attributes.normal.array, o * 3); for (let i = 0; i < k; i++) { col[(o + i) * 3] = color.r; col[(o + i) * 3 + 1] = color.g; col[(o + i) * 3 + 2] = color.b; } o += k; gg.dispose(); }
+        const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); mg.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); mg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+        let bm = BAKED[key]; if (!bm) bm = BAKED[key] = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: key.includes('f'), metalness: key.includes('m') ? 0.6 : 0, roughness: key.includes('m') ? 0.4 : 0.85, side: key.includes('d') ? THREE.DoubleSide : THREE.FrontSide });
+        const merged = new THREE.Mesh(mg, bm); merged.castShadow = true; merged.receiveShadow = false; g.add(merged);
+        list.forEach((c) => { g.remove(c); c.geometry.dispose(); });
+      }
+    }
   }
   _hat(kind, c, c2, hr, s, head) {
     const top = 0.04 * s + hr * 0.9;

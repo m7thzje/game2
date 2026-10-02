@@ -7,6 +7,7 @@ import { S, load, persist } from './save.js';
 import { MinigameMode } from './engine/harness.js';
 import { loadGame, loadAllGames } from './games/index.js';
 import { Host } from './net/host.js';
+import { Particles } from './engine/particles.js';
 
 load();
 ui.names = S.names;
@@ -16,7 +17,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = S.settings.quality !== 'low';
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.type = THREE.PCFShadowMap;
 
 export const app = {
   net: null,
@@ -37,17 +38,31 @@ export const app = {
   },
 };
 
+// Automatische resolutieregeling: te traag -> iets minder pixels, snel genoeg -> weer scherper
+const perf = { cap: S.settings.quality === 'low' ? 1 : Math.min(devicePixelRatio || 1, 1.5), scale: 1, ema: 16.7, t: 0, cool: 3, noShadow: false };
+perf.scale = perf.cap;
 function resize() {
-  const q = S.settings.quality === 'low' ? 1 : Math.min(devicePixelRatio || 1, 1.75);
-  renderer.setPixelRatio(q);
+  const q = perf.scale;
+  renderer.setPixelRatio(q); Particles.ratio = q;
   renderer.setSize(innerWidth, innerHeight, false);
   if (app.mode && app.mode.resize) app.mode.resize(innerWidth, innerHeight);
 }
 addEventListener('resize', resize); resize();
 
 let last = performance.now(), fpsT = 0, fpsN = 0;
+function adapt(ft) {
+  perf.ema = perf.ema * 0.92 + Math.min(ft, 100) * 0.08; perf.t += ft / 1000; perf.cool -= ft / 1000;
+  if (perf.t < 1 || perf.cool > 0) return; perf.t = 0;
+  if (perf.ema > 24 && perf.scale > 0.55) { perf.scale = Math.max(0.55, perf.scale * 0.85); perf.cool = 2; resize(); app.perfInfo = perf; }
+  else if (perf.ema > 30 && perf.scale <= 0.6 && !perf.noShadow) { // nog steeds traag: schaduwen uit
+    perf.noShadow = true; renderer.shadowMap.enabled = false;
+    if (app.mode && app.mode.scene) app.mode.scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
+    perf.cool = 3;
+  } else if (perf.ema < 15.5 && perf.scale < perf.cap) { perf.scale = Math.min(perf.cap, perf.scale * 1.08); perf.cool = 6; resize(); }
+}
 function frame(now) {
   requestAnimationFrame(frame);
+  adapt(now - last);
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (!scare.active) input.update();
   if (!scare.active) { ui.update(dt); }
@@ -78,5 +93,6 @@ async function boot() {
   else await app.goMenu();
 }
 app.net = new Host(app);
+app.perf = perf;
 window.__app = app;
 boot().catch((e) => { console.error(e); document.body.insertAdjacentHTML('beforeend', `<pre style="position:fixed;inset:0;background:#200;color:#fcc;padding:20px;z-index:99;white-space:pre-wrap">${e.stack || e}</pre>`); });
