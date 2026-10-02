@@ -368,7 +368,7 @@ export default {
       if (w == null) { if (S.misses[0] !== S.misses[1]) { w = S.misses[0] < S.misses[1] ? 0 : 1; why = `Gelijk aantal paren, maar ${names[w]} maakte minder fouten.`; } else { w = Math.random() < 0.5 ? 0 : 1; why = `Helemaal gelijk! De kip beslist: ${names[w]} wint.`; } }
       const jokes = [`${names[w]} heeft een geheugen als een olifant (met een toverstaf)!`, `${names[w]} is de Meester van de Magische Memory!`, `${names[1 - w]} was de kaarten vergeten. Alle kaarten.`];
       setPose(pl[w], 'cheer', 99); setPose(pl[1 - w], 'sad', 99);
-      later(0.5, () => ctx.finishPvp({ winner: w, score: [a, b], delay: 800, summary: `${why ? why + '<br>' : ''}${pick(jokes)}` }));
+      later(0.5, () => ctx.finishPvp({ winner: w, score: [a, b], delay: 800, summary: why ? why : pick(jokes) }));
     }
 
     // ---------------- invoer per frame ----------------
@@ -484,6 +484,7 @@ export default {
     return {
       update, resultUpdate, introUpdate,
       onStart() { refreshHud(); },
+      onCountdown() { refreshHud(); },
       onSwap(sw) { popup(sw ? 'WISSEL!' : 'TERUG!', 0, 5, 1, '#ffe14a', 1.8); hud.toast(sw ? 'Je bestuurt nu de toetsen van je broer!' : 'Iedereen weer op zijn eigen toetsen.', 2000); },
       onDeurman(movers) {
         if (S.done) return;

@@ -126,7 +126,7 @@ export default {
       p.dead = true; p.deadT = DEAD_TIME; p.falls++; const q = p.pl;
       audio.sfx('splash', { vol: 0.8, rate: 0.7 }); audio.sfx('sizzle', { vol: 0.8 }); ctx.shake(0.5);
       fx.particles.burst(q.x, lavaY + 0.3, p.z, { count: 40, speed: 7, up: 1.8, life: 1.0, size: 0.6, colors: [0xff7a1a, 0xffe070, 0xff4a1a, 0x444444], gravity: 12 });
-      textUp('PSSSSSST!', q.x, lavaY + 2.5, p.z, '#ff8a3a', 1.3); hud.toast(`${p.name} valt in de lava! (2,4 sec straf)`, 1600);
+      textUp('PSSSSSST!', q.x, lavaY + 2.5, p.z, '#ff8a3a', 1.3); hud.toast(`🔥 ${p.name} valt in de lava!`, 1500);
       p.holder.visible = false; p.tag.visible = false;
       if (pl.every((r) => r.dead)) endGame(pl[0].height >= pl[1].height ? (Math.abs(pl[0].height - pl[1].height) < 0.3 ? null : pl[0]) : pl[1], 'lava');
     }
@@ -323,7 +323,7 @@ export default {
           if (q.dead) continue;
           if (Math.abs(q.pl.x - p.x) < 1.0 + 0.3 * q.size && Math.abs(q.pl.y + 0.9 - (p.y + 0.9)) < 1.6) {
             shoeTaken.add(p.id); if (m) m.visible = false; q.pl.shoe = 9; audio.sfx('powerup', { vol: 0.8 }); audio.sfx('sparkle', { vol: 0.6 });
-            textUp('GOUDEN SCHOEN!', q.pl.x, q.pl.y + 3.2, q.z, '#ffe14a', 1.3); hud.toast(`${q.name} heeft de gouden schoen! Extra hoge sprongen`, 1500);
+            textUp('GOUDEN SCHOEN!', q.pl.x, q.pl.y + 3.2, q.z, '#ffe14a', 1.3); hud.toast(`👟 ${q.name}: gouden schoen!`, 1400);
             fx.particles.burst(q.pl.x, q.pl.y + 0.3, q.z, { count: 26, speed: 5, up: 1.4, life: 0.8, size: 0.4, colors: [0xffe14a, 0xffffff, 0xffa500], gravity: 5 });
           }
         }

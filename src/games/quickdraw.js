@@ -389,6 +389,8 @@ export default {
           }
           if (R.gag && R.gag.done) {
             if (R.react && R.react[l.i] == null && R.def.kind !== 'seq') setTag(l, 'te laat', '#ffb0b0');
+            const rr = R.react || [null, null], fmt = (v) => (v != null ? `${v} ms` : 'te laat');
+            hud.toast(R.def.kind === 'seq' ? `${names[R.winner]} tikte de reeks het snelst: ${pl[R.winner].times[pl[R.winner].times.length - 1]} ms` : `${names[0]}: ${fmt(rr[0])}  ·  ${names[1]}: ${fmt(rr[1])}`, 1800);
             R.state = 'result'; R.t = 0;
           }
           break;
@@ -546,6 +548,7 @@ export default {
     return {
       update, introUpdate, resultUpdate,
       onStart() { refreshHud(); },
+      onCountdown() { refreshHud(); },
       onResize() { },
       onSwap(sw) {
         for (const p of pl) fx.particles.burst(p.homeX, 1.4, 0.5, { count: 26, speed: 5, up: 1, life: 0.7, size: 0.5, colors: [0xffe14a, 0xffffff, 0xff6fa5], gravity: 3 });

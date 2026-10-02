@@ -177,7 +177,7 @@ export default {
     function win(i, why = '') {
       if (done) return; done = true; winner = i;
       const w = pl[i], l = pl[1 - i];
-      w.state = 'won'; w.x = C.GOAL_U + w.off + 2.4; w.y = C.BANK_Y; w.cheerT = 99;
+      if (!why) { w.state = 'won'; w.x = C.GOAL_U + w.off + 2.4; w.y = C.BANK_Y; } w.cheerT = 99;
       audio.sfx('win', { vol: 0.5 }); ctx.shake(0.35);
       hud.showBig(`${names[i]} wint!`, 1600, i ? '#4a8cff' : '#35c46f');
       for (let k = 0; k < 7; k++) setTimeout(() => { try { fx.particles.burst(w.x + (Math.random() - 0.5) * 6, C.BANK_Y + 3 + Math.random() * 4, w.z + (Math.random() - 0.5) * 3, { count: 36, speed: 7, up: 1.2, life: 1.5, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 }); audio.sfx('sparkle', { vol: 0.4 }); } catch (e) { /* weg */ } }, k * 230);
@@ -280,7 +280,7 @@ export default {
         if (p.armed && !inp.a) { release(p); return; }
         // rotte liaan
         if (v.kind === 'rotten' && v.broken <= 0) {
-          p.rotT += dt;
+          p.rotT += dt * ts;
           v.shake = p.rotT > 2.0 ? 1 : 0;
           if (p.rotT > 2.0 && !p.rotWarn) { p.rotWarn = true; audio.sfx('creak', { vol: 0.7 }); text('KRAAK!', p.x, p.y + 2.4, p.z + 1, '#ff9a5a', 1.3); }
           if (p.rotT > ROT_LIMIT + 0.8 * p.tz) { snapVine(p, v); return; }
@@ -404,7 +404,14 @@ export default {
             const acc = -(gp / C.VL) * Math.sin(v.th) - 0.35 * v.w + windNow * 0.8;
             v.w += acc * dt; v.th += v.w * dt;
           }
-          if (v.broken > 0) { v.broken -= dt; if (v.broken <= 0) { v.th = 0; v.w = 0; v.grp.scale.setScalar(0.01); } }
+          if (v.broken > 0) {
+            v.broken -= dt;
+            if (v.broken <= 0) {
+              v.th = 0; v.w = 0;
+              if (v.kind === 'rotten') { scene.remove(v.grp); v.kind = 'normal'; v.grp = makeVine('normal'); scene.add(v.grp); }   // een verse, gezonde liaan
+              v.grp.scale.setScalar(0.01); fx.particles.burst(pivotX(v, T), C.PY - 1, lane.z, { count: 12, speed: 3, up: 1, life: 0.6, size: 0.3, colors: [0x5cc24c, 0xb6ff9a], gravity: 4 });
+            }
+          }
           if (v.grp.scale.x < 1 && v.broken <= 0) v.grp.scale.setScalar(Math.min(1, v.grp.scale.x + dt * 3));
           v.grp.visible = v.broken <= 0 || v.broken > 99;
           const px = pivotX(v, T);
@@ -438,7 +445,7 @@ export default {
       } else if (p.state === 'won') {
         pose = 'cheer'; c.group.position.y = 0; py = C.BANK_Y + Math.abs(Math.sin(T * 6)) * 0.6; px = p.x;
       }
-      if (done && p.state !== 'won') { pose = p.state === 'hang' ? 'sad' : pose; }
+      if (done && p.state !== 'won') { pose = p.i === winner ? 'cheer' : (p.state === 'hang' ? 'sad' : pose); }
       p.yellT = Math.max(0, p.yellT - dt);
       c.pose = pose; c.air = air; c.speed = 0;
       hd.position.set(px, py, p.z);

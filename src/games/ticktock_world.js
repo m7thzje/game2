@@ -303,11 +303,35 @@ export function buildTower(ctx, rng) {
   // middenkap
   A.add(mesh(new THREE.CylinderGeometry(0.95, 1.15, 0.45, 16), brass, { cast: false, pos: [0, 0.2, 0] }));
   A.add(mesh(new THREE.SphereGeometry(0.55, 12, 10), mat(0xffe27a, { metalness: 0.7, roughness: 0.25 }), { cast: false, pos: [0, 0.5, 0] }));
+  // Hickory Dickory Dock: een muisje rent langs de rand van de klok
+  {
+    const m = new THREE.Group(); const grey = mat(0xb9b2c4, { flatShading: false }), pink = mat(0xf2a0b8, { flatShading: false });
+    m.add(mesh(new THREE.SphereGeometry(0.42, 10, 8), grey, { cast: false, pos: [0, 0.3, 0], scale: [0.8, 0.7, 1.25] }));
+    m.add(mesh(new THREE.SphereGeometry(0.26, 8, 6), grey, { cast: false, pos: [0, 0.34, -0.55], scale: [0.9, 0.9, 1.1] }));
+    m.add(mesh(new THREE.ConeGeometry(0.07, 0.24, 5), pink, { cast: false, pos: [0, 0.3, -0.84], rot: [-Math.PI / 2, 0, 0] }));
+    for (const sx of [-1, 1]) { m.add(mesh(new THREE.CircleGeometry(0.17, 8), pink, { cast: false, pos: [sx * 0.2, 0.6, -0.45], rot: [0, sx * 0.4, 0] })); m.add(mesh(new THREE.SphereGeometry(0.04, 5, 4), new THREE.MeshBasicMaterial({ color: 0x111111 }), { cast: false, pos: [sx * 0.11, 0.42, -0.74] })); }
+    const tail = mesh(new THREE.CylinderGeometry(0.02, 0.05, 1.1, 5), pink, { cast: false, pos: [0, 0.2, 0.9], rot: [Math.PI / 2 - 0.3, 0, 0] }); m.add(tail);
+    A.add(m); W.mouse = { g: m, tail };
+  }
+  // vleermuizen die rondvliegen
+  W.bats = [];
+  for (let i = 0; i < 7; i++) {
+    const b = new THREE.Group(); const bm = new THREE.MeshBasicMaterial({ color: 0x120a1e, side: THREE.DoubleSide });
+    const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 1.8, 0.4, -0.3, 1.5, -0.1, 0.5, 0, 0, 0, 1.5, -0.1, 0.5, 0.4, -0.2, 0.6], 3));
+    const wings = []; for (const sx of [-1, 1]) { const pv = new THREE.Group(); const w = new THREE.Mesh(wg, bm); w.scale.x = sx; pv.add(w); b.add(pv); wings.push({ pv, sx }); }
+    b.add(mesh(new THREE.SphereGeometry(0.25, 6, 5), bm, { cast: false, scale: [0.8, 0.8, 1.4] }));
+    b.add(new THREE.Mesh(new THREE.SphereGeometry(0.045, 4, 3), new THREE.MeshBasicMaterial({ color: 0xff3a3a })).translateX(0.1).translateY(0.07).translateZ(-0.3));
+    b.add(new THREE.Mesh(new THREE.SphereGeometry(0.045, 4, 3), new THREE.MeshBasicMaterial({ color: 0xff3a3a })).translateX(-0.1).translateY(0.07).translateZ(-0.3));
+    b.scale.setScalar(1.5 + (i % 3) * 0.4); scene.add(b);
+    W.bats.push({ g: b, wings, r: 22 + (i % 4) * 7, y: 10 + (i * 5) % 22, sp: (i % 2 ? 1 : -1) * (0.25 + (i % 3) * 0.08), ph: i * 1.7, cz: -14 - (i % 3) * 6 });
+  }
   W.glowTex = glow;
   return W;
 }
 
 export function updateTower(W, T, dt) {
+  if (W.mouse) { const a = T * 0.42, R = PLATE_R + 0.02; const x = Math.sin(a) * R, z = -Math.cos(a) * R; W.mouse.g.position.set(x, 0.42 + Math.abs(Math.sin(T * 14)) * 0.07, z); W.mouse.g.rotation.y = -a - Math.PI; W.mouse.tail.rotation.z = Math.sin(T * 10) * 0.4; }
+  for (const b of W.bats || []) { const a = T * b.sp + b.ph; b.g.position.set(Math.cos(a) * b.r, b.y + Math.sin(T * 0.9 + b.ph) * 2, b.cz + Math.sin(a) * b.r * 0.55); b.g.rotation.y = -a + (b.sp > 0 ? 0 : Math.PI); const f = Math.sin(T * 11 + b.ph) * 0.8; for (const w of b.wings) w.pv.rotation.z = w.sx * f; }
   for (const a of W.anim) {
     if (a.axis === 'ringY') { a.spin.rotation.z += a.speed * dt; continue; }
     a.spin.rotation.z += a.speed * dt; if (a.hub) a.hub.rotation.y += 0;

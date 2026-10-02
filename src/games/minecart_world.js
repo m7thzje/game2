@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mat, mesh, canvasTex, clamp, lerp, fbm, mulberry32, TAU } from '../engine/util.js';
-import { makeBrother, PLAYER_COLORS } from '../engine/chars.js';
+import { makeBrother, makeNPC, PLAYER_COLORS } from '../engine/chars.js';
 
 // Omgeving en onderdelen van "Mijnkar-Race": kristalmijn-tunnel die voorbij schuift (bochten/hellingen via vertex-vervorming),
 // twee spoorbanen met elk 3 rails, mijnkarren, hindernissen (vonkjes, rotsen, gaten, turbo-pads, vuur, brokkelmuur).
@@ -297,8 +297,14 @@ export function buildMine(ctx, rng) {
   boul.setColorAt(0, new THREE.Color(1, 1, 1)); stal.setColorAt(0, new THREE.Color(1, 1, 1));
 
   const endGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: gT, color: 0x9fb4ff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })); endGlow.scale.set(60, 40, 1); scene.add(endGlow);
+  // dwergen op de middenrichel die de karren aanmoedigen
+  const POSES = ['wave', 'cheer', 'dance', 'hands_up', 'point', 'cheer'];
+  M.dwarfs = POSES.map((pose, k) => {
+    const c = makeNPC('dwarf', { hatColor: [0xe0a030, 0x44b0e0, 0xd8372c, 0x58c860, 0xff8ad0, 0xb06aff][k], beardColor: [0xd97a2a, 0xe8e8e8, 0x5a3a22, 0xb0702a, 0xf0d070, 0x222222][k], beard: 'long', shirt: [0x7a3a3a, 0x2a6a9a, 0x4a7a3a, 0x8a5a9a, 0x9a8a2a, 0x3a3a5a][k] });
+    c.group.scale.setScalar(1.5); c.pose = pose; scene.add(c.group); return { c, b: 28 + k * 22, k };
+  });
   const dummy = new THREE.Object3D(); const LOOP = 140;
-  M.updateDecor = (d, t, zc = 0) => {
+  M.updateDecor = (d, t, zc = 0, dt = 0.016) => {
     // vloer/muren/plafond volgen de gedeelde afstand d
     setProfile(floor, B, FLOOR_P, d, zc, 1 / 6);
     setProfile(wallL, B, WALL_L, d, zc, 1 / 14); setProfile(wallR, B, WALL_R, d, zc, 1 / 14); setProfile(ceil, B, CEIL_P, d, zc, 1 / 14);
@@ -318,6 +324,7 @@ export function buildMine(ctx, rng) {
       for (let q = 0; q < 2; q++) { dummy.position.set((q ? 9.2 : -9.2) + bx, 9.2 + hy + Math.sin(t * 1.3 + k + q) * 0.05, zc - s); dummy.updateMatrix(); lamps.setMatrixAt(k * 2 + q, dummy.matrix); }
       if (k < lampGlow.length) { lampGlow[k].position.set((k % 2 ? 9.2 : -9.2) + bx, 9.2 + hy, zc - s); lampGlow[k].visible = s > -5 && s < 70; }
     }
+    for (const dw of M.dwarfs) { let s = (dw.b - d) % 132; if (s < 0) s += 132; s += S0 - 6; const on = s < VIEW - 6; dw.c.group.visible = on; if (on) { dw.c.group.position.set(B.bx(s) + (dw.k % 2 ? 0.25 : -0.25), 1.12 + B.hy(s), zc - s); dw.c.faceDir(0, 1); dw.c.update(dt); } }
     endGlow.position.set(B.bx(VIEW) * 0.9, 5 + B.hy(VIEW) * 0.9, zc - VIEW - 5);
     for (const im of [cry, boul, stal, post, beam, lamps]) im.instanceMatrix.needsUpdate = true; if (cry.instanceColor) cry.instanceColor.needsUpdate = true;
   };

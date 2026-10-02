@@ -190,6 +190,10 @@ for (const name of scen) {
       console.log(r);
     }
     await browser.close();
+  } else if (name === 'hint') {
+    const { browser, page } = await open(process.env.TWIST || 'none');
+    await page.evaluate(() => { const d = window.__app.mode.instance.dbg; window.__mode = 'idle'; d.pl[0].x = d.stations[2].cx - 0.5; d.pl[0].z = d.stations[2].cz; d.pl[1].x = d.stations[1].cx; d.pl[1].z = d.stations[1].cz + 0.3; d.give(1, 'pudding'); d.pl[1].x = 6; d.pl[1].z = 7; for (let k = 0; k < 12; k++) { window.__app.input.update(); window.__app.mode.update(1 / 30); } window.__app.mode.paused = true; });
+    await page.waitForTimeout(1000); await page.screenshot({ path: '/tmp/cf_hint.png' }); await browser.close();
   } else if (name === 'shots2') {
     const { browser, page } = await open(process.env.TWIST || 'none');
     const step = (n) => page.evaluate((n) => { for (let k = 0; k < n; k++) { window.__app.input.update(); window.__app.mode.update(1 / 30); } }, n);

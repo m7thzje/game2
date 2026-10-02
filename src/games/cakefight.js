@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { clamp, lerp, damp, dampAngle, rand, pick, TAU, canvasTex } from '../engine/util.js';
 import { PLAYER_COLORS } from '../engine/chars.js';
+import { KEY_LABELS } from '../engine/input.js';
 import { buildHall, HALL_X, HALL_Z, BOUNDS, TABLES, TABLE_TOP, CART, STATIONS, STATION_BOX, LANES, WALL_X } from './cakefight_world.js';
 import { CAKES, makeCake, splatTexture, makeSplats } from './cakefight_items.js';
 
@@ -68,6 +69,12 @@ export default {
       const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace;
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthTest: false })); s.scale.set(2.6, 0.98, 1); s.renderOrder = 15; scene.add(s); return s;
     }
+    const hintTexCache = {};
+    function hintTex(txt, css) {
+      const key = txt + css; if (hintTexCache[key]) return hintTexCache[key];
+      const t = canvasTex(256, 96, (g, w, h) => { g.font = 'bold 50px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; g.lineWidth = 12; g.strokeStyle = 'rgba(30,10,20,.92)'; g.strokeText(txt, w / 2, h / 2, w - 10); g.fillStyle = css; g.fillText(txt, w / 2, h / 2, w - 10); });
+      hintTexCache[key] = t; return t;
+    }
     const pl = players.map((pp, i) => {
       const c = ctx.make.brother(i); const sz = pv.size(i);
       const holder = new THREE.Group(), pivot = new THREE.Group(); pivot.rotation.order = 'YXZ'; pivot.position.y = 0.95; c.group.position.y = -0.95; pivot.add(c.group); holder.add(pivot); scene.add(holder);
@@ -79,9 +86,10 @@ export default {
       const rim = new THREE.Mesh(new THREE.TorusGeometry(0.85, 0.06, 6, 24), new THREE.MeshStandardMaterial({ color: 0xe8c24a, metalness: 0.8, roughness: 0.3 })); rim.rotation.x = Math.PI / 2; tray.add(rim);
       const handle = new THREE.Mesh(new THREE.CapsuleGeometry(0.05, 0.4, 3, 6), new THREE.MeshStandardMaterial({ color: 0x6b4a2e })); handle.rotation.z = Math.PI / 2; handle.position.set(0, -0.12, 0); tray.add(handle);
       tray.position.set(0, 0.12, 0.95); tray.rotation.x = Math.PI / 2 - 0.15; pivot.add(tray);
+      const hint = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false })); hint.scale.set(2.4, 0.9, 1); hint.renderOrder = 17; hint.visible = false; scene.add(hint);
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.1, 32), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; scene.add(ring);
       const p = {
-        i, c, holder, pivot, tray, ring, sz, blob: mkBlob(), label: mkLabel({ i }), splats: makeSplats(c),
+        i, c, holder, pivot, tray, ring, hint, sz, blob: mkBlob(), label: mkLabel({ i }), splats: makeSplats(c),
         x: START[i][0], z: START[i][1], y: 0, vy: 0, vx: 0, vz: 0, face: i ? -Math.PI / 2 : Math.PI / 2, yaw: i ? -Math.PI / 2 : Math.PI / 2,
         cake: null, stun: 0, inv: 0, sh: false, shT: 0, shCd: 0, trayBroken: 0, trayWob: 0, throwCd: 0, score: 0, air: false, spin: 0, puddle: false, cheer: false, slipT: 0, bramHit: false, near: -1,
       };
@@ -353,7 +361,7 @@ export default {
     // ---------------- einde ----------------
     function endGame(winner, line) {
       if (done) return; done = true; over = true; hud.setTimer(null);
-      pl.forEach((q) => { q.cheer = winner != null && q.i === winner; q.sh = false; });
+      pl.forEach((q) => { q.cheer = winner != null && q.i === winner; q.sh = false; q.hint.visible = false; });
       const jokes = ['Bakker Bram heeft zijn keuken nooit zo plakkerig gezien.', 'Er zit slagroom op het plafond.', 'De koks hebben nog nooit zo gelachen.', 'Dat was een smakelijk gevecht!', 'Wie ruimt dit op?'];
       const sum = `${line}<br>Taarten gegooid: ${stat.throws[0]} – ${stat.throws[1]} · raak: ${stat.hits[0]} – ${stat.hits[1]} · geblokkeerd: ${stat.blocks[0]} – ${stat.blocks[1]}${stat.bram ? ` · Bram: ${stat.bram}×` : ''}<br>${pick(jokes)}`;
       ctx.finishPvp({ winner, score: [pl[0].score, pl[1].score], summary: sum, delay: 1700 });
@@ -404,16 +412,24 @@ export default {
       // plassen
       for (const q of puddles) { if (q.life <= 0) { q.m.visible = false; continue; } q.life -= dt; q.m.material.opacity = clamp(q.life / 2.2, 0, 1); if (q.life <= 0) q.m.visible = false; }
       // stations
+      pl.forEach((p) => { p.hintNow = false; });
       stations.forEach((s) => {
         s.cd = Math.max(0, s.cd - dt); s.pop = Math.max(0, (s.pop || 0) - dt);
         const ring = s.kind === 'cart' ? world.cartRing : s.vis.ring, icon = s.kind === 'cart' ? world.cartIcon : s.vis.icon;
         let near = -1; for (const p of pl) if (!p.cake && !p.air && Math.hypot(p.x - s.cx, p.z - s.cz) < (s.kind === 'cart' ? s.r : 2.5) + 0.3) near = p.i;
         const ready = s.cd <= 0;
+        if (near >= 0 && ready) pl[near].hintNow = true;
         ring.material.opacity = ready ? 0.55 + Math.sin(clock * 5 + s.x) * 0.15 + (near >= 0 ? 0.25 : 0) : 0.18;
         ring.material.color.set(near >= 0 && ready ? PLAYER_COLORS[near] : ready ? (s.kind === 'cart' ? 0xff7ab8 : 0xffe14a) : 0x888888);
         ring.scale.setScalar(1 + (s.pop > 0 ? s.pop : 0) * 0.5);
         icon.material.opacity = ready ? 1 : 0.35;
       });
+    }
+    function hints() {
+      for (const p of pl) {
+        const on = p.hintNow && !p.cake && !p.air && !over && p.stun <= 0; p.hint.visible = on;
+        if (on) { const k = KEY_LABELS[pv.swapped ? 1 - p.i : p.i]; const txt = `${tid === 'swapab' ? k.b : k.a} = PAKKEN`; p.hint.material.map = hintTex(txt, players[p.i].css); p.hint.material.needsUpdate = true; p.hint.position.set(p.x, p.y + 4.9 * p.sz + 0.9 + Math.sin(clock * 8) * 0.12, p.z); }
+      }
     }
     function cameraUpdate(dt) { camera.position.copy(camBase); camera.lookAt(tgt); }
 
@@ -427,7 +443,7 @@ export default {
       else { timeLeft = Math.max(0, TIME - T); hud.setTimer(timeLeft, 10); if (timeLeft <= 0) timeUp(); }
       for (const p of pl) control(p, dt);
       updateCakes(dt); updateBram(dt);
-      visuals(dt); world.update(clock, dt); cameraUpdate(dt);
+      visuals(dt); hints(); world.update(clock, dt); cameraUpdate(dt);
       refreshHud();
     }
     function resultUpdate(dt) {

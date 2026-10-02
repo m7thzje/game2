@@ -96,10 +96,11 @@ async function open(twist = 'none', quality = 'low') {
         const st = dbg.state(); if (stop && stop(st)) return true;
         for (const i of [0, 1]) {
           const v = inp.virtual[i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
+          if (window.__bots[i].pushNow) { window.__bots[i].pushNow = false; v.b = true; }
           if (window.__idle[i] || m.state !== 'play') continue;
           const pl = dbg.players[i].pl; botInput(window.__bots[i], pl, dbg.P, st.T, dt, out[i], { dbg });
           let x = out[i].x; if (window.__flip[i]) x = -x;
-          v.x = x; v.a = !!out[i].aP; v.b = !!out[i].bP || (window.__bots[i].pushNow ? (window.__bots[i].pushNow = false, true) : false);
+          v.x = x; v.a = !!out[i].aP; v.b = v.b || !!out[i].bP;
           // pas op: aP wordt door de input-laag afgeleid uit a (1 frame ingedrukt)
         }
         inp.update(); m.update(dt);
@@ -169,6 +170,68 @@ if (scen.includes('shots')) {
   await o2.page.evaluate(() => { window.__post = true; window.__app.mode.instance.dbg.endNow(0, 'top'); }); await o2.page.evaluate(() => window.__run(60 * 2.2)); await o2.page.waitForTimeout(500); await snap2('k_win');
   errors.push(...o2.errors); await o2.browser.close();
   console.log(errors.length ? 'ERRORS\n' + errors.join('\n') : 'NO ERRORS');
+}
+
+
+if (scen.includes('push')) {
+  console.log('\n== duwen (B)');
+  const { browser, page, errors } = await open('none');
+  await page.evaluate(() => { window.__idle = [true, true]; const d = window.__app.mode.instance.dbg; const t = d.P.find((p) => p.bridge); d.warp(0, t.x - 1.0, t.y + 0.01); d.warp(1, t.x + 0.8, t.y + 0.01); d.players[0].pl.face = 1; d.players[1].pl.face = -1; d.players[0].pl.ground = t; d.players[1].pl.ground = t; });
+  await page.evaluate(() => window.__run(10));
+  let st = await S(page); const x1 = st.p[1].x;
+  await page.evaluate(() => { window.__bots[0].pushNow = true; window.__run(8); });
+  st = await S(page);
+  check(st.p[1].stun > 0 && st.p[1].vx > 3 && st.p[0].pushes === 1, `Wes duwt Jor weg (vx ${st.p[1].vx.toFixed(1)}, stun ${st.p[1].stun.toFixed(2)})`);
+  await page.evaluate(() => window.__run(60 * 0.6));
+  st = await S(page); check(Math.abs(st.p[1].x - x1) > 3, `Jor is flink opgeschoven (${(st.p[1].x - x1).toFixed(1)} u)`);
+  // cooldown: direct nogmaals duwen mag niet
+  await page.evaluate(() => { const d = window.__app.mode.instance.dbg; const t = d.P.find((p) => p.bridge); d.warp(1, t.x + 0.8, t.y + 0.01); d.players[1].pl.ground = t; d.players[1].pl.stun = 0; d.players[1].knockInv = 0; window.__bots[0].pushNow = true; window.__run(3); });
+  st = await S(page); check(st.p[0].pushes === 1, 'cooldown: tweede duw direct erna telt niet');
+  // andersom: Jor duwt Wes
+  await page.evaluate(() => { const d = window.__app.mode.instance.dbg; const t = d.P.find((p) => p.bridge); d.players[0].pushCd = 0; d.players[1].pushCd = 0; d.players[0].knockInv = 0; d.players[1].knockInv = 0; d.warp(0, t.x - 0.8, t.y + 0.01); d.warp(1, t.x + 0.8, t.y + 0.01); d.players[0].pl.ground = t; d.players[1].pl.ground = t; d.players[0].pl.stun = 0; d.players[1].pl.stun = 0; d.players[1].pl.face = -1; window.__bots[1].pushNow = true; window.__run(6); });
+  st = await S(page); check(st.p[1].pushes === 1 && st.p[0].stun > 0, `Jor duwt Wes weg (stun ${st.p[0].stun.toFixed(2)})`);
+  check(errors.length === 0, 'geen console-fouten' + (errors.length ? '\n' + errors.join('\n') : ''));
+  await browser.close();
+}
+
+if (scen.includes('hazards')) {
+  console.log('\n== gevaren en gimmicks');
+  const { browser, page, errors } = await open('none');
+  const ev = (fn, ...a) => page.evaluate(fn, ...a);
+  await ev(() => { window.__idle = [true, true]; });
+  // stekels
+  await ev(() => { const d = window.__app.mode.instance.dbg; const t = d.P.find((p) => p.tower === 0 && p.spikes); const [xa, xb] = d.LY.spikeRanges(t)[0]; d.warpTo(0, t.id); d.players[0].pl.x = (xa + xb) / 2; d.players[0].pl.ground = t; d.setLava(-50); window.__run(4); });
+  let st = await S(page); check(st.p[0].hits === 1 && st.p[0].stun > 0, `stekels doen pijn (hits ${st.p[0].hits}, stun ${st.p[0].stun.toFixed(2)})`);
+  // gouden schoen
+  await ev(() => { const d = window.__app.mode.instance.dbg; const t = d.P.find((p) => p.tower === 1 && p.shoe); d.warpTo(1, t.id); window.__run(4); });
+  st = await S(page); check(st.p[1].shoe > 5, `gouden schoen opgepakt (${st.p[1].shoe.toFixed(1)} s)`);
+  // trampoline en springplaat
+  await ev(() => { const d = window.__app.mode.instance.dbg; const t = d.P.find((p) => p.tower === 0 && p.spring); d.warpTo(0, t.id); d.players[0].pl.stun = 0; window.__run(3); });
+  st = await S(page); check(st.p[0].vy > 15 || st.p[0].y > 12, `trampoline lanceert (vy ${st.p[0].vy.toFixed(1)}, y ${st.p[0].y.toFixed(1)})`);
+  await ev(() => { const d = window.__app.mode.instance.dbg; const t = d.P.find((p) => p.tower === 0 && p.pad); d.warpTo(0, t.id); window.__run(3); });
+  st = await S(page); check(st.p[0].vy > 12, `springplaat lanceert (vy ${st.p[0].vy.toFixed(1)})`);
+  // lava: dood + respawn met tijdstraf
+  await ev(() => { const d = window.__app.mode.instance.dbg; const t = d.P.filter((p) => p.tower === 0 && p.type === 'stone')[6]; d.warpTo(0, t.id); d.warpTo(1, d.P.filter((p) => p.tower === 1 && p.type === 'stone')[7].id); d.setLava(t.y0 + 1.5); window.__run(4); });
+  st = await S(page); check(st.p[0].dead, 'speler in de lava is even uit het spel');
+  await ev(() => window.__run(60 * 3));
+  st = await S(page); check(!st.p[0].dead && st.p[0].y > st.lava + 2, `respawn op een platform boven de lava (y ${st.p[0].y.toFixed(1)}, lava ${st.lava.toFixed(1)}, ${st.p[0].falls}x gevallen)`);
+  // beide in de lava -> spel eindigt, wie het hoogst was wint
+  await ev(() => { window.__fin = null; const m = window.__app.mode; const orig = m.finishPvp.bind(m); m.finishPvp = (res) => { window.__fin = res; return orig(res); }; const d = window.__app.mode.instance.dbg; d.players[0].height = 30; d.players[1].height = 20; d.setLava(500); window.__run(10); });
+  const fin = await ev(() => window.__fin); check(fin && fin.winner === 0, `beide in de lava: de hoogste (Wes) wint (winnaar ${fin && fin.winner}, score ${fin && JSON.stringify(fin.score)})`);
+  await browser.close();
+  // draak, tonnen, kip, schildpad in een nieuw potje
+  const o2 = await open('none'); const e2 = (fn, ...a) => o2.page.evaluate(fn, ...a);
+  await e2(() => { window.__idle = [true, true]; const d = window.__app.mode.instance.dbg; d.warpTo(0, d.P.filter((p) => p.tower === 0 && p.type === 'stone')[10].id); d.warpTo(1, d.P.filter((p) => p.tower === 1 && p.type === 'stone')[3].id); d.setLava(-60); d.dragonNow(); });
+  await e2(() => window.__run(60 * 8)); st = await S(o2.page);
+  check(st.p[0].hits >= 1, `de draak raakt de leider (hits ${st.p[0].hits})`); check(st.p[1].hits === 0, 'de draak mikt op de leider, niet op de achterligger');
+  await e2(() => { const d = window.__app.mode.instance.dbg; const t = d.P.find((p) => p.bridge); d.warpTo(0, t.id); d.warpTo(1, t.id); d.players[0].pl.x = t.x - 1; d.players[1].pl.x = t.x + 1; window.__run(60 * 14); });
+  st = await S(o2.page); check(st.p[0].hits + st.p[1].hits >= 1, `rollende ton raakt iemand op de brug (hits ${st.p[0].hits + st.p[1].hits})`);
+  await e2(() => { const d = window.__app.mode.instance.dbg; d.chickenNow(); window.__run(10); });
+  check((await e2(() => window.__app.mode.instance.dbg.chickens.length)) === 1, 'een kip vliegt uit een tonnetje');
+  await e2(() => { const d = window.__app.mode.instance.dbg; d.warpTo(0, d.P.filter((p) => p.tower === 0 && p.type === 'stone')[16].id); d.warpTo(1, d.P.filter((p) => p.tower === 1 && p.type === 'stone')[4].id); d.players[0].pl.stun = 0; d.turtleNow(); window.__run(60 * 4.5); });
+  st = await S(o2.page); const h0 = st.p[0].hits; check(await e2(() => window.__app.mode.instance.dbg.Tt.state) !== 'warn', `blauwe schildpad is gevallen (${st.turtle})`);
+  check(errors.length === 0 && o2.errors.length === 0, 'geen console-fouten' + [...errors, ...o2.errors].join('\n'));
+  await o2.browser.close();
 }
 
 if (scen.includes('trace')) {

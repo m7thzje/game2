@@ -88,7 +88,7 @@ if (scen === 'bots' || scen === 'twists') {
   const tws = scen === 'twists' ? ALL_TW : [args[1] || 'none'];
   for (const tw of tws) {
     const tally = [0, 0, 0]; const durs = [];
-    for (let rep = 0, tries = 0; rep < (scen === 'twists' ? 2 : 6); rep++) {
+    for (let rep = 0, tries = 0; rep < (+process.env.REPS || (scen === 'twists' ? 2 : 6)); rep++) {
       let browser, page, errors;
       try { ({ browser, page, errors } = await open(tw)); } catch (e) { console.log('  (open mislukt, opnieuw)', e.message.split('\n')[0]); if (tries++ < 6) rep--; continue; }
       const skill = rep % 3 === 0 ? [0.5, 0.5] : rep % 3 === 1 ? [0.35, 0.8] : [0.8, 0.35];

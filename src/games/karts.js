@@ -92,6 +92,7 @@ export default {
     placeStart();
 
     // ---------------- toestand ----------------
+    let hintState = -1;
     let T = 0, done = false, state = 'race', started = false, finishT = 0, winnerK = null, shakeCd = 0;
     const timeLeftFn = () => Math.max(0, TIME_LIMIT - T);
     const tmp = { idx: 0, lat: 0, px: 0, pz: 0, tx: 1, tz: 0, dist: 0 };
@@ -436,8 +437,8 @@ export default {
         if (ad > 2.2 && k.fwd > 2 && !k.done) { k.wrongT += dt; if (k.wrongT > 1.6 && T - k.wrongMsgT > 4) { k.wrongMsgT = T; textUp('↩ ANDERS OM!', k.x, 3.6, k.z, '#ff7a5a', 1.1); } } else k.wrongT = 0;
       }
       // hints
-      if (T < 9) hud.setHint(T < 4.5 ? `<b>Gas gaat vanzelf</b> · links/rechts sturen · <b>A</b> = voorwerp · <b>B</b> = rem / drift` : `Rij door de <b>vraagtekens</b> voor voorwerpen · drift met <b>B</b> + sturen, laat los voor een turbo`);
-      else if (T < 9.2) hud.setHint(null);
+      const hintNow = T < 4.5 ? 1 : T < 9 ? 2 : 0;
+      if (hintNow !== hintState) { hintState = hintNow; hud.setHint(hintNow === 1 ? `<b>Gas gaat vanzelf</b> · links/rechts sturen · <b>A</b> = voorwerp · <b>B</b> = rem / drift` : hintNow === 2 ? `Rij door de <b>vraagtekens</b> voor voorwerpen · drift met <b>B</b> + sturen, laat los voor een turbo` : null); }
       // HUD
       const rank0 = a.prog >= b2.prog;
       for (const k of karts) {

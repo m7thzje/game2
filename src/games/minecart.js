@@ -80,7 +80,7 @@ export default {
       const flame = new THREE.Mesh(new THREE.ConeGeometry(0.45, 2.4, 7), new THREE.MeshBasicMaterial({ color: 0x7ae8ff, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending })); flame.rotation.x = -Math.PI / 2; flame.visible = false; scene.add(flame);
       const pools = { spark: [], rock: [], gap: [], pad: [], fire: [], wall: [] };
       const mk = (type, fn, n) => { for (let k = 0; k < n; k++) { const m = fn(); m.visible = false; scene.add(m); pools[type].push(m); } };
-      mk('spark', makeSpark, 7); mk('rock', makeRock, 3); mk('gap', makePit, 7); mk('pad', makePad, 10); mk('fire', makeFire, 4); mk('wall', makeWall, 2);
+      mk('spark', makeSpark, 10); mk('rock', makeRock, 4); mk('gap', makePit, 10); mk('pad', makePad, 14); mk('fire', makeFire, 6); mk('wall', makeWall, 3);
       const dragon = new Dragon(i ? 0x2f7ad4 : 0x7a2fd4, 0.62); dragon.group.visible = false; scene.add(dragon.group);
       const breath = new THREE.Mesh(new THREE.ConeGeometry(1.4, 1, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xff9a2a, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); breath.visible = false; scene.add(breath);
       return {
@@ -129,7 +129,7 @@ export default {
       if (p.state !== 'run' && kind !== 'fall') return;
       if (p.inv > 0 && kind !== 'wallok') return;
       const sz = p.sizeMul;
-      p.hits++; p.inv = 1.5; p.charge = 0; p.braking = false;
+      p.hits++; p.inv = 1.5; p.charge = 0; p.braking = false; p.stateT = 0.9;
       if (kind === 'spark') { p.slowT = p.slowDur = 1.15; p.slowF = 0.32; p.stats.zaps++; audio.sfx('buzz', { vol: 0.8 }); audio.sfx('hurt', { vol: 0.6 }); ctx.shake(0.6); say(p, pick(['ZAP!', 'BZZT!', 'AU!']), '#7ae8ff', 1.3); p.cart.userData.c.pose = 'scared'; p.stateT = 1.15; p.wob = 1;
         fx.particles.burst(p.x, 1.2, p.zc, { count: 44, speed: 7, up: 1.3, life: 0.7, size: 0.35, colors: [0x7ae8ff, 0xffffff, 0xffe14a], gravity: 6 }); }
       else if (kind === 'rock') { p.slowT = p.slowDur = 1.3; p.slowF = 0.18; p.stats.crashes++; audio.sfx('hit', { vol: 1 }); audio.sfx('thud', { vol: 0.8 }); ctx.shake(0.85); say(p, pick(['BONK!', 'KRAK!', 'BOEM!']), '#ffd24a', 1.4); p.cart.userData.c.pose = 'scared'; p.vy = 7; p.y = 0.05; p.wob = 1;
@@ -225,7 +225,7 @@ export default {
           const th = 0.56 * Math.sin(T * TAU / o.period + o.ph); const ry = 8 - 6.8 * Math.cos(th);
           if (d1 > o.D - 1.1 && d0 < o.D + 1.1 && dx < 1.15 + 0.5 * cm && p.y < ry + 0.55) hurt(p, 'rock');
         } else if (o.type === 'gap') {
-          if (d1 > o.D + 0.5 && d0 < o.D + o.len - 0.5 && dx < 0.95 && p.y < 0.45) { p.fallObs = o; hurt(p, 'fall'); }
+          if (d1 > o.D + 0.3 && d0 < o.D + o.len - 0.5 && dx < 0.95 && p.y < 0.45) { if (p.inv > 0) { if (!p.padUsed.has(o.id)) { p.padUsed.add(o.id); p.vy = 11; p.y = 0.05; audio.sfx('jump', { vol: 0.4 }); } } else { p.fallObs = o; hurt(p, 'fall'); } }
         } else if (o.type === 'fire') {
           const ft = p.fireT.get(o.id);
           if (ft && ft.burn && d1 > o.D - 5 && d0 < o.D + 5 && dx < 1.0 && p.y < 1.1) hurt(p, 'fire');
@@ -367,7 +367,8 @@ export default {
         const a = arches[p.i]; const s = COURSE - p.d; a.visible = s > S0 - 6 && s < VIEW; a.position.set(laneX(p.i, 1) + B.bx(s), B.hy(s), p.zc - s);
         updateCart(p, dt, mode !== 'frozen');
       }
-      Mw.updateDecor(dAvg, T + introT, 0);
+      Mw.updateDecor(dAvg, T + introT, 0, dt);
+      if (mode === 'play') { const vv = (pl[0].v + pl[1].v) / 2; if (Math.random() < dt * 22) { const sd = Math.random() < 0.5 ? -1 : 1; fx.particles.emit(sd * (4 + Math.random() * 11), 0.6 + Math.random() * 9, -48 - Math.random() * 10, 0, Math.random() * 0.3, vv * 1.0, { life: 2.4, size: 0.2, color: [0x7ae8ff, 0xff7ad8, 0xa0ff8a, 0xffe14a][Math.floor(Math.random() * 4)], gravity: 0 }); } }
       station.position.set(0, 0, 6 + dAvg); station.visible = dAvg < 40;
     }
 

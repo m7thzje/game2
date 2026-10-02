@@ -456,7 +456,7 @@ export default {
       audio.sfx('win', { vol: 0.9 });
       hud.showBig(`${we.name} wint!`, 2200, we.css);
       // andere deelnemers die nog meespelen gaan juichend naar de kant
-      for (const e of E) if (e !== we && e.alive) { e.mode = 'cheerside'; }
+      for (const e of E) if (e !== we && e.alive) { if (e.seat) { e.seat.occupant = null; e.seat = null; } e.mode = 'cheerside'; e.y = PLAT_Y; e.holder.rotation.set(0, 0, 0); e.face = 0; e.x = clamp(e.x, -6, 6); }
       refreshHud();
     }
     function finishGame() {

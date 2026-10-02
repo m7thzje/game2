@@ -22,7 +22,7 @@ async function open(twist = 'none') {
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=memory&twist=${twist}&quality=low`);
+  await page.goto(`http://localhost:${port}/?game=memory&twist=${twist}&quality=${process.env.Q || "low"}`);
   await page.waitForFunction(() => window.__app && window.__app.mode && window.__app.mode.instance, null, { timeout: 240000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
