@@ -79,5 +79,38 @@ if (scenario === 'input') {
   log('na invoer-afspelen: state=', await dbg('state'), 'klaar=', await dbg('done'));
   await page.screenshot({ path: out + '_input.png' });
 }
+if (scenario === 'full') {
+  for (let i = 0; i < LEVELS.length; i++) {
+    const L = parseLevel(LEVELS[i]); const sol = solve(L, { noDeath: true });
+    await page.waitForFunction(() => window.__app.mode.instance._dbg.state === 'play', null, { timeout: 90000 });
+    await page.waitForTimeout(300);
+    for (const m of sol.path) { await page.evaluate(([w, a]) => window.__app.mode.instance._dbg.act(w, a), [m.who, m.a]); await page.waitForTimeout(40); }
+    if (i === 1) { await page.waitForTimeout(1200); await page.screenshot({ path: out + '_clear.png' }); }
+    await page.waitForTimeout(300);
+  }
+  await page.waitForFunction(() => window.__app.mode.state === 'result', null, { timeout: 60000 });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: out + '_result.png' });
+  log('eindstand: ', await page.evaluate(() => JSON.stringify(window.__app.mode.result)));
+}
+if (scenario === 'death') {
+  // level 2: Daan loopt de lava in (stap 1: naar plaat, dan rechts de lava in)
+  await dbg('goto', [1]); await page.waitForTimeout(800);
+  await page.evaluate(() => { const d = window.__app.mode.instance._dbg; d.act(1, 3); d.act(1, 3); d.act(1, 3); });
+  await page.waitForTimeout(500);
+  await page.evaluate(() => { const d = window.__app.mode.instance._dbg; d.act(1, 3); });
+  await page.waitForTimeout(700); await page.screenshot({ path: out + '_death1.png' });
+  await page.waitForTimeout(1500); await page.screenshot({ path: out + '_death2.png' });
+  log('posities na dood', await page.evaluate(() => JSON.stringify(window.__app.mode.instance._dbg.lvl.st.p)));
+}
+if (scenario === 'reset') {
+  await dbg('goto', [0]); await page.waitForTimeout(400);
+  await page.evaluate(() => window.__app.mode.instance._dbg.act(0, 3));
+  await page.evaluate(() => { window.__app.input.virtual[1].b = true; });
+  await frames(12); await page.screenshot({ path: out + '_reset_mid.png' }); await frames(8);
+  await page.evaluate(() => { window.__app.input.virtual[1].b = false; });
+  await frames(3);
+  log('na reset: posities', await page.evaluate(() => JSON.stringify(window.__app.mode.instance._dbg.lvl.st.p)));
+}
 console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 15).join('\n') : 'NO ERRORS');
 await browser.close(); server.close();

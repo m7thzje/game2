@@ -21,11 +21,12 @@ export class EndingMode {
     this.app = app; this.t = 0; this.shot = null; this.shake = 0;
     this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.1, 400);
     this.fx = new Particles(3500); this.scene.add(this.fx.points); this.fx.setViewportHeight(innerHeight);
-    const L = setupLights(this.scene, 'night', { shadow: 30, center: [0, 0, 0], fogNear: 40, fogFar: 160 }); L.sun.intensity = 0.7;
+    const L = setupLights(this.scene, 'night', { shadow: 30, center: [0, 0, 0], fogNear: 40, fogFar: 160 }); L.sun.intensity = 0.9; L.hemi.intensity = 1.1;
+    const gl = new THREE.PointLight(0xffd9a0, 90, 40, 1.6); gl.position.set(0, 7, 38); this.scene.add(gl); const gl2 = new THREE.PointLight(0xff7ad5, 40, 30, 1.6); gl2.position.set(0, 5, 31); this.scene.add(gl2);
+    this.beams = [];
     this.knobs = DOORKNOBS.filter((k) => S.collected[k.id]).length; this.allKnobs = this.knobs >= DOORKNOBS.length; this.vip = S.vip || this.allKnobs;
     this.build();
     this.camera.position.set(0, 3, 40); this.camera.lookAt(0, 3, 30);
-    this.beams = [];
   }
   build() {
     const sc = this.scene;
@@ -88,7 +89,7 @@ export class EndingMode {
   cam(from, to, look0, look1, dur) { this.shot = { from, to, look0, look1, dur, t: 0 }; }
   async run() {
     audio.music('tense'); await ui.fade(0, 900);
-    this.cam([0, 4, 40], [0, 5.5, 36], [0, 5, 31], [0, 5, 31], 9);
+    this.cam([0, 4.5, 50], [0, 5, 44], [0, 4.5, 31], [0, 4.5, 31], 9);
     await wait(1500);
     await ui.say(STORY.GATE_TALK, { creepy: false });
     if (this.allKnobs) {
