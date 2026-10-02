@@ -21,7 +21,7 @@ export default {
   mode: 'pvp',
   time: 50,
   music: 'game',
-  blurb: 'Zwaai als Tarzan van liaan naar liaan over de rivier vol <b>hongerige krokodillen</b>! Houd <b>A</b> ingedrukt, duw links en rechts op het ritme van de zwaai en laat A los om te vliegen. Wie als eerste de overkant haalt, wint. Pas op voor <b>apen met bananen</b>, <b>rotte lianen</b> en de <b>draak</b>!',
+  blurb: 'Zwaai als Tarzan van liaan naar liaan over de rivier vol <b>hongerige krokodillen</b>! Houd <b>A</b> vast, duw links/rechts mee met de zwaai en laat A los om te vliegen. Eerste aan de overkant wint. Pas op voor <b>apen</b>, <b>rotte lianen</b> en een <b>draak</b>!',
   controls: ['{a} vasthouden (loslaten = vliegen)', '{move} links/rechts duwen = zwaaien', '{b} Tarzan-schreeuw (boost)'],
   tip: 'Duw mee met de beweging van je poppetje: dan zwaai je steeds hoger. Wie achterstaat krijgt Tarzan-power!',
 
@@ -155,7 +155,7 @@ export default {
       p.hintT = 0;
     }
     function dropInWater(p, x) {
-      (dbgLog.push({ i: p.i, t: +T.toFixed(1), x: +x.toFixed(1), rel: p.lastRel, st: p.state })); p.state = 'swim'; p.swimT = 0; p.falls++; p.armed = false; p.stun = 0; p.goldT = 0; p.rotT = 0; p.x = x; p.y = 0.2 + WATER_HIT; p.vx = 0; p.vy = 0;
+      (dbgLog.push({ i: p.i, t: +T.toFixed(1), x: +x.toFixed(1), rel: p.lastRel, st: p.state })); p.state = 'swim'; p.swimT = 0; p.falls++; p.armed = false; p.stun = 0; p.goldT = 0; p.rotT = 0; p.x = x; p.y = 0.2 + WATER_HIT * p.size; p.vx = 0; p.vy = 0;
       const v = lanes[p.i].vines[p.vine]; v.held = false;
       splashAt(x, p.z, 1.3); ctx.shake(0.45);
       text('PLONS!', x, 4.4, p.z + 1, '#8fe8ff', 1.5);
@@ -254,14 +254,15 @@ export default {
     }
 
     // ---------------- fysica per speler ----------------
-    function inputOf(p) { return ctx.pvp.input(p.i); }
+    const BLANK = { x: 0, y: 0, a: false, b: false, aP: false, bP: false };
+    function inputOf(p) { return done ? BLANK : ctx.pvp.input(p.i); }
     function stepPlayer(p, dt) {
       const inp = inputOf(p);
       p.stun = Math.max(0, p.stun - dt); p.cd = Math.max(0, p.cd - dt); p.goldT = Math.max(0, p.goldT - dt); p.noGrab = Math.max(0, p.noGrab - dt); p.sinceRel += dt;
       p.size = ctx.pvp.size(p.i);
       const ts = ctx.pvp.speed(p.i);
       const slip = ctx.pvp.slip, grav = ctx.pvp.gravity;
-      const gP = G_PEND * (0.45 + 0.55 * grav), gF = G_FLY * grav;
+      const gP = G_PEND * (0.45 + 0.55 * grav), gF = G_FLY * (0.55 + 0.45 * grav);
       // comeback: Tarzan-power
       const other = pl[1 - p.i];
       const lag = other.prog - p.prog;
@@ -287,7 +288,7 @@ export default {
         const n = Math.max(1, Math.ceil(dt * ts / 0.012)), h = dt * ts / n;
         const cdamp = lerp(DAMP, 0.03, slip);
         for (let s = 0; s < n; s++) {
-          const E = 0.5 * p.w * p.w + (gP / p.r) * (1 - Math.cos(p.th)), Emax = (gP / p.r) * (1 - Math.cos(1.05 + 0.1 * p.tz));
+          const E = 0.5 * p.w * p.w + (gP / p.r) * (1 - Math.cos(p.th)), Emax = (gP / p.r) * (1 - Math.cos(1.05 + 0.1 * p.tz + (1 - grav) * 0.25));
           const cap = clamp((Emax - E) / (0.3 * Emax), 0, 1);
           let x = p.stun > 0 ? 0 : inp.x;
           const tau = PUMP * x * cap * (1 + 0.7 * p.tz) * (p.goldT > 0 ? 2.0 : 1) + windNow * 0.9 * (C.VL / p.r);
@@ -327,18 +328,18 @@ export default {
         const feet = p.y - p.handH * p.sc * p.size * 0.0 - 2.0 * p.size;
         // overkant
         if (p.x >= C.GOAL_U + p.off - 0.4) {
-          if (feet >= C.BANK_Y - 0.6) { reachGoal(p); return; }
+          if (feet >= C.BANK_Y - 0.6 && !done) { reachGoal(p); return; }
           p.x = C.GOAL_U + p.off - 0.4; p.vx = -1.8; text('AU!', p.x - 0.5, p.y + 1.4, p.z + 1, '#ff7a5a', 1.2); audio.sfx('hit', { vol: 0.6 });
         }
         // startoever (terugvallen)
         if (p.x < 0.9 + p.off && feet < C.BANK_Y + 0.2 && p.vy < 0) {
           startReturn(p, { x: p.x, y: p.y }); p.swimT = 0; text('Oeps, terug!', p.x, p.y + 1.6, p.z + 1, '#bfe8ff', 1.1); return;
         }
-        if (p.y < WATER_HIT) dropInWater(p, p.x);
+        if (p.y < WATER_HIT * p.size) dropInWater(p, p.x);
       } else if (p.state === 'swim') {
         p.swimT += dt;
         const ch = W.chompers[p.i];
-        p.y = WATER_HIT - 0.5 + Math.sin(p.swimT * 6) * 0.1; p.x += windNow * dt * 0.5;
+        p.y = (WATER_HIT - 0.5) * p.size + Math.sin(p.swimT * 6) * 0.1; p.x += windNow * dt * 0.5;
         if (ch.state === 'delay' && p.swimT > 0.5) { ch.state = 'rise'; ch.t = 0; audio.sfx('splash', { vol: 0.35, rate: 0.6 }); W.ripple(ch.x, ch.z, 1.2); }
         if (ch.state === 'wait' && p.swimT > 1.25) {
           ch.state = 'chomp'; ch.t = 0; audio.sfx('hit', { vol: 0.7 }); audio.sfx('bad', { vol: 0.3 }); text('HAP!', ch.x, 3.5, ch.z + 1, '#ff7a5a', 1.5); ctx.shake(0.3);
@@ -378,7 +379,7 @@ export default {
       const lane = lanes[p.i];
       let vx = p.r * p.w * Math.cos(p.th), vy = p.r * p.w * Math.sin(p.th);
       if (p.goldT > 0) { vx *= 1.25; vy *= 1.15; }
-      let x = p.x, y = p.y; const gF = G_FLY * ctx.pvp.gravity; const dt = 0.04; const reach = 1.5 * p.size;
+      let x = p.x, y = p.y; const gF = G_FLY * (0.55 + 0.45 * ctx.pvp.gravity); const dt = 0.04; const reach = 1.5 * p.size;
       for (let s = 0; s < 45; s++) {
         vy -= gF * dt; x += vx * dt; y += vy * dt;
         if (y < 2.2) break;
@@ -447,23 +448,23 @@ export default {
       }
       // iconen
       const showB = p.state === 'hang' || p.state === 'fly';
-      p.bIcon.visible = showB && !done; p.bIcon.position.set(0.9, p.handH + 0.5, 0.1);
+      p.bIcon.visible = showB && !done; p.bIcon.position.set(0.95, 0.75, 0.1);
       p.bIcon.material.map = bTex[p.cd <= 0 ? 0 : 1]; p.bIcon.material.opacity = p.cd <= 0 ? 1 : 0.55;
       p.bIcon.scale.setScalar(p.cd <= 0 ? 0.85 + Math.sin(T * 6) * 0.05 : 0.7);
       const hintOn = p.state === 'hang' && !done && (playT < 14 || Math.abs(p.th) < 0.35) && p.stun <= 0;
       p.icon.visible = hintOn;
-      if (hintOn) { const dir = Math.abs(p.w) > 0.04 ? Math.sign(p.w) : 1; p.icon.material.map = arrowTex[dir > 0 ? 1 : 0]; p.icon.position.set(-0.7, p.handH + 0.55, 0.1); p.icon.material.opacity = 0.85; }
-      p.tag.position.set(0, p.handH + 1.6, 0);
+      if (hintOn) { const dir = Math.abs(p.w) > 0.04 ? Math.sign(p.w) : 1; p.icon.material.map = arrowTex[dir > 0 ? 1 : 0]; p.icon.position.set(-0.85, 0.75, 0.1); p.icon.material.opacity = 0.85; }
+      p.tag.position.set(0, 1.75, 0);
       p.tag.visible = !done;
       const tzOn = p.tz > 0.2 && !done;
-      p.aura.visible = tzOn; if (tzOn) { p.aura.position.set(0, p.handH * 0.45, 0); p.aura.scale.setScalar(4.5 + Math.sin(T * 7) * 0.3); p.aura.material.opacity = 0.5 * p.tz + 0.2; if (Math.random() < dt * 18) fx.particles.emit(p.x + (Math.random() - 0.5) * 1.6, p.y - 0.4 - Math.random() * 1.6, p.z + 0.5, (Math.random() - 0.5), 1 + Math.random(), 0, { life: 0.7, size: 0.28, color: Math.random() < 0.5 ? 0xffe14a : 0x8dff9a, gravity: -1 }); }
+      p.aura.visible = tzOn; if (tzOn) { p.aura.position.set(0, -p.handH * 0.5, 0); p.aura.scale.setScalar(4.5 + Math.sin(T * 7) * 0.3); p.aura.material.opacity = 0.5 * p.tz + 0.2; if (Math.random() < dt * 18) fx.particles.emit(p.x + (Math.random() - 0.5) * 1.6, p.y - 0.4 - Math.random() * 1.6, p.z + 0.5, (Math.random() - 0.5), 1 + Math.random(), 0, { life: 0.7, size: 0.28, color: Math.random() < 0.5 ? 0xffe14a : 0x8dff9a, gravity: -1 }); }
       // sweet spot
       p.hintT -= dt;
       if (p.hintT <= 0) { p.hintT = 0.1; p.sweet = p.tz > 0.15 && p.state === 'hang' && predictCatch(p); }
-      p.ring.visible = p.sweet && !done; if (p.sweet) { p.ring.position.set(0, p.handH + 0.1, 0.2); p.ring.scale.setScalar(2.0 + Math.sin(T * 14) * 0.25); }
+      p.ring.visible = p.sweet && !done; if (p.sweet) { p.ring.position.set(0, 0.1, 0.2); p.ring.scale.setScalar(2.0 + Math.sin(T * 14) * 0.25); }
       // sterretjes
       const stunned = p.stun > 0 && p.state !== 'swim';
-      p.stars.visible = stunned; if (stunned) { p.stars.position.set(0, p.handH - 0.5, 0); p.starSprites.forEach((s, k) => { const a = T * 6 + k * TAU / 3; s.position.set(Math.cos(a) * 0.75, Math.sin(a * 2) * 0.1, Math.sin(a) * 0.5); }); }
+      p.stars.visible = stunned; if (stunned) { p.stars.position.set(0, -0.35, 0); p.starSprites.forEach((s, k) => { const a = T * 6 + k * TAU / 3; s.position.set(Math.cos(a) * 0.75, Math.sin(a * 2) * 0.1, Math.sin(a) * 0.5); }); }
       // schaduwblob op het water
       p.blob.position.set(p.x, 0.05, p.z); const hh = Math.max(0, p.y - 2);
       p.blob.material.opacity = (p.state === 'hang' || p.state === 'fly') ? clamp(0.28 - hh * 0.02, 0, 0.28) : 0; p.blob.scale.setScalar(1 + hh * 0.05);
@@ -492,7 +493,7 @@ export default {
       camX = first ? tx : damp(camX, tx, 3.2, dt); camDist = first ? tdist : damp(camDist, tdist, 1.6, dt);
       const cy = 6.0 + Math.max(0, camDist - 30) * 0.06;
       camera.position.set(camX, cy + 7.0, camDist);
-      camLook.set(camX, cy - 0.4, 0); camera.lookAt(camLook);
+      camLook.set(camX, cy + 0.3, 0); camera.lookAt(camLook);
       // zon + schaduw volgt de camera
       L.sun.position.set(camX + 14, 40, 26); L.sun.target.position.set(camX, 3, 0); L.sun.target.updateMatrixWorld();
     }
@@ -563,9 +564,7 @@ export default {
 
     function resultUpdate(dt) {
       T += dt; resultT += dt;
-      pl.forEach((p) => {
-        if (p.state === 'hang') { const v = lanes[p.i].vines[p.vine]; v.held = true; p.w *= 0.995; p.th += p.w * dt * 0.0; }
-      });
+      pl.forEach((p) => { if (p.state !== 'won') stepPlayer(p, dt); });
       W.update(T, dt, camX); visuals(dt); cam(dt);
     }
   },

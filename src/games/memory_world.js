@@ -219,7 +219,7 @@ export function buildLibrary(ctx, L) {
     ghost.add(new THREE.Mesh(new THREE.SphereGeometry(0.85, 14, 10, 0, TAU, 0, Math.PI / 2), gm)); ghost.children[1].position.y = 3.0;
     for (const s of [-1, 1]) { ghost.add(mesh(new THREE.SphereGeometry(0.17, 8, 6), new THREE.MeshBasicMaterial({ color: 0x111122 }), { cast: false, pos: [s * 0.36, 2.55, 0.92], scale: [1, 1.5, 0.6] })); const arm = mesh(new THREE.SphereGeometry(0.3, 8, 6), gm, { cast: false, pos: [s * 1.35, 1.7, 0.2], scale: [1.4, 0.8, 0.8] }); ghost.add(arm); ghost.userData['arm' + s] = arm; }
     ghost.add(mesh(new THREE.SphereGeometry(0.28, 8, 6), new THREE.MeshBasicMaterial({ color: 0x111122 }), { cast: false, pos: [0, 2.0, 1.0], scale: [1, 1.4, 0.5] }));
-    ghost.scale.setScalar(1.25); }
+    ghost.scale.setScalar(1.7); }
   let gT = -1, gDur = 2.4;
   Wd.ghostStart = (dur = 2.4) => { gT = 0; gDur = dur; ghost.visible = true; };
   Wd.ghostActive = () => gT >= 0;
@@ -227,9 +227,9 @@ export function buildLibrary(ctx, L) {
     if (gT < 0) return;
     gT += dt; const u = gT / gDur;
     if (u >= 1) { gT = -1; ghost.visible = false; return; }
-    const x = lerp(-15, 15, u) + Math.sin(u * 14) * 2.2, z = Math.sin(u * 9 + 1) * 3.4 + 0.5, y = 3.4 + Math.sin(u * 20) * 0.7 + Math.sin(u * Math.PI) * 1.8;
+    const x = lerp(-15, 15, u) + Math.sin(u * 14) * 2.2, z = Math.sin(u * 9 + 1) * 3.4 + 0.5, y = 2.6 + Math.sin(u * 20) * 0.5 + Math.sin(u * Math.PI) * 1.2;
     ghost.position.set(x, y, z); ghost.rotation.y = Math.PI / 2 * (u < 0.5 ? 1 : -1) * 0.2 + Math.sin(u * 14) * 0.4; ghost.rotation.z = Math.cos(u * 14) * 0.25;
-    const sc = Math.min(1, u * 8, (1 - u) * 8); ghost.scale.setScalar(1.25 * Math.max(0.01, sc));
+    const sc = Math.min(1, u * 8, (1 - u) * 8); ghost.scale.setScalar(1.7 * Math.max(0.01, sc));
     ghost.userData['arm1'].position.y = 1.7 + Math.sin(gT * 12) * 0.4; ghost.userData['arm-1'].position.y = 1.7 + Math.cos(gT * 12) * 0.4;
     if (Math.random() < 0.7) fx.particles.emit(x + rand(-1, 1), y + rand(0, 2.5), z + rand(-1, 1), rand(-0.5, 0.5), rand(-0.3, 0.8), rand(-0.5, 0.5), { life: 0.9, size: 0.45, color: pick([0xcfd8ff, 0xffffff, 0xb0a0ff]), gravity: -0.4 });
   });

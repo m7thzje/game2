@@ -89,7 +89,7 @@ export default {
         c.root.scale.setScalar(Math.max(0.001, c.sc));
         c.flip.rotation.z = c.ang;
         c.flip.rotation.x = c.wob > 0 ? Math.sin(T * 38) * c.wob * 0.16 : (c.lift > 0.02 ? -c.lift * 0.25 : 0);
-        c.mat.emissiveIntensity = c.glow * (0.55 + Math.sin(T * 14) * 0.15);
+        c.mat.emissiveIntensity = c.glow * (0.32 + Math.sin(T * 14) * 0.08);
       }
     }
     const slotPos = (s) => v3b.set(slotX(s), CARD_Y, slotZ(s));
@@ -102,7 +102,7 @@ export default {
     const pl = players.map((pp, i) => {
       const c = ctx.make.brother(i);
       const holder = new THREE.Group(); holder.add(c.group); scene.add(holder);
-      const size = ctx.pvp.size(i); const sc = 1.2 * size; holder.scale.setScalar(sc); holder.position.set(BASE_X[i], 0.02, 0.9);
+      const size = ctx.pvp.size(i); const sc = 1.5 * size; holder.scale.setScalar(sc); holder.position.set(BASE_X[i], 0.02, 0.9);
       const hs = c.spec.headScale ?? 1; c._hat('wizard', i ? 0x2a54c8 : 0x1f8a48, 0xffd24a, 0.3 * c.s * hs, c.s, c.head);
       // toverstaf
       const s = c.s;
@@ -120,7 +120,7 @@ export default {
         g.beginPath(); g.moveTo(w / 2 - 30, h - 58); g.lineTo(w / 2, h - 10); g.lineTo(w / 2 + 30, h - 58); g.closePath(); g.fill(); g.stroke(); g.fillRect(w / 2 - 26, h - 62, 52, 10);
         g.fillStyle = '#fff'; g.font = 'bold 80px Fredoka, Arial Black, Arial, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(0,0,0,.55)'; g.strokeText(pp.name.toUpperCase(), w / 2, (h - 66) / 2 + 12, w - 50); g.fillText(pp.name.toUpperCase(), w / 2, (h - 66) / 2 + 12, w - 50);
       });
-      const banner = new THREE.Sprite(new THREE.SpriteMaterial({ map: plaque, transparent: true, depthTest: false, fog: false })); banner.scale.set(4.2, 1.575, 1); banner.renderOrder = 18; banner.visible = false; scene.add(banner);
+      const banner = new THREE.Sprite(new THREE.SpriteMaterial({ map: plaque, transparent: true, depthTest: false, fog: false })); banner.scale.set(3.1, 1.16, 1); banner.renderOrder = 18; banner.visible = false; scene.add(banner);
       // cursor
       const cursor = new THREE.Mesh(new THREE.PlaneGeometry(CW + 0.55, CH + 0.55), new THREE.MeshBasicMaterial({ map: frameTex(), color: pp.color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.95 }));
       cursor.rotation.x = -Math.PI / 2; cursor.position.set(0, CARD_Y + 0.3, 0); cursor.visible = false; cursor.renderOrder = 6; scene.add(cursor);
@@ -128,6 +128,10 @@ export default {
       const zap = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1, 6, 1, true), new THREE.MeshBasicMaterial({ color: pp.color, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending })); zap.visible = false; zap.renderOrder = 7; scene.add(zap);
       return { i, c, holder, size, sc, wand, tip, wandArm: i === 0 ? c.armR : c.armL, ring, beamCol, banner, cursor, zap, pose: 'idle', poseT: 0, name: pp.name, bob: i * 1.7 };
     });
+
+    // zandloper-balk aan de voorkant van de tafel
+    const timerBar = mesh(new THREE.BoxGeometry(8, 0.14, 0.28), new THREE.MeshBasicMaterial({ color: 0x35c46f }), { cast: false, receive: false, pos: [0, 0.12, 6.3] }); timerBar.visible = false; scene.add(timerBar);
+    const timerBack = mesh(new THREE.BoxGeometry(8.3, 0.1, 0.5), mat(0x2a1a10), { cast: false, receive: false, pos: [0, 0.06, 6.3] }); scene.add(timerBack);
 
     // ---------------- toestand ----------------
     const T0 = { phase: 'deal', active: 0, first: null, second: null, timer: turnLen, cur: [0, NSLOT - 1], total: 0, shuffles: 0, ghosts: 0, nextGhost: 24 + rand(0, 8), turns: 0, misses: [0, 0], done: false, revealed: false };
@@ -209,13 +213,13 @@ export default {
       if (b.kind !== 'pair') { special(b); return; }
       if (a.face === b.face) matchPair(a, b); else mismatch(a, b);
     }
-    function pileTarget(i, k, w) { return v3.set((i ? 1 : -1) * 6.65 + (w ? 0.42 : -0.42), 0.06, -3.7 + clamp(k, 0, 8) * 1.0); }
+    function pileTarget(i, k, w) { return v3.set((i ? 1 : -1) * 6.9 + (w ? 0.5 : -0.5), 0.07, -4.3 + clamp(k, 0, 8) * 1.2); }
     function claim(a, b, i, fromJoker = false) {
       const k = piles[i].length; const pr = [a, b]; pr.w = remainingPairs() === 1 ? 2 : 1; piles[i].push(pr);
       if (pr.w === 2) { popup('GOUDEN PAAR! +2', (a.p.x + b.p.x) / 2, 4.2, (a.p.z + b.p.z) / 2, '#ffd23a', 1.7); hud.showBig('GOUDEN PAAR: 2 PUNTEN!', 1500, '#ffd23a'); audio.sfx('win', { vol: 0.5 }); }
       for (const [c, w] of [[a, 0], [b, 1]]) {
         if (slots[c.slot] === c) slots[c.slot] = null; c.slot = -1; c.st = 'claimed'; c.owner = i; c.angT = Math.PI; c.glowT = 0.6; c.liftT = 0;
-        tween(c, pileTarget(i, k, w), 0.85, { arc: 2.2, spin: 0, sc: 0.5, delay: w * 0.08 });
+        tween(c, pileTarget(i, k, w), 0.85, { arc: 2.2, spin: 0, sc: 0.62, delay: w * 0.08 });
       }
       later(0.9, () => { a.glowT = pr.w === 2 ? 0.5 : 0; b.glowT = pr.w === 2 ? 0.5 : 0; });
       refreshHud();
@@ -237,11 +241,12 @@ export default {
     }
     function mismatch(a, b) {
       S.phase = 'mismatch'; S.misses[S.active]++;
-      a.wob = b.wob = 1; a.glowT = b.glowT = 0;
+      a.wob = b.wob = 1; a.mat.emissive.set(0xff3a3a); b.mat.emissive.set(0xff3a3a); a.glowT = b.glowT = 0.9;
       audio.sfx('miss', { vol: 0.7 }); audio.sfx('buzz', { vol: 0.3 });
       popup(pick(['Helaas!', 'Mis!', 'Net niet!', 'Oeps!']), (a.p.x + b.p.x) / 2, 3.0, (a.p.z + b.p.z) / 2, '#ff8a8a', 1.2);
       setPose(pl[S.active], 'sad', 1.2); setPose(pl[1 - S.active], 'wave', 1.2);
-      later(1.0, () => { for (const c of [a, b]) { c.st = 'down'; c.angT = 0; } });
+      later(0.7, () => { a.glowT = b.glowT = 0; });
+      later(1.0, () => { for (const c of [a, b]) { c.st = 'down'; c.angT = 0; c.mat.emissive.set(0xffd24a); } });
       later(1.55, () => { S.first = S.second = null; endTurn(); });
     }
     function timeout() {
@@ -268,7 +273,7 @@ export default {
     }
     function special(c) {
       S.phase = 'special'; const i = S.active, p = pl[i];
-      c.glowT = 1;
+      c.mat.emissive.set({ bomb: 0xff4020, joker: 0xff6ad8, mirror: 0x6ac8ff, ghost: 0xaab4ff }[c.kind] || 0xffd24a); c.glowT = 1;
       if (c.kind === 'bomb') {
         hud.showBig('BOEM!', 1100, '#ff5a3a'); audio.sfx('buzz', { vol: 0.5 }); c.wob = 1.2;
         later(0.7, () => {
@@ -301,7 +306,7 @@ export default {
           if (s0 === s1) { popup('Gelijk! Niks verandert', 0, 3.6, 0, '#cfe8ff', 1.3); hud.toast('Spiegel, spiegel: jullie staan gelijk...', 1800); audio.sfx('miss', { vol: 0.5 }); }
           else {
             const t = piles[0]; piles[0] = piles[1]; piles[1] = t;
-            for (let q = 0; q < 2; q++) piles[q].forEach((pr, k) => { pr.forEach((cd, w) => { cd.owner = q; tween(cd, pileTarget(q, k, w), 1.1, { arc: 3.4, delay: k * 0.06 + w * 0.04, sc: 0.5 }); }); });
+            for (let q = 0; q < 2; q++) piles[q].forEach((pr, k) => { pr.forEach((cd, w) => { cd.owner = q; tween(cd, pileTarget(q, k, w), 1.1, { arc: 3.4, delay: k * 0.06 + w * 0.04, sc: 0.62 }); }); });
             popup(`${names[0]} ${piles[0].length} – ${piles[1].length} ${names[1]}`, 0, 4.2, 0, '#9ad8ff', 1.5);
             audio.sfx('powerup', { vol: 0.7 }); ctx.shake(0.4);
             burst(0, 2.5, 0, { count: 70, speed: 8, up: 0.8, life: 1.1, size: 0.5, colors: [0x9ad8ff, 0xffffff, 0xcfa8ff], gravity: 2 });
@@ -400,9 +405,9 @@ export default {
         const arm = p.wandArm;
         if (ctrl) { arm.rotation.x = lerp(arm.rotation.x, -1.45 + Math.sin(T * 6) * 0.05, 0.6); arm.rotation.z = lerp(arm.rotation.z, 0, 0.5); }
         p.ring.material.opacity = isAct ? 0.55 + Math.sin(T * 6) * 0.25 : 0.2;
-        p.ring.scale.setScalar(p.sc / 1.2 * (isAct ? 1.1 + Math.sin(T * 6) * 0.05 : 1));
+        p.ring.scale.setScalar(p.sc / 1.5 * 1.15 * (isAct ? 1.1 + Math.sin(T * 6) * 0.05 : 1));
         p.beamCol.material.opacity = damp(p.beamCol.material.opacity, isAct && !S.done ? 0.16 + Math.sin(T * 5) * 0.03 : 0, 6, dt);
-        if (p.banner.visible) { p.banner.position.set(hx, p.c.height * p.sc * 1.25 + 1.9 + Math.sin(T * 4) * 0.2, p.holder.position.z); const k = 1 + Math.sin(T * 6) * 0.04; p.banner.scale.set(4.2 * k, 1.575 * k, 1); }
+        if (p.banner.visible) { p.banner.position.set(hx, p.c.height * p.sc + 1.25 + Math.sin(T * 4) * 0.15, p.holder.position.z + 0.5); const k = 1 + Math.sin(T * 6) * 0.04; p.banner.scale.set(3.1 * k, 1.16 * k, 1); }
         // cursor
         p.cursor.visible = ctrl;
         if (ctrl) {
@@ -419,8 +424,12 @@ export default {
           if (Math.random() < dt * 24) { const t = Math.random(); fx.particles.emit(v3.x + v3b.x * len * t, v3.y + v3b.y * len * t, v3.z + v3b.z * len * t, rand(-0.5, 0.5), rand(0.2, 1), rand(-0.5, 0.5), { life: 0.5, size: 0.25, color: i ? 0x8ab8ff : 0x7affa8, gravity: 0 }); }
         } else p.zap.visible = false;
       }
-      // actieve kaart-onderdelen: timerbalk in HUD
-      if (active) hud.setTimer(S.timer, 3);
+      timerBar.visible = active;
+      if (active) {
+        hud.setTimer(S.timer, 3);
+        const k = clamp(S.timer / turnLen, 0, 1); timerBar.scale.x = Math.max(0.001, k); timerBar.position.x = -4 * (1 - k);
+        timerBar.material.color.setRGB(lerp(0.95, 0.2, k), lerp(0.2, 0.8, Math.min(1, k * 1.6)), 0.25);
+      }
     }
 
     // ---------------- camera ----------------

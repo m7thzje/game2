@@ -88,10 +88,11 @@ if (scen === 'bots' || scen === 'twists') {
   const tws = scen === 'twists' ? ALL_TW : [args[1] || 'none'];
   for (const tw of tws) {
     const tally = [0, 0, 0]; const durs = [];
-    for (let rep = 0; rep < (scen === 'twists' ? 2 : 6); rep++) {
-      const { browser, page, errors } = await open(tw);
+    for (let rep = 0, tries = 0; rep < (scen === 'twists' ? 2 : 6); rep++) {
+      let browser, page, errors;
+      try { ({ browser, page, errors } = await open(tw)); } catch (e) { console.log('  (open mislukt, opnieuw)', e.message.split('\n')[0]); if (tries++ < 6) rep--; continue; }
       const skill = rep % 3 === 0 ? [0.8, 0.8] : rep % 3 === 1 ? [0.6, 0.95] : [0.95, 0.6];
-      const r = await runMatch(page, { skill });
+      let r; try { r = await runMatch(page, { skill }); } catch (e) { console.log('  (match mislukt, opnieuw)', e.message.split('\n')[0]); await browser.close().catch(() => {}); if (tries++ < 6) rep--; continue; }
       if (!r.finished) console.log('  !! NIET AFGEROND', tw, JSON.stringify(r));
       const w = r.res ? r.res.winner : -1; tally[w == null ? 2 : w]++; durs.push(Math.round(r.t));
       console.log(`  [${tw}] rep${rep} skill=${skill} winner=${w} score=${r.res && r.res.score} t=${r.t.toFixed(1)} stats=${JSON.stringify(r.stats)}`);

@@ -189,10 +189,10 @@ export function buildJungle(ctx) {
   // middentak (voor de apen) + steunen
   for (let k = 0; k < 9; k++) {
     const x = x0 + 2 + k * ((x1 - x0 - 4) / 8);
-    add(mesh(new THREE.CylinderGeometry(0.5, 0.6, 7, 7), bark, { cast: false, pos: [x, C.PY + 3.4, -0.4], rot: [0.0, 0, 0] }));
+    add(mesh(new THREE.CylinderGeometry(0.5, 0.6, 7, 7), bark, { cast: false, pos: [x, C.PY + 2.0, -0.4], rot: [0.0, 0, 0] }));
   }
-  add(mesh(new THREE.CylinderGeometry(0.6, 0.6, x1 - x0, 8), bark2, { cast: false, pos: [(x0 + x1) / 2, C.PY + 2.4, -0.4], rot: [0, 0, Math.PI / 2] }));
-  for (let k = 0; k < 26; k++) leaf(x0 + k * ((x1 - x0) / 25) + r(-1, 1), C.PY + 3.2 + r(-0.4, 1.4), r(-3.2, -0.8), r(1.2, 2.0));
+  add(mesh(new THREE.CylinderGeometry(0.6, 0.6, x1 - x0, 8), bark2, { cast: false, pos: [(x0 + x1) / 2, C.PY + 1.0, -0.4], rot: [0, 0, Math.PI / 2] }));
+  for (let k = 0; k < 26; k++) leaf(x0 + k * ((x1 - x0) / 25) + r(-1, 1), C.PY + 1.9 + r(-0.4, 1.2), r(-3.4, -1.2), r(1.1, 1.8));
   // reuzenbomen
   for (let k = 0; k < 11; k++) {
     const x = -14 + k * 9.2 + r(-2, 2), z = -17 - r(0, 6), h = 30 + r(0, 8), rad = r(1.5, 2.4);
@@ -254,7 +254,7 @@ export function buildJungle(ctx) {
   // apen
   const monkeys = [];
   [14, 32, 50].forEach((x, k) => {
-    const m = makeMonkey(); m.position.set(x, C.PY + 3.0, -0.4); m.rotation.y = 0; m.scale.setScalar(1.05); root.add(m);
+    const m = makeMonkey(); m.position.set(x, C.PY + 1.6, -0.4); m.rotation.y = 0; m.scale.setScalar(1.05); root.add(m);
     monkeys.push({ g: m, x, state: 'idle', t: 0, cool: 0 });
   });
   // bananen

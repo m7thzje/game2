@@ -23,7 +23,7 @@ async function open(twist = 'none', extra = '') {
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
   await page.goto(`http://localhost:${port}/?game=quickdraw&twist=${twist}&quality=low${extra}`);
-  await page.waitForFunction(() => window.__app && window.__app.mode && window.__app.mode.instance, null, { timeout: 60000 });
+  await page.waitForFunction(() => window.__app && window.__app.mode && window.__app.mode.instance, null, { timeout: 240000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;

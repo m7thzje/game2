@@ -71,9 +71,9 @@ async function open(twist) {
         return;
       }
       // station zoeken
-      let best = null, bd = 1e9; for (const s of st.stations) { const d = Math.hypot(s.cx - me.x, s.cz - me.z) + s.cd * 3 + (s.kind === 'cart' ? -1 : 0); if (d < bd) { bd = d; best = s; } }
+      let best = null, bd = 1e9; for (const s of st.stations) { if (s.kind === 'cart') continue; const d = Math.hypot(s.cx - me.x, s.cz - me.z) + s.cd * 3; if (d < bd) { bd = d; best = s; } }
       const d = Math.hypot(best.cx - me.x, best.cz - me.z); const [nx, nz] = norm(best.cx - me.x, best.cz - me.z); v.x = nx; v.y = nz;
-      if (d < 1.9) { v.x = 0; v.y = 0; v.a = true; }
+      if (d < (best.kind === 'cart' ? 2.55 : 1.9)) { v.x = 0; v.y = 0; v.a = true; }
     }
     window.__bot = (n, stop) => {
       const dt = 1 / 30;
@@ -117,7 +117,7 @@ for (const name of scen) {
     }
     console.log(`winnaars: Wes ${tally[0]}, Jor ${tally[1]}, gelijk ${tally[2]}`);
   } else if (name === 'twists') {
-    for (const tw of ALL_TWISTS) {
+    for (const tw of (process.env.TW ? process.env.TW.split(',') : ALL_TWISTS)) {
       const { browser, page } = await open(tw);
       await playOut(page, `twist ${tw}`);
       await browser.close();
@@ -180,6 +180,14 @@ for (const name of scen) {
         return out;
       });
       console.log(r2.join('\n')); await b2.close();
+    }
+    await browser.close();
+  } else if (name === 'trace') {
+    const { browser, page } = await open(process.env.TWIST || 'none');
+    await page.evaluate((s) => { window.__skill = s; }, [{ aim: 0.4, tray: 0.2, dodge: 0.4 }, { aim: 0.4, tray: 0.2, dodge: 0.4 }]);
+    for (let k = 0; k < 30; k++) {
+      const r = await page.evaluate(() => { window.__bot(30 * 2); const s = window.__app.mode.instance.dbg.state(); return `T=${s.T.toFixed(0)} sc=${s.score} ` + s.p.map((p, i) => `P${i}(${p.x.toFixed(1)},${p.z.toFixed(1)}) ${p.cake || '-'} st${p.stun.toFixed(1)}${p.sh ? ' TRAY' : ''}${p.puddle ? ' PUD' : ''}`).join(' | ') + ` cd=${s.stations.map((q) => q.cd.toFixed(0))} bram=${s.bram.state}`; });
+      console.log(r);
     }
     await browser.close();
   } else if (name === 'shots2') {

@@ -90,6 +90,18 @@ for (const name of scen) {
       }
       await page.close();
     }
+  } else if (name === 'elim') {
+    for (const k of ['trap', 'spring']) {
+      const page = await open('none');
+      const snap = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); for (let q = 0; q < 4; q++) { try { await page.screenshot({ path: `/tmp/chairs_${tag}.png`, timeout: 90000 }); break; } catch (e) { await page.waitForTimeout(1500); } } await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
+      const until = (cond, max = 6000) => page.evaluate(({ cond, max }) => { const d = window.__app.mode.instance.dbg; const f = new Function('s', 'd', 'return ' + cond); let g = 0; while (!f(d.state(), d) && g++ < max && !window.__app.mode.finished) window.__step(1); return d.state().T; }, { cond, max });
+      await page.evaluate((k) => { const d = window.__app.mode.instance.dbg; d.auto(0); d.auto(1); d.setElim(k); }, k);
+      await until('s.rs==="elim"');
+      await page.evaluate(() => window.__step(50)); await snap(k + '_a');
+      await page.evaluate(() => window.__step(20)); await snap(k + '_b');
+      await page.evaluate(() => window.__step(20)); await snap(k + '_c');
+      await page.close();
+    }
   } else if (name === 'human') {
     // een "mens" (virtuele toetsen) speelt Wes tegen de AI; kijkt of de echte besturing werkt
     for (const tw of ['none', 'invert', 'swapab']) {

@@ -292,7 +292,7 @@ export default {
           if (!ai.smart && Math.random() < 0.18) ai.confused = 0.45;
         }
         const ch = ai.target; const d = Math.hypot(ch.x - e.x, ch.z - e.z);
-        toward(ch.x, ch.z, 1); out.speedMul = ai.smart ? 1.08 : 1.0; out.run = true;
+        toward(ch.x, ch.z, 1); out.speedMul = 1.0; out.run = true;
         if (d < SIT_REACH * e.sz) out.a = true;
         else if (d < (ai.smart ? 2.7 : 2.2) && Math.random() < dt * 10) out.a = true;       // duiken
         // duwen
@@ -310,7 +310,7 @@ export default {
     // ------------------------------------------------------------ muziek-stop en rondebesturing
     function doStop() {
       R.state = 'stop'; R.stopT = 0; R.settleT = 0;
-      for (const e of E) { if (e.early && e.mode === 'sit') e.early = false; if (e.early && e.mode === 'slide') e.early = false; if (e.dive) e.dive.early = false; if (e.ai) { e.ai.target = null; e.ai.delay = (e.ai.smart ? rand(0.2, 0.36) : rand(0.4, 0.75)); } }
+      for (const e of E) { if (e.early && e.mode === 'sit') e.early = false; if (e.early && e.mode === 'slide') e.early = false; if (e.dive) e.dive.early = false; if (e.ai) { e.ai.target = null; e.ai.delay = (e.ai.smart ? rand(0.27, 0.48) : rand(0.5, 0.9)); } }
       if (R.stopKind === 'gliss') {
         cutMusic();
         const f0 = 640; audio.tone(f0, 1.1, { type: 'sawtooth', vol: 0.17, slide: f0 / 5, vib: 0.03, filter: 1800, send: 0.2 });
@@ -390,18 +390,19 @@ export default {
       }
       R.state = 'elim'; R.t = 0; R.victim = victim; victim.mode = 'elim'; victim.modeT = 0; victim.dive = null; victim.slide = null; victim.stunT = 0;
       if (victim.seat) { victim.seat.occupant = null; victim.seat = null; }
-      R.elimKind = Math.random() < 0.5 ? 'trap' : 'spring';
+      R.elimKind = R.forceElim || (Math.random() < 0.5 ? 'trap' : 'spring');
       victim.alive = false; victim.out = true; victim.outRound = R.n;
       hud.showBig(`${victim.name} valt uit!`, 1100, victim.css);
       const v = victim;
       v.vx = v.vz = 0;
+      const tx = clamp(v.x * 0.5, -3, 3), tz = 3.0;
       if (R.elimKind === 'trap') {
-        trapdoor.group.visible = true; trapdoor.group.position.set(v.x, PLAT_Y + 0.01, v.z); trapdoor.open(0); trapdoor.group.scale.setScalar(v.sz);
-        v.fall = { t: 0 };
+        trapdoor.group.visible = true; trapdoor.group.position.set(tx, PLAT_Y + 0.01, tz); trapdoor.open(0); trapdoor.group.scale.setScalar(Math.max(0.9, v.sz));
+        v.fall = { t: 0, fx: v.x, fz: v.z, tx, tz };
         audio.sfx('door', { vol: 0.8 }); audio.sfx('creak', { vol: 0.4, rate: 1.8 });
       } else {
-        spring.group.visible = true; spring.group.position.set(v.x, PLAT_Y, v.z); spring.setK(0); spring.group.scale.setScalar(v.sz);
-        v.fly = null; v.fall = { t: 0, spring: true };
+        spring.group.visible = true; spring.group.position.set(tx, PLAT_Y, tz); spring.setK(1); spring.group.scale.setScalar(Math.max(0.9, v.sz));
+        v.fly = null; v.fall = { t: 0, spring: true, fx: v.x, fz: v.z, tx, tz };
         audio.sfx('click', { vol: 0.6 });
       }
       e_out_log(v);
@@ -481,8 +482,11 @@ export default {
       }
     }
     function statusHint() {
-      if (R.state === 'pick' || done) return;
-      const h = E.map((e) => `<span style="color:${e.css}">${e.name}</span> ${e.alive ? '✔' : '✘'}`).join(' &nbsp; '); if (h !== R.lastHint) { R.lastHint = h; hud.setHint(h); }
+      if (R.state === 'pick' || done || R.state === 'trophy') return;
+      const marks = E.map((e) => `<span style="color:${e.css}">${e.name}</span> ${e.alive ? '✔' : '✘'}`).join(' &nbsp; ');
+      const msg = R.state === 'music' ? '♪ Loop rond de stoelen... pas als de muziek <b>stopt</b> rennen en <b>A</b>!' : R.state === 'fake' ? '<b>Stilte...</b> is dit echt een STOP?' : R.state === 'stop' ? '<b>NU!</b> Ren naar een stoel en druk op A (B = duwen)' : R.state === 'intro' ? 'Maak je klaar...' : '';
+      const h = (msg ? msg + ' &nbsp;·&nbsp; ' : '') + marks;
+      if (h !== R.lastHint) { R.lastHint = h; hud.setHint(h); }
     }
 
     // ------------------------------------------------------------ update: spelers
@@ -675,41 +679,44 @@ export default {
     function updateElim(e, dt) {
       const f = e.fall; if (!f) return;
       f.t += dt;
+      if (f.t < 0.6) {   // eerst naar het midden van het podium schuiven, zodat iedereen het ziet
+        const k = smoothstep(0, 1, f.t / 0.6);
+        e.x = lerp(f.fx, f.tx, k); e.z = lerp(f.fz, f.tz, k); e.face = Math.atan2(f.tx - f.fx, f.tz - f.fz); e.c.speed = 0; e.y = PLAT_Y + Math.abs(Math.sin(f.t * 22)) * 0.1;
+        return;
+      }
+      const t = f.t - 0.6;
       if (!f.spring) {
         // valluik
-        const open = smoothstep(0, 1, clamp(f.t / 0.4, 0, 1)) * (f.t < 1.7 ? 1 : 1 - clamp((f.t - 1.7) / 0.4, 0, 1));
+        const open = smoothstep(0, 1, clamp(t / 0.4, 0, 1)) * (t < 1.7 ? 1 : 1 - clamp((t - 1.7) / 0.4, 0, 1));
         trapdoor.open(open);
-        if (f.t > 0.45) {
+        if (t > 0.45) {
           e.vy -= 30 * dt; e.y += e.vy * dt; e.holder.rotation.z += dt * 3; e.vx *= 0.9; e.vz *= 0.9;
           const k = clamp((PLAT_Y - e.y) / 3.5, 0, 1); e.scaleK = 1 - k * 0.9;
           if (!f.sound) { f.sound = true; audio.tone(900, 0.9, { type: 'sine', vol: 0.18, slide: 120 }); }
           if (e.y < PLAT_Y - 4.2 && !f.gone) { f.gone = true; e.holder.visible = false; audio.sfx('thud', { vol: 0.9 }); ctx.shake(0.3); fx.particles.burst(e.x, PLAT_Y + 0.4, e.z, { count: 20, speed: 5, up: 2, life: 0.8, size: 0.6, colors: [0x333333, 0x666666], gravity: 6 }); say('Plof...', e.x, e.z, '#cfcfcf', 1.0, 3); }
-        } else { e.c.pose = 'scared'; e.y = PLAT_Y + Math.sin(f.t * 60) * 0.03; }
-        if (f.t > 2.1) { trapdoor.group.visible = false; finishElim(e); }
+        } else { e.y = PLAT_Y + Math.sin(t * 60) * 0.03; }
+        if (t > 2.1) { trapdoor.group.visible = false; finishElim(e); }
       } else {
         // springplank / katapult
-        const comp = f.t < 0.55 ? smoothstep(0, 1, f.t / 0.55) : 0;
-        if (f.t < 0.55) { spring.setK(1 - comp * 0.75); e.y = PLAT_Y + (spring.plank.position.y) + 0.02; e.holder.scale.y = e.gs * (1 - comp * 0.15); }
+        const comp = t < 0.55 ? smoothstep(0, 1, t / 0.55) : 0;
+        if (t < 0.55) { spring.setK(1 - comp * 0.75); e.y = PLAT_Y + spring.plank.position.y + 0.02; }
         else if (!f.launched) {
           f.launched = true; spring.setK(1.0); audio.sfx('boing', { vol: 1, rate: 0.9 }); audio.sfx('whoosh', { vol: 0.8 }); ctx.shake(0.5);
           const s = e.slot || slotFor(e); e.slot = s;
-          const T0 = 1.5; f.T0 = T0; f.fx = e.x; f.fz = e.z; f.tx = s.x; f.tz = s.z; f.ty = s.y;
-          f.vy = (f.ty - e.y) / T0 + 0.5 * 24 * T0 + 9;     // boog tot balkon (ruwe benadering)
-          f.T0 = T0 * 1.0;
+          f.T0 = 1.5; f.fx = e.x; f.fz = e.z; f.tx2 = s.x; f.tz2 = s.z; f.ty = s.y;
           fx.particles.burst(e.x, PLAT_Y + 0.3, e.z, { count: 26, speed: 6, up: 1, life: 0.6, size: 0.5, colors: [0xffffff, 0xd8c8a8, 0xffe14a], gravity: 5 });
           fx.texts.add('BOIOIOING!', e.x, 4.5, e.z, '#ffe14a', 1.4);
         }
         if (f.launched) {
-          const tt = f.t - 0.55; const k = clamp(tt / f.T0, 0, 1);
-          // parabool met vaste eindpunt: x,z lineair, y = lineair + boog
-          e.x = lerp(f.fx, f.tx, k); e.z = lerp(f.fz, f.tz, k);
-          e.y = lerp(PLAT_Y + 1, f.ty, k) + Math.sin(k * Math.PI) * 5.5;
+          const tt = t - 0.55; const k = clamp(tt / f.T0, 0, 1);
+          e.x = lerp(f.fx, f.tx2, k); e.z = lerp(f.fz, f.tz2, k);
+          e.y = lerp(PLAT_Y + 1, f.ty, k) + Math.sin(k * Math.PI) * 6.5;
           e.holder.rotation.z = tt * 14; e.holder.rotation.x = tt * 5;
           if (Math.random() < dt * 40) fx.particles.emit(e.x, e.y + 0.6, e.z, 0, 0, 0, { life: 0.5, size: 0.5, color: 0xffe14a, gravity: 0 });
           if (k >= 1 && !f.landed) { f.landed = true; fx.particles.burst(e.x, e.y + 0.5, e.z, { count: 20, speed: 4, up: 1.5, life: 0.7, size: 0.5, colors: [0xffffff, 0xffe14a], gravity: 3 }); fx.texts.add('PLING!', e.x, e.y + 3, e.z, '#ffffff', 1.1); audio.sfx('ding', { vol: 0.8 }); }
+          if (tt > 0.35) spring.setK(Math.max(0.3, 1 - (tt - 0.35) * 1.5));
         }
-        if (f.t > 0.55 + f.T0 + 0.2) { spring.group.visible = false; finishElim(e); }
-        if (f.t > 0.9 && f.launched) { spring.setK(Math.max(0.3, 1 - (f.t - 0.9) * 1.5)); }
+        if (t > 0.55 + 1.5 + 0.2) { spring.group.visible = false; finishElim(e); }
       }
     }
     function finishElim(e) {
@@ -856,7 +863,7 @@ export default {
       // blazen van de slimme bots in de ronde 'trophy'
       if (R.state === 'trophy') { const we = E[winnerBro]; if (we) { we.c.pose = 'cheer'; we.y = PLAT_Y + Math.abs(Math.sin(T * 7)) * 0.5; } }
       visualsCommon(dt);
-      if (Math.floor(T * 4) !== R.hudT) { R.hudT = Math.floor(T * 4); refreshHud(); if (R.state !== 'pick' && R.state !== 'trophy') statusHint(); }
+      if (Math.floor(T * 4) !== R.hudT || R.state !== R.hudS) { R.hudT = Math.floor(T * 4); R.hudS = R.state; refreshHud(); if (R.state !== 'pick' && R.state !== 'trophy') statusHint(); }
       placeCamera(dt);
     }
     function resultUpdate(dt) {
@@ -912,7 +919,7 @@ export default {
       dbg: {
         state: () => ({ T, gameT, n: R.n, rs: R.state, musicT: R.musicT, stopAt: R.stopAt, fakeAt: R.fakeAt, gimmick: R.gimmick, chairsN: R.chairsN, alive: E.map((e) => e.alive), modes: E.map((e) => e.mode), outRound: E.map((e) => e.outRound), done, finishCalled, winnerBro, log: log.slice(), seated: E.map((e) => !!e.seat), early: E.map((e) => e.early), bonks: E.map((e) => e.bonks) }),
         E, chairs, R, auto: (i, v = true) => { E[i].auto = v; },
-        tryAction, tryPush, forceEnd,
+        tryAction, tryPush, forceEnd, setElim: (k) => { R.forceElim = k; },
       },
     };
   },

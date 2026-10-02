@@ -347,12 +347,12 @@ export function makeFinishArch(w = 7.4) {
 }
 export function makeStation() {
   const g = new THREE.Group();
-  const posts = mat(0x8a5a30), roof = mat(0x6a2a2a);
-  for (const x of [-9, 9]) for (const z of [-4, 6]) g.add(mesh(new THREE.BoxGeometry(0.6, 7, 0.6), posts, { pos: [x, 3.5, z] }));
-  g.add(mesh(new THREE.BoxGeometry(19.5, 0.5, 0.5), posts, { pos: [0, 7.1, -4] }));
-  for (let k = 0; k < 9; k++) g.add(mesh(new THREE.SphereGeometry(0.22, 6, 5), new THREE.MeshBasicMaterial({ color: [0xffd23a, 0xff6fa5, 0x6fe8ff, 0x8aff6a][k % 4] }), { cast: false, pos: [-8.8 + k * 2.2, 6.6 + Math.sin(k) * 0.15, -3.9] }));
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(10, 2.2), new THREE.MeshBasicMaterial({ map: canvasTex(512, 112, (c, w, h) => { c.fillStyle = '#2a1a0c'; c.fillRect(0, 0, w, h); c.strokeStyle = '#ffd23a'; c.lineWidth = 7; c.strokeRect(5, 5, w - 10, h - 10); c.fillStyle = '#ffd23a'; c.font = 'bold 54px Fredoka, Arial Black, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('MIJN KRISTALBERG', w / 2, h / 2 + 3); }) }));
-  sign.position.set(0, 5.6, -4.1); g.add(sign);
-  const start = new THREE.Mesh(new THREE.PlaneGeometry(17.5, 0.5), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7 })); start.rotation.x = -Math.PI / 2; start.position.set(0, 0.12, 2.2); g.add(start);
+  const posts = mat(0x8a5a30);
+  for (const x of [-9.2, 9.2]) g.add(mesh(new THREE.BoxGeometry(0.7, 12, 0.7), posts, { pos: [x, 6, 0] }));
+  g.add(mesh(new THREE.BoxGeometry(19.8, 0.6, 0.6), posts, { pos: [0, 12, 0] }));
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(9, 2), new THREE.MeshBasicMaterial({ map: canvasTex(512, 112, (c, w, h) => { c.fillStyle = '#2a1a0c'; c.fillRect(0, 0, w, h); c.strokeStyle = '#ffd23a'; c.lineWidth = 7; c.strokeRect(5, 5, w - 10, h - 10); c.fillStyle = '#ffd23a'; c.font = 'bold 54px Fredoka, Arial Black, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillText('MIJN KRISTALBERG', w / 2, h / 2 + 3); }) }));
+  sign.position.set(0, 10.4, 0.4); g.add(sign);
+  for (let k = 0; k < 9; k++) g.add(mesh(new THREE.SphereGeometry(0.22, 6, 5), new THREE.MeshBasicMaterial({ color: [0xffd23a, 0xff6fa5, 0x6fe8ff, 0x8aff6a][k % 4] }), { cast: false, pos: [-8.8 + k * 2.2, 11.6 + Math.sin(k) * 0.15, 0.4] }));
+  const start = new THREE.Mesh(new THREE.PlaneGeometry(17.5, 0.6), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.75 })); start.rotation.x = -Math.PI / 2; start.position.set(0, 0.12, -6); g.add(start);
   return g;
 }

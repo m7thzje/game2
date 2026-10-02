@@ -37,7 +37,7 @@ const ROUTE = [
   [65.3, 0.2, 3.2, 'stone', { spikes: [[1.0, 1.8]] }], [67.7, -3.6, 3.6, 'cloud'], [70.1, 2.8, 3.4, 'stone'],
   // gedeelde brug 3 (72,3)
   // zone D: de daken
-  [74.9, 3.8, 3.6, 'stone', { shoe: true }], [77.3, 0.4, 3.4, 'stone', { spikes: [[-0.9, -0.2]] }], [79.7, -3.6, 3.6, 'move', { ax: 1.8, sp: 1.2 }], [82.1, -0.2, 3.4, 'cloud'],
+  [74.9, 3.8, 3.6, 'stone', { shoe: true }], [77.3, 0.4, 3.4, 'stone', { spikes: [[-1.9, -1.0]] }], [79.7, -3.6, 3.6, 'move', { ax: 1.8, sp: 1.2 }], [82.1, -0.2, 3.4, 'cloud'],
   [84.5, 3.4, 3.4, 'stone'], [86.9, 0.0, 3.2, 'lift', { ay: 0.8, sp: 1.2 }], [89.3, -3.4, 3.4, 'stone'], [91.7, 0.2, 3.4, 'stone'], [94.1, 3.4, 3.4, 'move', { ax: 1.6, sp: 1.25 }],
 ];
 // route-indexen waar de gedeelde bruggen tussen zitten (brug staat tussen ROUTE[i-1] en ROUTE[i])

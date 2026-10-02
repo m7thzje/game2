@@ -101,16 +101,17 @@ for (const name of scen) {
     });
     console.log(r.join('\n')); console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS'); await browser.close(); continue;
   }
-  const res = await page.evaluate(() => {
-    const log = []; const m = window.__app.mode, inst = m.instance;
+  const res = await page.evaluate((nm) => {
+    let fired = false; const log = []; const m = window.__app.mode, inst = m.instance;
     let guard = 0, last = -1;
     while (!m.finished && guard++ < 60 * 130) {
       window.__bot(1);
       const st = inst.dbg.state();
+      if (nm === 'deurman' && !fired && st.T > 3) { fired = true; inst.onDeurman([true, false]); inst.onSwap(true); inst.onSwap(false); }
       if (Math.floor(st.T / 10) !== last) { last = Math.floor(st.T / 10); log.push(`T=${st.T.toFixed(1)} d=${st.d.map((x) => x.toFixed(0))} v=${st.v.map((x) => x.toFixed(1))} hits=${st.hits} pads=${st.stats.map((s) => s.pads)} walls=${st.stats.map((s) => s.walls)} falls=${st.stats.map((s) => s.falls)}`); }
     }
     return { log, st: inst.dbg.state(), finished: m.finished, result: m.result };
-  });
+  }, name);
   console.log(`\n=== ${name} (twist ${twist}) ===`);
   console.log(res.log.join('\n'));
   console.log(`end T=${res.st.T.toFixed(1)} d=${res.st.d.map((x) => x.toFixed(0))} finished=${res.finished} order=${res.st.finishOrder} stats=${JSON.stringify(res.st.stats)}`);

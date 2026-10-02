@@ -23,7 +23,7 @@ export default {
   time: 70,
   music: 'game_fast',
   blurb: 'Wie plant als eerste de vlag op de <b>Kasteeltop</b>? Spring omhoog langs vliegende stenen, wolken en trampolines, maar pas op voor <b>stekels</b>, <b>rollende tonnen</b> en een <b>vuurspuwende draak</b>. Onderin stijgt de <b>lava</b>! Duw je broer van zijn platform af voor de winst.',
-  controls: ['{move} lopen', '{a} springen (in de lucht nog eens = dubbele sprong)', '{b} duw / grijp je broer (laad op: 1 seconde)'],
+  controls: ['{move} lopen', '{a} springen (in de lucht nog eens = dubbele sprong)', '{b} duw je broer weg! (even wachten tussen duwen)'],
   tip: 'Pak de <b>gouden schoen</b> voor extra hoge sprongen. Je mag ook naar het midden springen om je broer te duwen. Valt je broer in de lava? Dan krijgt hij een tijdstraf.',
 
   create(ctx) {

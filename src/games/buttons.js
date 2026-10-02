@@ -28,9 +28,9 @@ export default {
   time: 45,
   music: 'game_fast',
   twists: ['invert', 'swapab', 'drunk', 'bodyswap', 'turbo', 'slowmo', 'deurman'],
-  blurb: 'Dwerg Brokkel laat <b>stenen blokken</b> op jullie neerstorten! Druk de toets die op het <b>onderste blok</b> staat en sla het in gruzelementen. Wie als eerste <b>25 blokken</b> breekt, wint. Een <b>gouden blok</b> geeft je broer 2 extra blokken, een <b>bom</b> moet je snel ontmantelen, een <b>ijsblok</b> vraagt twee toetsen.',
+  blurb: 'Dwerg Brokkel laat <b>stenen blokken</b> op jullie neerstorten! Druk de toets op het <b>onderste blok</b> en sla het kapot. Wie als eerste <b>25 blokken</b> breekt, wint. Pas op voor <b>gouden blokken</b> (sabotage!), <b>bommen</b> en <b>ijsblokken</b>.',
   controls: ['{move} pijl-blokken ← ↑ → ↓', '{a} A-blokken', '{b} B-blokken'],
-  tip: 'Verkeerde toets = even verdoofd. Te traag = platgedrukt! Wie achterstaat krijgt langzamere blokken.',
+  tip: 'Verkeerde toets = verdoofd, te traag = platgedrukt. Wie achterstaat krijgt langzamere blokken.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;

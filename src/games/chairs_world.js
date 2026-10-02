@@ -215,7 +215,9 @@ export function makeTrophy() {
   return g;
 }
 // zwevende noot
+const _noteTex = new Map();
 export function noteSprite(glyph = '♪', css = '#ffe14a') {
-  const t = canvasTex(64, 64, (g, w) => { g.font = 'bold 54px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 7; g.strokeStyle = 'rgba(20,8,30,.9)'; g.strokeText(glyph, w / 2, w / 2 + 2); g.fillStyle = css; g.fillText(glyph, w / 2, w / 2 + 2); });
+  const key = glyph + css; let t = _noteTex.get(key);
+  if (!t) { t = canvasTex(64, 64, (g, w) => { g.font = 'bold 54px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 7; g.strokeStyle = 'rgba(20,8,30,.9)'; g.strokeText(glyph, w / 2, w / 2 + 2); g.fillStyle = css; g.fillText(glyph, w / 2, w / 2 + 2); }); t.userData.keep = true; _noteTex.set(key, t); }
   const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); s.scale.set(1.1, 1.1, 1); return s;
 }

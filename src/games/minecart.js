@@ -368,7 +368,7 @@ export default {
         updateCart(p, dt, mode !== 'frozen');
       }
       Mw.updateDecor(dAvg, T + introT, 0);
-      station.position.set(0, B.hy(-dAvg) * 0, 0 + dAvg); station.visible = dAvg < 40;
+      station.position.set(0, 0, 6 + dAvg); station.visible = dAvg < 40;
     }
 
     // ---------------- hoofd-update ----------------

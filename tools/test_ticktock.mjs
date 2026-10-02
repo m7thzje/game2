@@ -88,18 +88,19 @@ for (const name of scen) {
     await browser.close(); continue;
   }
 
-  const res = await page.evaluate(() => {
-    const log = []; let last = '';
+  const res = await page.evaluate((nm) => {
+    let fired = false; const log = []; let last = '';
     const m = window.__app.mode, inst = m.instance;
     let guard = 0; const t0 = 0;
     while (!m.finished && guard++ < 60 * 400) {
       window.__bot(1);
       const st = inst.dbg.state();
+      if (nm === 'deurman' && !fired && st.T > 3) { fired = true; inst.onDeurman([true, false]); inst.onSwap(true); inst.onSwap(false); }
       const key = st.round + ':' + st.rstate + ':' + st.wins.join('-');
       if (key !== last) { log.push(`T=${st.T.toFixed(1)} r${st.round} ${st.rstate} wins=${st.wins} ht=${st.ht.toFixed(1)} draws=${st.draws} sd=${st.sd}`); last = key; }
     }
     return { log, st: inst.dbg.state(), finished: m.finished, result: m.result };
-  });
+  }, name);
   console.log(`\n=== ${name} (twist ${twist}) ===`);
   console.log(res.log.join('\n'));
   console.log(`end T=${res.st.T.toFixed(1)} wins=${res.st.wins} draws=${res.st.draws} finished=${res.finished} surv=${res.st.surv.map((x) => x.toFixed(1))}`);
