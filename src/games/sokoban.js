@@ -10,7 +10,7 @@ import { LEVELS, parseLevel, tryMove, isSolved, DIRS } from './sokoban_levels.js
 // Levels + regels staan in sokoban_levels.js (bewezen oplosbaar met tools/solve_sokoban.mjs).
 
 const C = 2.0;                 // celgrootte in de wereld
-const TOTAL_TIME = 300;        // seconden voor alle levels samen
+const TOTAL_TIME = 330;        // seconden voor alle levels samen
 const STEP = 0.15;             // seconden per stap (ingedrukt houden herhaalt)
 const RESET_HOLD = 0.8;
 const SKIP_AFTER = 75;         // na zoveel seconden in één level mag je 'm samen overslaan

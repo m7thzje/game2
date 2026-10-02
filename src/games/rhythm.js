@@ -156,7 +156,7 @@ export default {
 
     // ---------- spelers ----------
     const perf = players.map((pp, i) => {
-      const c = makeBrother(i); const SC = 1.4;
+      const c = makeBrother(i); const SC = 1.55;
       c.group.scale.setScalar(SC); c.group.position.set(i ? 9.6 : -9.6, 0, -1.6);
       scene.add(c.group);
       const inst = makeInstrument(i ? 'lute' : 'guitar', i ? 0x5a8ae8 : 0xd08a3a); inst.position.set(0, 0.34, 0.34); inst.rotation.z = -1.15; inst.scale.setScalar(1.15); c.torso.add(inst);
@@ -214,7 +214,7 @@ export default {
       perfect ? stats.perfect++ : stats.good++; stats.perPlayer[n.pl].hit++;
       accPoints += perfect ? 1 : 0.6;
       const pts = Math.round((perfect ? 100 : 50) * mult()); score += pts;
-      changeHype(perfect ? 3.4 : 1.9);
+      changeHype(perfect ? 3.4 : 2.1);
       const x = LANE_X(n.pl, n.lane);
       melody(n.pl, n.midi, perfect ? 1 : 0.8, n.long ? 0.35 : 0.45);
       say(perfect ? 'Perfect!' : 'Goed', n.pl, n.lane, perfect ? '#ffe14a' : '#8cff9a');
@@ -252,7 +252,7 @@ export default {
     }
     function missNote(n) {
       n.state = 'miss'; combo = 0; stats.miss++; stats.perPlayer[n.pl].miss++;
-      changeHype(-6.5); say('Mis', n.pl, n.lane, '#aaa', 0.5);
+      changeHype(-5.5); say('Mis', n.pl, n.lane, '#aaa', 0.5);
       falseNote(n.pl, n.midi);
       pads[n.pl * 4 + n.lane].flash = -1;
       if (n.long) { /* nooit begonnen */ }
