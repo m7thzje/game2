@@ -162,14 +162,14 @@ function buildFarm(W) {
 
 // ---------------------------------------------------------------- modderpad
 function buildMud(W) {
-  const x = -32, z = 29;
-  const mud = mesh(new THREE.CircleGeometry(7, 20), new THREE.MeshStandardMaterial({ color: 0x5a4028, roughness: 0.4, metalness: 0.0 }), { cast: false, pos: [0, 0.04, 0], rot: [-PI / 2, 0, 0] });
-  const mg = new THREE.Group(); mg.add(mud); for (let i = 0; i < 5; i++) mg.add(mesh(new THREE.CircleGeometry(0.8 + Math.random(), 10), new THREE.MeshStandardMaterial({ color: 0x3a4a60, roughness: 0.1, metalness: 0.4 }), { cast: false, pos: [(Math.random() - 0.5) * 8, 0.06, (Math.random() - 0.5) * 8], rot: [-PI / 2, 0, 0] }));
+  const x = -17, z = 13.5;
+  const mud = mesh(new THREE.CircleGeometry(6, 20), new THREE.MeshStandardMaterial({ color: 0x5a4028, roughness: 0.4, metalness: 0.0 }), { cast: false, pos: [0, 0.04, 0], rot: [-PI / 2, 0, 0] });
+  const mg = new THREE.Group(); mg.add(mud); for (let i = 0; i < 5; i++) mg.add(mesh(new THREE.CircleGeometry(0.7 + Math.random() * 0.8, 10), new THREE.MeshStandardMaterial({ color: 0x3a4a60, roughness: 0.1, metalness: 0.4 }), { cast: false, pos: [(Math.random() - 0.5) * 7, 0.06, (Math.random() - 0.5) * 7], rot: [-PI / 2, 0, 0] }));
   W.put(mg, x, z, 0);
-  const c = cart(); c.rotation.z = 0; W.put(c, x - 3.2, z + 1.5, 0.5, -0.3); c.rotation.x = 0.1; c.rotation.z = -0.12; W.box(x - 3.2, z + 1.5, 2.6, 1.8, 0.5);
-  for (let i = 0; i < 3; i++) { const m = milkCan(); m.position.set(x - 3.2 + (i - 1) * 0.5, groundY(x, z) + 0.65, z + 1.5 - 0.4 + i * 0.35); W.add(m); }
-  const sp = P.signpost(['Pas op: modder!', '→ Dorp'], 2.0); W.put(sp, x + 6, z - 5, -0.3);
-  W.circle(x + 6, z - 5, 0.4);
+  const c = cart(); W.put(c, x - 2.4, z + 1.2, 0.5, -0.3); c.rotation.x = 0.1; c.rotation.z = -0.12; W.box(x - 2.4, z + 1.2, 2.6, 1.8, 0.5);
+  for (let i = 0; i < 3; i++) { const m = milkCan(); m.position.set(x - 2.4 + (i - 1) * 0.5, groundY(x, z) + 0.65, z + 1.2 - 0.4 + i * 0.35); W.add(m); }
+  const sp = P.signpost(['Pas op: modder!', '→ Dorp'], 2.0); W.put(sp, x + 5.5, z - 4.5, -0.3);
+  W.circle(x + 5.5, z - 4.5, 0.4);
 }
 
 // ---------------------------------------------------------------- schapenweide

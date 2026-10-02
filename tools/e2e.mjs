@@ -18,7 +18,7 @@ await page.evaluate(() => { const S = window.__app.S; S.flags.intro = true; S.se
 await page.waitForTimeout(1500);
 const tp = (x, z) => page.evaluate(([x, z]) => { const m = window.__app.mode; m.players.forEach((p, i) => { p.x = x + i * 1.2; p.z = z; p.vx = p.vz = 0; }); }, [x, z]);
 // 1. naar de bakker teleporteren en praten
-await tp(-17.5, -6); await page.waitForTimeout(800);
+await tp(+process.env.TX || -17.5, +process.env.TZ || -6); await page.waitForTimeout(800);
 await page.screenshot({ path: '/tmp/e2e_1_bakker.png' });
 await press(0, 'a');
 await page.waitForTimeout(500);

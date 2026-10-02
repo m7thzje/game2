@@ -128,7 +128,7 @@ export class HubMode {
     let sx = S.hubPos?.x ?? SPAWN.x, sz = S.hubPos?.z ?? SPAWN.z;
     if (o.from) { const j = JOB_BY_ID[o.from]; if (j) { sx = j.x + Math.sin(j.yaw) * 3; sz = j.z + Math.cos(j.yaw) * 3; } }
     if (o.newGame) { sx = SPAWN.x; sz = SPAWN.z; }
-    this.players.forEach((p, i) => { p.x = sx + (i ? 1.2 : -1.2); p.z = sz; p.y = groundY(p.x, p.z); p.vx = p.vz = 0; p.vy = 0; p.yaw = Math.PI; p.c.targetYaw = p.c.yaw = Math.PI; p.lantern = false; p.c.group.visible = true; });
+    this.players.forEach((p, i) => { [p.x, p.z] = this.safeSpot(sx + (i ? 1.2 : -1.2), sz); p.lastSafe = [p.x, p.z]; p.y = groundY(p.x, p.z); p.vx = p.vz = 0; p.vy = 0; p.yaw = Math.PI; p.c.targetYaw = p.c.yaw = Math.PI; p.lantern = false; p.c.group.visible = true; });
     this.updateMid(); this.camPos.set(this.mid.x, this.mid.y + 16, this.mid.z + 20); this.camLook.copy(this.mid);
     this.camera.position.copy(this.camPos); this.camera.lookAt(this.camLook);
     audio.music(this.musicName());
@@ -194,6 +194,21 @@ export class HubMode {
   }
 
   // ---------------------------------------------------------------- beweging
+  // dichtstbijzijnde plek op het droge, niet in een obstakel
+  safeSpot(x, z) {
+    const ok = (px, pz) => { if (isWater(px, pz)) return false; const q = this.collide({}, px, pz); return Math.hypot(q[0] - px, q[1] - pz) < 0.05; };
+    if (ok(x, z)) return [x, z];
+    for (let r = 1; r <= 24; r += 1) for (let k = 0; k < 16; k++) { const a = (k / 16) * TAU; const px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r; if (ok(px, pz)) return [px, pz]; }
+    return [SPAWN.x, SPAWN.z];
+  }
+  rescue(p) {
+    if (isWater(p.x, p.z)) {
+      const [sx, sz] = this.safeSpot(p.lastSafe ? p.lastSafe[0] : SPAWN.x, p.lastSafe ? p.lastSafe[1] : SPAWN.z);
+      this.fx.burst(p.x, p.y + 0.5, p.z, { count: 20, color: 0xa8e0ff, speed: 3, life: 0.7, size: 0.3 }); audio.sfx('splash', { vol: 0.5 });
+      p.x = sx; p.z = sz; p.y = groundY(sx, sz); p.vx = p.vz = p.vy = 0; p.grounded = true; p.c.air = false;
+      ui.hud.toast(`${S.names[p.i]} is uit het water gehaald!`, 2000);
+    } else if (p.grounded && p.speed < 20) { if (!p.lastSafe || Math.hypot(p.lastSafe[0] - p.x, p.lastSafe[1] - p.z) > 1.5) p.lastSafe = [p.x, p.z]; }
+  }
   updateMid() {
     const [a, b] = this.players; this.mid.set((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
   }
@@ -236,7 +251,7 @@ export class HubMode {
     // spelers onderling
     const o = this.players[1 - p.i]; const dx = nx - o.x, dz = nz - o.z, d = Math.hypot(dx, dz); if (d < 1.1 && d > 1e-3) { const push = (1.1 - d) * 0.5; nx += dx / d * push; nz += dz / d * push; }
     // koppel: maximale afstand
-    const mdx = nx - o.x, mdz = nz - o.z, md = Math.hypot(mdx, mdz); const MAXSEP = 34; if (md > MAXSEP) { nx = o.x + mdx / md * MAXSEP; nz = o.z + mdz / md * MAXSEP; }
+    const mdx = nx - o.x, mdz = nz - o.z, md = Math.hypot(mdx, mdz); const MAXSEP = 34; if (md > MAXSEP) { const tx2 = o.x + mdx / md * MAXSEP, tz2 = o.z + mdz / md * MAXSEP; if (!isWater(tx2, tz2)) { nx = tx2; nz = tz2; } }
     p.x = nx; p.z = nz;
     // springen
     const gy = groundY(p.x, p.z);
@@ -419,7 +434,7 @@ export class HubMode {
         if (ip.aP) { const it = this.findInteract(p); if (it) this.interact(it, p); else this.tryJump(p); }
         if (ip.bP && !p.lantern) {}
       } else p.lantern = false;
-      this.movePlayer(p, dt, frozen);
+      this.movePlayer(p, dt, frozen); this.rescue(p);
       if (p.lantern && (this.deur.state === 'chase' || this.deur.state === 'door') && this.deur.m.group.visible) { const g = this.deur.m.group.position; const dx = g.x - p.x, dz = g.z - p.z; if (Math.hypot(dx, dz) < 26) { const ta = Math.atan2(dx, dz); let df = ta - p.yaw; df = Math.atan2(Math.sin(df), Math.cos(df)); if (Math.abs(df) < 1.7) { p.yaw = dampAngle(p.yaw, ta, 7, dt); p.c.targetYaw = p.yaw; } } }
       p.spot.visible = p.lantern; p.cone.visible = p.lantern; if (p.lantern) p.cone.material.opacity = 0.09 + Math.sin(t * 25) * 0.01;
       p.c.pose = (p.lantern ? 'point' : 'idle'); p.c.update(dt);
