@@ -332,6 +332,7 @@ export default {
 
     function endGame(timeout = false) {
       if (finished) return; finished = true; state = 'over';
+      if (prev) { scene.remove(prev.g); prev = null; if (lvl) lvl.g.position.x = 0; }
       const stars = solvedCount >= 7 ? 3 : solvedCount >= 5 ? 2 : solvedCount >= 3 ? 1 : 0;
       hud.setHint(null);
       if (lvl) lvl.chars.forEach((a) => { a.c.pose = stars ? 'cheer' : 'sad'; });
