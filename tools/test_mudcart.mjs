@@ -15,7 +15,7 @@ await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['perfect', 'good', 'poor', 'masher', 'idle'];
 const SHOTS = [['p1', 's.phase===1 && s.T>5.5'], ['p2a', 's.phase===2 && s.sub==="seg" && s.segHits>=3'], ['p2b', 's.phase===2 && s.seg===1 && s.segHits>=2'], ['p3a', 's.phase===3 && s.x>48'], ['p3b', 's.phase===3 && s.x>62'], ['end', 's.phase===4']];
-const SK = { perfect: { sd: 0.025, miss: 0, bias: 0 }, good: { sd: 0.07, miss: 0.04, bias: 0.01 }, poor: { sd: 0.12, miss: 0.14, bias: 0.03 }, masher: { masher: true }, idle: { idle: true } };
+const SK = { perfect: { sd: 0.025, miss: 0, bias: 0 }, good: { sd: 0.07, miss: 0.04, bias: 0.01 }, poor: { sd: 0.12, miss: 0.14, bias: 0.03 }, masher: { masher: true }, idle: { idle: true }, nolever: { sd: 0.03, miss: 0, bias: 0, nolever: true }, drop: { sd: 0.03, miss: 0, bias: 0, drop: true } };
 
 const launch = () => chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 for (const name of scen) {
@@ -91,8 +91,9 @@ for (const name of scen) {
             if (pt != null && st.T >= pt && st.T < pt + dt * 1.5 && !plan.get('done' + key)) { inp.virtual[i].a = true; plan.set('done' + key, true); }
           }
         }
-        if (st.phase === 2 && (st.sub === 'seg' || st.sub === 'swap' || st.sub === 'approach')) { if (st.sub === 'swap') { inp.virtual[0].b = true; inp.virtual[1].b = true; } else inp.virtual[st.leverP].b = true; }
+        if (!sk.nolever && !(sk.drop && st.sub === 'seg' && st.segHits === 2 && st.seg === 1 && !window.__dropped) && st.phase === 2 && (st.sub === 'seg' || st.sub === 'swap' || st.sub === 'approach')) { if (st.sub === 'swap') { inp.virtual[0].b = true; inp.virtual[1].b = true; } else inp.virtual[st.leverP].b = true; }
       }
+      if (sk.drop && st.sub === 'seg' && st.segHits === 2 && st.seg === 1) window.__dropped = true;
       inp.update(); mode.update(dt);
     }
     const st = inst.dbg.state();
