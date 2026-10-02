@@ -42,7 +42,7 @@ export const LEVELS = [
       '## ## ## ## ## ## ## ## ## ## ##',
     ] },
   { name: 'Hendel en sleutel',
-    hint: 'Loop naast een <b>hendel</b> en druk op A om hem om te halen. Een <b>sleutel</b> pak je door erover te lopen; het slot van dezelfde kleur gaat open als je ertegenaan loopt.',
+    hint: 'Loop naast een <b>hendel</b> en druk op <b>{A}</b> om hem om te halen. Een <b>sleutel</b> pak je door erover te lopen; het slot van dezelfde kleur gaat open als je ertegenaan loopt.',
     map: [
       '## ## ## ## ## ## V1 ## ## ## ## ## ## ## ##',
       '## @D .. P0 ## .. P0 .. ## .. .. .. ## XX ##',
@@ -62,7 +62,7 @@ export const LEVELS = [
       '## ## ## ## ## ## ## ## ## ##',
     ] },
   { name: 'Draaiende kristallen',
-    hint: 'De lichtstraal moet de <b>sensor</b> raken. Draai de <b>kristal-spiegels</b> met A. Eén spiegel staat achter een deur... Aan de straal kun je dwars door lava kijken!',
+    hint: 'De lichtstraal moet de <b>sensor</b> raken. Draai de <b>kristal-spiegels</b> met <b>{A}</b> (ernaast staan). Eén spiegel staat achter een deur... Aan de straal kun je dwars door lava kijken!',
     map: [
       '## ## ## ## ## ## ## ## ## ## ## ## ## ##',
       'E> .. .. .. .. .. M/ .. .. .. ## XX ## ##',

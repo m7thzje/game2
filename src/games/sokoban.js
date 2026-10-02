@@ -132,8 +132,8 @@ export default {
       const b = P.banner(col2, 3.4, 1.5); b.position.set(x, 4.9, -13.4); scene.add(b); animated.banners.push(b);
     }
     // lantaarnpalen en vlaggen langs de zijkanten van het podium (altijd in beeld)
-    for (const [x, z] of [[-12.6, -6.5], [12.6, -6.5], [-12.6, 6.5], [12.6, 6.5]]) { const lp = P.lampPost(0xffd27a); lp.position.set(x, -0.3, z); lp.scale.setScalar(1.5); scene.add(lp); }
-    for (const [x, c2] of [[-12.6, 0xd8372c], [12.6, 0x3a78e0]]) { const b = P.banner(c2, 3.2, 1.3); b.position.set(x, -0.3, 0); b.scale.setScalar(1.5); b.rotation.y = x < 0 ? 0 : Math.PI; scene.add(b); animated.banners.push(b); }
+    for (const [x, z] of [[-14.2, -3.5], [14.2, -3.5], [-14.2, 7.5], [14.2, 7.5]]) { const lp = P.lampPost(0xffd27a); lp.position.set(x, -0.3, z); lp.scale.setScalar(1.15); scene.add(lp); }
+    for (const [x, c2] of [[-14.2, 0xd8372c], [14.2, 0x3a78e0]]) { const b = P.banner(c2, 3.0, 1.1); b.position.set(x, -0.3, 2.2); b.scale.setScalar(1.1); b.rotation.y = x < 0 ? 0 : Math.PI; scene.add(b); animated.banners.push(b); }
     // vorkheftrucks
     function makeForklift(color = 0xf0a020, withCrate = false) {
       const g = new THREE.Group();
@@ -408,7 +408,7 @@ export default {
       let reset = 0, aBoth = 0;
       for (let i = 0; i < 2; i++) {
         const p = input.p[i], a = lv.chars[i];
-        const pr = [p.upP, p.downP, p.leftP, p.rightP], hd = [p.up, p.down, p.left, p.right];
+        const hd = [p.up || p.y < -0.6, p.down || p.y > 0.6, p.left || p.x < -0.6, p.right || p.x > 0.6]; const ph = a.prevHd || (a.prevHd = [false, false, false, false]); const pr = hd.map((v, k) => v && !ph[k]); for (let k = 0; k < 4; k++) ph[k] = hd[k];
         for (let d = 0; d < 4; d++) if (pr[d]) { a.dir = d; a.buf = d; a.bufT = 0.3; }
         if (a.dir >= 0 && !hd[a.dir]) a.dir = hd.indexOf(true);
         a.bufT -= dt; a.cd -= dt;

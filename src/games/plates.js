@@ -307,6 +307,9 @@ export default {
           moving = new THREE.Group(); holder.add(moving);
           for (let b = -3; b <= 3; b++) moving.add(mesh(gBox, metal, { pos: [0, 0.9, b * 0.26], scale: [0.16, 1.8, 0.12] }));
           moving.add(mesh(gBox, m, { cast: false, pos: [0, 1.2, 0], scale: [0.14, 0.14, 1.7] }));
+          moving.add(mesh(gBox, m, { pos: [0, 1.78, 0], scale: [1.5, 0.14, 1.9] }));          // gekleurd dak: van boven goed zichtbaar
+          for (const sx of [-0.65, 0.65]) moving.add(mesh(gBox, metal, { pos: [sx, 1.0, 0], scale: [0.08, 2.0, 0.08] }));
+          for (const yy of [0.5, 1.5]) moving.add(mesh(gBox, metal, { cast: false, pos: [0, yy, 0], scale: [1.3, 0.07, 0.07] }));
           openY = -1.95;
         } else if (gt.kind === 'wall') {
           moving = new THREE.Group(); grp.add(moving);
@@ -460,7 +463,7 @@ export default {
 
     function startLevel(idx, snap) {
       lvl = buildLevel(idx); fitCamera(lvl.L, snap);
-      dragonTargetZ = -(lvl.L.h * C / 2) - 8;
+      dragonTargetZ = -(lvl.L.h * C / 2) - 6.5;
       hud.setHint(hintFor(lvl)); updateHud();
     }
     let dragonTargetZ = -17;
@@ -564,7 +567,7 @@ export default {
       const lv = lvl; let reset = 0;
       for (let i = 0; i < 2; i++) {
         const p = input.p[i], ch = lv.chars[i];
-        const pr = [p.upP, p.downP, p.leftP, p.rightP], hd = [p.up, p.down, p.left, p.right];
+        const hd = [p.up || p.y < -0.6, p.down || p.y > 0.6, p.left || p.x < -0.6, p.right || p.x > 0.6]; const ph = ch.prevHd || (ch.prevHd = [false, false, false, false]); const pr = hd.map((v, k) => v && !ph[k]); for (let k = 0; k < 4; k++) ph[k] = hd[k];
         for (let d = 0; d < 4; d++) if (pr[d]) { ch.dir = d; ch.buf = d; ch.bufT = 0.25; }
         if (ch.dir >= 0 && !hd[ch.dir]) ch.dir = hd.indexOf(true);
         ch.bufT -= dt; ch.cd -= dt;
