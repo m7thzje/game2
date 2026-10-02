@@ -18,15 +18,15 @@ export function genCourse(rng) {
   const gapAt = (D0, lane, len = 4.2 + rng() * 1.0) => add({ type: 'gap', D: D0, lane, len });
   while (D < COURSE - 48) {
     const p = D / COURSE;
-    const table = [['sparks', 3], ['gap', 3], ['rock', p > 0.1 ? 1.6 : 0], ['fire', p > 0.16 ? 1.5 : 0], ['pad', 1.5], ['mixed', p > 0.06 ? 2.2 : 0], ['wall', p > 0.2 && D - lastWall > 190 ? 1.2 : 0]];
+    const table = [['sparks', 3.2], ['gap', 2.1], ['rock', p > 0.08 ? 1.9 : 0], ['fire', p > 0.14 ? 1.7 : 0], ['pad', 1.2], ['mixed', p > 0.06 ? 1.5 : 0], ['wall', p > 0.14 && D - lastWall > 150 ? 1.5 : 0]];
     let tot = table.reduce((a, t) => a + t[1], 0), r = rng() * tot, kind = 'gap';
     for (const [k, w] of table) { r -= w; if (r <= 0) { kind = k; break; } }
     const lanes = shuffle([0, 1, 2], rng); const [a, b, c] = lanes;
     if (kind === 'sparks') { sparkAt(D, 1, 0.9 + p * 0.2); if (p > 0.45 && rng() < 0.5) sparkAt(D + 10, rng() < 0.5 ? 0.5 : 1.5, 0.5); }
-    else if (kind === 'gap') { gapAt(D, a); if (p > 0.1 && rng() < 0.7) gapAt(D + (rng() < 0.5 ? 0 : 4), b); }
+    else if (kind === 'gap') { gapAt(D, a); if (p > 0.1 && rng() < 0.4) gapAt(D + (rng() < 0.5 ? 0 : 4), b); }
     else if (kind === 'rock') { add({ type: 'rock', D, ph: rng() * TAU, period: 2.5 + rng() * 0.5 }); }
     else if (kind === 'fire') { add({ type: 'fire', D, lane: a }); if (p > 0.5 && rng() < 0.6) add({ type: 'fire', D, lane: b }); }
-    else if (kind === 'pad') { add({ type: 'pad', D, lane: a }); if (rng() < 0.6) gapAt(D + 15, a, 5); if (rng() < 0.6) gapAt(D + 6, b); }
+    else if (kind === 'pad') { add({ type: 'pad', D, lane: a }); if (rng() < 0.35) gapAt(D + 15, a, 5); if (rng() < 0.4) sparkAt(D + 8, b, 0.5); }
     else if (kind === 'mixed') { gapAt(D, a); sparkAt(D + 2, b, 0.45); if (rng() < 0.4) add({ type: 'pad', D: D - 9, lane: c }); }
     else if (kind === 'wall') { add({ type: 'wall', D: D + 24, lane: a, bonus: 26 }); if (rng() < 0.55) add({ type: 'pad', D: D, lane: a }); gapAt(D + 22, b); sparkAt(D + 26, c, 0.5); lastWall = D; D += 24; }
     D += 30 + rng() * 10 - p * 8;
@@ -109,10 +109,10 @@ export default {
     function maybeSpawnExtras(p) {
       const q = pl[1 - p.i];
       while (p.nextChunk - 80 < p.d && p.nextChunk < COURSE - 30) {
-        const D0 = p.nextChunk; p.nextChunk += 38;
+        const D0 = p.nextChunk; p.nextChunk += 45;
         const lead = p.d - q.d;
         let n = 0;
-        if (lead < -50) n = 2 + (rng() < 0.5 ? 1 : 0); else if (lead < -15) n = 1 + (rng() < 0.45 ? 1 : 0); else if (lead < 12) n = rng() < 0.22 ? 1 : 0; else if (lead < 30) n = rng() < 0.08 ? 1 : 0; else n = 0;
+        if (lead < -60) n = 1 + (rng() < 0.7 ? 1 : 0); else if (lead < -25) n = rng() < 0.75 ? 1 : 0; else if (lead < -8) n = rng() < 0.4 ? 1 : 0; else if (lead < 12) n = rng() < 0.12 ? 1 : 0; else n = 0;
         for (let k = 0; k < n; k++) {
           for (let tr = 0; tr < 6; tr++) {
             const lane = randInt(0, 2), D = D0 + k * 11 + rand(0, 9);
@@ -378,7 +378,7 @@ export default {
       for (const p of pl) {
         const q = pl[1 - p.i];
         // comeback: achterligger krijgt een licht snelheidsvoordeel
-        const behind = q.d - p.d; p.rubber = 1 + clamp(behind / 300, 0, 0.1) - (behind < -80 ? 0.015 : 0);
+        const behind = q.d - p.d; p.rubber = 1 + clamp(behind / 400, 0, 0.05);
         if (p.stunT > 0) p.stunT -= dt;
         const d0 = p.d;
         if (!p.finished) control(p, dt);

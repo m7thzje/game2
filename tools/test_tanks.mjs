@@ -111,7 +111,7 @@ for (const name of scen) {
     console.log(res.join('\n')); await page.close();
   } else if (name === 'chaos') {
     const page = await open(process.env.TWIST || 'none');
-    const snap = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); await page.screenshot({ path: `/tmp/tanks_${tag}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
+    const snap = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); for (let k = 0; k < 4; k++) { try { await page.screenshot({ path: `/tmp/tanks_${tag}.png`, timeout: 90000 }); break; } catch (e) { await page.waitForTimeout(1500); } } await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
     for (const id of ['storm', 'giant', 'flip', 'sim']) {
       await page.evaluate((id) => { const d = window.__app.mode.instance.dbg; let g = 0; while (d.state().phase !== 'aim' && g++ < 6000) window.__bot(1); d.startChaos(id); window.__plan = {}; window.__bot(40); }, id);
       await snap('chaos_' + id + '_aim');
@@ -123,7 +123,7 @@ for (const name of scen) {
     await page.close();
   } else if (name === 'ko') {
     const page = await open(process.env.TWIST || 'none');
-    const snap = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); await page.screenshot({ path: `/tmp/tanks_${tag}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
+    const snap = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); for (let k = 0; k < 4; k++) { try { await page.screenshot({ path: `/tmp/tanks_${tag}.png`, timeout: 90000 }); break; } catch (e) { await page.waitForTimeout(1500); } } await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
     await page.evaluate(() => { const d = window.__app.mode.instance.dbg; let g = 0; while (d.state().phase !== 'ko' && g++ < 60 * 300) window.__bot(1); window.__bot(40); });
     await snap('ko1');
     await page.evaluate(() => { window.__bot(70); });
@@ -181,7 +181,7 @@ for (const name of scen) {
   } else if (name === 'shots' || name === 'types') {
     const tw = process.env.TWIST || 'none';
     const page = await open(tw, [1100, 650]);
-    const snap = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); await page.screenshot({ path: `/tmp/tanks_${tag}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
+    const snap = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); for (let k = 0; k < 4; k++) { try { await page.screenshot({ path: `/tmp/tanks_${tag}.png`, timeout: 90000 }); break; } catch (e) { await page.waitForTimeout(1500); } } await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
     await page.evaluate(() => window.__bot(30));
     await snap('aim');
     if (name === 'shots') {

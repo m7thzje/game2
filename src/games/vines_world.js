@@ -9,12 +9,12 @@ import * as P from '../engine/props.js';
 export const C = {
   N: 7,                 // aantal lianen
   X0: 4,                // x van de eerste liaan
-  DX: 10.0,              // afstand tussen lianen
+  DX: 9.0,              // afstand tussen lianen
   VL: 6.0,              // lengte van een liaan
   PY: 10.8,             // hoogte van het ophangpunt
-  LZ: [2.5, -2.5],      // z van de twee banen
-  OFF: [0, 2.2],        // de achterste baan staat iets verschoven (scheelt overlap op het scherm)
-  GOAL_U: 74.0,         // x van de overkant (in baan-coordinaten)
+  LZ: [3.0, -3.0],      // z van de twee banen
+  OFF: [0, 4.0],        // de achterste baan staat iets verschoven (scheelt overlap op het scherm)
+  GOAL_U: 66.6,         // x van de overkant (in baan-coordinaten)
   BANK_Y: 4.0,          // hoogte van de oevers
   WATER_Y: 0,
 };
@@ -262,7 +262,7 @@ export function buildJungle(ctx) {
   for (let k = 0; k < 4; k++) { const b = makeBanana(); b.visible = false; root.add(b); bananas.push({ g: b, on: false, t: 0, dur: 1.5, sx: 0, sy: 0, sz: 0, ex: 0, ey: 0, ez: 0, lane: 0, miss: false }); }
 
   // draak
-  const dragon = new Dragon(0x4fa86a, 0.95); dragon.group.visible = false; dragon.group.rotation.y = -Math.PI / 2; root.add(dragon.group);
+  const dragon = new Dragon(0x4fa86a, 1.15); dragon.group.visible = false; dragon.group.rotation.y = -Math.PI / 2; root.add(dragon.group);
   const dr = { on: false, t: 0, dur: 9, startX: 0, endX: 0, fire: 0 };
 
   // vuurvliegjes
@@ -318,9 +318,9 @@ export function buildJungle(ctx) {
     // draak
     if (dr.on) {
       dr.t += dt; const k = dr.t / dr.dur; dragon.update(dt);
-      dragon.group.position.set(lerp(dr.startX, dr.endX, k), 15.5 + Math.sin(dr.t * 1.4) * 1.2, -9);
+      dragon.group.position.set(lerp(dr.startX, dr.endX, k), 8.6 + Math.sin(dr.t * 1.4) * 0.9, -10);
       if (k >= 1) { dr.on = false; dragon.group.visible = false; }
-      if (dr.fire > 0) { dr.fire -= dt; const p = dragon.group.position; if (Math.random() < 0.9) fx.particles.emit(p.x - 2.6, p.y - 0.4, p.z + 0.2, -5 - Math.random() * 3, -2 - Math.random() * 3, (Math.random() - 0.5) * 2, { life: 0.8, size: 0.9, color: Math.random() < 0.5 ? 0xff7a1a : 0xffd23f, gravity: -1 }); }
+      if (dr.fire > 0) { dr.fire -= dt; const p = dragon.group.position; if (Math.random() < 0.9) fx.particles.emit(p.x - 3.4, p.y - 0.2, p.z + 0.2, -6 - Math.random() * 3, -1.5 - Math.random() * 2, (Math.random() - 0.5) * 2, { life: 0.8, size: 0.9, color: Math.random() < 0.5 ? 0xff7a1a : 0xffd23f, gravity: -1 }); }
     }
     // vuurvliegjes
     flyT -= dt; if (flyT <= 0) { flyT = 0.08; fx.particles.emit(camX + (Math.random() - 0.5) * 50, 1.5 + Math.random() * 8, -8 + Math.random() * 14, (Math.random() - 0.5) * 0.5, 0.2 + Math.random() * 0.4, (Math.random() - 0.5) * 0.3, { life: 4, size: 0.18, color: Math.random() < 0.5 ? 0xe8ff7a : 0x9fffe0, gravity: 0 }); }

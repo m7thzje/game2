@@ -64,7 +64,7 @@ export default {
         const g = new THREE.Group(); g.position.y = y; mt.add(g);
         const edge = new THREE.Mesh(new THREE.PlaneGeometry(4.25, 0.74), new THREE.MeshBasicMaterial({ color: 0xffe9b0, transparent: true, opacity: 0.55, depthWrite: false })); g.add(edge);
         const back = new THREE.Mesh(new THREE.PlaneGeometry(4.1, 0.6), new THREE.MeshBasicMaterial({ color: 0x120a06, transparent: true, opacity: 0.85, depthWrite: false })); back.position.z = 0.005; g.add(back);
-        const fill = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.42), new THREE.MeshBasicMaterial({ color: col, depthWrite: false })); fill.position.z = 0.01; g.add(fill);
+        const fill = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.42), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 1, depthWrite: false })); fill.position.z = 0.012; g.add(fill);
         const lt = labelTex(label); const lab = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.5), new THREE.MeshBasicMaterial({ map: lt, transparent: true, depthWrite: false })); lab.position.set(0, 0.62, 0.02); g.add(lab);
         return { g, fill, back };
       };
@@ -464,14 +464,14 @@ export default {
 
     // ---------- camera ----------
     const camP = new THREE.Vector3(), camL = new THREE.Vector3(), wantP = new THREE.Vector3(), wantL = new THREE.Vector3(), introP = new THREE.Vector3(), introL = new THREE.Vector3();
-    let camInit = false;
+    let camInit = false; const gpV = new THREE.Vector3(), glV = new THREE.Vector3();
     function cam(dt) {
       const hy = headCam(), sp = Math.abs(headY(pl[0]) - headY(pl[1]));
       let ty = hy + 2.2, tz = 23.5 + sp * 0.55;
       if (phase === 'won') { const k = smoothstep(0.4, 2.2, winT); ty = lerp(ty, 5.5, k); tz = lerp(tz, 24, k); }
       wantP.set(0, ty + 3.4, tz); wantL.set(0, ty, 0);
       introP.set(Math.sin(introT * 0.3) * 7, 20, 64); introL.set(0, 14, 0);
-      const gp = wantP.clone().lerp(introP, cine), gl = wantL.clone().lerp(introL, cine);
+      gpV.copy(wantP).lerp(introP, cine); glV.copy(wantL).lerp(introL, cine); const gp = gpV, gl = glV;
       if (!camInit) { camP.copy(gp); camL.copy(gl); camInit = true; }
       const f = 1 - Math.exp(-(phase === 'won' ? 3.5 : 6) * dt); camP.lerp(gp, f); camL.lerp(gl, f);
       camera.position.copy(camP); camera.lookAt(camL);

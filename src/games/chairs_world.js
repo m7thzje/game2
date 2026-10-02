@@ -5,7 +5,7 @@ import * as P from '../engine/props.js';
 
 // Bouwstenen voor Stoelendans: gouden troonzaal, stoelen, valluik, springplank, trofee.
 
-const GOLD = new THREE.MeshStandardMaterial({ color: 0xe8b83a, roughness: 0.32, metalness: 0.85, flatShading: false });
+const GOLD = new THREE.MeshStandardMaterial({ color: 0xffd04a, roughness: 0.35, metalness: 0.25, emissive: 0x8a5a00, emissiveIntensity: 0.45, flatShading: false });
 const DEEP_RED = 0x9a1c2c;
 
 // ---------------------------------------------------------------- vloer

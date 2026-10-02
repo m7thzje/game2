@@ -90,6 +90,17 @@ for (const name of scen) {
     await browser.close(); continue;
   }
 
+  if (name === 'wall') {
+    const r = await page.evaluate(() => {
+      const D = window.__app.mode.instance.dbg; const w = D.course.find((o) => o.type === 'wall'); const X = [[-7, -5, -3], [3, 5, 7]];
+      D.players.forEach((p, i) => { p.d = w.D - 32; p.lane = w.lane; p.x = X[i][w.lane]; p.inv = 0; p.v = 20; p.broken.clear(); D.course.forEach((o) => { if (o.type === 'pad') p.padUsed.add(o.id); }); });
+      D.players[0].boostT = 4; D.players[0].boostF = 1.55;
+      const out = []; const m = window.__app.mode; const app0 = window.__app;
+      for (let k = 0; k < 150; k++) { app0.input.update(); m.update(1 / 60); if (k % 25 === 0) { const s = D.state(); out.push(`k=${k} d=${s.d.map((x) => x.toFixed(0))} stats=${JSON.stringify(s.stats.map((q) => [q.walls, q.crashes]))}`); } }
+      return out;
+    });
+    console.log(r.join('\n')); console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS'); await browser.close(); continue;
+  }
   const res = await page.evaluate(() => {
     const log = []; const m = window.__app.mode, inst = m.instance;
     let guard = 0, last = -1;

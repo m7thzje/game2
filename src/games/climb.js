@@ -416,7 +416,7 @@ export default {
           const pushers = pl.filter((p) => !p.dead && p.pl.stun <= 0 && p.pushCd <= 0 && s === 0 && ctx.pvp.input(p.i).bP);
           if (pushers.length) doPushes(pushers);
         }
-        for (const p of pl) { if (!active) { if (p.pl.ground) { p.pl.x += p.pl.ground.dx; p.pl.y = p.pl.ground.y; } continue; } stepPlayer(p, h, s === 0); }
+        for (const p of pl) { if (!active) { if (!p.dead) { ci.x = 0; ci.aP = false; ci.a = false; WORLD.sp = p.sp; WORLD.size = p.size; LY.stepPlayer(p.pl, ci, h, WORLD); } continue; } stepPlayer(p, h, s === 0); }
       }
     }
     function update(dt) {

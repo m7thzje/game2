@@ -26,7 +26,7 @@ export default {
   music: 'puzzle',
   blurb: 'In de magische bibliotheek liggen <b>20 kaarten</b> op een gigantisch toverboek. Om en om draai je <b>twee kaarten</b> om: een <b>paar</b> is een punt en je mag nog een keer! Geen paar? Dan draaien ze terug en is je broer aan de beurt. Je hebt maar <b>8 seconden</b> per keuze. Pas op voor de <b>bom</b>, de <b>poltergeist</b> die alles door elkaar schudt, en let op de <b>joker</b> en de <b>spiegel</b>: daarmee kun je nog winnen!',
   controls: ['{move} cursor over de kaarten', '{a} kaart omdraaien', '{b} spring naar de volgende kaart'],
-  tip: 'Onthoud wat er al open is geweest. Een bom laat alle kaarten even zien: kijk dan goed!',
+  tip: 'Onthoud wat er al open is geweest. Een bom laat alle kaarten even zien: kijk dan goed! Het allerlaatste paar is goud en telt voor 2 punten.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
@@ -98,7 +98,7 @@ export default {
     function popup(text, x, y, z, color = '#ffe14a', s = 1.2) { fx.texts.add(text, x, y, z, color, s); }
 
     // ---------------- spelers ----------------
-    const BASE_X = [-8.9, 8.9];
+    const BASE_X = [-8.2, 8.2];
     const pl = players.map((pp, i) => {
       const c = ctx.make.brother(i);
       const holder = new THREE.Group(); holder.add(c.group); scene.add(holder);
@@ -135,13 +135,13 @@ export default {
     let T = 0, introT = 0, timers = [], lastTaunt = [-9, -9];
     const dirSt = [{ prev: null, hold: 0, rep: 0 }, { prev: null, hold: 0, rep: 0 }];
     const later = (sec, fn) => { timers.push({ t: sec, fn }); };
-    const scoreOf = (i) => piles[i].length;
+    const scoreOf = (i) => piles[i].reduce((a, pr) => a + (pr.w || 1), 0);
     const remainingPairs = () => cards.filter((c) => c.kind === 'pair' && (c.st === 'down' || c.st === 'up')).length / 2;
 
     hud.setTimer(null);
     function refreshHud() {
       hud.setScore(`${names[0]} ${scoreOf(0)} – ${scoreOf(1)} ${names[1]}`);
-      for (const p of pl) hud.setPlayerInfo(p.i, `${scoreOf(p.i)} ${scoreOf(p.i) === 1 ? 'paar' : 'paren'}${S.active === p.i && !S.done && S.phase !== 'deal' ? ' · aan de beurt' : ''}`);
+      for (const p of pl) hud.setPlayerInfo(p.i, `${scoreOf(p.i)} ${scoreOf(p.i) === 1 ? 'punt' : 'punten'}${S.active === p.i && !S.done && S.phase !== 'deal' ? ' · aan de beurt' : ''}`);
     }
     function hint() {
       if (S.done) { hud.setHint(null); return; }
@@ -209,15 +209,17 @@ export default {
       if (b.kind !== 'pair') { special(b); return; }
       if (a.face === b.face) matchPair(a, b); else mismatch(a, b);
     }
-    function pileTarget(i, k, w) { return v3.set((i ? 1 : -1) * 6.75 + (w ? 0.42 : -0.42), 0.06, -3.7 + clamp(k, 0, 8) * 1.0); }
+    function pileTarget(i, k, w) { return v3.set((i ? 1 : -1) * 6.65 + (w ? 0.42 : -0.42), 0.06, -3.7 + clamp(k, 0, 8) * 1.0); }
     function claim(a, b, i, fromJoker = false) {
-      const k = piles[i].length; piles[i].push([a, b]);
+      const k = piles[i].length; const pr = [a, b]; pr.w = remainingPairs() === 1 ? 2 : 1; piles[i].push(pr);
+      if (pr.w === 2) { popup('GOUDEN PAAR! +2', (a.p.x + b.p.x) / 2, 4.2, (a.p.z + b.p.z) / 2, '#ffd23a', 1.7); hud.showBig('GOUDEN PAAR: 2 PUNTEN!', 1500, '#ffd23a'); audio.sfx('win', { vol: 0.5 }); }
       for (const [c, w] of [[a, 0], [b, 1]]) {
         if (slots[c.slot] === c) slots[c.slot] = null; c.slot = -1; c.st = 'claimed'; c.owner = i; c.angT = Math.PI; c.glowT = 0.6; c.liftT = 0;
         tween(c, pileTarget(i, k, w), 0.85, { arc: 2.2, spin: 0, sc: 0.5, delay: w * 0.08 });
       }
-      later(0.9, () => { a.glowT = 0; b.glowT = 0; });
+      later(0.9, () => { a.glowT = pr.w === 2 ? 0.5 : 0; b.glowT = pr.w === 2 ? 0.5 : 0; });
       refreshHud();
+      if (remainingPairs() === 1) { later(1.2, () => { if (!S.done) { hud.toast('Het LAATSTE paar is goud: 2 punten!', 2600); popup('LAATSTE PAAR = 2 PUNTEN', 0, 4.8, 0, '#ffd23a', 1.4); } }); }
     }
     function matchPair(a, b) {
       S.phase = 'match'; const i = S.active, p = pl[i];
@@ -321,6 +323,7 @@ export default {
       // bom heeft zijn eigen slot nog bezet: er zijn altijd genoeg lege plekken, anders laten we de kaarten vervallen
       if (empty.length < 2) { pr.forEach((cd) => { cd.hidden = true; cd.root.visible = false; cd.st = 'gone'; }); refreshHud(); return true; }
       popup(text, pl[i].holder.position.x, 4.6, 1, '#ff5a5a', 1.6);
+      pr.w = 1;
       pr.forEach((cd, w) => {
         const s = empty[w]; cd.owner = -1; cd.slot = s; slots[s] = cd; cd.st = 'down'; cd.glowT = 0; cd.scT = 1;
         tween(cd, v3.set(slotX(s), CARD_Y, slotZ(s)), 0.9, { arc: 3.2, spin: TAU, delay: 0.1 + w * 0.12, sc: 1, onDone: () => { cd.angT = 0; } });
@@ -339,7 +342,7 @@ export default {
     function poltergeist(done) {
       S.phase = 'event'; hud.setTimer(null);
       hud.showBig('POLTERGEIST!', 1300, '#cfd8ff'); W.ghostStart(2.8); W.dim = true; audio.sfx('creak', { vol: 0.9 }); audio.sfx('whisper', { vol: 0.8 });
-      hud.setHint('De poltergeist schudt alle kaarten door elkaar!');
+      hud.setHint('De poltergeist schudt alle kaarten door elkaar!'); for (const p of pl) p.banner.visible = false;
       const gp = W.ghostPos(); popup('UUUUUH!', 0, 5, -3, '#cfd8ff', 1.8);
       later(0.7, () => {
         const mov = cards.filter((c) => c.st === 'down' && c.slot >= 0);
@@ -423,14 +426,14 @@ export default {
     // ---------------- camera ----------------
     const camP = new THREE.Vector3(0, 12, 17), camL = new THREE.Vector3(0, 0, 1); let camShiftX = 0;
     function camUpdate(dt, intro = false) {
-      const a = camera.aspect || 1.7, f = clamp(1.62 / a, 1, 1.7);
+      const a = camera.aspect || 1.7, f = clamp(1.7 / a, 1, 1.7);
       const act = S.done ? 0 : (S.active ? 1 : -1);
       camShiftX = damp(camShiftX, intro ? 0 : act * 0.7, 2.5, dt);
       let tx, ty, tz, lx = 0, ly = 0, lz = 1.0;
-      if (intro) { const t = introT * 0.25; tx = Math.sin(t) * 6; ty = 9.5 + Math.sin(t * 0.7) * 0.8; tz = 18 + Math.cos(t) * 1.5; }
-      else if (S.phase === 'peek' || S.revealed) { tx = 0; ty = 12.2; tz = 15; }
-      else if (S.phase === 'event') { tx = Math.sin(T * 1.2) * 1.5; ty = 11.5; tz = 16.5; }
-      else { tx = camShiftX; ty = 10.6; tz = 15.6 + Math.sin(T * 0.4) * 0.15; }
+      if (intro) { const t = introT * 0.25; tx = Math.sin(t) * 5; ty = 8.6 + Math.sin(t * 0.7) * 0.8; tz = 14.5 + Math.cos(t) * 1.2; }
+      else if (S.phase === 'peek' || S.revealed) { tx = 0; ty = 9.4; tz = 12.6; }
+      else if (S.phase === 'event') { tx = Math.sin(T * 1.2) * 1.5; ty = 9.2; tz = 13.2; }
+      else { tx = camShiftX; ty = 8.5; tz = 11.9 + Math.sin(T * 0.4) * 0.12; }
       camP.x = damp(camP.x, tx * 1.0, 3, dt); camP.y = damp(camP.y, ty * (0.8 + 0.2 * f), 3, dt); camP.z = damp(camP.z, 1 + (tz - 1) * f, 3, dt);
       camL.set(camShiftX * 0.5, ly, lz);
       camera.position.copy(camP); camera.lookAt(camL);
@@ -466,7 +469,7 @@ export default {
 
     // beginstand
     for (const p of pl) { p.c.faceDir(-Math.sign(p.holder.position.x), 0.55); p.c.update(0.016); }
-    camP.set(0, 10, 19); camera.position.copy(camP); camera.lookAt(0, 0, 1);
+    camera.fov = 50; camera.updateProjectionMatrix(); camP.set(0, 9, 16); camera.position.copy(camP); camera.lookAt(0, 0, 1);
     refreshHud();
 
     return {

@@ -28,6 +28,7 @@ async function open(twist = 'none', size = [1100, 650]) {
   await page.waitForFunction(() => window.__app && window.__app.mode && window.__app.mode.instance, null, { timeout: 60000 });
   await page.waitForTimeout(500);
   await page.evaluate(async () => {
+    try { const am = await import('/src/engine/audio.js'); am.audio.init(); window.__audioOK = !!am.audio.ctx; } catch (e) { window.__audioOK = 'err ' + e.message; }
     const app = window.__app, mode = app.mode, inp = app.input;
     inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
     inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
@@ -72,6 +73,49 @@ for (const name of scen) {
       console.log(`idle twist=${tw} fin=${res.fin} winner=${res.result && res.result.winner} T=${res.st.T.toFixed(1)} out=${res.st.outRound} :: ${res.result ? res.result.summary.replace(/<[^>]+>/g, '') : ''}`);
       await page.close();
     }
+  } else if (name === 'gim') {
+    for (const g of ['smoky', 'runaway']) {
+      const page = await open(process.env.TWIST || 'none');
+      const snap = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); for (let k = 0; k < 4; k++) { try { await page.screenshot({ path: `/tmp/chairs_${tag}.png`, timeout: 90000 }); break; } catch (e) { await page.waitForTimeout(1500); } } await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
+      const until = (cond, max = 6000) => page.evaluate(({ cond, max }) => { const d = window.__app.mode.instance.dbg; const f = new Function('s', 'd', 'return ' + cond); let g = 0; while (!f(d.state(), d) && g++ < max && !window.__app.mode.finished) window.__step(1); return d.state().T; }, { cond, max });
+      await page.evaluate((g) => { const d = window.__app.mode.instance.dbg; d.auto(0); d.auto(1); d.R.gimmicks = g === 'smoky' ? ['smoky', 'runaway'] : ['runaway', 'smoky']; }, g);
+      await until('s.rs==="stop"');
+      if (g === 'smoky') {
+        await until('d.chairs.some(c => c.kind==="smoky" && c.fuse>0.3)'); await snap('smoky_fuse');
+        await until('d.chairs.some(c => c.boomed)'); await page.evaluate(() => window.__step(8)); await snap('smoky_boom');
+        await page.evaluate(() => window.__step(30)); await snap('smoky_fly');
+      } else {
+        await page.evaluate(() => window.__step(30)); await snap('runaway1');
+        await page.evaluate(() => window.__step(30)); await snap('runaway2');
+      }
+      await page.close();
+    }
+  } else if (name === 'human') {
+    // een "mens" (virtuele toetsen) speelt Wes tegen de AI; kijkt of de echte besturing werkt
+    for (const tw of ['none', 'invert', 'swapab']) {
+      const page = await open(tw);
+      const res = await page.evaluate(() => {
+        const app = window.__app, m = app.mode, d = m.instance.dbg, inp = app.input; d.auto(1);
+        const v = inp.virtual[0]; const out = { audio: window.__audioOK }; let guard = 0; const E0 = d.E[0];
+        const inv = window.__app.mode.twist.id === 'invert', swp = window.__app.mode.twist.id === 'swapab';
+        while (!m.finished && guard++ < 60 * 400) {
+          const s = d.state();
+          v.x = 0; v.y = 0; v.a = false; v.b = false;
+          if (s.rs === 'music' || s.rs === 'fake' || s.rs === 'intro') { /* rondjes lopen */ const a = Math.atan2(E0.z, E0.x) + 0.3; const tx = Math.cos(a) * 5.8 - E0.x, tz = Math.sin(a) * 5.8 - E0.z; const l = Math.hypot(tx, tz) || 1; v.x = tx / l * (inv ? -1 : 1); v.y = tz / l * (inv ? -1 : 1); }
+          if (s.rs === 'stop' && s.mode !== 'sit') {
+            let best = null, bd = 99; for (const c of d.chairs) if (c.active && !c.occupant && c.state === 'idle') { const dd = Math.hypot(c.x - E0.x, c.z - E0.z); if (dd < bd) { bd = dd; best = c; } }
+            if (best && E0.mode === 'walk') { const l = bd || 1; v.x = (best.x - E0.x) / l * (inv ? -1 : 1); v.y = (best.z - E0.z) / l * (inv ? -1 : 1); if (bd < 3.2 && Math.floor(s.T * 10) % 2 === 0) { if (swp) v.b = true; else v.a = true; } }
+          }
+          if (s.rs === 'pick' && s.alive[0]) { if (swp) v.b = true; else v.a = true; }
+          inp.update(); m.update(1 / 60);
+        }
+        v.x = v.y = 0; v.a = v.b = false;
+        out.fin = m.finished; out.st = d.state(); out.res = m.result && { w: m.result.winner, sc: m.result.scoreArr };
+        return out;
+      });
+      console.log('human', tw, JSON.stringify({ audio: res.audio, fin: res.fin, out: res.st.outRound, bonks: res.st.bonks, res: res.res, T: +res.st.T.toFixed(1) }));
+      await page.close();
+    }
   } else if (name === 'input') {
     const page = await open('none');
     const res = await page.evaluate(() => {
@@ -88,7 +132,7 @@ for (const name of scen) {
   } else if (name === 'shots') {
     const tw = process.env.TWIST || 'none';
     const page = await open(tw);
-    const snap = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); await page.screenshot({ path: `/tmp/chairs_${tag}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
+    const snap = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); for (let k = 0; k < 4; k++) { try { await page.screenshot({ path: `/tmp/chairs_${tag}.png`, timeout: 90000 }); break; } catch (e) { await page.waitForTimeout(1500); } } await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
     const until = (cond, max = 6000) => page.evaluate(({ cond, max }) => { const d = window.__app.mode.instance.dbg; const f = new Function('s', 'return ' + cond); let g = 0; while (!f(d.state()) && g++ < max && !window.__app.mode.finished) window.__step(1); return d.state().T; }, { cond, max });
     await page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.auto(0); d.auto(1); });
     await until('s.rs==="music" && s.musicT>3'); await snap('music');

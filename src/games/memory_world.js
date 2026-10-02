@@ -113,20 +113,20 @@ export function buildLibrary(ctx, L) {
 
   // ---------------- tafel ----------------
   const wood = new THREE.MeshStandardMaterial({ map: tex.planks(6, 3, '#6a3e20'), roughness: 0.75 });
-  scene.add(mesh(new THREE.BoxGeometry(22.4, 0.8, 15.6), wood, { pos: [0, -0.4, 0], cast: false }));
+  scene.add(mesh(new THREE.BoxGeometry(19.6, 0.8, 13.6), wood, { pos: [0, -0.4, 0], cast: false }));
   const gold = mat(0xe0a820, { metalness: 0.75, roughness: 0.35, flatShading: false });
-  scene.add(mesh(new THREE.BoxGeometry(22.8, 0.16, 0.2), gold, { cast: false, pos: [0, -0.02, 7.85] }), mesh(new THREE.BoxGeometry(22.8, 0.16, 0.2), gold, { cast: false, pos: [0, -0.02, -7.85] }));
-  scene.add(mesh(new THREE.BoxGeometry(0.2, 0.16, 15.6), gold, { cast: false, pos: [11.3, -0.02, 0] }), mesh(new THREE.BoxGeometry(0.2, 0.16, 15.6), gold, { cast: false, pos: [-11.3, -0.02, 0] }));
-  scene.add(mesh(new THREE.BoxGeometry(21.2, 1.0, 14.4), wood, { pos: [0, -1.3, 0], cast: false }));
+  scene.add(mesh(new THREE.BoxGeometry(20.0, 0.16, 0.2), gold, { cast: false, pos: [0, -0.02, 6.85] }), mesh(new THREE.BoxGeometry(20.0, 0.16, 0.2), gold, { cast: false, pos: [0, -0.02, -6.85] }));
+  scene.add(mesh(new THREE.BoxGeometry(0.2, 0.16, 13.6), gold, { cast: false, pos: [9.9, -0.02, 0] }), mesh(new THREE.BoxGeometry(0.2, 0.16, 13.6), gold, { cast: false, pos: [-9.9, -0.02, 0] }));
+  scene.add(mesh(new THREE.BoxGeometry(18.6, 1.0, 12.6), wood, { pos: [0, -1.3, 0], cast: false }));
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const lg = new THREE.Group(); lg.position.set(sx * 9.8, 0, sz * 6.2);
+    const lg = new THREE.Group(); lg.position.set(sx * 8.6, 0, sz * 5.4);
     lg.add(mesh(new THREE.CylinderGeometry(0.8, 0.55, 4.6, 10), wood, { pos: [0, -3.1, 0] }));
     lg.add(mesh(new THREE.SphereGeometry(0.95, 10, 8), gold, { pos: [0, -1.7, 0] }));
     lg.add(mesh(new THREE.CylinderGeometry(1.1, 1.25, 0.5, 10), gold, { pos: [0, -5.25, 0] }));
     scene.add(lg);
   }
   // fluwelen kleed onder het boek
-  const cloth = mesh(new THREE.PlaneGeometry(14.4, 13.6), new THREE.MeshStandardMaterial({ map: canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#6a1626'; g.fillRect(0, 0, w, h); g.strokeStyle = '#e0a820'; g.lineWidth = 6; g.strokeRect(8, 8, w - 16, h - 16); g.lineWidth = 2; g.strokeRect(20, 20, w - 40, h - 40); g.fillStyle = 'rgba(224,168,32,.35)'; for (let i = 0; i < 40; i++) { g.beginPath(); g.arc(30 + (i * 53) % (w - 60), 30 + (i * 91) % (h - 60), 2, 0, TAU); g.fill(); } }), roughness: 1 }), { cast: false, pos: [0, 0.012, 0], rot: [-Math.PI / 2, 0, 0] });
+  const cloth = mesh(new THREE.PlaneGeometry(13.8, 12.8), new THREE.MeshStandardMaterial({ map: canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#6a1626'; g.fillRect(0, 0, w, h); g.strokeStyle = '#e0a820'; g.lineWidth = 6; g.strokeRect(8, 8, w - 16, h - 16); g.lineWidth = 2; g.strokeRect(20, 20, w - 40, h - 40); g.fillStyle = 'rgba(224,168,32,.35)'; for (let i = 0; i < 40; i++) { g.beginPath(); g.arc(30 + (i * 53) % (w - 60), 30 + (i * 91) % (h - 60), 2, 0, TAU); g.fill(); } }), roughness: 1 }), { cast: false, pos: [0, 0.012, 0], rot: [-Math.PI / 2, 0, 0] });
   scene.add(cloth);
 
   // ---------------- het toverboek ----------------
@@ -142,12 +142,12 @@ export function buildLibrary(ctx, L) {
   scene.add(mesh(new THREE.BoxGeometry(11.2, 0.17, 0.5), mat(0x3a1c0c), { cast: false, pos: [0, 0.3, 0] }));
   scene.add(mesh(new THREE.BoxGeometry(0.3, 0.05, 3.0), mat(0xc42a3a), { cast: false, pos: [-1.4, 0.43, 5.0], rot: [0, 0.1, 0] }));      // lintje
   // leesstandaard-sfeer: gloeiende runenring om het raster
-  const runeRing = new THREE.Mesh(new THREE.RingGeometry(6.3, 6.5, 64), new THREE.MeshBasicMaterial({ color: 0xb08aff, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+  const runeRing = new THREE.Mesh(new THREE.RingGeometry(6.3, 6.42, 64), new THREE.MeshBasicMaterial({ color: 0x9a70ff, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
   runeRing.rotation.x = -Math.PI / 2; runeRing.position.y = BOOK_TOP + 0.01; runeRing.scale.set(1.0, 0.98, 1); runeRing.userData.dyn = true; scene.add(runeRing);
-  ups.push((t) => { runeRing.material.opacity = 0.22 + Math.sin(t * 1.5) * 0.1; runeRing.rotation.z = t * 0.05; });
+  ups.push((t) => { runeRing.material.opacity = 0.12 + Math.sin(t * 1.5) * 0.06; runeRing.rotation.z = t * 0.05; });
 
   // ---------------- decor op de tafel ----------------
-  for (const [x, z, s] of [[-9.6, -5.6, 1], [9.6, -5.6, 1]]) {   // kandelaars
+  for (const [x, z, s] of [[-8.3, -5.0, 1], [8.3, -5.0, 1]]) {   // kandelaars
     const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
     g.add(mesh(new THREE.CylinderGeometry(0.7, 0.9, 0.3, 10), gold, { pos: [0, 0.15, 0] }));
     g.add(mesh(new THREE.CylinderGeometry(0.12, 0.2, 2.2, 8), gold, { pos: [0, 1.3, 0] }));
@@ -158,11 +158,11 @@ export function buildLibrary(ctx, L) {
     }
   }
   { // stapel boeken
-    const sb = new THREE.Group(); sb.position.set(-9.7, 0, 5.2); scene.add(sb);
+    const sb = new THREE.Group(); sb.position.set(-8.2, 0, 4.7); scene.add(sb);
     [[0x8a2a2a, 2.0, 0.5, 1.5, 0.1], [0x2a4a8a, 1.8, 0.45, 1.4, -0.2], [0x2a7a4a, 1.6, 0.4, 1.2, 0.25]].forEach(([c, w, h, d, ry], i) => { const b = mesh(new THREE.BoxGeometry(w, h, d), mat(c), { pos: [0, 0.25 + i * 0.47, 0], rot: [0, ry, 0] }); sb.add(b); sb.add(mesh(new THREE.BoxGeometry(w * 0.98, h * 0.6, d * 0.98), mat(0xf0e0b0), { cast: false, pos: [0.04, 0.25 + i * 0.47, 0.02], rot: [0, ry, 0] })); });
   }
   { // inktpot met ganzenveer
-    const ik = new THREE.Group(); ik.position.set(9.6, 0, 5.4); scene.add(ik);
+    const ik = new THREE.Group(); ik.position.set(8.4, 0, 4.9); scene.add(ik);
     ik.add(mesh(new THREE.CylinderGeometry(0.38, 0.45, 0.6, 10), new THREE.MeshStandardMaterial({ color: 0x1a1a3a, roughness: 0.2, metalness: 0.4 }), { pos: [0, 0.3, 0] }));
     ik.add(mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.6, 4), mat(0xf4f0e0), { pos: [0.5, 1.6, 0.2], rot: [0.0, 0, -0.35] }));
     ik.add(mesh(new THREE.PlaneGeometry(0.5, 1.8), new THREE.MeshStandardMaterial({ color: 0xfff8e8, side: THREE.DoubleSide }), { pos: [0.85, 2.0, 0.2], rot: [0, 0.4, -0.35] }));
@@ -178,7 +178,7 @@ export function buildLibrary(ctx, L) {
   ups.push((t) => { for (const f of floaters) { f.c.position.y = f.y + Math.sin(t * 0.9 + f.ph) * 0.35; f.c.position.x = f.x + Math.sin(t * 0.4 + f.ph * 2) * 0.3; } });
   // een paar gloeiende lampen als echt licht
   const candleLights = [];
-  for (const x of [-9.6, 9.6]) { const pl = new THREE.PointLight(0xffa850, 1.4, 22, 1.4); pl.position.set(x, 3.4, -5.4); scene.add(pl); candleLights.push(pl); }
+  for (const x of [-8.3, 8.3]) { const pl = new THREE.PointLight(0xffa850, 1.4, 22, 1.4); pl.position.set(x, 3.4, -4.4); scene.add(pl); candleLights.push(pl); }
   ups.push((t) => { candleLights.forEach((l, i) => { l.intensity = (Wd.dim ? 0.5 : 1.35) + Math.sin(t * 9 + i * 3) * 0.12 + Math.sin(t * 5.3 + i) * 0.1; }); });
 
   // ---------------- zwevende boeken ----------------

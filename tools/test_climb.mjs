@@ -161,10 +161,14 @@ if (scen.includes('shots')) {
   await page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.chickenNow(); }); await run(60 * 1.2); await snap('h_chicken');
   // lava dichtbij
   await page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.warpTo(0, d.P.filter((p) => p.tower === 0 && p.route && p.y0 > 1)[0].id); d.warpTo(1, d.P.filter((p) => p.tower === 1 && p.route && p.y0 > 1)[1].id); d.setLava(1.0); }); await run(60 * 2.2); await snap('i_lava');
-  // top
-  await page.evaluate(() => { const d = window.__app.mode.instance.dbg; const t = d.P.filter((p) => p.top); d.warpTo(0, d.P.filter((p) => p.tower === 0 && p.route && p.y0 > 90 && !p.top)[0].id); d.warpTo(1, d.P.filter((p) => p.tower === 1 && p.route && p.y0 > 85 && !p.top)[0].id); d.setLava(60); }); await run(60 * 3); await snap('j_top');
-  await page.evaluate(() => { window.__post = true; }); await page.evaluate(() => window.__app.mode.instance.dbg.endNow(0, 'top')); await run(60 * 2.5); await page.waitForTimeout(500); await snap('k_win');
-  console.log(errors.length ? 'ERRORS\n' + errors.join('\n') : 'NO ERRORS'); await browser.close();
+  await browser.close();
+  const o2 = await open(twistArg || 'none', process.env.Q || 'low');
+  const snap2 = async (n) => { await o2.page.evaluate(() => { window.__app.mode.paused = true; }); await o2.page.screenshot({ path: `/tmp/climb_${tag}_${n}.png` }); await o2.page.evaluate(() => { window.__app.mode.paused = false; }); };
+  await o2.page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.warpTo(0, d.P.filter((p) => p.tower === 0 && p.route && p.y0 > 88 && !p.top)[0].id); d.warpTo(1, d.P.filter((p) => p.tower === 1 && p.route && p.y0 > 84 && !p.top)[0].id); d.setLava(40); });
+  await o2.page.evaluate(() => window.__run(60 * 1.5)); await snap2('j_top');
+  await o2.page.evaluate(() => { window.__post = true; window.__app.mode.instance.dbg.endNow(0, 'top'); }); await o2.page.evaluate(() => window.__run(60 * 2.2)); await o2.page.waitForTimeout(500); await snap2('k_win');
+  errors.push(...o2.errors); await o2.browser.close();
+  console.log(errors.length ? 'ERRORS\n' + errors.join('\n') : 'NO ERRORS');
 }
 if (server) server.close();
 console.log(failures ? `\n${failures} test(s) MISLUKT` : '\nAlle tests geslaagd');

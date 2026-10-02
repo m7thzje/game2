@@ -184,7 +184,7 @@ export default {
       R.gimmick = al.length >= 4 ? R.gimmicks[0] : al.length === 3 ? 'golden' : R.gimmicks[1];
       layoutChairs();
       R.state = 'intro'; R.t = 0; R.musicT = 0; R.fakeDone = false; R.fakeT = 0; R.stopT = 0; R.omega = 0; R.victim = null; R.pick = null; R.goldSitter = null; R.allSat = false; R.settleT = 0;
-      R.stopAt = [rand(11.5, 15.5), rand(10, 14), rand(9.5, 13)][Math.min(2, R.n - 1)];
+      R.stopAt = [rand(13, 17.5), rand(11, 15), rand(10, 13.5)][Math.min(2, R.n - 1)];
       const pf = [0.5, 0.85, 0.85][Math.min(2, R.n - 1)];
       R.fakeAt = Math.random() < pf ? R.stopAt * rand(0.38, 0.62) : -1;
       R.stopKind = Math.random() < 0.5 ? 'cut' : 'gliss';
@@ -392,7 +392,7 @@ export default {
       if (victim.seat) { victim.seat.occupant = null; victim.seat = null; }
       R.elimKind = Math.random() < 0.5 ? 'trap' : 'spring';
       victim.alive = false; victim.out = true; victim.outRound = R.n;
-      hud.showBig(`${victim.name} valt uit!`, 1500, victim.css);
+      hud.showBig(`${victim.name} valt uit!`, 1100, victim.css);
       const v = victim;
       v.vx = v.vz = 0;
       if (R.elimKind === 'trap') {
@@ -703,7 +703,7 @@ export default {
           const tt = f.t - 0.55; const k = clamp(tt / f.T0, 0, 1);
           // parabool met vaste eindpunt: x,z lineair, y = lineair + boog
           e.x = lerp(f.fx, f.tx, k); e.z = lerp(f.fz, f.tz, k);
-          e.y = lerp(PLAT_Y + 1, f.ty, k) + Math.sin(k * Math.PI) * 11;
+          e.y = lerp(PLAT_Y + 1, f.ty, k) + Math.sin(k * Math.PI) * 5.5;
           e.holder.rotation.z = tt * 14; e.holder.rotation.x = tt * 5;
           if (Math.random() < dt * 40) fx.particles.emit(e.x, e.y + 0.6, e.z, 0, 0, 0, { life: 0.5, size: 0.5, color: 0xffe14a, gravity: 0 });
           if (k >= 1 && !f.landed) { f.landed = true; fx.particles.burst(e.x, e.y + 0.5, e.z, { count: 20, speed: 4, up: 1.5, life: 0.7, size: 0.5, colors: [0xffffff, 0xffe14a], gravity: 3 }); fx.texts.add('PLING!', e.x, e.y + 3, e.z, '#ffffff', 1.1); audio.sfx('ding', { vol: 0.8 }); }
@@ -808,7 +808,7 @@ export default {
       }
       for (let i = notes.length - 1; i >= 0; i--) { const n = notes[i]; n.t += dt; n.s.position.y += dt * 2.2; n.s.position.x += Math.sin(n.t * 3 + n.ph) * dt * 1.2 + n.vx * dt * 0.4; n.s.material.opacity = 1 - clamp((n.t - 1.8) / 0.8, 0, 1); if (n.t > 2.6) { scene.remove(n.s); n.s.material.dispose(); notes.splice(i, 1); } }
       // kandelaars/lichtjes flitsen mee op het ritme
-      L.hemi.intensity = lerp(L.hemi.intensity, R.state === 'stop' ? 1.7 : 1.25 + (musicOn() ? Math.sin(T * R.bpm / 60 * Math.PI) * 0.12 : 0), 8, dt);
+      L.hemi.intensity = damp(L.hemi.intensity, R.state === 'stop' ? 1.7 : 1.25 + (musicOn() ? Math.sin(T * R.bpm / 60 * Math.PI) * 0.12 : 0), 8, dt);
     }
     const notes = [];
 

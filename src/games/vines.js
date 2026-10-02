@@ -488,10 +488,10 @@ export default {
       if (winner >= 0) { tx = pl[winner].x - 3; spread = 4; }
       const asp = camera.aspect || 1.7, tv = Math.tan(camera.fov * Math.PI / 360);
       const needHalfW = spread / 2 + 12;
-      const tdist = clamp(Math.max(needHalfW / (tv * asp), 8.0 / tv), 28, 80);
+      const tdist = clamp(Math.max(needHalfW / (tv * asp), 8.4 / tv), 30, 80);
       camX = first ? tx : damp(camX, tx, 3.2, dt); camDist = first ? tdist : damp(camDist, tdist, 1.6, dt);
-      const cy = 6.2 + Math.max(0, camDist - 28) * 0.06;
-      camera.position.set(camX, cy + 4.0, camDist);
+      const cy = 6.0 + Math.max(0, camDist - 30) * 0.06;
+      camera.position.set(camX, cy + 7.0, camDist);
       camLook.set(camX, cy - 0.4, 0); camera.lookAt(camLook);
       // zon + schaduw volgt de camera
       L.sun.position.set(camX + 14, 40, 26); L.sun.target.position.set(camX, 3, 0); L.sun.target.updateMatrixWorld();

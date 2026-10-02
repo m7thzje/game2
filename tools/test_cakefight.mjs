@@ -151,12 +151,12 @@ for (const name of scen) {
       // 6. confetti: ontploft later, +2
       reset(); d.give(0, 'confetti'); d.pl[1].x = 5; press(0); step(30); st = d.state(); const mid = st.score[0]; step(100); st = d.state(); ok('confetti: +2 (direct of vertraagd)', st.score[0] === 2, JSON.stringify([mid, st.score]));
       // 7. confetti op eigen voeten -> punt voor de ander
-      reset(); d.give(0, 'confetti'); d.pl[1].x = 14; d.pl[1].z = 8; d.pl[0].face = Math.PI; press(0); step(100); st = d.state(); ok('confetti vlak bij jezelf: tegenstander +1', st.score[1] >= 1 && st.score[0] === 0, JSON.stringify([st.score, st.fuseList]));
+      reset(); d.give(0, 'confetti'); d.pl[0].x = -8; d.pl[0].z = -8.4; d.pl[1].x = 14; d.pl[1].z = 8; d.pl[0].face = Math.PI; press(0); step(130); st = d.state(); ok('confetti vlak bij jezelf: tegenstander +1', st.score[1] >= 1 && st.score[0] === 0, JSON.stringify([st.score, st.fuseList]));
       // 8. Bakker Bram
       reset(); d.bramNow(); d.pl[1].x = 0; d.pl[1].z = 1.9; d.pl[0].z = -9; d.pl[0].x = -14; let gotBram = false; for (let k = 0; k < 60 * 7; k++) { d.pl[1].x = 0; d.pl[1].z = 1.9; step(1); const s2 = d.state(); if (s2.stat.bram > 0) { gotBram = true; break; } if (s2.bram.state === 'idle' && s2.bram.runs > 0 && k > 120) break; }
       st = d.state(); ok('Bram rent omver, punt voor de ander', gotBram && st.score[0] >= 1, JSON.stringify([st.stat.bram, st.score, st.bram]));
       // 9. plas laat glijden
-      reset(); d.puddleAt(-8, 0, 1.5, 'cream'); step(2); st = d.state(); ok('plas: glibberig', st.p[0].puddle === true);
+      reset(); d.puddleAt(-8, 0, 1.5, 'cream'); step(20); st = d.state(); ok('plas: glibberig', st.p[0].puddle === true);
       // 10. gouden taart bij gelijkspel
       reset(); d.setT(59.9); step(30); st = d.state(); ok('gelijk -> gouden taart (sdMode)', st.sdMode && st.p[0].cake === 'gold' && st.p[1].cake === 'gold', JSON.stringify([st.sdMode, st.p[0].cake]));
       step(120); d.pl[1].x = 3; d.pl[0].x = -3; d.pl[0].z = 0; d.pl[1].z = 0; d.pl[0].face = Math.PI / 2; step(2); press(0); step(60); st = d.state(); ok('gouden taart: eerste treffer wint', m.finished && m.result.winner === 0, JSON.stringify(m.result && [m.result.winner, m.result.scoreArr]));

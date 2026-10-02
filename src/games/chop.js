@@ -12,7 +12,7 @@ const TX = [-6.4, 6.4];
 const BASE_Y = 0.5;
 const WIN_H = 21;                // stukken met hun voet lager dan dit krijgen een mesh
 const SIDE_X = 2.2;
-const STUN = 1.6;
+const STUN = 1.75;
 const hexOf = (c) => '#' + c.toString(16).padStart(6, '0');
 const HZ = ['spikes', 'branch', 'hive'];
 
@@ -203,7 +203,7 @@ export default {
       const it = p.list[0]; if (!it) return;
       const spd = gSpeed(p.i);
       if (T - p.lastChop < 0.6 / Math.min(1.3, spd)) p.tempo = Math.min(1, p.tempo + 0.1); else p.tempo = Math.max(0, p.tempo - 0.3);
-      p.lastChop = T; p.lock = lerp(0.42, 0.27, p.tempo) / spd; p.swingT = 0; p.kick = 1;
+      p.lastChop = T; p.lock = lerp(0.45, 0.29, p.tempo) / spd; p.swingT = 0; p.kick = 1;
       p.c.faceDir(-p.side, 0);
       const y0 = it.ty;
       if (p.tempo >= 0.9 && !p.fire) { p.fire = true; note(p.i, 'TEMPO!', '#ffb040', 1.1, 7.2, p.side * 0.5); audio.sfx('powerup', { vol: 0.4 }); }
@@ -462,14 +462,14 @@ export default {
     }
 
     // ---------- camera ----------
-    const camP = new THREE.Vector3(), camL = new THREE.Vector3(), gp = new THREE.Vector3(), gl = new THREE.Vector3();
+    const camP = new THREE.Vector3(), camL = new THREE.Vector3(), gp = new THREE.Vector3(), gl = new THREE.Vector3(), ip = new THREE.Vector3(), il = new THREE.Vector3();
     let camInit = false;
     function cam(dt) {
       punch = Math.max(0, punch - dt * 3);
       let px = 0, py = 6.2, pz = 19.6 - punch * 1.2, lx = 0, ly = 5.8;
       if (phase === 'won' && winner != null) { const k = smoothstep(0.2, 2.0, winT); px = lerp(0, TX[winner] * 0.6, k); pz = lerp(pz, 13, k); py = lerp(py, 4.2, k); lx = lerp(0, TX[winner] * 0.8, k); ly = lerp(5.8, 4.0, k); }
       gp.set(px + Math.sin(T * 0.4) * 0.25, py, pz); gl.set(lx, ly, 0);
-      const ip = new THREE.Vector3(-12 + Math.sin(introT * 0.3) * 6, 24 - Math.min(introT, 6) * 0.9, 40), il = new THREE.Vector3(0, 11, 0);
+      ip.set(-12 + Math.sin(introT * 0.3) * 6, 24 - Math.min(introT, 6) * 0.9, 40); il.set(0, 11, 0);
       gp.lerp(ip, cine); gl.lerp(il, cine);
       if (!camInit) { camP.copy(gp); camL.copy(gl); camInit = true; }
       const f = 1 - Math.exp(-6 * dt); camP.lerp(gp, f); camL.lerp(gl, f);
@@ -504,7 +504,6 @@ export default {
     function resultUpdate(dt) { tick(dt, false); }
     function introUpdate(dt) {
       introT += dt; cine = counting ? damp(cine, 0, 1.3, dt) : 1;
-      for (const p of pl) { p.c.pose = 'idle'; p.c.faceDir(-p.side, 0); p.c.update(dt); p.c.armR.rotation.x = -2.35 + Math.sin(introT * 3 + p.i) * 0.04; p.c.armL.rotation.x = -1.7; p.c.group.position.set(p.x, BASE_Y, 0.3); p.tag.position.set(p.x, BASE_Y + 3.9, 0.3); }
       forest.update(introT, dt); visuals(dt); cam(dt);
     }
     visuals(0.016); cam(0.016);

@@ -119,6 +119,12 @@ for (const name of scen) {
     console.log('edge', JSON.stringify(r));
     console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS');
     await browser.close();
+  } else if (name === 'jam') {
+    const { browser, page, errors } = await open('none');
+    await page.evaluate(() => { window.__prof = ['mash', 'pro']; window.__bot(60 * 20, (s) => s.jam[0] > 0.6); window.__bot(20); });
+    await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(600); await page.screenshot({ path: '/tmp/screws_jam.png' });
+    console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS');
+    await browser.close();
   } else if (name === 'gnomecam') {
     const { browser, page, errors } = await open('none');
     await page.evaluate(() => { window.__prof = ['kid', 'kid']; const F = window.__app.mode.instance.dbg.force; F.setUnits(0, 150); F.setUnits(1, 40); F.gnome(1); window.__bot(60 * 3, (s) => s.gnome[1] > 0); window.__bot(90); });

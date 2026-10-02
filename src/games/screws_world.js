@@ -119,6 +119,7 @@ function bannerTex(name, css, flip) {
 
 export function buildCellar(ctx, { colX, names, css }) {
   const { scene, fx } = ctx;
+  const firstChild = scene.children.length;
   const rng = mulberry32(77);
   const upd = [];
   const WALL_Z = -14;
@@ -271,6 +272,8 @@ export function buildCellar(ctx, { colX, names, css }) {
     // stofdeeltjes in de lucht
     if (Math.random() < dt * 14) fx.particles.emit((Math.random() - 0.5) * 40, camY + (Math.random() - 0.3) * 18, -4 + Math.random() * 14, (Math.random() - 0.5) * 0.3, -0.25, 0, { life: 3.2, size: 0.14, color: 0xffd9a0, gravity: 0, shrink: false });
   }
+  // decor werpt geen schaduwen (spaart de schaduw-pass); schroeven, kooien en poppetjes wel
+  for (let k = firstChild; k < scene.children.length; k++) scene.children[k].traverse((o) => { if (o.isMesh || o.isInstancedMesh) o.castShadow = false; });
   return { update, ringBell, WALL_Z };
 }
 
