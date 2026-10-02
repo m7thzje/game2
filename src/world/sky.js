@@ -135,7 +135,7 @@ export class Sky {
     const sunI = useSun ? Math.max(0.05, smoothstep(-0.05, 0.3, s)) * 2.8 : smoothstep(-0.05, -0.4, s) * 0.55 + 0.1;
     this.sun.intensity = sunI;
     mixC(this.hemi.color, 'hemiTop'); mixC(this.hemi.groundColor, 'hemiBot');
-    this.hemi.intensity = lerp(0.62, 1.15, dayF);
+    this.hemi.intensity = lerp(0.9, 1.15, dayF);
     this.scene.fog.color.copy(U.bottom.value).lerp(U.mid.value, 0.15); this.scene.fog.near = lerp(40, 80, dayF); this.scene.fog.far = lerp(170, 270, dayF);
     this.dome.position.copy(camera.position);
     // wolken

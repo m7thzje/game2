@@ -13,6 +13,24 @@ if (di >= 0) {
   const blocks = fs.readFileSync(args[di + 1], 'utf8').replace(/\r/g, '').split(/\n\s*\n/).map((b) => b.split('\n').filter((l) => l.trim() && !l.startsWith('//')));
   defs = blocks.filter((b) => b.length).map((map, i) => ({ name: 'draft ' + (i + 1), map }));
 }
+// vastloper-analyse: hoeveel bereikbare toestanden kunnen NIET meer winnen? (dan is herstarten met B nodig)
+import { initState as _is, packState, unpackState, act as _act, isWin as _win } from '../src/games/plates_levels.js';
+function deadStates(L, cap = 300000) {
+  const k0 = packState(L, _is(L)); const seen = new Map([[k0, 0]]); const keys = [k0]; const rev = [[]]; const wins = [];
+  for (let h = 0; h < keys.length && keys.length < cap; h++) {
+    const s = unpackState(L, keys[h]);
+    for (let who = 0; who < 2; who++) for (let a = 0; a < 5; a++) {
+      const r = _act(L, s, who, a); if (!r) continue; const k = packState(L, r.s);
+      let id = seen.get(k); if (id === undefined) { id = keys.length; seen.set(k, id); keys.push(k); rev.push([]); if (r.win) wins.push(id); }
+      rev[id].push(h);
+    }
+  }
+  const good = new Uint8Array(keys.length); const st = [...wins]; wins.forEach((w) => { good[w] = 1; });
+  while (st.length) { const n = st.pop(); for (const p of rev[n]) if (!good[p]) { good[p] = 1; st.push(p); } }
+  let dead = 0; for (let i = 0; i < keys.length; i++) if (!good[i]) dead++;
+  let ex = null; for (let i = 0; i < keys.length; i++) if (!good[i]) { ex = unpackState(L, keys[i]); break; }
+  return { total: keys.length, dead, ex };
+}
 let ok = true, totalSteps = 0;
 defs.forEach((def, i) => {
   const t0 = Date.now();
@@ -35,6 +53,7 @@ defs.forEach((def, i) => {
   console.log(`  zonder ooit dood te gaan: ${nd.solved ? nd.steps + ' acties' : 'ONOPLOSBAAR'}`);
   if (!nd.solved) ok = false;
   if (independent) ok = false;
+  if (args.includes('--dead')) { const dd = deadStates(L); console.log(`  bereikbare toestanden: ${dd.total}, daarvan zonder uitweg (herstart nodig): ${dd.dead} (${(100 * dd.dead / dd.total).toFixed(1)}%)`); if (dd.ex) console.log(renderAscii(L, dd.ex).split('\n').map((r) => '     ' + r).join('\n')); }
   if (args.includes('--path')) console.log('  ' + both.path.map((m) => 'DS'[m.who] + (m.a < 4 ? '^v<>'[m.a] : 'A')).join(' '));
 });
 console.log(ok ? `\nALLE LEVELS OK (som van kortste oplossingen: ${totalSteps} acties)` : '\nER ZIJN PROBLEMEN');
