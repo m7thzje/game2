@@ -48,9 +48,9 @@ export default {
   time: 75,
   pay: 1.1,
   music: 'game_fast',
-  blurb: 'Op de kermis speelt Nar Nico <b>Hete Aardappel</b>! Wie de tikkende aardappel heeft, moet hem <b>doorgeven</b> door iemand aan te tikken. Bij elke ontploffing valt de houder uit. Daan en Sem zijn een team tegen de narren <b>Fonkel</b> en <b>Dobber</b>: laat de narren eerder ontploffen dan jullie!',
-  controls: ['{move} rennen', '{a} duiken: tik de bom door of duw iemand weg', '{b} sprint (even wachten)'],
-  tip: 'Duw een nar weg met A als hij achter je broer aan zit! Pak bubbels (schild) en ijsbloemen (houdt de bomhouder 2 sec op). Uitgeschakeld? Loop langs de rand en moedig je broer aan met A.',
+  blurb: 'Op de kermis speelt Nar Nico <b>Hete Aardappel</b>! Wie de tikkende aardappel heeft, geeft hem door door iemand <b>aan te tikken</b>. Bij elke knal valt de houder uit. Daan en Sem zijn een team tegen de narren <b>Fonkel</b> en <b>Dobber</b>.',
+  controls: ['{move} rennen', '{a} duiken: bom doorgeven / wegduwen', '{b} sprint (even wachten)'],
+  tip: 'Duw een nar weg die je broer achterna zit. Pak bubbels (schild) en ijsbloemen. Uitgeschakeld? Moedig je broer aan met {a}!'.replace('{a}', 'A'),
 
   create(ctx) {
     const { scene, camera, fx, players, input, audio, hud } = ctx;
@@ -111,14 +111,14 @@ export default {
     fuse.add(mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.4, 5), mat(0x2a1a0e), { cast: false, pos: [0.06, 0.18, 0], rot: [0, 0, -0.35] }));
     const spark = mesh(new THREE.SphereGeometry(0.1, 7, 5), new THREE.MeshBasicMaterial({ color: 0xffd23f }), { cast: false, receive: false, pos: [0.15, 0.38, 0] }); fuse.add(spark);
     const bombLight = new THREE.PointLight(0xff5a1a, 0, 12, 1.5); bomb.add(bombLight);
-    const haloTex = canvasTex(64, 64, (g, w, hh) => { const gr = g.createRadialGradient(32, 32, 2, 32, 32, 32); gr.addColorStop(0, 'rgba(255,200,80,.95)'); gr.addColorStop(0.45, 'rgba(255,90,20,.45)'); gr.addColorStop(1, 'rgba(255,60,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, hh); });
+    const haloTex = canvasTex(64, 64, (g, w, hh) => { const gr = g.createRadialGradient(32, 32, 2, 32, 32, 32); gr.addColorStop(0, 'rgba(255,150,60,.8)'); gr.addColorStop(0.5, 'rgba(255,70,20,.35)'); gr.addColorStop(1, 'rgba(255,60,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, hh); });
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false })); halo.scale.set(2.6, 2.6, 1); halo.renderOrder = 18; bomb.add(halo);
     bomb.visible = false;
     const bombWorld = new THREE.Vector3();
 
     // ---------- toestand ----------
     const st = {
-      phase: 'setup', timer: 1.0, round: 0, fuse: 0, fuseMax: 1, tickT: 0, lock: 0, holder: null, passes: 0, protects: 0, elim: [], t: 0,
+      phase: 'setup', timer: 0.3, round: 0, fuse: 0, fuseMax: 1, tickT: 0, lock: 0, holder: null, passes: 0, protects: 0, elim: [], t: 0,
       hintOff: false, powerT: 5, endT: 0, over: false, cheers: 0, bombFly: null, banner: 0, boom: 0, lastBeat: 0, shakeY: 0, winner: null, pushHits: 0,
     };
     const powerups = [];
@@ -321,6 +321,7 @@ export default {
       else { e.npcCheer = (e.npcCheer || 1) - dt; if (e.npcCheer <= 0) { e.npcCheer = rand(1.5, 3.5); e.c.jump(); } mx = Math.sin(st.t * 0.6 + e.i) * 0.4; }
       const move = mx * -Math.sin(e.ang) + mz * Math.cos(e.ang);   // schermrichting -> langs de rand
       e.ang += move * dt * 0.62;
+      for (const o of E) { if (o !== e && o.state === 'out') { const dA = angDiff(e.ang, o.ang); if (Math.abs(dA) < 0.2) e.ang -= Math.sign(dA || 1) * (0.2 - Math.abs(dA)) * 0.5; } }
       e.x = Math.cos(e.ang) * RIM_R; e.z = Math.sin(e.ang) * RIM_R;
       e.c.group.position.set(e.x, 0.56, e.z); e.c.faceDir(-Math.cos(e.ang), -Math.sin(e.ang));
       e.c.speed = Math.abs(move) * 0.8; e.cheerCd -= dt;
@@ -421,7 +422,7 @@ export default {
       const tx = dirx * (RIM_R), tz = dirz * (RIM_R); e.fvx = (tx - e.x) / 1.2; e.fvz = (tz - e.z) / 1.2; e.ang = Math.atan2(dirz, dirx);
       e.c.pose = 'scared';
       audio.sfx('explode'); ctx.shake(1); st.shakeY = 0.6;
-      flash.intensity = 120; flash.position.set(e.x, 3, e.z);
+      flash.intensity = 70; flash.position.set(e.x, 3, e.z);
       fx.particles.burst(e.x, 1.2, e.z, { count: 70, colors: [0xff7a1a, 0xffd23f, 0xff3a0a], speed: 9, up: 1.2, size: 0.65, life: 0.9, gravity: 4 });
       fx.particles.burst(e.x, 1.2, e.z, { count: 45, colors: [0x2a2a2a, 0x555555, 0x777777], speed: 5, up: 1.6, size: 0.9, life: 1.6, gravity: -0.5 });
       fx.particles.burst(e.x, 2.0, e.z, { count: 80, colors: [0xff5a8a, 0xffd23f, 0x7ad8ff, 0x9aff7a, 0xffffff, 0xb15ae8], speed: 9, up: 1.8, size: 0.34, life: 1.8, gravity: 5 });
@@ -443,6 +444,7 @@ export default {
         // rangen voor wie nog leeft (bij vroeg einde)
         let r = st.elim.length + 1; for (const e of live) { if (!e.rank) e.rank = r++; }
         for (const e of live) { e.c.pose = 'cheer'; }
+        hud.setScore(st.winner ? `${st.winner.name} wint de Hete Aardappel!` : 'De narren winnen...');
         if (st.winner) { audio.sfx('win'); fx.texts.add(st.winner.name + ' wint!', st.winner.x, 4.2, st.winner.z, st.winner.css, 1.6); }
         return true;
       }
@@ -481,12 +483,12 @@ export default {
           if (k >= 1) st.bombFly = null;
         }
         bomb.position.set(bx, by + Math.sin(st.t * 9) * 0.04, bz);
-        const sc = 1 + beat * (0.18 + prog * 0.15) + prog * 0.12; bomb.scale.setScalar(sc * 0.95);
+        const sc = 1 + beat * (0.18 + prog * 0.15) + prog * 0.12; bomb.scale.setScalar(sc * 1.2);
         bomb.rotation.y = Math.sin(st.t * 2.2) * 0.35; bomb.rotation.z = Math.sin(st.t * 7) * (0.04 + prog * 0.18);
-        const warm = new THREE.Color().setHSL(0.04 - prog * 0.04, 1, 0.18 + prog * 0.3);
+        const warm = new THREE.Color().setHSL(0.065 - prog * 0.065, 1, 0.2 + prog * 0.28);
         bombMat.emissive.copy(warm); bombMat.emissiveIntensity = 0.3 + prog * 1.6 + beat * 0.9;
         bombMat.color.setHSL(0.08 - prog * 0.06, 0.5 + prog * 0.3, 0.38 - prog * 0.06);
-        halo.material.opacity = 0.35 + prog * 0.45 + beat * 0.3; halo.scale.setScalar((2.2 + prog * 1.0 + beat * 0.6) / Math.max(0.5, bomb.scale.x));
+        halo.material.opacity = 0.3 + prog * 0.35 + beat * 0.25; halo.scale.setScalar((2.0 + prog * 0.8 + beat * 0.5) / Math.max(0.5, bomb.scale.x));
         bombLight.intensity = (2 + prog * 22) * (0.6 + beat * 0.8); bombLight.color.setHSL(0.05, 1, 0.5);
         spark.scale.setScalar(0.8 + Math.random() * 0.8);
         spark.getWorldPosition(bombWorld);
@@ -503,7 +505,7 @@ export default {
         if (live) {
           e.ring.position.set(e.x, 0.06, e.z);
           const hot = e.holder; const s = hot ? 1.3 + Math.sin(st.t * 14) * 0.15 : 1; e.ring.scale.set(s, s, s);
-          e.ring.material.color.setHex(hot ? 0xff3a1a : e.color); e.ring.material.opacity = hot ? 0.95 : 0.75;
+          e.ring.material.color.setHex(hot ? (e.immT > 0 ? 0xffffff : 0xff3a1a) : e.color); e.ring.material.opacity = hot ? 0.95 : 0.75;
         }
         e.tag.position.set(e.x, (e.state === 'out' ? 0.6 : 0) + e.c.height + 0.65, e.z + 0.2);
         e.shield.visible = e.shieldT > 0 && e.alive;
@@ -513,10 +515,16 @@ export default {
       }
       // schokgolf
       if (waveT > 0) { waveT -= dt; const k = 1 - waveT / 0.6; wave.visible = true; wave.position.set(waveX, 0.1, waveZ); wave.scale.setScalar(1 + k * 12); wave.material.opacity = (1 - k) * 0.8; } else wave.visible = false;
-      flash.intensity = Math.max(0, flash.intensity - dt * 240);
+      flash.intensity = Math.max(0, flash.intensity - dt * 160);
       st.shakeY = damp(st.shakeY, 0, 6, dt); placeCam(st.shakeY);
     }
 
+    function firework() {
+      const a = Math.random() * TAU, r = 6 + Math.random() * 14; const x = Math.cos(a) * r, z = -8 - Math.random() * 12 + Math.sin(a) * 3, y = 11 + Math.random() * 6;
+      const cols = [[0xff5a8a, 0xffd23f], [0x7ad8ff, 0xffffff], [0x9aff7a, 0xffd23f], [0xb15ae8, 0xff8a2a]][Math.floor(Math.random() * 4)];
+      fx.particles.burst(x, y, z, { count: 46, colors: cols, speed: 8, up: 1, spread: 1.4, size: 0.5, life: 1.5, gravity: 3 });
+      audio.sfx('pop', { vol: 0.25, rate: 0.7 + Math.random() * 0.4 });
+    }
     // ---------- hoofdlus ----------
     function control(dt, aiOnly = false) {
       const live = alive().filter((e) => e.state === 'play');
@@ -585,6 +593,7 @@ export default {
       }
       control(dt);
       updatePowerups(dt);
+      st.fwT = (st.fwT ?? 3) - dt; if (st.fwT <= 0) { firework(); st.fwT = st.phase === 'end' ? 0.35 : rand(4, 7); }
       const boost = st.phase === 'boom' ? 1 : st.phase === 'round' ? 0.25 + (1 - st.fuse / st.fuseMax) * 0.5 : st.phase === 'end' ? 1 : 0.2;
       arena.update(st.t, dt, boost);
       visuals(dt);
@@ -592,7 +601,7 @@ export default {
       if (st.phase === 'round' && Math.floor(st.t * 4) !== Math.floor((st.t - dt) * 4)) {
         for (const b of [DAAN, SEM]) {
           const msg = !b.alive ? '💀 Uit! A = aanmoedigen' : b.holder ? '💣 Jij hebt de bom! Tik iemand (A)' : st.holder && dist(b, st.holder) < 4.5 ? '😱 Pas op! Ren weg!' : '🏃 Houd afstand';
-          hud.setPlayerInfo(b.i, msg);
+          hud.setPlayerInfo(b.i, msg + (b.alive ? (b.sprintCd <= 0 ? '  ⚡' : '') : ''));
         }
       }
     }

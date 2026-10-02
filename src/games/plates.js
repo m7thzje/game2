@@ -100,72 +100,76 @@ export default {
     // ------------------------------------------------------------------ de slapende draak
     function makeDragon() {
       const g = new THREE.Group(); const S = 2.0; g.scale.setScalar(S);
-      const scaleMat = new THREE.MeshStandardMaterial({ color: 0x5e38b0, roughness: 0.55, metalness: 0.25, emissive: 0x1d0a4a, emissiveIntensity: 0.8 });
-      const bellyMat = new THREE.MeshStandardMaterial({ color: 0xe8c068, roughness: 0.6, emissive: 0x4a3010, emissiveIntensity: 0.6 });
-      const hornMat = mat(0xf0e6c8, { flatShading: false });
-      const darkMat = mat(0x15101e);
-      const body = mesh(gSph, scaleMat, { pos: [0, 1.0, -0.6], scale: [1.7, 1.0, 2.3] }); g.add(body);
-      g.add(mesh(gSph, bellyMat, { pos: [0, 0.55, 0.0], scale: [1.2, 0.55, 1.9] }));
-      // rugstekels
-      const spikes = new THREE.Group(); g.add(spikes);
-      for (let i = 0; i < 9; i++) { const sp = mesh(new THREE.ConeGeometry(0.22 - i * 0.008, 0.7, 5), bellyMat, { pos: [0, 1.9 - Math.abs(i - 4) * 0.08, -2.6 + i * 0.5], rot: [0.15, 0, 0] }); spikes.add(sp); }
-      // opgevouwen vleugel
+      const scaleMat = new THREE.MeshStandardMaterial({ color: 0x2fae98, roughness: 0.5, metalness: 0.3, emissive: 0x0f5a50, emissiveIntensity: 0.9 });
+      const darkScale = new THREE.MeshStandardMaterial({ color: 0x1f7f78, roughness: 0.6, metalness: 0.2, emissive: 0x083a38, emissiveIntensity: 0.8 });
+      const bellyMat = new THREE.MeshStandardMaterial({ color: 0xf2cc70, roughness: 0.6, emissive: 0x6a4a10, emissiveIntensity: 0.8 });
+      const spikeMat = new THREE.MeshStandardMaterial({ color: 0xff8a3a, emissive: 0xc04a10, emissiveIntensity: 0.9, roughness: 0.5 });
+      const hornMat = new THREE.MeshStandardMaterial({ color: 0xf6efd8, emissive: 0x6a6450, emissiveIntensity: 0.5, roughness: 0.5 });
+      const darkMat = mat(0x0c0a14);
+      const body = mesh(gSph, scaleMat, { pos: [0, 1.15, -0.5], scale: [1.9, 1.15, 2.5] }); g.add(body);
+      g.add(mesh(gSph, bellyMat, { pos: [0, 0.55, 0.3], scale: [1.45, 0.6, 2.0] }));
+      // rugstekels (oranje)
+      for (let i = 0; i < 10; i++) g.add(mesh(new THREE.ConeGeometry(0.2 - i * 0.006, 0.8 - Math.abs(i - 4) * 0.04, 5), spikeMat, { pos: [0, 2.25 - Math.abs(i - 3) * 0.1, -2.6 + i * 0.46], rot: [0.25, 0, 0] }));
+      // vleugels (opgevouwen langs de flanken)
+      const wingGeo = new THREE.BufferGeometry();
+      wingGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0.5, 0, 0, -0.7, 2.6, 0.2, -1.2, 0, 0, 0.5, 2.6, 0.2, -1.2, 3.8, 0.5, 0.0, 0, 0, 0.5, 3.8, 0.5, 0.0, 2.0, 0.1, 1.1], 3)); wingGeo.computeVertexNormals();
+      const wingMat = new THREE.MeshStandardMaterial({ color: 0x1d8a82, emissive: 0x0a4a48, emissiveIntensity: 0.9, side: THREE.DoubleSide, flatShading: true, roughness: 0.7 });
       for (const sx of [-1, 1]) {
-        const wing = new THREE.Group(); wing.position.set(sx * 1.05, 1.5, -0.9); wing.rotation.set(0.15, sx * 0.25, sx * -0.55); g.add(wing);
-        wing.add(mesh(new THREE.ConeGeometry(0.7, 3.2, 4), new THREE.MeshStandardMaterial({ color: 0x7a4fd0, roughness: 0.7, flatShading: true, side: THREE.DoubleSide }), { rot: [Math.PI / 2, 0, 0], pos: [0, 0.1, -1.2], scale: [1, 1, 0.35] }));
-        wing.add(mesh(new THREE.CylinderGeometry(0.06, 0.08, 3.0, 5), hornMat, { rot: [Math.PI / 2, 0, 0], pos: [0, 0.35, -1.0] }));
+        const wing = new THREE.Group(); wing.position.set(sx * 1.2, 1.95, -0.7); wing.rotation.set(0.1, sx * 0.2, sx * -0.95); wing.scale.set(sx * 0.62, 0.62, 0.62); g.add(wing);
+        wing.add(new THREE.Mesh(wingGeo, wingMat));
+        wing.add(mesh(new THREE.CylinderGeometry(0.07, 0.1, 3.9, 5), hornMat, { pos: [1.9, 0.3, -0.3], rot: [Math.PI / 2 - 1.35, 0, 0], cast: false }));
       }
-      // voorpoten (kussen voor de kop)
+      // voorpoten
       for (const sx of [-1, 1]) {
-        g.add(mesh(new THREE.CapsuleGeometry(0.36, 1.5, 4, 8), scaleMat, { pos: [sx * 0.95, 0.38, 2.1], rot: [Math.PI / 2, 0, sx * 0.1] }));
-        for (let k = -1; k <= 1; k++) g.add(mesh(new THREE.ConeGeometry(0.1, 0.34, 4), hornMat, { pos: [sx * 0.95 + k * 0.2, 0.2, 3.1], rot: [Math.PI / 2, 0, 0] }));
+        g.add(mesh(new THREE.CapsuleGeometry(0.4, 1.7, 4, 8), scaleMat, { pos: [sx * 1.25, 0.42, 2.3], rot: [Math.PI / 2, 0, sx * 0.08] }));
+        for (let k = -1; k <= 1; k++) g.add(mesh(new THREE.ConeGeometry(0.11, 0.42, 4), hornMat, { pos: [sx * 1.25 + k * 0.24, 0.2, 3.35], rot: [Math.PI / 2, 0, 0] }));
       }
-      // kop
-      const head = new THREE.Group(); head.position.set(0, 0.75, 2.5); g.add(head);
-      head.add(mesh(gSph, scaleMat, { pos: [0, 0.0, 0.25], scale: [0.8, 0.55, 1.0] }));
-      head.add(mesh(gSph, scaleMat, { pos: [0, -0.1, 1.05], scale: [0.5, 0.36, 0.7] }));
-      head.add(mesh(gSph, bellyMat, { pos: [0, -0.28, 0.9], scale: [0.42, 0.18, 0.7] }));
+      // kop (rust op de poten)
+      const head = new THREE.Group(); head.position.set(0, 0.92, 3.0); g.add(head);
+      head.add(mesh(gSph, scaleMat, { pos: [0, 0.1, 0.15], scale: [0.9, 0.62, 1.05] }));
+      head.add(mesh(gSph, scaleMat, { pos: [0, -0.02, 1.15], scale: [0.62, 0.42, 0.85] }));
+      head.add(mesh(gSph, bellyMat, { pos: [0, -0.3, 1.0], scale: [0.5, 0.2, 0.85] }));
+      // wenkbrauwkammen + tanden
       for (const sx of [-1, 1]) {
-        head.add(mesh(gSph, darkMat, { cast: false, pos: [sx * 0.17, 0.0, 1.62], scale: 0.07 }));
-        head.add(mesh(new THREE.ConeGeometry(0.12, 0.9, 5), hornMat, { pos: [sx * 0.42, 0.55, -0.35], rot: [-0.9, 0, sx * -0.25] }));
-        head.add(mesh(new THREE.ConeGeometry(0.07, 0.4, 4), hornMat, { pos: [sx * 0.7, 0.1, 0.0], rot: [0, 0, sx * -1.5] }));
+        head.add(mesh(gBox, darkScale, { pos: [sx * 0.42, 0.45, 0.65], rot: [0, sx * -0.3, sx * -0.3], scale: [0.5, 0.12, 0.3] }));
+        head.add(mesh(gSph, darkMat, { cast: false, pos: [sx * 0.2, 0.08, 1.95], scale: 0.075 }));
+        head.add(mesh(new THREE.ConeGeometry(0.15, 1.2, 5), hornMat, { pos: [sx * 0.5, 0.75, -0.55], rot: [-1.05, 0, sx * -0.3] }));
+        head.add(mesh(new THREE.ConeGeometry(0.09, 0.5, 4), hornMat, { pos: [sx * 0.88, 0.1, 0.05], rot: [0, 0, sx * -1.45] }));
+        for (let k = 0; k < 3; k++) head.add(mesh(new THREE.ConeGeometry(0.05, 0.2, 4), hornMat, { cast: false, pos: [sx * 0.46, -0.24, 0.9 + k * 0.34], rot: [Math.PI, 0, 0] }));
       }
-      // ogen: dicht (boogje) of open (gele bol)
       const eyes = [];
       for (const sx of [-1, 1]) {
-        const e = new THREE.Group(); e.position.set(sx * 0.4, 0.2, 0.55); head.add(e);
-        const open = mesh(gSph, new THREE.MeshBasicMaterial({ color: 0xffd23f }), { cast: false, receive: false, scale: [0.11, 0.14, 0.06] }); open.visible = false; e.add(open);
-        const slit = mesh(gBox, darkMat, { cast: false, pos: [sx * 0.02, 0, 0.065], scale: [0.03, 0.12, 0.02] }); slit.visible = false; e.add(slit);
-        const closed = mesh(new THREE.TorusGeometry(0.1, 0.022, 4, 10, Math.PI), darkMat, { cast: false, rot: [0, 0, Math.PI], pos: [0, 0.03, 0.04] }); e.add(closed);
+        const e = new THREE.Group(); e.position.set(sx * 0.5, 0.28, 0.72); e.rotation.y = sx * 0.4; head.add(e);
+        const open = mesh(gSph, new THREE.MeshBasicMaterial({ color: 0xffd23f }), { cast: false, receive: false, scale: [0.17, 0.2, 0.08] }); open.visible = false; e.add(open);
+        const slit = mesh(gBox, darkMat, { cast: false, pos: [0, 0, 0.07], scale: [0.04, 0.2, 0.02] }); slit.visible = false; e.add(slit);
+        const closed = mesh(new THREE.TorusGeometry(0.16, 0.035, 4, 10, Math.PI), darkMat, { cast: false, rot: [0, 0, Math.PI], pos: [0, 0.04, 0.05] }); e.add(closed);
         eyes.push({ open, slit, closed });
       }
-      // staart: segmenten in een bocht
-      const tail = [];
-      let prev = g;
+      // staart
+      const tail = []; let prev = g;
       for (let i = 0; i < 9; i++) {
-        const seg = new THREE.Group(); seg.position.set(0, i === 0 ? 0.9 : 0, i === 0 ? -2.8 : -0.8); prev.add(seg);
-        const r = 0.8 * (1 - i * 0.09);
-        seg.add(mesh(gSph, scaleMat, { pos: [0, 0, -0.35], scale: [r, r * 0.8, 0.8] }));
-        if (i < 8 && i > 0) seg.add(mesh(new THREE.ConeGeometry(0.13, 0.4, 4), bellyMat, { pos: [0, r * 0.75, -0.35] }));
+        const seg = new THREE.Group(); seg.position.set(0, i === 0 ? 0.95 : 0, i === 0 ? -2.9 : -0.85); prev.add(seg);
+        const r = 0.95 * (1 - i * 0.095);
+        seg.add(mesh(gSph, scaleMat, { pos: [0, 0, -0.4], scale: [r, r * 0.8, 0.85] }));
+        if (i < 8) seg.add(mesh(new THREE.ConeGeometry(0.14, 0.45, 4), spikeMat, { pos: [0, r * 0.78, -0.4] }));
         tail.push(seg); prev = seg;
       }
-      tail.forEach((s, i) => { s.rotation.y = 0.22; });
+      tail.forEach((s) => { s.rotation.y = 0.24; });
       // glinsterschubben
-      const glim = new THREE.InstancedMesh(gSph, new THREE.MeshBasicMaterial({ color: 0xffe9a0 }), 40);
-      const glimPos = []; for (let i = 0; i < 40; i++) { const a = rng() * TAU, b = rng() * 1.6 + 0.2; glimPos.push([Math.cos(a) * 1.55 * Math.sin(b), 1.0 + Math.cos(b) * 0.95, -0.6 + Math.sin(a) * 2.1 * Math.sin(b), rng() * 6]); }
+      const glim = new THREE.InstancedMesh(gSph, new THREE.MeshBasicMaterial({ color: 0xfff2b0 }), 44);
+      const glimPos = []; for (let i = 0; i < 44; i++) { const a = rng() * TAU, b = rng() * 1.4 + 0.15; glimPos.push([Math.cos(a) * 1.85 * Math.sin(b), 1.15 + Math.cos(b) * 1.1, -0.5 + Math.sin(a) * 2.4 * Math.sin(b), rng() * 6]); }
       g.add(glim);
       const d = new THREE.Object3D();
       return {
-        group: g, eyes, head, body, scaleMat, tail, spikes, wake: 0, nose: [new THREE.Vector3(-0.17, 0, 1.62), new THREE.Vector3(0.17, 0, 1.62)],
+        group: g, eyes, head, body, scaleMat, tail, wake: 0,
         update(tt, dt) {
           const br = Math.sin(tt * 1.25);
-          body.scale.set(1.7 * (1 + br * 0.015), 1.0 * (1 + br * 0.045), 2.3);
-          head.rotation.x = br * 0.015; head.position.y = 0.75 + br * 0.03;
-          scaleMat.emissiveIntensity = 0.7 + Math.sin(tt * 0.9) * 0.25;
-          tail.forEach((s, i) => { s.rotation.y = 0.2 + Math.sin(tt * 0.6 - i * 0.5) * 0.06 + (this.wake > 0 ? Math.sin(tt * 9 - i) * 0.12 * this.wake : 0); });
-          glimPos.forEach((p, i) => { const k = 0.5 + 0.5 * Math.sin(tt * 2.2 + p[3]); d.position.set(p[0], p[1], p[2]); d.scale.setScalar(0.03 + Math.max(0, k - 0.6) * 0.16); d.updateMatrix(); glim.setMatrixAt(i, d.matrix); });
+          body.scale.set(1.9 * (1 + br * 0.015), 1.15 * (1 + br * 0.05), 2.5);
+          head.rotation.x = br * 0.02; head.position.y = 0.92 + br * 0.03;
+          scaleMat.emissiveIntensity = 0.8 + Math.sin(tt * 0.9) * 0.3;
+          tail.forEach((s, i) => { s.rotation.y = 0.24 + Math.sin(tt * 0.6 - i * 0.5) * 0.06 + (this.wake > 0 ? Math.sin(tt * 9 - i) * 0.12 * this.wake : 0); });
+          glimPos.forEach((p, i) => { const k = 0.5 + 0.5 * Math.sin(tt * 2.2 + p[3]); d.position.set(p[0], p[1], p[2]); d.scale.setScalar(0.03 + Math.max(0, k - 0.55) * 0.2); d.updateMatrix(); glim.setMatrixAt(i, d.matrix); });
           glim.instanceMatrix.needsUpdate = true;
-          // ogen
           this.wake = Math.max(0, this.wake - dt);
           const openAmt = this.wake > 0 ? 1 : 0;
           eyes.forEach((e) => { e.open.visible = openAmt > 0; e.slit.visible = openAmt > 0; e.closed.visible = openAmt === 0; });
@@ -763,7 +767,7 @@ export default {
       onCountdown() { hud.setTimer(0, -1); updateHud(); },
       onResize() { if (lvl) fitCamera(lvl.L, false); },
       dispose() {},
-      _dbg: { get lvl() { return lvl; }, get state() { return state; }, get done() { return doneCount; }, act: (w, a) => doAction(w, a), get elapsed() { return elapsed; }, goto: (i) => { if (prev) { scene.remove(prev.g); prev = null; } if (lvl) scene.remove(lvl.g); startLevel(i, true); state = 'play'; stateT = 0; } },
+      _dbg: { cam: (px, py, pz, lx, ly, lz) => { camPos.set(px, py, pz); camLook.set(lx, ly, lz); camera.position.copy(camPos); camTarget.copy(camLook); camera.lookAt(camLook); }, get lvl() { return lvl; }, get state() { return state; }, get done() { return doneCount; }, act: (w, a) => doAction(w, a), get elapsed() { return elapsed; }, goto: (i) => { if (prev) { scene.remove(prev.g); prev = null; } if (lvl) scene.remove(lvl.g); startLevel(i, true); state = 'play'; stateT = 0; } },
     };
   },
 };

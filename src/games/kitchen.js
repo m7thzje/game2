@@ -447,6 +447,7 @@ export default {
         // doel bepalen
         p.tgt = findTarget(p);
         if (inp.aP) { if (p.tgt) act(p, p.tgt); else audio.sfx('click', { vol: 0.2 }); }
+        if (inp.bP && !p.bt) { const nb = boards.find((b) => Math.hypot(p.x - b.x, p.z - b.z) - b.r < 1.0); if (nb) popText(p.hold ? 'Handen vrij!' : nb.item ? 'Al gehakt!' : 'Leg eerst iets neer', p.x, 2.7, p.z, '#ffd0a0', 0.8); }
         // hakken / blussen
         if (p.bt) {
           const st = p.bt.st;

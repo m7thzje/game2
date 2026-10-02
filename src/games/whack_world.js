@@ -46,7 +46,7 @@ export function buildGarden(ctx, rng) {
   const ground = mesh(new THREE.PlaneGeometry(220, 160), new THREE.MeshStandardMaterial({ map: tex.grass(44, 32), roughness: 1 }), { cast: false, rot: [-Math.PI / 2, 0, 0], pos: [0, 0, -20] });
   scene.add(ground);
   // veld (verhoogd bed)
-  const FW = 17.2, FD = 13.2, FZ = 0.2;
+  const FW = 15.8, FD = 12.0, FZ = 0.2;
   const soilMat = new THREE.MeshStandardMaterial({ map: soilTexture(), roughness: 1 });
   const bed = new THREE.Mesh(new THREE.BoxGeometry(FW, 0.3, FD), [mat(0x4a3220), mat(0x4a3220), soilMat, mat(0x4a3220), mat(0x4a3220), mat(0x4a3220)]);
   bed.position.set(0, -0.0, FZ); bed.receiveShadow = true; scene.add(bed);
@@ -73,21 +73,21 @@ export function buildGarden(ctx, rng) {
     for (let i = 0; i <= n; i++) { const t = i / n; posts.push({ x: lerp(x0, x1, t), y: 0.55, z: lerp(z0, z1, t), ry: rng() * 0.4, rz: (rng() - 0.5) * 0.06 }); }
     for (const y of [0.35, 0.8]) rails.push({ x: (x0 + x1) / 2, y, z: (z0 + z1) / 2, ry: -ang, sx: len / 1.4 });
   }
-  fence(-12.5, -8.6, 12.5, -8.6);
-  fence(-12.5, -8.6, -12.5, 6.5); fence(12.5, -8.6, 12.5, 6.5);
-  fence(-12.5, 6.5, -9.5, 6.5); fence(9.5, 6.5, 12.5, 6.5);
+  fence(-11.4, -8.0, 11.4, -8.0);
+  fence(-11.4, -8.0, -11.4, 6.6); fence(11.4, -8.0, 11.4, 6.6);
+  fence(-11.4, 6.6, -9.0, 6.6); fence(9.0, 6.6, 11.4, 6.6);
   scene.add(instanced(new THREE.BoxGeometry(0.18, 1.1, 0.18), mat(0x8b6a40), posts));
   scene.add(instanced(new THREE.BoxGeometry(1.4, 0.1, 0.08), mat(0xb08856), rails));
 
   // ---- groente (instanced) ----
   const cab = [], pump = [], carrotTop = [], carrotRoot = [], corn = [], cobs = [], lettuce = [];
-  for (let i = 0; i < 16; i++) { const x = -10.8 + i * 1.4 + rng() * 0.3; cab.push({ x, y: 0.34, z: -7.7 + rng() * 0.3, sx: 0.55, sy: 0.45, sz: 0.55, c: i % 3 ? 0x6cc04a : 0x4a9a3a }); }
-  for (let i = 0; i < 16; i++) { const x = -10.6 + i * 1.4 + rng() * 0.3; lettuce.push({ x, y: 0.28, z: -6.2 + rng() * 0.2, s: 0.34, c: i % 2 ? 0x9be06a : 0x7ed05a }); }
-  for (let i = 0; i < 6; i++) pump.push({ x: -11.0 + i * 0.9 + rng() * 0.3, y: 0.4, z: 7.4 - rng() * 0.2, sx: 0.5, sy: 0.38, sz: 0.5, c: 0xf08a1c });
-  for (let i = 0; i < 6; i++) pump.push({ x: 9.6 + i * 0.5, y: 0.4, z: 7.5 + (i % 2) * 0.2, sx: 0.5, sy: 0.38, sz: 0.5, c: 0xff9a2c });
-  for (let k = 0; k < 20; k++) { const x = -11.2 + (k % 4) * 0.55 + (k > 9 ? 22 - 0 : 0) * 0 + 0.0; const side = k < 10 ? -1 : 1; const px = side * (9.8 + (k % 5) * 0.55), pz = -4 + Math.floor((k % 10) / 5) * 4.5 + rng() * 0.6 + (side > 0 ? 0 : 0.3); carrotTop.push({ x: px, y: 0.28, z: pz, s: 0.2, c: 0x4fa83a }); carrotRoot.push({ x: px, y: 0.15, z: pz, sy: 0.7, sx: 0.8, sz: 0.8, rx: Math.PI, c: 0xff7a1a }); }
-  for (let k = 0; k < 14; k++) { const x = -10.6 + (k % 7) * 0.7; const z = 4.7 + Math.floor(k / 7) * 0.9 + rng() * 0.2; if (x > -8) continue; corn.push({ x: -10.2 - (k % 3) * 0.4, y: 1.3, z: -5 + (k % 7) * 1.5, sy: 1, s: 1 }); }
-  for (let k = 0; k < 9; k++) { const px = 11.0 + (k % 3) * 0.6, pz = -6.5 + Math.floor(k / 3) * 3.0; corn.push({ x: px, y: 1.3, z: pz, sy: 1, s: 1 }); cobs.push({ x: px + 0.08, y: 1.5, z: pz, sy: 1, s: 1 }); }
+  for (let i = 0; i < 16; i++) { const x = -10.4 + i * 1.4 + rng() * 0.3; cab.push({ x, y: 0.34, z: -7.25 + rng() * 0.2, sx: 0.55, sy: 0.45, sz: 0.55, c: i % 3 ? 0x6cc04a : 0x4a9a3a }); }
+  for (let i = 0; i < 16; i++) { const x = -10.2 + i * 1.4 + rng() * 0.3; lettuce.push({ x, y: 0.28, z: -6.75 + rng() * 0.15, s: 0.34, c: i % 2 ? 0x9be06a : 0x7ed05a }); }
+  for (let i = 0; i < 6; i++) pump.push({ x: -10.4 + i * 0.9 + rng() * 0.3, y: 0.4, z: 7.3 - rng() * 0.2, sx: 0.5, sy: 0.38, sz: 0.5, c: 0xf08a1c });
+  for (let i = 0; i < 6; i++) pump.push({ x: 7.6 + i * 0.5, y: 0.4, z: 7.4 + (i % 2) * 0.2, sx: 0.5, sy: 0.38, sz: 0.5, c: 0xff9a2c });
+  for (let k = 0; k < 20; k++) { const x = -11.2 + (k % 4) * 0.55 + (k > 9 ? 22 - 0 : 0) * 0 + 0.0; const side = k < 10 ? -1 : 1; const px = side * (8.9 + (k % 5) * 0.4), pz = -4 + Math.floor((k % 10) / 5) * 4.5 + rng() * 0.6 + (side > 0 ? 0 : 0.3); carrotTop.push({ x: px, y: 0.28, z: pz, s: 0.2, c: 0x4fa83a }); carrotRoot.push({ x: px, y: 0.15, z: pz, sy: 0.7, sx: 0.8, sz: 0.8, rx: Math.PI, c: 0xff7a1a }); }
+  for (let k = 0; k < 14; k++) { const x = -10.6 + (k % 7) * 0.7; const z = 4.7 + Math.floor(k / 7) * 0.9 + rng() * 0.2; if (x > -8) continue; corn.push({ x: -9.7 - (k % 3) * 0.4, y: 1.3, z: -5 + (k % 7) * 1.5, sy: 1, s: 1 }); }
+  for (let k = 0; k < 9; k++) { const px = 9.6 + (k % 3) * 0.55, pz = -6.5 + Math.floor(k / 3) * 3.0; corn.push({ x: px, y: 1.3, z: pz, sy: 1, s: 1 }); cobs.push({ x: px + 0.08, y: 1.5, z: pz, sy: 1, s: 1 }); }
   scene.add(instanced(new THREE.IcosahedronGeometry(1, 1), mat(0xffffff), cab));
   scene.add(instanced(new THREE.IcosahedronGeometry(1, 0), mat(0xffffff), lettuce));
   scene.add(instanced(new THREE.SphereGeometry(1, 10, 8), mat(0xffffff, { flatShading: false }), pump));
@@ -99,7 +99,7 @@ export function buildGarden(ctx, rng) {
 
   // ---- vogelverschrikker ----
   {
-    const g = new THREE.Group(); g.position.set(-10.4, 0.2, -6.3); g.rotation.y = 0.6; scene.add(g);
+    const g = new THREE.Group(); g.position.set(-9.4, 0.2, -6.3); g.rotation.y = 0.6; scene.add(g);
     const sway = new THREE.Group(); g.add(sway);
     sway.add(mesh(new THREE.CylinderGeometry(0.09, 0.11, 3.6, 6), mat(0x6b4a2e), { pos: [0, 1.8, 0] }));
     sway.add(mesh(new THREE.CylinderGeometry(0.07, 0.07, 3.0, 6), mat(0x6b4a2e), { pos: [0, 2.5, 0], rot: [0, 0, Math.PI / 2] }));
@@ -133,14 +133,14 @@ export function buildGarden(ctx, rng) {
     scene.add(mesh(new THREE.ConeGeometry(2.3, 2.5, 12), mat(0x8a4a3a), { pos: [-26, 10.2, -12] }));
     for (let i = 0; i < 5; i++) { const b = mesh(new THREE.CylinderGeometry(0.8, 0.8, 1.2, 10), mat(0xd9b84a), { pos: [-13 + i * 1.7 + (i > 2 ? 0.9 : 0), 0.6 + (i === 3 || i === 4 ? 0.9 : 0), -11.5], rot: [Math.PI / 2, 0, 0.1 * i] }); scene.add(b); }
     // wiel kruiwagen
-    const cb = new THREE.Group(); cb.position.set(10.6, 0, 4.8); cb.rotation.y = 0.5; scene.add(cb);
+    const cb = new THREE.Group(); cb.position.set(9.9, 0, 5.4); cb.rotation.y = 0.5; scene.add(cb);
     cb.add(mesh(new THREE.BoxGeometry(1.5, 0.5, 0.9), mat(0x3b7dd8), { pos: [0, 0.7, 0] }));
     cb.add(mesh(new THREE.CylinderGeometry(0.32, 0.32, 0.12, 10), mat(0x333333), { pos: [0.85, 0.35, 0], rot: [Math.PI / 2, 0, 0] }));
     for (const sz of [-1, 1]) cb.add(mesh(new THREE.BoxGeometry(1.2, 0.07, 0.07), mat(0x8b6a40), { pos: [-1.0, 0.75, sz * 0.4], rot: [0, 0, 0.2] }));
     for (let i = 0; i < 4; i++) cb.add(mesh(new THREE.SphereGeometry(0.2, 8, 6), mat(i % 2 ? 0xd83a2a : 0xf08a1c, { flatShading: false }), { pos: [-0.3 + i * 0.3, 1.0, (i % 2 - 0.5) * 0.3] }));
-    const tr = P.barrel(1.1); tr.position.set(-10.4, 0, 5.4); scene.add(tr);
-    const bk = P.bucket(); bk.position.set(-9.4, 0, 5.8); scene.add(bk);
-    const sg = P.signpost(['Boer Boris', 'Moestuin']); sg.position.set(8.6, 0, 7.2); sg.rotation.y = -0.4; scene.add(sg);
+    const tr = P.barrel(1.1); tr.position.set(-9.6, 0, 5.6); scene.add(tr);
+    const bk = P.bucket(); bk.position.set(-8.6, 0, 6.0); scene.add(bk);
+    const sg = P.signpost(['Boer Boris', 'Moestuin']); sg.position.set(7.4, 0, 8.4); sg.rotation.y = -0.4; scene.add(sg);
   }
 
   // ---- bomen rondom (instanced) ----
@@ -178,36 +178,36 @@ export function buildGarden(ctx, rng) {
   for (const [kind, x, z] of [['cow', -12, -17], ['cow', -6, -20], ['sheep', 3, -18], ['sheep', 9, -21], ['sheep', 13, -17], ['cow', 21, -10]]) {
     const a = new Animal(kind); a.group.position.set(x, 0, z); a.base = new THREE.Vector3(x, 0, z); a.ph = rng() * 6; a.group.scale.setScalar(1.25); scene.add(a.group); W.animals.push(a);
   }
-  for (const [x, z] of [[14.5, 4], [-14.8, 2], [15.5, 7]]) { const a = new Animal('chicken'); a.group.position.set(x, 0, z); a.base = new THREE.Vector3(x, 0, z); a.ph = rng() * 6; a.group.scale.setScalar(1.3); a.chicken = true; scene.add(a.group); W.animals.push(a); }
+  for (const [x, z] of [[13.5, 4], [-13.8, 2], [14.5, 7]]) { const a = new Animal('chicken'); a.group.position.set(x, 0, z); a.base = new THREE.Vector3(x, 0, z); a.ph = rng() * 6; a.group.scale.setScalar(1.3); a.chicken = true; scene.add(a.group); W.animals.push(a); }
 
   // ---- gnoomen ----
   function gnome(x, z, ry, hat = 0xd8372c) {
     const n = makeNPC('dwarf', { hatColor: hat, hat: 'wizard', hatColor2: 0xffe14a, scale: 0.75 }); n.group.position.set(x, 0, z); n.targetYaw = n.yaw = ry; scene.add(n.group); W.gnomes.push(n); return n;
   }
-  W.gA = gnome(-10.2, 3.2, 0.6, 0xd8372c); W.gA.pose = 'wave';
-  W.gB = gnome(10.2, -5.4, -1.2, 0x3b7dd8);
+  W.gA = gnome(-9.9, 3.0, 0.6, 0xd8372c); W.gA.pose = 'wave';
+  W.gB = gnome(9.9, -5.4, -1.2, 0x3b7dd8);
   // zittend op paddenstoel/stronk
   {
     const stump = mesh(new THREE.CylinderGeometry(0.5, 0.6, 0.55, 8), new THREE.MeshStandardMaterial({ map: tex.planks(1, 1, '#8a6238') }), { pos: [W.gB.group.position.x, 0.28, W.gB.group.position.z] }); scene.add(stump);
     W.gB.pose = 'sit'; W.gB.group.position.y = 0.55;
   }
   // wandelende gnoom met gieter
-  W.gW = gnome(-7, -7.2, 0, 0x2f9e5b); { const b = P.bucket(); b.scale.setScalar(0.8); W.gW.hold(b, 'r'); b.rotation.x = 0; b.position.set(0, -0.25, 0.1); }
+  W.gW = gnome(-7, -7.0, 0, 0x2f9e5b); { const b = P.bucket(); b.scale.setScalar(0.8); W.gW.hold(b, 'r'); b.rotation.x = 0; b.position.set(0, -0.25, 0.1); }
   W.gW.walk = { t: rng() * 10 };
   // gnoom in de struiken
-  W.gP = gnome(11.8, 2.2, -1.9, 0xf08a1c);
-  const bush = P.bush(1.6); bush.position.set(12.6, 0, 2.6); scene.add(bush);
+  W.gP = gnome(10.4, 2.0, -1.9, 0xf08a1c);
+  const bush = P.bush(1.6); bush.position.set(11.0, 0, 2.5); scene.add(bush);
   // gnomenhuisje (paddenstoel)
   {
-    const g = new THREE.Group(); g.position.set(-12.6, 0, -2.5); scene.add(g);
-    const m = P.mushroom(3.0, 0xd8372c); g.add(m);
+    const g = new THREE.Group(); g.position.set(-12.8, 0, -2.5); g.rotation.y = 0.5; scene.add(g);
+    const m = P.mushroom(2.1, 0xd8372c); g.add(m);
     g.add(mesh(new THREE.BoxGeometry(0.55, 0.9, 0.12), mat(0x6b4226), { pos: [0, 0.5, 0.52] }));
     g.add(mesh(new THREE.BoxGeometry(0.3, 0.3, 0.1), new THREE.MeshStandardMaterial({ color: 0xffd27a, emissive: 0xffa040, emissiveIntensity: 0.6 }), { cast: false, pos: [0.5, 0.9, 0.5] }));
   }
 
   // ---- Boer Boris ----
   {
-    const b = makeNPC('farmer'); b.group.position.set(13.8, 0, -1.0); b.targetYaw = b.yaw = -1.2; scene.add(b.group); W.npcs.boris = b; b.react = 0;
+    const b = makeNPC('farmer'); b.group.position.set(12.9, 0, -1.0); b.targetYaw = b.yaw = -1.2; scene.add(b.group); W.npcs.boris = b; b.react = 0;
     const fork = new THREE.Group(); fork.add(mesh(new THREE.CylinderGeometry(0.04, 0.04, 2.2, 5), mat(0x8a5a2b), { pos: [0, 0.1, 0] })); for (const sx of [-1, 0, 1]) fork.add(mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.5, 4), mat(0x888894, { metalness: 0.6 }), { pos: [sx * 0.1, 1.3, 0] }));
     b.hold(fork, 'r'); fork.position.set(0, 0.7, 0);
   }
@@ -241,7 +241,7 @@ export function buildGarden(ctx, rng) {
       a.group.position.x = nx; a.group.position.z = nz; a.speed = Math.min(1, sp * (a.chicken ? 0.35 : 0.9)); if (sp > 0.05) a.targetYaw = Math.atan2(dx, dz); a.update(dt);
     }
     for (const g of W.gnomes) {
-      if (g === W.gW) { const w = g.walk; w.t += dt; const x = Math.sin(w.t * 0.35) * 8; const dx = x - g.group.position.x; g.group.position.x = x; g.group.position.z = -7.4; g.speed = Math.min(1, Math.abs(dx) / dt * 0.5); if (Math.abs(dx) > 1e-4) g.faceDir(dx, 0); }
+      if (g === W.gW) { const w = g.walk; w.t += dt; const x = Math.sin(w.t * 0.35) * 8; const dx = x - g.group.position.x; g.group.position.x = x; g.group.position.z = -7.0; g.speed = Math.min(1, Math.abs(dx) / dt * 0.5); if (Math.abs(dx) > 1e-4) g.faceDir(dx, 0); }
       if (g.cheerT > 0) { g.cheerT -= dt; g.pose = 'cheer'; } else if (g === W.gA) g.pose = 'wave'; else if (g === W.gB) g.pose = 'sit'; else if (g === W.gP) { g.pose = Math.sin(t * 0.8) > 0.6 ? 'wave' : 'idle'; } else g.pose = 'idle';
       g.update(dt);
     }

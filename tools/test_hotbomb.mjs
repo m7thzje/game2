@@ -31,7 +31,7 @@ const step = (n, dt) => ev(([n, dt]) => step(n, dt), [n, dt || 0.05]);
 const shot = (name) => page.screenshot({ path: `${out}_${name}.png` });
 async function start() {
   await ev(() => { V(0).a = true; V(1).a = true; }); await step(2); await ev(() => { V(0).a = false; V(1).a = false; }); await step(2);
-  await page.waitForTimeout(600);
+  await page.waitForFunction(() => __app.mode.state === 'countdown' || __app.mode.state === 'play', null, { timeout: 20000 });
   await step(90); // aftellen
 }
 const S = { page, ev, step, shot, start, errors, server, browser, out, W, H };
