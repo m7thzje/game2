@@ -60,7 +60,7 @@ for (const name of scen) {
       await page.screenshot({ path: `/tmp/mc_${tag}.png` });
       console.log('shot', tag, ok);
     }
-    await page.evaluate(() => { for (let k = 0; k < 330; k++) window.__app.mode.update(1 / 60); document.getElementById('screens').style.display = 'none'; });
+    await page.evaluate(() => { for (let k = 0; k < 600; k++) window.__app.mode.update(1 / 60); document.getElementById('screens').style.display = 'none'; });
     await page.waitForTimeout(900);
     await page.screenshot({ path: '/tmp/mc_end2.png' });
     console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS');

@@ -13,7 +13,7 @@ const DURATION = 58;
 const P1_END = 30;                              // einde modderstuk
 const XS = [31.15, 32.72, 34.28, 35.85];        // grenzen van de 3 segmenten onder de boomstam
 const P3_START = S3A;                           // begin helling
-const FINISH_X = 75.5;
+const FINISH_X = 73.5;
 const BEAT1 = 0.64;                             // fase 1: tijd tussen maten
 const BEAT2 = 0.56;                             // fase 2: duwer
 const SLOT3 = 0.46;                             // fase 3: om de beurt
@@ -465,7 +465,7 @@ export default {
       wantL.set(camX + 1.2, camY + ly, 0);
       if (phase === 4) {
         const y8 = roadY(GATE_X);
-        wantP.set(GATE_X - 13.5, y8 + 5.0, 14.5); wantL.set(GATE_X - 3.0, y8 + 2.4, 0); k = 1.8;
+        wantP.set(GATE_X - 15, y8 + 6.0, 17); wantL.set(GATE_X - 2.5, y8 + 2.6, 0); k = 2.0;
       }
       if (!camInit) { camP.copy(wantP); camL.copy(wantL); camInit = true; }
       const f = 1 - Math.exp(-k * dt);
@@ -582,7 +582,7 @@ export default {
         // karretje rolt door de poort
         const open = clamp((cheerT - 0.2) / 1.2, 0, 1);
         for (const d of world.doors) d.pivot.rotation.y = -d.sz * (Math.PI / 2) * 0.92 * open;
-        if (cheerT > 0.9) { x = Math.min(x + dt * 2.6, GATE_X - 3.2); }
+        if (cheerT > 0.9) { x = Math.min(x + dt * 2.6, GATE_X - 5.0); }
       }
     }
 
