@@ -121,6 +121,19 @@ for (const name of scen) {
     }
     continue;
   }
+  if (name === 'hooks') {
+    // harness-hooks (onSwap / onDeurman / celebrate) middenin een potje aanroepen en daarna uitspelen
+    const o = await open('none');
+    const res = await o.page.evaluate(() => {
+      const m = window.__app.mode, inst = m.instance;
+      window.__step(60 * 12);
+      inst.onSwap(true); window.__step(30); inst.onDeurman([true, false]); window.__step(30); inst.onDeurman([false, true]); window.__step(30); inst.onSwap(false);
+      let guard = 0; while (!m.finished && guard++ < 60 * 400) window.__step(1);
+      return { st: inst.dbg.state(), finished: m.finished, result: m.result };
+    });
+    console.log('hooks: finished=' + res.finished + ' winner=' + (res.result && res.result.winner) + ' scores=' + JSON.stringify(res.st.scores), o.errors.length ? 'ERRORS ' + o.errors.slice(0, 3).join(' | ') : 'ok');
+    await o.browser.close(); continue;
+  }
   if (name === 'twists') {
     for (const tw of TWISTS) {
       const o = await open(tw);

@@ -137,6 +137,22 @@ if (scen === 'bots' || scen === 'twists') {
   const out = await page.evaluate(() => { const inst = window.__app.mode.instance; let g = 0; while (!window.__app.mode.finished && g++ < 60 * 100) window.__bot(1, { skill: [0.6, 0.6] }); return inst.dbg.log.map((l) => JSON.stringify(l)); });
   console.log(out.join('\n'));
   await browser.close();
+} else if (scen === 'hooks') {
+  // roept de optionele hooks (Deurman, lichaamswissel, celebrate) direct aan en kijkt of er niets stukgaat
+  const { browser, page, errors } = await open(args[1] || 'none');
+  const out = await page.evaluate(() => {
+    const inst = window.__app.mode.instance; const log = [];
+    window.__bot(60 * 4, { skill: [0.6, 0.6] });
+    inst.onDeurman([true, false]); window.__bot(30, { skill: [0.6, 0.6] }); log.push('deurman ok');
+    inst.onDeurman([true, true]); window.__bot(30, { skill: [0.6, 0.6] });
+    inst.onSwap(true); window.__bot(30, { skill: [0.6, 0.6] }); inst.onSwap(false); window.__bot(30, { skill: [0.6, 0.6] }); log.push('swap ok');
+    let g = 0; while (!window.__app.mode.finished && g++ < 60 * 200) window.__bot(1, { skill: [0.8, 0.8] });
+    inst.celebrate(0); inst.celebrate(1); inst.resultUpdate(0.05); log.push('celebrate ok, finished=' + window.__app.mode.finished);
+    return log;
+  });
+  console.log(out.join(' | '));
+  console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 6).join('\n') : 'NO ERRORS');
+  await browser.close();
 } else if (scen === 'shots') {
   const tw = args[1] || 'none';
   const { browser, page, errors } = await open(tw);

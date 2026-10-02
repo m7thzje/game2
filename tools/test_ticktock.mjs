@@ -67,6 +67,20 @@ for (const name of scen) {
     };
   }, name === 'idle' ? 'idle' : name === 'p0' ? 'p0' : name === 'p1' ? 'p1' : 'bots');
 
+  if (name === 'timeout') {
+    const r = await page.evaluate(() => {
+      const m = window.__app.mode, inst = m.instance, D = inst.dbg, inp = window.__app.input; const log = [];
+      let guard = 0;
+      while (!m.finished && guard++ < 60 * 200) {
+        const s = D.state();
+        if (s.rstate === 'fight' && s.ht < 31 && s.ht > 1) D.R.ht = 32.5;   // sla de ronde over: veiligheidsklep moet beide spelers laten vallen
+        inp.update(); m.update(1 / 60);
+        const k = s.round + ':' + s.rstate + ':' + s.draws + ':' + D.R.matchOver; if (log[log.length - 1] !== k) log.push(k); if (s.draws >= 4) break;
+      }
+      return { log, finished: m.finished, result: m.result && { winner: m.result.winner, score: m.result.scoreArr }, st: D.state() };
+    });
+    console.log(JSON.stringify(r)); console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS'); await browser.close(); continue;
+  }
   if (name === 'look') {
     const shot = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); await page.screenshot({ path: `/tmp/ticktock_${tag}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
     const E = (fn) => page.evaluate(fn);

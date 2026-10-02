@@ -90,6 +90,13 @@ for (const name of scen) {
     await browser.close(); continue;
   }
 
+  if (name === 'timeout') {
+    const r = await page.evaluate(() => {
+      const m = window.__app.mode, D = m.instance.dbg; window.__bot(60 * 8); D.players[1].d += 120; D.setT(96); window.__bot(10);
+      return { finished: m.finished, result: m.result && { winner: m.result.winner, score: m.result.scoreArr, summary: m.result.summary }, st: D.state().d };
+    });
+    console.log(JSON.stringify(r)); console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS'); await browser.close(); continue;
+  }
   if (name === 'wall') {
     const r = await page.evaluate(() => {
       const D = window.__app.mode.instance.dbg; const w = D.course.find((o) => o.type === 'wall'); const X = [[-7, -5, -3], [3, 5, 7]];

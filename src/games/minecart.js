@@ -438,7 +438,7 @@ export default {
       dispose() {},
       dbg: {
         state: () => ({ T, done, finished: pl.map((p) => p.finished), finishOrder, d: pl.map((p) => p.d), v: pl.map((p) => p.v), lane: pl.map((p) => p.lane), x: pl.map((p) => p.x), y: pl.map((p) => p.y), st: pl.map((p) => p.state), boost: pl.map((p) => p.boostT), charge: pl.map((p) => p.charge), hits: pl.map((p) => p.hits), stats: pl.map((p) => p.stats), inv: pl.map((p) => p.inv), slow: pl.map((p) => p.slowT) }),
-        players: pl, course, near: (i, lo, hi) => obstaclesNear(pl[i], pl[i].d + lo, pl[i].d + hi), hurt, boost, finishRace, B, T: () => T,
+        setT: (v) => { T = v; }, players: pl, course, near: (i, lo, hi) => obstaclesNear(pl[i], pl[i].d + lo, pl[i].d + hi), hurt, boost, finishRace, B, T: () => T,
         sparkX: (o, i) => laneX(i, 1) + (o.c + o.amp * Math.sin(T * TAU / o.period + o.ph) - 1) * RAIL_GAP, rockTh: (o) => 0.56 * Math.sin(T * TAU / o.period + o.ph),
         fireBurn: (i, id) => { const f = pl[i].fireT.get(id); return f ? (f.burn ? 2 : (T - f.t0 < 0.9 ? 1 : 3)) : 0; },
       },

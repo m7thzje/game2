@@ -49,6 +49,7 @@ export default {
     const A = W.arena;
     const hemiBase = L.hemi.color.clone(), sunBase = L.sun.color.clone();
 
+    const COLD1 = new THREE.Color(0x9fd8ff), COLD2 = new THREE.Color(0xd8f0ff);
     const tmpV = new THREE.Vector3();
     const wp = (x, y, z) => { tmpV.set(x, y, z); A.localToWorld(tmpV); return tmpV; };
     const burst = (x, y, z, o) => { const v = wp(x, y, z); fx.particles.burst(v.x, v.y, v.z, o); };
@@ -518,7 +519,7 @@ export default {
       const fz = R.freeze > 0 ? 1 : 0;
       for (const h of HL) { const mm = h.m.userData.mat; if (!h.em0) { h.em0 = mm.emissive.getHex(); h.ei0 = mm.emissiveIntensity; } mm.emissive.setHex(fz ? 0x66d0ff : h.em0); mm.emissiveIntensity = fz ? 0.8 : h.ei0; }
       if (fz && animate && Math.random() < dt * 50) { const a = rand(0, TAU), r = rand(0, 10); const v = wp(Math.sin(a) * r, rand(2, 7), -Math.cos(a) * r); fx.particles.emit(v.x, v.y, v.z, rand(-0.4, 0.4), rand(-1.6, -0.8), rand(-0.4, 0.4), { life: 1.3, size: 0.26, color: 0xdff6ff, gravity: 0 }); }
-      L.hemi.color.copy(hemiBase).lerp(new THREE.Color(0x9fd8ff), fz * 0.7); L.sun.color.copy(sunBase).lerp(new THREE.Color(0xd8f0ff), fz * 0.7);
+      L.hemi.color.copy(hemiBase).lerp(COLD1, fz * 0.7); L.sun.color.copy(sunBase).lerp(COLD2, fz * 0.7);
       // zwevend stof
       if (animate && Math.random() < dt * 9) { const a = rand(0, TAU), r = rand(2, 12); fx.particles.emit(Math.sin(a) * r, rand(0.5, 6), -Math.cos(a) * r, rand(-0.2, 0.2), rand(0.1, 0.4), rand(-0.2, 0.2), { life: 3, size: 0.18, color: 0xffe3a0, gravity: -0.05 }); }
     }
@@ -547,7 +548,7 @@ export default {
     function update(dt) {
       if (done) { resultUpdate(dt); return; }
       T += dt;
-      if (R.n === 0) startRound();
+      if (!R.started) { R.started = true; startRound(); }
       // invoer vastleggen (per frame, voor de deelstappen)
       for (const p of pl) {
         const inp = ctx.pvp.input(p.i);
@@ -614,7 +615,7 @@ export default {
     }
     function introUpdate(dt) {
       introT += dt;
-      if (R.n === 0) {
+      if (!R.started) {
         // decor: poppetjes staan klaar, wijzers draaien rustig
         pl.forEach((p, i) => { p.x = START[i][0]; p.z = START[i][1]; p.sc = VSC; p.c.pose = 'idle'; p.face = Math.atan2(-p.x, -p.z); });
         const hh = hands.hour, mm = hands.minute; if (!hh.on) { hh.on = true; mm.on = true; hh.m.visible = true; mm.m.visible = true; hh.dir = 1; mm.dir = 1; }

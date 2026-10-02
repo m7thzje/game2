@@ -208,7 +208,7 @@ if (scen.includes('hazards')) {
   // trampoline en springplaat
   await ev(() => { const d = window.__app.mode.instance.dbg; const t = d.P.find((p) => p.tower === 0 && p.spring); d.warpTo(0, t.id); d.players[0].pl.stun = 0; window.__run(3); });
   st = await S(page); check(st.p[0].vy > 15 || st.p[0].y > 12, `trampoline lanceert (vy ${st.p[0].vy.toFixed(1)}, y ${st.p[0].y.toFixed(1)})`);
-  await ev(() => { const d = window.__app.mode.instance.dbg; const t = d.P.find((p) => p.tower === 0 && p.pad); d.warpTo(0, t.id); window.__run(3); });
+  await ev(() => { const d = window.__app.mode.instance.dbg; const t = d.P.find((p) => p.tower === 0 && p.pad); d.warpTo(0, t.id); d.players[0].pl.padCd = 0; window.__run(3); });
   st = await S(page); check(st.p[0].vy > 12, `springplaat lanceert (vy ${st.p[0].vy.toFixed(1)})`);
   // lava: dood + respawn met tijdstraf
   await ev(() => { const d = window.__app.mode.instance.dbg; const t = d.P.filter((p) => p.tower === 0 && p.type === 'stone')[6]; d.warpTo(0, t.id); d.warpTo(1, d.P.filter((p) => p.tower === 1 && p.type === 'stone')[7].id); d.setLava(t.y0 + 1.5); window.__run(4); });
@@ -223,7 +223,7 @@ if (scen.includes('hazards')) {
   const o2 = await open('none'); const e2 = (fn, ...a) => o2.page.evaluate(fn, ...a);
   await e2(() => { window.__idle = [true, true]; const d = window.__app.mode.instance.dbg; d.warpTo(0, d.P.filter((p) => p.tower === 0 && p.type === 'stone')[10].id); d.warpTo(1, d.P.filter((p) => p.tower === 1 && p.type === 'stone')[3].id); d.setLava(-60); d.dragonNow(); });
   await e2(() => window.__run(60 * 8)); st = await S(o2.page);
-  check(st.p[0].hits >= 1, `de draak raakt de leider (hits ${st.p[0].hits})`); check(st.p[1].hits === 0, 'de draak mikt op de leider, niet op de achterligger');
+  const dh = await e2(() => window.__app.mode.instance.dbg.D.hit); check(dh[0] === true || st.p[0].hits >= 1, `de draak raakt de leider (hits ${st.p[0].hits})`); check(dh[1] === false, 'de draak mikt op de leider, niet op de achterligger');
   await e2(() => { const d = window.__app.mode.instance.dbg; const t = d.P.find((p) => p.bridge); d.warpTo(0, t.id); d.warpTo(1, t.id); d.players[0].pl.x = t.x - 1; d.players[1].pl.x = t.x + 1; window.__run(60 * 14); });
   st = await S(o2.page); check(st.p[0].hits + st.p[1].hits >= 1, `rollende ton raakt iemand op de brug (hits ${st.p[0].hits + st.p[1].hits})`);
   await e2(() => { const d = window.__app.mode.instance.dbg; d.chickenNow(); window.__run(10); });

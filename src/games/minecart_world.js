@@ -324,7 +324,7 @@ export function buildMine(ctx, rng) {
       for (let q = 0; q < 2; q++) { dummy.position.set((q ? 9.2 : -9.2) + bx, 9.2 + hy + Math.sin(t * 1.3 + k + q) * 0.05, zc - s); dummy.updateMatrix(); lamps.setMatrixAt(k * 2 + q, dummy.matrix); }
       if (k < lampGlow.length) { lampGlow[k].position.set((k % 2 ? 9.2 : -9.2) + bx, 9.2 + hy, zc - s); lampGlow[k].visible = s > -5 && s < 70; }
     }
-    for (const dw of M.dwarfs) { let s = (dw.b - d) % 132; if (s < 0) s += 132; s += S0 - 6; const on = s < VIEW - 6; dw.c.group.visible = on; if (on) { dw.c.group.position.set(B.bx(s) + (dw.k % 2 ? 0.25 : -0.25), 1.12 + B.hy(s), zc - s); dw.c.faceDir(0, 1); dw.c.update(dt); } }
+    for (const dw of M.dwarfs) { let s = (dw.b - d) % 132; if (s < 0) s += 132; s += S0 - 6; if (s < -3) s += 132; const on = s < VIEW - 6; dw.c.group.visible = on; if (on) { dw.c.group.position.set(B.bx(s) + (dw.k % 2 ? 0.25 : -0.25), 1.12 + B.hy(s), zc - s); dw.c.faceDir(0, 1); dw.c.update(dt); } }
     endGlow.position.set(B.bx(VIEW) * 0.9, 5 + B.hy(VIEW) * 0.9, zc - VIEW - 5);
     for (const im of [cry, boul, stal, post, beam, lamps]) im.instanceMatrix.needsUpdate = true; if (cry.instanceColor) cry.instanceColor.needsUpdate = true;
   };

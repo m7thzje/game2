@@ -21,9 +21,9 @@ export default {
   mode: 'pvp',
   time: 50,
   music: 'game',
-  blurb: 'Zwaai als Tarzan van liaan naar liaan over de rivier vol <b>hongerige krokodillen</b>! Houd <b>A</b> vast, duw links/rechts mee met de zwaai en laat A los om te vliegen. Eerste aan de overkant wint. Pas op voor <b>apen</b>, <b>rotte lianen</b> en een <b>draak</b>!',
-  controls: ['{a} vasthouden (loslaten = vliegen)', '{move} links/rechts duwen = zwaaien', '{b} Tarzan-schreeuw (boost)'],
-  tip: 'Duw mee met de beweging van je poppetje: dan zwaai je steeds hoger. Wie achterstaat krijgt Tarzan-power!',
+  blurb: 'Zwaai als Tarzan over de rivier vol <b>hongerige krokodillen</b>! Houd <b>A</b> vast, duw mee met de zwaai en laat los om te vliegen. Eerste aan de overkant wint. Pas op voor <b>apen</b>, <b>rotte lianen</b> en een <b>draak</b>!',
+  controls: ['{a} vast = hangen, los = vliegen', '{move} links/rechts = zwaaien', '{b} Tarzan-schreeuw'],
+  tip: 'Duw mee met je poppetje, dan zwaai je hoger. Wie achterstaat krijgt Tarzan-power!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;

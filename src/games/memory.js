@@ -302,15 +302,15 @@ export default {
       } else if (c.kind === 'mirror') {
         hud.showBig('SPIEGEL!', 1100, '#6ac8ff'); audio.sfx('sparkle', { vol: 0.8 }); c.wob = 0.6;
         later(0.8, () => {
-          const s0 = piles[0].length, s1 = piles[1].length;
+          const s0 = scoreOf(0), s1 = scoreOf(1);
           if (s0 === s1) { popup('Gelijk! Niks verandert', 0, 3.6, 0, '#cfe8ff', 1.3); hud.toast('Spiegel, spiegel: jullie staan gelijk...', 1800); audio.sfx('miss', { vol: 0.5 }); }
           else {
             const t = piles[0]; piles[0] = piles[1]; piles[1] = t;
             for (let q = 0; q < 2; q++) piles[q].forEach((pr, k) => { pr.forEach((cd, w) => { cd.owner = q; tween(cd, pileTarget(q, k, w), 1.1, { arc: 3.4, delay: k * 0.06 + w * 0.04, sc: 0.62 }); }); });
-            popup(`${names[0]} ${piles[0].length} – ${piles[1].length} ${names[1]}`, 0, 4.2, 0, '#9ad8ff', 1.5);
+            popup(`${names[0]} ${scoreOf(0)} – ${scoreOf(1)} ${names[1]}`, 0, 4.2, 0, '#9ad8ff', 1.5);
             audio.sfx('powerup', { vol: 0.7 }); ctx.shake(0.4);
             burst(0, 2.5, 0, { count: 70, speed: 8, up: 0.8, life: 1.1, size: 0.5, colors: [0x9ad8ff, 0xffffff, 0xcfa8ff], gravity: 2 });
-            setPose(pl[0], piles[0].length > piles[1].length ? 'cheer' : 'sad', 1.6); setPose(pl[1], piles[1].length > piles[0].length ? 'cheer' : 'sad', 1.6);
+            setPose(pl[0], scoreOf(0) > scoreOf(1) ? 'cheer' : 'sad', 1.6); setPose(pl[1], scoreOf(1) > scoreOf(0) ? 'cheer' : 'sad', 1.6);
             refreshHud();
           }
           later(1.3, () => afterSpecial(c, false));
@@ -331,7 +331,7 @@ export default {
       pr.w = 1;
       pr.forEach((cd, w) => {
         const s = empty[w]; cd.owner = -1; cd.slot = s; slots[s] = cd; cd.st = 'down'; cd.glowT = 0; cd.scT = 1;
-        tween(cd, v3.set(slotX(s), CARD_Y, slotZ(s)), 0.9, { arc: 3.2, spin: TAU, delay: 0.1 + w * 0.12, sc: 1, onDone: () => { cd.angT = 0; } });
+        tween(cd, v3.set(slotX(s), CARD_Y, slotZ(s)), 0.9, { arc: 3.2, spin: TAU, delay: 0.1 + w * 0.12, sc: 1, onDone: () => { if (!S.revealed) cd.angT = 0; } });
         cd.angT = Math.PI;
       });
       refreshHud(); return true;

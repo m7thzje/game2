@@ -262,7 +262,7 @@ export function buildJungle(ctx) {
   for (let k = 0; k < 4; k++) { const b = makeBanana(); b.visible = false; root.add(b); bananas.push({ g: b, on: false, t: 0, dur: 1.5, sx: 0, sy: 0, sz: 0, ex: 0, ey: 0, ez: 0, lane: 0, miss: false }); }
 
   // draak
-  const dragon = new Dragon(0x4fa86a, 1.15); dragon.group.visible = false; dragon.group.rotation.y = -Math.PI / 2; root.add(dragon.group);
+  const dragon = new Dragon(0x4fa86a, 1.7); dragon.group.visible = false; dragon.group.rotation.y = -Math.PI / 2; root.add(dragon.group);
   const dr = { on: false, t: 0, dur: 9, startX: 0, endX: 0, fire: 0 };
 
   // vuurvliegjes
@@ -318,7 +318,7 @@ export function buildJungle(ctx) {
     // draak
     if (dr.on) {
       dr.t += dt; const k = dr.t / dr.dur; dragon.update(dt);
-      dragon.group.position.set(lerp(dr.startX, dr.endX, k), 8.6 + Math.sin(dr.t * 1.4) * 0.9, -10);
+      dragon.group.position.set(lerp(dr.startX, dr.endX, k), 9.2 + Math.sin(dr.t * 1.4) * 0.9, -9);
       if (k >= 1) { dr.on = false; dragon.group.visible = false; }
       if (dr.fire > 0) { dr.fire -= dt; const p = dragon.group.position; if (Math.random() < 0.9) fx.particles.emit(p.x - 3.4, p.y - 0.2, p.z + 0.2, -6 - Math.random() * 3, -1.5 - Math.random() * 2, (Math.random() - 0.5) * 2, { life: 0.8, size: 0.9, color: Math.random() < 0.5 ? 0xff7a1a : 0xffd23f, gravity: -1 }); }
     }

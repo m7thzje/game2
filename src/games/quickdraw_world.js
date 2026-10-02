@@ -25,7 +25,7 @@ function bubbleTex(text, color) {
       g.fillStyle = color; g.font = font(text.length > 12 ? 52 : 66); g.textAlign = 'center'; g.textBaseline = 'middle';
       g.fillText(text, w / 2, (h - 62) / 2 + 10, w - 60);
     });
-    bubbleCache.set(key, t);
+    t.userData.keep = true; bubbleCache.set(key, t);
   }
   return t;
 }
