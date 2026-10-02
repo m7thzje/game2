@@ -61,7 +61,7 @@ export default {
     const rng = mulberry32(90210);
     const Mw = buildMine(ctx, mulberry32(777));
     const B = Mw.B;
-    const course = genCourse(mulberry32(31337));
+    const course = genCourse(mulberry32(Math.floor(ctx.rng() * 1e9) + 1));
     const gT = canvasTex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 1, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
 
     // start-station + finish-bogen
@@ -130,11 +130,11 @@ export default {
       if (p.inv > 0 && kind !== 'wallok') return;
       const sz = p.sizeMul;
       p.hits++; p.inv = 1.5; p.charge = 0; p.braking = false; p.stateT = 0.9;
-      if (kind === 'spark') { p.slowT = p.slowDur = 1.15; p.slowF = 0.32; p.stats.zaps++; audio.sfx('buzz', { vol: 0.8 }); audio.sfx('hurt', { vol: 0.6 }); ctx.shake(0.6); say(p, pick(['ZAP!', 'BZZT!', 'AU!']), '#7ae8ff', 1.3); p.cart.userData.c.pose = 'scared'; p.stateT = 1.15; p.wob = 1;
+      if (kind === 'spark') { p.slowT = p.slowDur = 1.3; p.slowF = 0.3; p.stats.zaps++; audio.sfx('buzz', { vol: 0.8 }); audio.sfx('hurt', { vol: 0.6 }); ctx.shake(0.6); say(p, pick(['ZAP!', 'BZZT!', 'AU!']), '#7ae8ff', 1.3); p.cart.userData.c.pose = 'scared'; p.stateT = 1.15; p.wob = 1;
         fx.particles.burst(p.x, 1.2, p.zc, { count: 44, speed: 7, up: 1.3, life: 0.7, size: 0.35, colors: [0x7ae8ff, 0xffffff, 0xffe14a], gravity: 6 }); }
-      else if (kind === 'rock') { p.slowT = p.slowDur = 1.3; p.slowF = 0.18; p.stats.crashes++; audio.sfx('hit', { vol: 1 }); audio.sfx('thud', { vol: 0.8 }); ctx.shake(0.85); say(p, pick(['BONK!', 'KRAK!', 'BOEM!']), '#ffd24a', 1.4); p.cart.userData.c.pose = 'scared'; p.vy = 7; p.y = 0.05; p.wob = 1;
+      else if (kind === 'rock') { p.slowT = p.slowDur = 1.5; p.slowF = 0.16; p.stats.crashes++; audio.sfx('hit', { vol: 1 }); audio.sfx('thud', { vol: 0.8 }); ctx.shake(0.85); say(p, pick(['BONK!', 'KRAK!', 'BOEM!']), '#ffd24a', 1.4); p.cart.userData.c.pose = 'scared'; p.vy = 7; p.y = 0.05; p.wob = 1;
         fx.particles.burst(p.x, 1.0, p.zc, { count: 36, speed: 6, up: 1.0, life: 0.9, size: 0.45, colors: [0x8a7a9a, 0x5a4e72, 0xd0c8e0], gravity: 14 }); }
-      else if (kind === 'fire') { p.slowT = p.slowDur = 1.0; p.slowF = 0.45; p.burn = 1.4; p.stats.crashes++; audio.sfx('sizzle', { vol: 0.9 }); audio.sfx('hurt', { vol: 0.7 }); ctx.shake(0.4); say(p, pick(['AU, HEET!', 'FFFFT!', 'BRAND!']), '#ff9a3a', 1.3); p.cart.userData.c.pose = 'scared'; p.wob = 1; }
+      else if (kind === 'fire') { p.slowT = p.slowDur = 1.25; p.slowF = 0.4; p.burn = 1.5; p.stats.crashes++; audio.sfx('sizzle', { vol: 0.9 }); audio.sfx('hurt', { vol: 0.7 }); ctx.shake(0.4); say(p, pick(['AU, HEET!', 'FFFFT!', 'BRAND!']), '#ff9a3a', 1.3); p.cart.userData.c.pose = 'scared'; p.wob = 1; }
       else if (kind === 'wall') { p.slowT = p.slowDur = 1.6; p.slowF = 0.08; p.stats.crashes++; audio.sfx('explode', { vol: 0.6 }); audio.sfx('hurt', { vol: 0.7 }); ctx.shake(1); say(p, 'KRAK! Geen turbo...', '#ffd24a', 1.1); p.cart.userData.c.pose = 'scared'; p.vy = 6; p.y = 0.05; p.wob = 1;
         fx.particles.burst(p.x, 1.2, p.zc - 1, { count: 40, speed: 7, up: 1.2, life: 0.9, size: 0.45, colors: [0x8a7a9a, 0x5a4e72, 0xffd23a], gravity: 14 }); }
       else if (kind === 'fall') { p.state = 'fall'; p.stateT = 0; p.fall = 0; p.stats.falls++; p.inv = 2.2; audio.sfx('miss', { vol: 0.9 }); audio.sfx('splash', { vol: 0.4, rate: 0.6 }); ctx.shake(0.5); say(p, 'AAAAH!', '#ff7a5a', 1.3); p.cart.userData.c.pose = 'scared'; p.vy = -1; }
