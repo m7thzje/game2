@@ -226,7 +226,7 @@ if (scen.includes('hazards')) {
   const dh = await e2(() => window.__app.mode.instance.dbg.D.hit); check(dh[0] === true || st.p[0].hits >= 1, `de draak raakt de leider (hits ${st.p[0].hits})`); check(dh[1] === false, 'de draak mikt op de leider, niet op de achterligger');
   await e2(() => { const d = window.__app.mode.instance.dbg; const t = d.P.find((p) => p.bridge); d.warpTo(0, t.id); d.warpTo(1, t.id); d.players[0].pl.x = t.x - 1; d.players[1].pl.x = t.x + 1; window.__run(60 * 14); });
   st = await S(o2.page); check(st.p[0].hits + st.p[1].hits >= 1, `rollende ton raakt iemand op de brug (hits ${st.p[0].hits + st.p[1].hits})`);
-  await e2(() => { const d = window.__app.mode.instance.dbg; d.chickenNow(); window.__run(10); });
+  await e2(() => { const d = window.__app.mode.instance.dbg; d.warpTo(0, d.P.filter((p) => p.tower === 0 && p.type === 'stone')[12].id); d.warpTo(1, d.P.filter((p) => p.tower === 1 && p.type === 'stone')[12].id); d.setLava(0); d.chickenNow(); window.__run(10); });
   check((await e2(() => window.__app.mode.instance.dbg.chickens.length)) >= 1, 'een kip vliegt uit een tonnetje');
   await e2(() => { const d = window.__app.mode.instance.dbg; d.warpTo(0, d.P.filter((p) => p.tower === 0 && p.type === 'stone')[16].id); d.warpTo(1, d.P.filter((p) => p.tower === 1 && p.type === 'stone')[4].id); d.players[0].pl.stun = 0; d.turtleNow(); window.__run(60 * 7); });
   st = await S(o2.page); const h0 = st.p[0].hits; check((await e2(() => window.__app.mode.instance.dbg.Tt.state)) === 'wait', `blauwe schildpad is gevallen en weer weg (${st.turtle})`);
