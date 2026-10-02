@@ -47,7 +47,7 @@ function buildWorld(app) {
   // spelers
   const players = [0, 1].map((i) => {
     const c = makeBrother(i); scene.add(c.group);
-    const label = floatLabel(i ? 'Sem' : 'Daan', '', i ? '#7fb2ff' : '#6bf09a'); label.scale.set(2.6, 0.8, 1); label.position.y = c.height + 0.95; c.group.add(label); label.material.depthTest = false;
+    const label = floatLabel(i ? 'Jor' : 'Wes', '', i ? '#7fb2ff' : '#6bf09a'); label.scale.set(2.6, 0.8, 1); label.position.y = c.height + 0.95; c.group.add(label); label.material.depthTest = false;
     const spot = new THREE.SpotLight(0xfff0c0, 0, 32, 0.46, 0.6, 1.1); spot.position.set(0, 1.5, 0.3); const tg = new THREE.Object3D(); tg.position.set(0, 0.6, 12); c.group.add(spot); c.group.add(tg); spot.target = tg;
     const cg = new THREE.CylinderGeometry(5.2, 0.12, 15, 18, 1, true); cg.rotateX(Math.PI / 2); cg.translate(0, 0, 7.5);
     const cone = new THREE.Mesh(cg, new THREE.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0.1, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); cone.position.set(0, 1.4, 0.3); cone.visible = false; c.group.add(cone);
@@ -172,7 +172,7 @@ export class HubMode {
   onCollect(type, v, x, y, z, p) {
     if (type === 'coin') { S.coins += v; S.totalEarned += v; audio.sfx('coin', { rate: 0.95 + Math.random() * 0.2 }); this.fx.burst(x, y + 0.3, z, { count: 4, color: 0xffe14a, speed: 2, size: 0.2, life: 0.5 }); }
     else if (type === 'chest') { S.coins += v; S.totalEarned += v; audio.sfx('powerup'); ui.hud.toast(`Schatkist! +${v} heitjes`, 2200); }
-    else if (type === 'knob') { audio.sfx('star'); audio.sfx('bell'); const n = this.pickups.knobsFound(); ui.hud.toast(`✨ Gouden deurknop gevonden! (${n}/${DOORKNOBS.length})`, 3000); if (n === DOORKNOBS.length) setTimeout(() => ui.say([{ who: 'Sem', text: 'Dat was de laatste! Alle acht! De Deurman gaat dolblij zijn!' }]), 1500); }
+    else if (type === 'knob') { audio.sfx('star'); audio.sfx('bell'); const n = this.pickups.knobsFound(); ui.hud.toast(`✨ Gouden deurknop gevonden! (${n}/${DOORKNOBS.length})`, 3000); if (n === DOORKNOBS.length) setTimeout(() => ui.say([{ who: 'Jor', text: 'Dat was de laatste! Alle acht! De Deurman gaat dolblij zijn!' }]), 1500); }
     this.onCoinsChanged(); this.coinT = 1;
   }
   drawMini() {
@@ -304,7 +304,7 @@ export class HubMode {
     await new Promise((res) => setTimeout(res, 300));
     const msg = T.res[r.stars] || '';
     await this.say([{ who: j.who, text: msg }, { who: j.who, text: r.total > 0 ? `Hier is je loon: ${r.total} heitjes!` : 'Helaas, geen loon.' }]);
-    if (S.coins >= TICKET_PRICE && !S.ticket && !S.flags.enough) { S.flags.enough = true; await this.say([{ who: 'Sem', text: `Daan! We hebben ${S.coins} heitjes! Genoeg voor de kaartjes!` }, { who: 'Daan', text: 'Naar het loket op het plein! Dat staat bij het podium.' }]); }
+    if (S.coins >= TICKET_PRICE && !S.ticket && !S.flags.enough) { S.flags.enough = true; await this.say([{ who: 'Jor', text: `Wes! We hebben ${S.coins} heitjes! Genoeg voor de kaartjes!` }, { who: 'Wes', text: 'Naar het loket op het plein! Dat staat bij het podium.' }]); }
     this.busy = false;
     if (!S.flags.firstJobDone) { S.flags.firstJobDone = true; }
   }
@@ -339,7 +339,7 @@ export class HubMode {
     const mins = Math.floor(S.playTime / 60);
     const lore = STORY.ELDER_LORE.filter((l) => done >= l.need).map((l) => h('p', { style: { fontStyle: 'italic', fontSize: '16px' } }, '“' + l.text + '”'));
     const knobHints = DOORKNOBS.filter((k) => !S.collected[k.id] && done >= 4).slice(0, 3).map((k) => h('li', {}, '✨ ' + k.hint));
-    await this.cardModal('Dagboek van Daan & Sem', h('div', {},
+    await this.cardModal('Dagboek van Wes & Jor', h('div', {},
       h('p', { html: `🪙 <b>${S.coins}</b> heitjes (totaal verdiend: ${S.totalEarned}) · 🎟️ ${S.ticket ? 'kaartjes gekocht' : 'nog geen kaartjes'}<br>⭐ ${stars}/${JOBS.length * 3} sterren · 🔨 ${done}/${JOBS.length} klussen<br>✨ ${knobs}/${DOORKNOBS.length} gouden deurknoppen<br>👁️ Deurman gezien: ${S.sightings}× · verjaagd: ${S.banished || 0}× · geschrokken: ${S.scared || 0}×<br>⏱️ speeltijd ${mins} min` }),
       lore.length ? h('div', {}, h('h4', {}, 'Wat het dorp over de Deurman vertelt:'), ...lore) : null,
       knobHints.length ? h('div', {}, h('h4', {}, 'Hints voor deurknoppen:'), h('ul', { style: { paddingLeft: '20px' } }, ...knobHints)) : null), '');
@@ -368,7 +368,7 @@ export class HubMode {
     S.coins -= TICKET_PRICE; S.ticket = true; persist(); this.onCoinsChanged();
     audio.sfx('win'); ui.flash('#fff', 400);
     for (let i = 0; i < 5; i++) setTimeout(() => this.fx.burst(BOOTH.x + rand(-4, 4), 6 + rand(0, 3), BOOTH.z + rand(-4, 4), { count: 40, colors: [0xff4a4a, 0xffe14a, 0x4ac8ff, 0x7bff7b, 0xff7ad5], speed: 7, size: 0.4, life: 1.4, gravity: 3 }), i * 250);
-    await this.say([{ who: 'Loket-Lotte', text: B.buy }, { who: 'Sem', text: 'WE GAAN NAAR DUTCHTUBER!' }, { who: 'Daan', text: 'Het concert begint zodra het donker is. Naar de kasteelpoort! Als de Deurman ons laat...' }]);
+    await this.say([{ who: 'Loket-Lotte', text: B.buy }, { who: 'Jor', text: 'WE GAAN NAAR DUTCHTUBER!' }, { who: 'Wes', text: 'Het concert begint zodra het donker is. Naar de kasteelpoort! Als de Deurman ons laat...' }]);
   }
   async fountain() {
     if (S.coins < 1) { await this.say([{ text: 'Je hebt geen heitje om te gooien.' }]); return; }

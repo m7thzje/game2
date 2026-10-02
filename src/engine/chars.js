@@ -203,11 +203,11 @@ export class Character {
 }
 
 export const BROTHER_SPECS = [
-  { // Daan, de oudste
+  { // Wes, de oudste
     scale: 1.0, skin: 0xf4c9a0, shirt: 0x2f9e5b, sleeve: 0xf2efe0, tunic: 0x2f9e5b, pants: 0x6b4a2e, boots: 0x4a2e17, belt: 0x5b3a1e,
     hair: 0x7a4a24, hairStyle: 'spiky', scarf: 0xd8372c, backpack: 0x8a5a2e, hat: null,
   },
-  { // Sem, de jongste
+  { // Jor, de jongste
     scale: 0.82, skin: 0xf7d2ae, shirt: 0x3a78e0, sleeve: 0x3a78e0, pants: 0x3d4a73, boots: 0x6b4a2e, belt: 0x3a2a1e,
     hair: 0xe8b84a, hairStyle: 'short', hat: 'capback', hatColor: 0xffc93c, eyeScale: 1.2, headScale: 1.1, cape: 0xe5484d,
   },

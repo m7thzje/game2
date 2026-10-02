@@ -30,7 +30,7 @@ const F1 = H1.map((n) => (n[0] === 7 || n[0] === 3 ? [n[0], n[1], n[2], 'D'] : n
 const F2 = H2.map((n) => (n[0] === 7 || n[0] === 3 ? [n[0], n[1], n[2], 'D'] : n));
 const OUT = [[0, 84, 4, 'DL']];
 
-// secties: bar, noten, transpositie, wie speelt ('seq' = eerste helft Daan, tweede helft Sem; 'alt' = om de beurt)
+// secties: bar, noten, transpositie, wie speelt ('seq' = eerste helft Wes, tweede helft Jor; 'alt' = om de beurt)
 export const SECTIONS = [
   { name: 'intro', bar: 0, len: 2 },
   { name: 'couplet', bar: 2, len: 4, notes: P1, shift: 0, who: 'seq' },

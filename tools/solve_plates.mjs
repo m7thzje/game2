@@ -1,6 +1,6 @@
 // Gebruik: node tools/solve_plates.mjs [--path] [--draft bestand]
 // Bewijst per level: oplosbaar (BFS over gezamenlijke toestand), en dat samenwerking nodig is:
-//  - 'solo': kan Daan (terwijl Sem stil blijft staan) een uitgangsvakje bereiken? en Sem (terwijl Daan stil blijft staan)?
+//  - 'solo': kan Wes (terwijl Jor stil blijft staan) een uitgangsvakje bereiken? en Jor (terwijl Wes stil blijft staan)?
 //  - zijn beide solo-bereikbaar op twee verschillende uitgangsvakjes -> level zou zonder samenwerking kunnen => FOUT
 import fs from 'node:fs';
 import { LEVELS, parseLevel, validateLevel, renderAscii, initState } from '../src/games/plates_levels.js';
@@ -48,8 +48,8 @@ defs.forEach((def, i) => {
   // eenvoudige variant: reach-modus test 'een van de twee'; voor onderscheid per vakje gebruiken we dezelfde functie met aangepaste exits
   const independent = indep(L);
   const nd = solve(L, { noDeath: true });
-  console.log(`  opgelost in ${both.steps} acties (Daan ${rp.moves[0]} stappen + ${rp.presses[0]}xA, Sem ${rp.moves[1]} stappen + ${rp.presses[1]}xA, ${rp.deaths} keer dood), ${both.states} toestanden, ${Date.now() - t0}ms`);
-  console.log(`  solo: Daan-alleen bereikt een uitgang: ${reach[0].solved ? 'JA' : 'nee'} | Sem-alleen: ${reach[1].solved ? 'JA' : 'nee'} | onafhankelijk op 2 vakjes: ${independent ? 'JA => FOUT (geen samenwerking nodig)' : 'nee => samenwerking vereist'}`);
+  console.log(`  opgelost in ${both.steps} acties (Wes ${rp.moves[0]} stappen + ${rp.presses[0]}xA, Jor ${rp.moves[1]} stappen + ${rp.presses[1]}xA, ${rp.deaths} keer dood), ${both.states} toestanden, ${Date.now() - t0}ms`);
+  console.log(`  solo: Wes-alleen bereikt een uitgang: ${reach[0].solved ? 'JA' : 'nee'} | Jor-alleen: ${reach[1].solved ? 'JA' : 'nee'} | onafhankelijk op 2 vakjes: ${independent ? 'JA => FOUT (geen samenwerking nodig)' : 'nee => samenwerking vereist'}`);
   console.log(`  zonder ooit dood te gaan: ${nd.solved ? nd.steps + ' acties' : 'ONOPLOSBAAR'}`);
   if (!nd.solved) ok = false;
   if (independent) ok = false;
@@ -60,7 +60,7 @@ console.log(ok ? `\nALLE LEVELS OK (som van kortste oplossingen: ${totalSteps} a
 process.exit(ok ? 0 : 1);
 
 function indep(L) {
-  // bereikt Daan-alleen vakje a en Sem-alleen vakje b met a != b ?
+  // bereikt Wes-alleen vakje a en Jor-alleen vakje b met a != b ?
   const can = (who, cell) => {
     const L2 = Object.assign({}, L, { exits: [cell, -1] });
     return solve(L2, { movers: [who], mode: 'reach', reachWho: who }).solved;

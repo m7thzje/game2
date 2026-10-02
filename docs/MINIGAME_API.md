@@ -41,8 +41,8 @@ export default {
 | `ctx.fx.particles` | `burst(x,y,z,{count,speed,up,spread,life,size,color,colors,gravity})`, `emit(...)`, `ring(x,y,z,{...})`, `dust(x,y,z,n,color)` |
 | `ctx.fx.texts.add(tekst, x,y,z, kleur='#ffe14a', schaal=1)` | zwevende tekst in de wereld ("+10") |
 | `ctx.lights(mood, opts)` | zet zon+hemellicht+achtergrond+mist. `mood`: `'day' 'dusk' 'night' 'indoor' 'cave' 'ice' 'swamp'`. `opts`: `{shadow: 24 (helft van schaduwvak), center:[x,y,z], fog:true, fogNear, fogFar}`. Retourneert `{sun, hemi}` |
-| `ctx.players` | `[{index, name, color (0xRRGGBB), css}]` — Daan (index 0, groen, WASD) en Sem (index 1, blauw, pijltjes) |
-| `ctx.make.brother(i)` | `Character` van Daan/Sem (zie chars.js) |
+| `ctx.players` | `[{index, name, color (0xRRGGBB), css}]` — Wes (index 0, groen, WASD) en Jor (index 1, blauw, pijltjes) |
+| `ctx.make.brother(i)` | `Character` van Wes/Jor (zie chars.js) |
 | `ctx.shake(0..1)` | camera-schud |
 | `ctx.penalty(n, melding?)` / `ctx.bonus(n, melding?)` | heitjes aftrekken/bijtellen (optioneel) |
 | `ctx.rng()` | seeded random 0..1 |
@@ -51,14 +51,14 @@ export default {
 
 Sterren zijn gedeeld: de broers hebben één portemonnee. Maak 2 sterren *haalbaar* voor een gemiddeld duo en 3 sterren echt een uitdaging.
 
-## Invoer (`ctx.input.p[0]` = Daan, `p[1]` = Sem)
+## Invoer (`ctx.input.p[0]` = Wes, `p[1]` = Jor)
 ```
 p.x  -1..1 (links..rechts)     p.y  -1..1 (OMHOOG = -1 .. OMLAAG = +1; "omhoog" = van de speler af, dus -z in de wereld als de camera naar -z kijkt)
 p.mag 0..1 stick-grootte       p.a  p.b  = knop ingedrukt (F / Enter, G / Shift)
 p.aP p.bP = net ingedrukt (1 frame)      p.aR p.bR = net losgelaten
 p.up p.down p.left p.right = richting ingedrukt, p.upP .. p.rightP = net ingedrukt (voor rooster-/menu-besturing)
 ```
-Toetsen: Daan WASD + F/G, Sem pijltjes + Enter/Shift. (Gamepads werken automatisch.) **Elke game moet speelbaar zijn met alleen: bewegen (4 richtingen) + knop A + knop B.**
+Toetsen: Wes WASD + F/G, Jor pijltjes + Enter/Shift. (Gamepads werken automatisch.) **Elke game moet speelbaar zijn met alleen: bewegen (4 richtingen) + knop A + knop B.**
 Gebruik géén andere toetsen. Gebruik `ctx.input.p[i]`, nooit rechtstreeks `keydown`.
 
 ## Geluid (`ctx.audio.sfx`)

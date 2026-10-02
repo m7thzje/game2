@@ -1,6 +1,6 @@
 import { loadPeerLib, peerOptions, PREFIX } from './common.js';
 
-// GAST (speler 2 / Sem): dunne client. Toont het beeld van de host, stuurt alleen toetsen terug.
+// GAST (speler 2 / Jor): dunne client. Toont het beeld van de host, stuurt alleen toetsen terug.
 const $ = (id) => document.getElementById(id);
 const css = (el, s) => { el.style.cssText = s; return el; };
 
@@ -19,7 +19,7 @@ export async function runGuest() {
   // 1. code + klik (nodig voor geluid)
   await new Promise((resolve) => {
     const o = overlay(`<div style="font:min(10vw,64px) MedievalSharp,serif;color:#ffcf3a;text-shadow:0 5px 0 #5b3a1e">Heitjes voor Karweitjes</div>
-      <div style="font-size:24px">Je doet mee als <b style="color:#4a8cff">Sem</b> (speler 2)</div>
+      <div style="font-size:24px">Je doet mee als <b style="color:#4a8cff">Jor</b> (speler 2)</div>
       ${code ? `<div style="font-size:22px">Code: <b>${code}</b></div>` : `<input id="gcode" inputmode="numeric" maxlength="6" placeholder="code van je broer" style="font:700 30px Fredoka,sans-serif;padding:10px 16px;border-radius:12px;border:4px solid #4a8cff;text-align:center;width:min(320px,80vw)">`}
       <button id="gjoin" style="${btnCss}">Meedoen!</button>
       <div style="opacity:.75;max-width:520px;font-size:16px">Gebruik <b>WASD</b> of de <b>pijltjes</b> om te lopen, <b>F / Enter</b> en <b>G / Shift</b> als actieknoppen. Het beeld komt van de computer van je broer.</div>`);

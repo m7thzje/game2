@@ -5,7 +5,7 @@ import { PLAYER_COLORS } from '../engine/chars.js';
 import { buildArena, ARENA_R, RIM_R, OBSTACLES } from './hotbomb_world.js';
 
 // Hete Aardappel (Mario Party "Hot Bomb"): 4 deelnemers, 1 tikkende bom. Tik hem door aan een ander met A!
-// Daan + Sem (team) tegen twee nar-NPC's. Elke ronde ontploft de bom bij de houder; die valt uit.
+// Wes + Jor (team) tegen twee nar-NPC's. Elke ronde ontploft de bom bij de houder; die valt uit.
 
 const N_ROUNDS = 3;                      // 4 deelnemers -> 3 ontploffingen (daarna blijft er één over)
 const FUSE = [20, 17, 14.5];             // lont per ronde (seconden, +/- 10%)
@@ -49,7 +49,7 @@ export default {
   time: 75,
   pay: 1.1,
   music: 'game_fast',
-  blurb: 'Op de kermis speelt Nar Nico <b>Hete Aardappel</b>! Wie de tikkende aardappel heeft, geeft hem door door iemand <b>aan te tikken</b>. Bij elke knal valt de houder uit. Daan en Sem zijn een team tegen de narren <b>Fonkel</b> en <b>Dobber</b>.',
+  blurb: 'Op de kermis speelt Nar Nico <b>Hete Aardappel</b>! Wie de tikkende aardappel heeft, geeft hem door door iemand <b>aan te tikken</b>. Bij elke knal valt de houder uit. Wes en Jor zijn een team tegen de narren <b>Fonkel</b> en <b>Dobber</b>.',
   controls: ['{move} rennen', '{a} duiken: bom doorgeven / wegduwen', '{b} sprint (even wachten)'],
   tip: 'Duw een nar weg die je broer achterna zit. Pak bubbels (schild) en ijsbloemen. Uitgeschakeld? Moedig je broer aan met {a}!'.replace('{a}', 'A'),
 

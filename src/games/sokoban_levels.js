@@ -1,7 +1,7 @@
 // Kratten Schuiven: levels + spelregels (puur, zonder THREE) zodat tools/solve_sokoban.mjs
 // exact dezelfde regels gebruikt als de game.
 //
-// Legenda:  #=muur  .=vloer  G=doelvak  $=krat  *=krat op doelvak  D=Daan (speler 0)  S=Sem (speler 1)
+// Legenda:  #=muur  .=vloer  G=doelvak  $=krat  *=krat op doelvak  D=Wes (speler 0)  S=Jor (speler 1)
 //           spatie = leegte (buiten het magazijn)
 // Regels: een speler loopt 1 vakje; staat daar een krat dan wordt die 1 vakje meegeduwd, mits het vakje erachter
 // vrij is (geen muur, krat of speler). Spelers kunnen niet door elkaar of elkaar duwen.
@@ -26,8 +26,8 @@ export const LEVELS = [
       '#S....#G#',
       '#########',
     ] },
-  { name: 'Sem zit vast!',
-    hint: 'Oei, Sem zit opgesloten! <b>Daan</b>, maak de weg vrij. <b>Sem</b>, duw de krat naar buiten. Duwen kan alleen als er <b>niets</b> achter de krat staat.',
+  { name: 'Jor zit vast!',
+    hint: 'Oei, Jor zit opgesloten! <b>Wes</b>, maak de weg vrij. <b>Jor</b>, duw de krat naar buiten. Duwen kan alleen als er <b>niets</b> achter de krat staat.',
     map: [
       '########',
       '#D..#S.#',
@@ -77,7 +77,7 @@ export const LEVELS = [
       '########',
     ] },
   { name: 'Het grote magazijn',
-    hint: 'Het laatste level! Daan zit in de gang links, Sem in de hal. Help elkaar en let op de volgorde.',
+    hint: 'Het laatste level! Wes zit in de gang links, Jor in de hal. Help elkaar en let op de volgorde.',
     map: [
       '#########',
       '#.#.....#',

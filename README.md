@@ -1,6 +1,6 @@
 # Heitjes voor Karweitjes
 
-Een **co-op 3D-game voor twee spelers** op één toetsenbord. Daan en Sem doen *heitjes voor karweitjes* om geld te
+Een **co-op 3D-game voor twee spelers** op één toetsenbord. Wes en Jor doen *heitjes voor karweitjes* om geld te
 verdienen voor een concert van hun favoriete YouTuber **DutchTuber**. Ondertussen gaat er in het dorp steeds
 een deur vanzelf open... en staat daar **de Deurman**.
 
@@ -17,25 +17,25 @@ Een moderne browser met WebGL is genoeg (Chrome, Edge, Firefox). Het spel werkt 
 
 ### Besturing
 
-| | Speler 1 (Daan) | Speler 2 (Sem) |
+| | Speler 1 (Wes) | Speler 2 (Jor) |
 |---|---|---|
 | Lopen | `W` `A` `S` `D` | pijltjestoetsen |
 | Actie A (praten / springen / acties) | `F` (of spatiebalk) | `Enter` |
 | Actie B (lantaarn / tweede actie) | `G` (of `E`) | `Shift` rechts |
 
-Gamepads werken ook (pad 1 = Daan, pad 2 = Sem). Online mag de gast zowel WASD als de pijltjes gebruiken. `Esc` = pauze/menu, `Tab` = dagboek, `M` = geluid uit/aan.
+Gamepads werken ook (pad 1 = Wes, pad 2 = Jor). Online mag de gast zowel WASD als de pijltjes gebruiken. `Esc` = pauze/menu, `Tab` = dagboek, `M` = geluid uit/aan.
 
 ## Online spelen met 2 apparaten (2 links)
 
-Eén van jullie is de **host** (Daan) en draait het spel. De ander doet mee als **Sem** via een link. Het beeld en geluid van de host
-worden live doorgestuurd (WebRTC), Sem stuurt alleen zijn toetsen terug. Daardoor werken alle 14 minigames, het dorp, de Deurman en het concert
+Eén van jullie is de **host** (Wes) en draait het spel. De ander doet mee als **Jor** via een link. Het beeld en geluid van de host
+worden live doorgestuurd (WebRTC), Jor stuurt alleen zijn toetsen terug. Daardoor werken alle 14 minigames, het dorp, de Deurman en het concert
 meteen online. Niemand hoeft iets te installeren; een computer met Chrome of Edge is genoeg.
 
 1. **Zet het spel online** (eenmalig, voor een publieke link): GitHub-repo → *Settings* → *Pages* → *Source: Deploy from a branch* →
    branch `claude/epic-edison-p6qo95` (of `main` na een merge), map `/ (root)` → *Save*. Na een minuutje staat het spel op
    `https://m7thzje.github.io/game2/`.
 2. **Host:** open die link → kies **🌐 Online spelen (host)** → je krijgt een code en een link (`…/?join=123456`). Stuur de link naar je broer.
-3. **Gast:** opent de link, klikt **Meedoen!** en speelt mee als Sem (WASD of pijltjes, F/Enter en G/Shift). Of kies in het menu *Meedoen met een code*.
+3. **Gast:** opent de link, klikt **Meedoen!** en speelt mee als Jor (WASD of pijltjes, F/Enter en G/Shift). Of kies in het menu *Meedoen met een code*.
 
 Tips: de host moet het tabblad zichtbaar houden (anders pauzeert de browser het spel). Er zit ±0,1-0,2 s vertraging op de toetsen van de gast;
 het ritmespel is daardoor wat lastiger. Lukt de verbinding niet (strenge netwerken)? Dan kan een eigen TURN-server mee: `?turn=turn:server:3478|gebruiker|wachtwoord`

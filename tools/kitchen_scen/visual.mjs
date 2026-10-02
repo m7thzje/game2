@@ -2,7 +2,7 @@ import { helpers } from './lib.mjs';
 export default async function (S) {
   const { ev, step, shot, start } = S; const H = helpers(S);
   await start(); await step(80);
-  // Daan hakt vlees, Sem staat bij pan met bord
+  // Wes hakt vlees, Jor staat bij pan met bord
   await H.stand(0, 'crate:vlees'); await H.press(0);
   await H.stand(0, 'board:0'); await H.press(0);
   await ev(() => { V(0).b = true; }); await step(12);

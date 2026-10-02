@@ -3,7 +3,7 @@ import { mat, mesh, clamp, damp, lerp, rand, pick, TAU, h } from '../engine/util
 import { ING, RECIPES, itemMesh, dishMesh, ingMesh, plateMesh, emojiSprite, bubbleSprite, makeBar } from './kitchen_items.js';
 import { buildWorld, makeCustomerPool, L, CY } from './kitchen_world.js';
 
-// Taverne-keuken (Overcooked-achtig): Daan en Sem runnen samen de keuken van De Gouden Griffioen.
+// Taverne-keuken (Overcooked-achtig): Wes en Jor runnen samen de keuken van De Gouden Griffioen.
 // Links: kratten + hakplanken (voorbereiden). Midden: doorgeef-aanrecht. Rechts: fornuis, borden, serveerluik.
 
 const DURATION = 100;

@@ -11,6 +11,6 @@ maps.filter((m) => m.length).forEach((map, n) => {
   if (!both.solved) { console.log(`#${n + 1}: ONOPLOSBAAR${both.capped ? ' (cap)' : ''} (${both.states})`); return; }
   const a = solve(L, { movers: [0], maxStates: 8e6 }), b = solve(L, { movers: [1], maxStates: 8e6 });
   const st = replayStats(L, both.path, tryMove, isSolved);
-  console.log(`#${n + 1}: ${both.steps} stappen (D${st.steps[0]}/S${st.steps[1]}, duw ${st.pushes[0]}+${st.pushes[1]}), ${both.states} toest. | Daan-alleen:${a.solved ? 'KAN' : 'nee'} Sem-alleen:${b.solved ? 'KAN' : 'nee'}`);
+  console.log(`#${n + 1}: ${both.steps} stappen (D${st.steps[0]}/S${st.steps[1]}, duw ${st.pushes[0]}+${st.pushes[1]}), ${both.states} toest. | Wes-alleen:${a.solved ? 'KAN' : 'nee'} Jor-alleen:${b.solved ? 'KAN' : 'nee'}`);
   if (process.argv.includes('--path')) console.log('   ' + both.path.map((m) => 'DS'[m.who] + '^v<>'[m.d]).join(' '));
 });

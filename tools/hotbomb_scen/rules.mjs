@@ -9,25 +9,25 @@ export default async function (S) {
   const freeze = (i) => ev((i) => { K().E[i].stun = 99; }, i);
   const setHolder = (i) => ev((i) => { const k = K(); for (const e of k.E) e.holder = false; k.E[i].holder = true; k.st.holder = k.E[i]; k.st.lock = 0; k.E[i].immT = 0; k.st.fuse = 50; k.st.fuseMax = 60; }, i);
   await ev(() => { K().st.fuse = 50; K().st.fuseMax = 60; });
-  // 1. Daan (houder) duikt op Dobber
+  // 1. Wes (houder) duikt op Dobber
   await setHolder(0); await place(0, 0, 4, 0, -1); await place(1, -6, 0); await place(2, 6, 0); await place(3, 0, 1.5, 0, 1); await freeze(2); await freeze(3); await freeze(1);
   await press(0, 'a'); await step(8);
   ok((await holder()) === 'Dobber', 'duik van bomhouder geeft de bom door (houder=' + (await holder()) + ')');
   // 2. bom kan niet direct terug (lock)
   const st1 = await ev(() => K().st.lock); ok(st1 > 0, 'lock na tik > 0 (' + st1.toFixed(2) + ')');
-  // 3. Sem duwt Dobber (houder) weg
+  // 3. Jor duwt Dobber (houder) weg
   await ev(() => { K().st.lock = 0; K().E[3].stun = 0; K().E[3].immT = 0; });
   await place(3, 3, -3, 0, 1); await freeze(3); await ev(() => { K().E[3].stun = 0; K().E[3].immT = 0; }); await place(1, 3, 0, 0, -1); await ev(() => { K().E[3].stun = 0; });
   const before = await ev(() => ({ x: K().E[3].x, z: K().E[3].z }));
   await press(1, 'a'); await step(6);
   const after = await ev(() => ({ x: K().E[3].x, z: K().E[3].z, st: K().st.protects }));
-  ok(Math.hypot(after.x - before.x, after.z - before.z) > 1.0, `Sem duwt Dobber weg (${Math.hypot(after.x - before.x, after.z - before.z).toFixed(1)} u)  protects=${after.st}`);
+  ok(Math.hypot(after.x - before.x, after.z - before.z) > 1.0, `Jor duwt Dobber weg (${Math.hypot(after.x - before.x, after.z - before.z).toFixed(1)} u)  protects=${after.st}`);
   ok((await holder()) === 'Dobber', 'duw geeft de bom NIET door');
   // 4. schild blokkeert
   await setHolder(0); await place(0, 0, 4, 0, -1); await place(3, 0, 1.5, 0, 1); await place(1, -7, 0); await place(2, 7, 0);
   await ev(() => { const k = K(); k.E[3].shieldT = 4; k.E[3].stun = 99; k.E[1].stun = 99; k.E[2].stun = 99; k.st.lock = 0; });
   await press(0, 'a'); await step(6);
-  ok((await holder()) === 'Daan', 'schild blokkeert de tik (houder=' + (await holder()) + ')');
+  ok((await holder()) === 'Wes', 'schild blokkeert de tik (houder=' + (await holder()) + ')');
   ok((await ev(() => K().E[0].stun)) > 0.1 || (await ev(() => K().E[0].knockT)) > 0, 'aanvaller wordt teruggekaatst');
   // 5. sprint
   await ev(() => { const e = K().E[1]; e.stun = 0; e.sprintCd = 0; e.x = -3; e.z = 0; e.vx = e.vz = 0; });

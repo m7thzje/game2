@@ -89,7 +89,7 @@ function buildHome(W) {
   const [fx2, fz2] = L(3, 5); const fl2 = P.flowerPatch(0xffe14a, 10, 1.4); W.put(fl2, fx2, fz2, 0);
   const [mx, mz] = L(2.6, 7.6); const mb = new THREE.Group(); mb.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.2, 5), mat(0x5b3d24), { pos: [0, 0.6, 0] })); mb.add(mesh(new THREE.BoxGeometry(0.5, 0.35, 0.35), mat(0xd8372c), { pos: [0, 1.3, 0] })); W.put(mb, mx, mz, yaw);
   const [wx, wz] = L(-4.2, 1); const wp = new THREE.Group(); for (let i = 0; i < 6; i++) wp.add(mesh(new THREE.CylinderGeometry(0.15, 0.15, 1.4, 6), mat(0x8a5a2b), { pos: [(i % 3) * 0.32 - 0.32, 0.15 + Math.floor(i / 3) * 0.28, 0], rot: [0, 0, PI / 2] })); W.put(wp, wx, wz, yaw + 1.5);
-  const [sx, sz] = L(0, 3.15); const sg = W.sign('Daan & Sem', 2.4, 0.7, sx, groundY(HOME.x, HOME.z) + 3.0, sz, yaw, { size: 70 }); W.add(sg);
+  const [sx, sz] = L(0, 3.15); const sg = W.sign('Wes & Jor', 2.4, 0.7, sx, groundY(HOME.x, HOME.z) + 3.0, sz, yaw, { size: 70 }); W.add(sg);
   const [ix, iz] = L(0, 5.2); W.interact.push({ type: 'home', x: ix, z: iz, r: 3.4, label: 'Naar binnen (slapen)' });
   const [tx, tz] = L(-1, -8); const tr = P.tree(6); W.put(tr, tx, tz, 0); W.circle(tx, tz, 0.8);
 }

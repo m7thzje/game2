@@ -2,7 +2,7 @@
 //
 // Een kaart is een lijst rijen; elke cel is een token van 2 tekens, gescheiden door spaties:
 //   ..  vloer        ##  rots (muur)     --  leegte        ~~  lava (dodelijk)     ii  ijs (je glijdt door)     XX  uitgang (2 stuks)
-//   @D  start Daan   @S  start Sem
+//   @D  start Wes   @S  start Jor
 //   P0..P3  drukplaat (kanaal/kleur 0..3)         G0..G3  deur (open zolang kanaal actief)
 //   W0..W3  stenen muur (zelfde als deur, maar gaat omlaag; bedoeld voor hendels)      B0..B3  brug over een gat (dicht = gat = vallen!)
 //   V0..V3  hendel (A ernaast = aan/uit, blijft staan)   K0..K3  sleutel    L0..L3  slot (open met sleutel van dezelfde kleur)
@@ -136,7 +136,7 @@ export function initState(L) {
     p: [L.starts[0], L.starts[1]],
     lever: L.levers.map(() => 0),
     mirror: L.mirrors.map((m) => m.o0),
-    key: L.keys.map(() => 0),     // 0 op de grond, 1 Daan heeft 'm, 2 Sem heeft 'm, 3 gebruikt
+    key: L.keys.map(() => 0),     // 0 op de grond, 1 Wes heeft 'm, 2 Jor heeft 'm, 3 gebruikt
     lock: L.locks.map(() => 0),   // 1 = open
     deaths: 0,
   };

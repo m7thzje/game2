@@ -114,13 +114,13 @@ export class EndingMode {
     this.cam([0, 14, 22], [0, 8, 6], [0, 7, -8], [0, 5, -10], 8); await wait(5000);
     await ui.say([{ who: 'DutchTuber', text: 'Deze is voor de twee broers vooraan! Ik hoorde dat jullie keihard hebben gewerkt voor een kaartje!' }]);
     this.cam([-3, 3.5, 9], [3, 3.5, 9], [0, 3.5, 6], [0, 3.5, 6], 6); audio.sfx('sparkle'); await wait(3500);
-    await ui.say([{ who: 'Sem', text: 'Daan! Hij kijkt naar ons! HIJ ZWAAIT!' }, { who: 'Daan', text: '(zwaait terug) ...Zie je de Deurman ook?' }, { who: 'Sem', text: 'Hij danst. Op de beat.' }]);
+    await ui.say([{ who: 'Jor', text: 'Wes! Hij kijkt naar ons! HIJ ZWAAIT!' }, { who: 'Wes', text: '(zwaait terug) ...Zie je de Deurman ook?' }, { who: 'Jor', text: 'Hij danst. Op de beat.' }]);
     this.deur.dance = true;
     this.cam([-10, 2.5, 8], [-14, 2.5, 7], [-13, 3, 4], [-13, 3, 4], 8); for (let i = 0; i < 5; i++) setTimeout(() => this.firework(), i * 500); await wait(5500);
     this.cam([0, 22, 30], [0, 30, 40], [0, 6, -4], [0, 10, -8], 10); for (let i = 0; i < 14; i++) setTimeout(() => this.firework(), i * 450); this.confettiBurst(); await wait(7500);
     if (this.vip) {
       await ui.fade(1, 700); this.concert = false; this.backstage(); await ui.fade(0, 700);
-      await ui.say([{ who: 'DutchTuber', text: 'Jullie zijn dus Daan en Sem! De Deurman vertelde me alles. Hij is mijn grootste fan, wist je dat?' }, { who: 'Deurman', text: '...Handtekening.', creepy: true }, { who: 'DutchTuber', text: 'Natuurlijk, Deurman. Voor jou en de broers. Deze poster is gesigneerd door iedereen.' }, { who: 'Daan', text: 'Dit is de mooiste dag van mijn leven.' }]);
+      await ui.say([{ who: 'DutchTuber', text: 'Jullie zijn dus Wes en Jor! De Deurman vertelde me alles. Hij is mijn grootste fan, wist je dat?' }, { who: 'Deurman', text: '...Handtekening.', creepy: true }, { who: 'DutchTuber', text: 'Natuurlijk, Deurman. Voor jou en de broers. Deze poster is gesigneerd door iedereen.' }, { who: 'Wes', text: 'Dit is de mooiste dag van mijn leven.' }]);
       audio.sfx('win');
     }
     await ui.fade(1, 900); this.concert = false; this.epilogue();
@@ -159,7 +159,7 @@ export class EndingMode {
       { label: 'Naar het titelscherm', onSelect: async () => { ui.activeMenus = []; await ui.fade(1, 600); await this.app.goMenu(); ui.fade(0, 600); } },
     ]);
     const done = Object.keys(S.jobs).length; const stars = Object.values(S.jobs).reduce((a, j) => a + j.bestStars, 0);
-    const card = h('div', { class: 'card' }, h('h1', { style: { fontSize: '54px' } }, 'EINDE'), h('p', { style: { textAlign: 'center' }, html: `Daan en Sem zagen <b>DutchTuber LIVE</b>${this.vip ? ' — en ontmoetten hem backstage' : ''}!<br>🪙 ${S.totalEarned} heitjes verdiend · 🔨 ${done}/14 klussen · ⭐ ${stars}/42 sterren<br>✨ ${this.knobs}/8 gouden deurknoppen${this.allKnobs ? ' — De Deurman is dolblij!' : ''}<br>👁️ Deurman gezien: ${S.sightings}× · verjaagd: ${S.banished || 0}×` }), menu.el, h('div', { class: 'small-note' }, 'Bedankt voor het spelen!'));
+    const card = h('div', { class: 'card' }, h('h1', { style: { fontSize: '54px' } }, 'EINDE'), h('p', { style: { textAlign: 'center' }, html: `Wes en Jor zagen <b>DutchTuber LIVE</b>${this.vip ? ' — en ontmoetten hem backstage' : ''}!<br>🪙 ${S.totalEarned} heitjes verdiend · 🔨 ${done}/14 klussen · ⭐ ${stars}/42 sterren<br>✨ ${this.knobs}/8 gouden deurknoppen${this.allKnobs ? ' — De Deurman is dolblij!' : ''}<br>👁️ Deurman gezien: ${S.sightings}× · verjaagd: ${S.banished || 0}×` }), menu.el, h('div', { class: 'small-note' }, 'Bedankt voor het spelen!'));
     ui.overlay(card); ui.activeMenus.push(menu);
   }
 

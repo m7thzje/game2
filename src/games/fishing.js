@@ -4,7 +4,7 @@ import { PLAYER_COLORS, makeNPC } from '../engine/chars.js';
 import { KEY_LABELS } from '../engine/input.js';
 import { buildLake, TIP, NET_D, LANE_Z, radialTex } from './fishing_world.js';
 
-// Samen Vissen: Daan hengelt, Sem schept. Halverwege wisselen de rollen.
+// Samen Vissen: Wes hengelt, Jor schept. Halverwege wisselen de rollen.
 // cast -> charge -> fly -> wait (nibbel) -> bite -> fight -> net -> caught / lost
 
 const DURATION = 80;

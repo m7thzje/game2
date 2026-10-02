@@ -18,10 +18,10 @@ LEVELS.forEach((def, i) => {
   const st = replayStats(L, both.path, tryMove, isSolved);
   totalSteps += both.steps;
   const need = i >= 2; // vanaf level 3 beide spelers nodig
-  const alone = (onlyD.solved ? 'Daan-alleen kan' : 'Daan-alleen kan NIET') + ' / ' + (onlyS.solved ? 'Sem-alleen kan' : 'Sem-alleen kan NIET');
+  const alone = (onlyD.solved ? 'Wes-alleen kan' : 'Wes-alleen kan NIET') + ' / ' + (onlyS.solved ? 'Jor-alleen kan' : 'Jor-alleen kan NIET');
   const coopOk = !(onlyD.solved || onlyS.solved);
   if (need && !coopOk) allOk = false;
-  line += `opgelost in ${both.steps} stappen (Daan ${st.steps[0]}, Sem ${st.steps[1]}; duwen ${st.pushes[0]}+${st.pushes[1]}), ${both.states} toestanden, ${Date.now() - t0}ms | ${alone}${need ? (coopOk ? '  => beide nodig OK' : '  => FOUT: één speler volstaat!') : ''}`;
+  line += `opgelost in ${both.steps} stappen (Wes ${st.steps[0]}, Jor ${st.steps[1]}; duwen ${st.pushes[0]}+${st.pushes[1]}), ${both.states} toestanden, ${Date.now() - t0}ms | ${alone}${need ? (coopOk ? '  => beide nodig OK' : '  => FOUT: één speler volstaat!') : ''}`;
   console.log(line);
   if (process.argv.includes('--path')) console.log('   ' + both.path.map((m) => 'DS'[m.who] + '^v<>'[m.d]).join(' '));
 });

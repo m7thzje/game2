@@ -6,7 +6,7 @@ import { PLAYER_CSS } from './chars.js';
 const $ = (id) => document.getElementById(id);
 export const ui = {
   hudEl: $('hud'), screens: $('screens'), fadeEl: $('fade'), vignette: $('vignette'),
-  names: ['Daan', 'Sem'],
+  names: ['Wes', 'Jor'],
 };
 
 // ---------- fade ----------

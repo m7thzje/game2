@@ -31,7 +31,7 @@ export class MinigameMode {
     this.ctx = {
       scene: this.scene, camera: this.camera, renderer: r, input, audio, hud: ui.hud, fx: this.fx,
       rng: this.rng, THREE,
-      players: [0, 1].map((i) => ({ index: i, name: S.names[i] || ['Daan', 'Sem'][i], color: PLAYER_COLORS[i], css: PLAYER_CSS[i] })),
+      players: [0, 1].map((i) => ({ index: i, name: S.names[i] || ['Wes', 'Jor'][i], color: PLAYER_COLORS[i], css: PLAYER_CSS[i] })),
       difficulty: 1 + Math.min(1, ((S.jobs[def.id]?.plays || 0)) * 0.15),
       lights: (mood, o) => setupLights(this.scene, mood, { shadows: S.settings.quality !== 'low', ...o }),
       make: { brother: makeBrother, npc: makeNPC },

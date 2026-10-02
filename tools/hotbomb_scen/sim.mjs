@@ -21,5 +21,5 @@ export default async function (S) {
   }
   const avg = (f) => rows.reduce((a, r) => a + f(r), 0) / rows.length;
   const rk = (n) => avg((r) => +r.ranks.find((x) => x.startsWith(n)).split(':')[1]);
-  console.log('gem. rang (4=winnaar):', ['Daan', 'Sem', 'Fonkel', 'Dobber'].map((n) => n + '=' + rk(n).toFixed(2)).join(' '), ' sterren gem.', avg((r) => r.summary).toFixed(2), ' passes gem.', avg((r) => r.passes).toFixed(1), ' duur gem.', avg((r) => r.t).toFixed(0));
+  console.log('gem. rang (4=winnaar):', ['Wes', 'Jor', 'Fonkel', 'Dobber'].map((n) => n + '=' + rk(n).toFixed(2)).join(' '), ' sterren gem.', avg((r) => r.summary).toFixed(2), ' passes gem.', avg((r) => r.passes).toFixed(1), ' duur gem.', avg((r) => r.t).toFixed(0));
 }

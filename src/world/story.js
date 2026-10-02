@@ -1,25 +1,25 @@
-// Alle teksten van het verhaal. Spreker 'D' = Daan, 'S' = Sem.
-export const D = 'Daan', S_ = 'Sem';
+// Alle teksten van het verhaal. Spreker 'D' = Wes, 'S' = Jor.
+export const D = 'Wes', S_ = 'Jor';
 
 export const INTRO = [
   { text: 'Heitjesveen. Een rustig dorp met een taverne, een kasteel, een draak (of drie) en... heel veel karweitjes.' },
-  { who: 'Sem', text: 'DAAN! KIJK! DutchTuber komt LIVE naar het kasteel! Met vuurwerk, een echt podium en alles!' },
-  { who: 'Daan', text: 'Kaartjes kosten 600 heitjes. Voor ons samen, dan.' },
-  { who: 'Sem', text: 'Hoeveel hebben wij?' },
-  { who: 'Daan', text: '...Nul.' },
-  { who: 'Sem', text: 'Nul is toch ook een getal?' },
-  { who: 'Daan', text: 'Dan gaan we karweitjes doen! Het hele dorp heeft werk voor ons. Heitjes voor karweitjes. Samen lukt het vast.' },
+  { who: 'Jor', text: 'DAAN! KIJK! DutchTuber komt LIVE naar het kasteel! Met vuurwerk, een echt podium en alles!' },
+  { who: 'Wes', text: 'Kaartjes kosten 600 heitjes. Voor ons samen, dan.' },
+  { who: 'Jor', text: 'Hoeveel hebben wij?' },
+  { who: 'Wes', text: '...Nul.' },
+  { who: 'Jor', text: 'Nul is toch ook een getal?' },
+  { who: 'Wes', text: 'Dan gaan we karweitjes doen! Het hele dorp heeft werk voor ons. Heitjes voor karweitjes. Samen lukt het vast.' },
   { text: '*kraaaaaak*', sfx: 'creak' },
-  { who: 'Sem', text: 'Daan... waarom gaat onze voordeur vanzelf open?' },
-  { who: 'Daan', text: 'Tocht.' },
-  { who: 'Sem', text: 'We hebben alle ramen dicht.' },
-  { who: 'Daan', text: '...Kom. Naar het dorp. Nu.' },
+  { who: 'Jor', text: 'Wes... waarom gaat onze voordeur vanzelf open?' },
+  { who: 'Wes', text: 'Tocht.' },
+  { who: 'Jor', text: 'We hebben alle ramen dicht.' },
+  { who: 'Wes', text: '...Kom. Naar het dorp. Nu.' },
 ];
 
 export const FIRST_DOOR = [
-  { who: 'Sem', text: 'Daan. Er staat iemand in de deuropening.' },
-  { who: 'Daan', text: 'Niet bewegen. Misschien ziet hij ons niet.' },
-  { who: 'Sem', text: 'Hij heeft geen oren, maar ik denk dat hij ons wél hoort.' },
+  { who: 'Jor', text: 'Wes. Er staat iemand in de deuropening.' },
+  { who: 'Wes', text: 'Niet bewegen. Misschien ziet hij ons niet.' },
+  { who: 'Jor', text: 'Hij heeft geen oren, maar ik denk dat hij ons wél hoort.' },
 ];
 
 export const DEURMAN_HINTS = [
@@ -157,25 +157,25 @@ export const WISHES = [
 // ---- eindscène ----
 export const GATE_TALK = [
   { who: 'Deurman', text: 'Kaartjes.', creepy: true },
-  { who: 'Sem', text: '(fluistert) Daan, hij praat.' },
-  { who: 'Daan', text: 'Eh, hier. Twee kaartjes. Gewoon betaald. Met heitjes.' },
+  { who: 'Jor', text: '(fluistert) Wes, hij praat.' },
+  { who: 'Wes', text: 'Eh, hier. Twee kaartjes. Gewoon betaald. Met heitjes.' },
   { who: 'Deurman', text: 'Eindelijk... gasten die aankloppen. In plaats van weglopen.', creepy: true },
   { who: 'Deurman', text: 'Ik ben de Deurman. Ik open deuren. Maar iemand heeft mijn acht gouden deurknoppen gestolen. Ik zoek ze al jaren.', creepy: true },
 ];
 export const GATE_ALL_KNOBS = [
-  { who: 'Daan', text: 'Wacht. Misschien zijn dit ze?' },
-  { who: 'Sem', text: 'We hebben ze ALLEMAAL gevonden! Acht gouden deurknoppen!' },
+  { who: 'Wes', text: 'Wacht. Misschien zijn dit ze?' },
+  { who: 'Jor', text: 'We hebben ze ALLEMAAL gevonden! Acht gouden deurknoppen!' },
   { who: 'Deurman', text: '...', creepy: true },
   { who: 'Deurman', text: 'Mijn knoppen. Mijn mooie knoppen. Dank jullie wel. Dit is het aardigste dat iemand ooit voor mij deed.', creepy: true },
   { who: 'Deurman', text: 'Jullie zijn mijn gasten. Geen gewone kaartjes. Jullie gaan naar... BACKSTAGE.', creepy: true },
 ];
 export const GATE_FEW_KNOBS = [
-  { who: 'Sem', text: 'Sorry, meneer. We hebben er nog niet alle acht gevonden. Maar we blijven zoeken!' },
+  { who: 'Jor', text: 'Sorry, meneer. We hebben er nog niet alle acht gevonden. Maar we blijven zoeken!' },
   { who: 'Deurman', text: 'Dat is... lief. Ga maar naar binnen. Veel plezier.', creepy: true },
 ];
 export const AFTER_CONCERT = [
   { text: 'Het concert was onvergetelijk. Vuurwerk, een enorme speelhal, DutchTuber die iedereen toezwaaide...' },
-  { who: 'Sem', text: 'Daan, dat was het BESTE wat ik ooit heb meegemaakt.' },
-  { who: 'Daan', text: 'Zelfs de Deurman danste. Ik zag het.' },
+  { who: 'Jor', text: 'Wes, dat was het BESTE wat ik ooit heb meegemaakt.' },
+  { who: 'Wes', text: 'Zelfs de Deurman danste. Ik zag het.' },
   { text: 'En sindsdien gaat de voordeur nog steeds soms vanzelf open. Maar nu zwaaien ze gewoon terug.' },
 ];

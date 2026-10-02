@@ -6,16 +6,16 @@ export default async function (S) {
   await step(100); // klant komt aan
   console.log('seats', await H.seatInfo());
   const log = async (m) => console.log(m.padEnd(34), 'hold0=', await H.holding(0), 'hold1=', await H.holding(1), '|', await H.ck());
-  // Daan: ui
+  // Wes: ui
   await H.stand(0, 'crate:ui'); await H.press(0); await log('take ui');
   await H.stand(0, 'board:0'); await H.press(0); await log('put on board');
   await H.hold(0, 'b', 40); await log('chop (2s)');
   await H.press(0); await log('grab chopped');
   await H.stand(0, 'slot:2,L'); await H.press(0); await log('put on divider');
-  // Sem pakt het door
-  await H.stand(1, 'slot:2,R'); await H.press(1); await log('Sem grabs');
+  // Jor pakt het door
+  await H.stand(1, 'slot:2,R'); await H.press(1); await log('Jor grabs');
   await H.stand(1, 'cooker:0'); await H.press(1); await log('add to pot (ui)');
-  // Daan: wortel
+  // Wes: wortel
   await H.stand(0, 'crate:wortel'); await H.press(0);
   await H.stand(0, 'board:1'); await H.press(0); await H.hold(0, 'b', 40); await H.press(0);
   await H.stand(0, 'slot:3,L'); await H.press(0);

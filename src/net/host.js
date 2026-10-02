@@ -18,9 +18,9 @@ export class Host {
   setStatus(s) { this.status = s; this.emit(); this.updateBadge(); }
   updateBadge() {
     const b = this.badge;
-    if (this.status === 'connected') { b.style.display = 'block'; b.style.borderColor = '#35c46f'; b.textContent = `🌐 Sem is online · ${Math.round(this.pingMs)} ms`; }
-    else if (this.status === 'waiting') { b.style.display = 'block'; b.style.borderColor = '#ffcf3a'; b.textContent = `🌐 Wachten op Sem… code ${this.code}`; }
-    else if (this.status === 'lost') { b.style.display = 'block'; b.style.borderColor = '#e5484d'; b.textContent = '🌐 Sem is weg — vraag hem opnieuw te joinen'; }
+    if (this.status === 'connected') { b.style.display = 'block'; b.style.borderColor = '#35c46f'; b.textContent = `🌐 Jor is online · ${Math.round(this.pingMs)} ms`; }
+    else if (this.status === 'waiting') { b.style.display = 'block'; b.style.borderColor = '#ffcf3a'; b.textContent = `🌐 Wachten op Jor… code ${this.code}`; }
+    else if (this.status === 'lost') { b.style.display = 'block'; b.style.borderColor = '#e5484d'; b.textContent = '🌐 Jor is weg — vraag hem opnieuw te joinen'; }
     else b.style.display = 'none';
   }
   link() {

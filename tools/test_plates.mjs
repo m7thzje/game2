@@ -94,7 +94,7 @@ if (scenario === 'full') {
   log('eindstand: ', await page.evaluate(() => JSON.stringify(window.__app.mode.result)));
 }
 if (scenario === 'death') {
-  // level 2: Daan loopt de lava in (stap 1: naar plaat, dan rechts de lava in)
+  // level 2: Wes loopt de lava in (stap 1: naar plaat, dan rechts de lava in)
   await dbg('goto', [1]); await page.waitForTimeout(800);
   await page.evaluate(() => { const d = window.__app.mode.instance._dbg; d.act(1, 3); d.act(1, 3); d.act(1, 3); });
   await page.waitForTimeout(500);

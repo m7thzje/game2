@@ -1,7 +1,7 @@
 // Opslag in localStorage (fallback: geheugen)
 const KEY = 'heitjes_voor_karweitjes_v1';
 const defaults = () => ({
-  names: ['Daan', 'Sem'],
+  names: ['Wes', 'Jor'],
   coins: 0, totalEarned: 0,
   jobs: {},            // id -> { plays, bestStars, bestScore }
   day: 0,              // loopt op met elke klus
@@ -21,6 +21,7 @@ export function load() {
   if (raw) {
     try { const o = JSON.parse(raw); Object.assign(S, defaults(), o, { settings: { ...defaults().settings, ...(o.settings || {}) } }); } catch (e) { /* kapot */ }
   }
+  S.names = ['Wes', 'Jor'];   // namen staan vast (ook voor oude opslag)
   return S;
 }
 export function persist() {

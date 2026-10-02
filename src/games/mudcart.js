@@ -120,7 +120,7 @@ export default {
       scene.add(ring);
       return { c, ring, px: 0, pz: 0, lunge: 0, ox: 0, tapFlash: 0, taps: 0, hits: 0 };
     });
-    const SIDE = [-1, 1];   // Daan achter-links (ver), Sem achter-rechts (dichtbij)
+    const SIDE = [-1, 1];   // Wes achter-links (ver), Jor achter-rechts (dichtbij)
     const pushSpot = (i) => ({ x: x - 3.1 - (i ? 0.45 : 0.95), z: SIDE[i] * 1.0 });
 
     // ---------------- toestand ----------------
@@ -180,7 +180,7 @@ export default {
         else if (sub === 'swap') instr = `WISSEL! ${names[leverP]} pakt de hefboom (${keyTxtB(leverP)}) · ${names[pusher]} duwt`;
         else if (sub === 'approach') instr = 'Rol naar de boomstam... pak de hefboom!';
         else instr = 'Door! Weg van die stam!';
-      } else if (phase === 3) instr = sub === 'lead' ? 'Straks: om de beurt tikken. Eerst Daan, dan Sem...' : 'Om de beurt tikken! Mis je een beurt, dan glijdt het karretje terug.';
+      } else if (phase === 3) instr = sub === 'lead' ? 'Straks: om de beurt tikken. Eerst Wes, dan Jor...' : 'Om de beurt tikken! Mis je een beurt, dan glijdt het karretje terug.';
       else instr = 'Koen is dolblij!';
       g.fillStyle = '#fff'; g.font = '600 16px Fredoka, sans-serif'; g.fillText(instr, 235, 27, 610);
       // banen
@@ -371,7 +371,7 @@ export default {
       phase = 3; sub = 'lead'; leadT = 1.9; clearNotes(); combo = 0; nextNoteT = 0; lastP = 1;
       phaseTimes.p2 = DURATION - timeLeft;
       hud.showBig('GLIBBER!', 1100, '#8fd8ff'); audio.sfx('whoosh');
-      hud.toast('Om de beurt tikken: Daan, Sem, Daan, Sem...', 2800);
+      hud.toast('Om de beurt tikken: Wes, Jor, Wes, Jor...', 2800);
     }
     function finishGame(win) {
       if (done) return; done = true; phase = win ? 4 : phase;

@@ -4,7 +4,7 @@ import { makeBrother, PLAYER_COLORS } from '../engine/chars.js';
 import { buildHut, makeHendrika, ING, PED_POS } from './potion_hut.js';
 
 // Toverdrank Memory (Simon Says voor twee): Heks Hendrika toont een reeks ingrediënten,
-// Daan en Sem herhalen die om en om. Vanaf reeks 5 zijn er gouden "dubbele" stappen.
+// Wes en Jor herhalen die om en om. Vanaf reeks 5 zijn er gouden "dubbele" stappen.
 
 const MAX_LEN = 12, START_LEN = 2, LIVES = 3, REPLAYS = 2, DBL_FROM = 5, DBL_WIN = 0.9;
 const DIRS = ['up', 'left', 'right', 'down'];
@@ -29,7 +29,7 @@ export default {
   mode: 'puzzle',
   pay: 1.1,
   music: 'puzzle',
-  blurb: 'Hendrika toont een reeks <b>ingrediënten</b> die oplichten. Herhaal de reeks <b>om en om</b>: Daan de eerste stap, Sem de tweede... Een <b>gouden stap</b> doen jullie <b>tegelijk</b>! Roer de drank tussen de rondes. Drie levens!',
+  blurb: 'Hendrika toont een reeks <b>ingrediënten</b> die oplichten. Herhaal de reeks <b>om en om</b>: Wes de eerste stap, Jor de tweede... Een <b>gouden stap</b> doen jullie <b>tegelijk</b>! Roer de drank tussen de rondes. Drie levens!',
   controls: ['{move} ingrediënt kiezen (zelfde richting)', '{a} roeren', '{b} reeks nog eens bekijken (2x)'],
   tip: 'Reeks 6, 9 en 12 geven 1, 2 en 3 sterren. Een pijl boven je hoofd = jouw beurt.',
 
