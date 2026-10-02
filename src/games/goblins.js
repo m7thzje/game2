@@ -524,12 +524,12 @@ export default {
       if (outcome.kind === 'win') {
         if (alive >= 5 || (alive >= 4 && ratio >= 0.85)) stars = 3; else if (alive >= 3) stars = 2; else if (alive >= 2) stars = 1;
       } else if (outcome.kind === 'timeout') { stars = alive >= 2 ? 1 : 0; }
-      else if (outcome.why && outcome.why.startsWith('Allebei') && alive >= 3) stars = 1;
+      else if (outcome.why && outcome.why.startsWith('Allebei') && alive >= 3 && wave >= 1) stars = 1;
       const pct = Math.round(ratio * 100);
       let sum = `Gered: <b>${alive}</b> van de ${SHEEP_N} schapen · <b>${pct}%</b> van de goblins verslagen`;
       if (outcome.kind === 'win') sum = `De Goblin-koning is verslagen! ` + sum + '.';
       else if (outcome.kind === 'lose') sum = (outcome.why || 'Mislukt') + ' ' + sum + '.';
-      else sum = 'De koning wist te ontsnappen... ' + sum + '.';
+      else sum = (king ? 'De koning wist te ontsnappen... ' : 'De tijd is om... ') + sum + '.';
       if (revives) sum += ` Maatje gered: ${revives}x.`;
       pl.forEach((p) => { p.c.pose = stars ? 'cheer' : 'sad'; });
       ctx.finish({ stars, score: total, summary: sum, delay: 500 });

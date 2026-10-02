@@ -362,7 +362,7 @@ export default {
         const cr = mesh(new THREE.OctahedronGeometry(0.55, 0), new THREE.MeshBasicMaterial({ color: 0xbff4ff }), { cast: false, pos: [0, 1.5, 0], scale: [0.7, 1.3, 0.7] });
         grp.add(cr);
         const dx = DIRS[em.dir][0], dz = DIRS[em.dir][1];
-        grp.add(mesh(new THREE.ConeGeometry(0.28, 0.7, 5), new THREE.MeshBasicMaterial({ color: 0xe8fcff }), { cast: false, pos: [dx * 0.75, 0.95, dz * 0.75], rot: [dz * Math.PI / 2 * -1 + (dz ? 0 : 0), 0, dx ? -dx * Math.PI / 2 : 0] }));
+        grp.add(mesh(new THREE.ConeGeometry(0.28, 0.7, 5), new THREE.MeshBasicMaterial({ color: 0xe8fcff }), { cast: false, pos: [dx * 0.75, 0.95, dz * 0.75], rot: [dz * Math.PI / 2, 0, -dx * Math.PI / 2] }));
         return { em, grp, cr };
       });
 

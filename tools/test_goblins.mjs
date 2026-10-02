@@ -71,7 +71,7 @@ const fn = scen === 'bot' ? botSrc : lookSrc;
 let simT = 0, shots = 0; const T0 = Date.now();
 while (simT < secs) {
   await step(20, fn); simT += 1;
-  if (simT >= shots * SHOT_EVERY + 4) { shots++; await shot(String(shots)); console.log('sim t=' + simT.toFixed(0), JSON.stringify(await dbg())); }
+  if (simT >= shots * SHOT_EVERY + 4) { shots++; await shot(String(shots)); console.log('sim t=' + simT.toFixed(0), 'calls', await page.evaluate(() => window.__app.renderer.info.render.calls + '/' + window.__app.renderer.info.render.triangles), JSON.stringify(await dbg()).slice(0, 150)); }
   if (await page.evaluate(() => window.__app.mode.state) === 'result') { console.log('RESULT reached at sim', simT); break; }
   if ((Date.now() - T0) > 270000) { console.log('wallclock limit'); break; }
 }
