@@ -23,10 +23,11 @@ export const app = {
     if (app.mode && app.mode.exit && !app.mode._exited) { app.mode._exited = true; app.mode.exit(); }
     app.mode = m; if (m) { m._exited = false; m.resize && m.resize(innerWidth, innerHeight); m.enter && m.enter(); }
   },
-  async goMenu() { const { MenuMode } = await import('./world/menu.js'); app.setMode(new MenuMode(app)); },
-  async goHub(opts = {}) { const { HubMode } = await import('./world/hub.js'); app.setMode(new HubMode(app, opts)); },
+  async goMenu() { const { MenuMode } = await import('./world/menu.js'); app.setMode(null); app.setMode(new MenuMode(app)); },
+  async goHub(opts = {}) { const { HubMode } = await import('./world/hub.js'); app.setMode(null); app.setMode(await HubMode.create(app, opts)); },
   async playGame(id, { practice = false, back = 'hub' } = {}) {
     const def = await loadGame(id);
+    app.setMode(null);
     app.setMode(new MinigameMode(app, def, {
       practice,
       onDone: async (res) => { await ui.fade(1, 300); if (back === 'hub') await app.goHub({ result: res, from: id }); else if (back === 'menu') await app.goMenu(); ui.fade(0, 500); },

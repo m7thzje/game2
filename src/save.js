@@ -10,7 +10,7 @@ const defaults = () => ({
   sightings: 0,        // aantal keer dat de Deurman gezien is
   scared: 0,           // aantal keer geschrokken
   ticket: false, vip: false, ending: false,
-  playTime: 0,
+  playTime: 0, tod: 0.1, hubPos: null, banished: 0,
   settings: { scare: 2, flashFree: false, music: 0.5, sfx: 0.8, quality: 'high' },
 });
 export const S = defaults();

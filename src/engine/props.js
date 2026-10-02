@@ -180,7 +180,7 @@ export function door(w = 1.2, h = 2.2, color = 0x6b4226) {
   const leaf = new THREE.Group(); leaf.position.set(-w / 2, 0, 0.02); g.add(leaf);
   const slab = mesh(new THREE.BoxGeometry(w, h, 0.09), new THREE.MeshStandardMaterial({ map: tex.planks(1, 1, '#' + new THREE.Color(color).getHexString()), roughness: 0.9 }), { pos: [w / 2, h / 2, 0.05] }); leaf.add(slab);
   leaf.add(mesh(new THREE.SphereGeometry(0.06, 6, 5), mat(0xe8c24a, { metalness: 0.7 }), { pos: [w * 0.85, h * 0.48, 0.12] }));
-  g.userData.leaf = leaf; g.userData.w = w; g.userData.h = h;
+  leaf.userData.dynamic = true; g.userData.leaf = leaf; g.userData.w = w; g.userData.h = h;
   return g;
 }
 export function windmill(scale = 1) {
@@ -191,7 +191,7 @@ export function windmill(scale = 1) {
   const hub = new THREE.Group(); hub.position.set(0, 6 * scale, 2 * scale); g.add(hub);
   hub.add(mesh(new THREE.CylinderGeometry(0.3 * scale, 0.3 * scale, 0.6, 8), mat(0x5b3d24), { rot: [Math.PI / 2, 0, 0] }));
   for (let i = 0; i < 4; i++) { const a = new THREE.Group(); a.rotation.z = i * Math.PI / 2; hub.add(a); a.add(mesh(new THREE.BoxGeometry(0.2 * scale, 4.5 * scale, 0.1), mat(0x5b3d24), { pos: [0, 2.3 * scale, 0.2] })); a.add(mesh(new THREE.BoxGeometry(1.0 * scale, 3.2 * scale, 0.05), mat(0xf4efe0), { pos: [0.55 * scale, 2.6 * scale, 0.26] })); }
-  g.userData.blades = hub; return g;
+  hub.userData.dynamic = true; g.userData.blades = hub; return g;
 }
 export function houseSimple(w = 5, d = 5, h = 3, { wall = '#efe2c4', roof = '#b5483a', thatch = false, doorColor = 0x6b4226 } = {}) {
   const g = G();

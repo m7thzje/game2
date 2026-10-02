@@ -1,0 +1,11 @@
+{
+  "name": "heitjes-voor-karweitjes",
+  "version": "1.0.0",
+  "description": "Co-op 3D minigame-avontuur voor twee broers (Three.js, geen build-stap)",
+  "type": "module",
+  "scripts": {
+    "start": "node tools/serve.mjs",
+    "test:game": "node tools/shot.mjs"
+  },
+  "license": "MIT"
+}

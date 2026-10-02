@@ -14,7 +14,7 @@ export class Character {
     this.spec = spec; this.s = s;
     const skin = spec.skin ?? 0xf2c29b;
     const shirt = spec.shirt ?? 0x3b7dd8, pants = spec.pants ?? 0x5b4636, boots = spec.boots ?? 0x3a2a1e;
-    const root = new THREE.Group(); this.group = root;
+    const root = new THREE.Group(); this.group = root; root.userData.dynamic = true;
     const body = new THREE.Group(); root.add(body); this.body = body;
     const legLen = 0.6 * s, torsoH = 0.62 * s;
     this.legLen = legLen; this.height = legLen + torsoH + 0.62 * s;
@@ -120,7 +120,8 @@ export class Character {
     this.speed = 0; this.pose = 'idle'; this.air = false; this.t = Math.random() * 10; this.phase = 0;
     this.swingT = 0; this.jumpT = 0; this.yaw = 0; this.targetYaw = 0; this.squash = 0; this.blinkT = 2 + Math.random() * 3;
     this.mood = 'happy';
-    root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    root.traverse((o) => { if (o.isMesh) o.castShadow = false; });
+    for (const part of [this.legL, this.legR, this.torso, this.head, this.armL, this.armR]) { const m = part.children.find((c) => c.isMesh); if (m) m.castShadow = true; }
   }
   _hat(kind, c, c2, hr, s, head) {
     const top = 0.04 * s + hr * 0.9;
@@ -370,7 +371,7 @@ export function makeDeurman(scale = 1) { return new Deurman(scale); }
 // ============================================================================
 export class Animal {
   constructor(kind) {
-    this.kind = kind; const g = new THREE.Group(); this.group = g; this.t = Math.random() * 10; this.speed = 0; this.yaw = Math.random() * 6; this.targetYaw = this.yaw; this.peck = 0;
+    this.kind = kind; const g = new THREE.Group(); this.group = g; g.userData.dynamic = true; this.t = Math.random() * 10; this.speed = 0; this.yaw = Math.random() * 6; this.targetYaw = this.yaw; this.peck = 0;
     if (kind === 'chicken') {
       g.add(mesh(new THREE.SphereGeometry(0.28, 10, 8), mat(0xf6f1e4, { flatShading: false }), { pos: [0, 0.38, 0], scale: [0.85, 0.9, 1.15] }));
       this.head = new THREE.Group(); this.head.position.set(0, 0.62, 0.26); g.add(this.head);

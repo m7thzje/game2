@@ -133,7 +133,8 @@ ui.say = (lines, { creepy = false, speed = 38 } = {}) => new Promise((resolve) =
   } };
   next();
 });
-ui.update = (dt) => { if (dlg) dlg.update(dt); };
+ui.activeMenus = [];
+ui.update = (dt) => { if (dlg) dlg.update(dt); for (const m of ui.activeMenus) m.update(); };
 ui.dialogActive = () => !!dlg;
 
 // ---------- flash / schermschud ----------
