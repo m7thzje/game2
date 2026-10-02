@@ -170,6 +170,16 @@ if (scen.includes('shots')) {
   errors.push(...o2.errors); await o2.browser.close();
   console.log(errors.length ? 'ERRORS\n' + errors.join('\n') : 'NO ERRORS');
 }
+
+if (scen.includes('trace')) {
+  const { browser, page, errors } = await open(twistArg || 'none');
+  for (let k = 0; k < 40; k++) {
+    await page.evaluate(() => window.__run(90)); const st = await S(page);
+    console.log(`t=${st.T.toFixed(1)} lava=${st.lava.toFixed(1)} x${st.lavaMult.toFixed(1)} dragon=${st.dragon} turtle=${st.turtle} | ` + st.p.map((p) => `[y=${p.y.toFixed(1)} h=${p.height.toFixed(0)} ${p.dead ? 'DEAD' : ''} st=${p.stun.toFixed(1)} gr=${p.ground} f=${p.falls} hit=${p.hits}]`).join(' '));
+    if (await page.evaluate(() => window.__app.mode.finished)) break;
+  }
+  console.log(errors.join('\n')); await browser.close();
+}
 if (server) server.close();
 console.log(failures ? `\n${failures} test(s) MISLUKT` : '\nAlle tests geslaagd');
 process.exit(failures ? 1 : 0);
