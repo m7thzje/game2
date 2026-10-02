@@ -27,6 +27,28 @@ export function openSettings(onClose) {
   const card = h('div', { class: 'card', style: { width: 'min(640px,94vw)' } }, h('h2', {}, 'Instellingen'), menu.el, h('div', { class: 'small-note' }, 'Links/rechts verandert een waarde. De Deurman is gemaakt om te griezelen: kies "Gezellig" of "Uit" als je het te eng vindt.'));
   el = ui.overlay(card); ui.activeMenus.push(menu);
 }
+// Online spelen: jij bent de host (Daan), je broer doet mee als Sem via een link of code
+export function openOnline(app, onClose) {
+  const host = app.net; let el;
+  const statusEl = h('p', { style: { textAlign: 'center', fontWeight: 700, fontSize: '20px' } }, 'Verbinding maken…');
+  const codeEl = h('div', { style: { textAlign: 'center', fontSize: '54px', fontFamily: 'MedievalSharp,serif', letterSpacing: '6px', margin: '4px 0' } }, '······');
+  const linkEl = h('div', { style: { textAlign: 'center', fontSize: '16px', wordBreak: 'break-all', background: 'rgba(255,255,255,.55)', borderRadius: '10px', padding: '8px 12px', margin: '6px 0' } }, '');
+  const warnEl = h('p', { class: 'small-note' }, '');
+  let copied = false;
+  const copy = async () => { try { await navigator.clipboard.writeText(host.link()); copied = true; } catch (e) { copied = false; } };
+  const close = () => { off(); ui.activeMenus = ui.activeMenus.filter((m) => m !== menu); el.remove(); onClose && onClose(); };
+  const menu = new Menu([{ label: () => (copied ? 'Link gekopieerd ✓' : 'Link kopiëren'), onSelect: copy }, { label: () => (host.status === 'connected' ? 'Klaar — spelen maar!' : 'Terug'), onSelect: close }]);
+  const render = () => {
+    const st = host.status;
+    statusEl.textContent = st === 'connected' ? '✅ Sem is verbonden! Jullie kunnen nu samen spelen.' : st === 'waiting' ? '⏳ Wachten tot Sem meedoet…' : st === 'lost' ? '⚠️ Sem is weggevallen. Laat hem de link opnieuw openen.' : st === 'error' ? '❌ Geen verbinding met de signaalserver. Heb je internet?' : 'Verbinding maken…';
+    if (host.code) { codeEl.textContent = host.code; linkEl.textContent = host.link(); }
+    const loc = location.hostname; warnEl.textContent = /^(localhost|127\.|192\.168\.|10\.|172\.)/.test(loc) ? 'Let op: dit spel draait op jouw eigen computer. Je broer kan die link alleen openen als hij op hetzelfde netwerk zit. Zet het spel online (bijv. GitHub Pages, zie README) om over internet te spelen.' : 'Stuur de link naar je broer (appen, mailen...). Hij hoeft niets te installeren: een computer met Chrome of Edge is genoeg.';
+  };
+  const off = host.on(render);
+  const card = h('div', { class: 'card', style: { width: 'min(680px,94vw)' } }, h('h2', {}, '🌐 Online spelen'), h('p', { style: { textAlign: 'center' }, html: 'Jij bent <b>Daan</b>. Je broer speelt mee als <b>Sem</b> op zijn eigen computer.' }), codeEl, linkEl, statusEl, menu.el, warnEl);
+  el = ui.overlay(card); ui.activeMenus.push(menu); render();
+  host.start().then(render).catch((e) => { statusEl.textContent = '❌ ' + (e.message || 'Mislukt'); });
+}
 function howToPlay(onClose) {
   const card = h('div', { class: 'card' }, h('h2', {}, 'Hoe werkt het?'),
     h('p', { html: 'Daan en Sem sparen voor <b>DutchTuber LIVE</b>. Loop door het dorp, praat met de dorpelingen en doe <b>karweitjes</b> (minigames) voor <b>heitjes</b>. Verzamel <b>600</b> voor 2 kaartjes!' }),
@@ -71,6 +93,8 @@ export class MenuMode {
     const items = [];
     if (hasSave()) items.push({ label: 'Verder spelen', sub: () => `🪙 ${S.coins} heitjes · ${Object.keys(S.jobs).length} klussen gedaan`, onSelect: () => this.go(false) });
     items.push({ label: hasSave() ? 'Nieuw spel' : 'Spel starten', onSelect: () => { if (hasSave()) { resetSave(); S.names = ['Daan', 'Sem']; } this.go(true); } });
+    items.push({ label: '🌐 Online spelen (host)', sub: 'Twee apparaten, één spel', onSelect: () => { this.hide(); openOnline(this.app, () => this.show()); } });
+    items.push({ label: '🌐 Meedoen met een code', onSelect: () => { location.search = '?join'; } });
     items.push({ label: 'Hoe werkt het?', onSelect: () => { this.hide(); howToPlay(() => this.show()); } });
     items.push({ label: 'Instellingen', onSelect: () => { this.hide(); openSettings(() => this.show()); } });
     this.menu = new Menu(items);

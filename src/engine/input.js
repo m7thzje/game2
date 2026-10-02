@@ -28,6 +28,8 @@ class Input {
     this.prev = [{}, {}];
     this.lastPressTime = 0;
     this.pads = [null, null];
+    // online: speler 2 komt van een andere computer
+    this.online = false; this.remoteState = null; this.remoteLatch = {}; this.remoteKeys = new Set();
     addEventListener('keydown', (e) => {
       if (e.repeat) { if (this.isGameKey(e.code)) e.preventDefault(); return; }
       this.keys.add(e.code);
@@ -41,7 +43,14 @@ class Input {
     for (const m of KEYMAP) for (const b of BTN) if (m[b].includes(code)) return true;
     return code === 'Escape' || code === 'KeyP' || code === 'KeyM' || code === 'Tab';
   }
-  pressed(code) { return this.keys.has(code); }
+  pressed(code) { return this.keys.has(code) || this.remoteKeys.has(code); }
+  // Wordt aangeroepen door de netwerklaag met de toetsstand van de andere speler
+  setRemote(state, keys) {
+    this.remoteState = state || null;
+    this.remoteKeys = new Set(keys || []);
+    if (state) for (const b of BTN) if (state[b]) this.remoteLatch[b] = true;   // korte tikjes mogen niet verloren gaan
+  }
+  clearRemote() { this.remoteState = null; this.remoteLatch = {}; this.remoteKeys = new Set(); }
 
   update() {
     // gamepads
@@ -53,8 +62,14 @@ class Input {
       for (const b of BTN) raw[b] = false;
       let ax = 0, ay = 0;
       const km = KEYMAP[i];
-      for (const b of BTN) for (const c of km[b]) if (this.keys.has(c)) raw[b] = true;
-      const g = connected[i];
+      const remoteSlot = this.online && i === 1;
+      if (!remoteSlot) for (const b of BTN) for (const c of km[b]) if (this.keys.has(c)) raw[b] = true;
+      const g = remoteSlot ? null : connected[i];
+      if (remoteSlot && this.remoteState) {
+        for (const b of BTN) if (this.remoteState[b] || this.remoteLatch[b]) raw[b] = true;
+        ax += this.remoteState.x || 0; ay += this.remoteState.y || 0;
+        this.remoteLatch = {};
+      }
       if (g) {
         const dz = 0.25;
         let gx = g.axes[0] || 0, gy = g.axes[1] || 0;
@@ -91,7 +106,7 @@ class Input {
   // helpers
   anyA() { return this.p[0].aP || this.p[1].aP; }
   anyB() { return this.p[0].bP || this.p[1].bP; }
-  reset() { this.keys.clear(); for (const p of this.p) for (const k in p) p[k] = typeof p[k] === 'boolean' ? false : 0; for (const pr of this.prev) for (const k in pr) pr[k] = false; }
+  reset() { this.keys.clear(); this.remoteLatch = {}; for (const p of this.p) for (const k in p) p[k] = typeof p[k] === 'boolean' ? false : 0; for (const pr of this.prev) for (const k in pr) pr[k] = false; }
 }
 
 export const input = new Input();

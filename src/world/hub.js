@@ -18,7 +18,7 @@ import { Pickups } from './pickups.js';
 import { HubDeurman } from './hubdeur.js';
 import { JOBS, JOB_BY_ID, HOME, SPAWN, BOOTH, BOARD, CONCERT_GATE, PATHS, riverX, TICKET_PRICE, VIP_PRICE, DOORKNOBS, ICE, PLAZA, CAVE } from './layout.js';
 import * as STORY from './story.js';
-import { openSettings } from './menu.js';
+import { openSettings, openOnline } from './menu.js';
 import { mergeStatic } from './merge.js';
 
 const ICONS = { catch: '🥖', kitchen: '🍲', rhythm: '🎸', hotbomb: '💣', sokoban: '📦', whack: '🔨', mudcart: '🛒', goblins: '🐑', fishing: '🎣', potion: '🧪', plates: '🐉', sweeper: '🏰', breakout: '🧱', sumo: '🤼' };
@@ -391,10 +391,11 @@ export class HubMode {
   // ---------------------------------------------------------------- pauze
   async pauseMenu() {
     if (this.busy) return; this.busy = true;
-    const c = await this.choose('Pauze', ['Doorgaan', 'Dagboek', 'Instellingen', 'Terug naar het titelscherm']);
+    const c = await this.choose('Pauze', ['Doorgaan', 'Dagboek', 'Instellingen', '🌐 Online spelen', 'Terug naar het titelscherm']);
     if (c === 1) await this.journal();
     else if (c === 2) await new Promise((r) => openSettings(r));
-    else if (c === 3) { persist(); await ui.fade(1, 400); this.busy = false; await this.app.goMenu(); ui.fade(0, 500); await new Promise(() => {}); }
+    else if (c === 3) await new Promise((r) => openOnline(this.app, r));
+    else if (c === 4) { persist(); await ui.fade(1, 400); this.busy = false; await this.app.goMenu(); ui.fade(0, 500); await new Promise(() => {}); }
     this.busy = false; input.reset();
   }
 

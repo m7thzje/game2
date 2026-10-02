@@ -17,6 +17,8 @@ class AudioSys {
     this.master = c.createGain(); this.master.gain.value = this.muted ? 0 : 0.9;
     this.comp = c.createDynamicsCompressor(); this.comp.threshold.value = -14; this.comp.ratio.value = 6;
     this.master.connect(this.comp); this.comp.connect(c.destination);
+    // voor online spelen: het geluid ook als stream beschikbaar maken
+    try { this.streamDest = c.createMediaStreamDestination(); this.comp.connect(this.streamDest); } catch (e) { this.streamDest = null; }
     this.sfxG = c.createGain(); this.sfxG.gain.value = this.sfxVol; this.sfxG.connect(this.master);
     this.musG = c.createGain(); this.musG.gain.value = this.musicVol * 0.5; this.musG.connect(this.master);
     // delay/reverb-ish send voor muziek
