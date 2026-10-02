@@ -10,7 +10,7 @@ import { createBall } from './dodgeball_balls.js';
 // Na 80 s sudden death: de arena krimpt en het regent vuurballen.
 
 const HX = 14.4, HZ = 8.5, HX_MIN = 8.6, HZ_MIN = 5.6;     // speelveld (halve afmetingen) begin / minimum
-const PR = 0.88, PH = 2.3, VIS = 1.35, SPEED = 8.4, MID = 0.5;
+const PR = 0.88, PH = 2.3, VIS = 1.5, SPEED = 8.4, MID = 0.5;
 const G0 = 34, SD_AT = 80, END_AT = 90, CAP_AT = 125, FALL_T = 1.15;
 const RDUR = 0.5, RIFR = 0.36, RCD = 1.5;
 const FIRE_N = 7;

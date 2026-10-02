@@ -10,12 +10,13 @@ import { buildArena, TB } from './airhockey_world.js';
 //  * comeback: wie 2 of meer achter staat krijgt een gouden (grotere) schijf
 
 const { LX, LZ, SD } = TB;
-const PR = 0.7;                 // puck-straal
-const RP = 1.35;                // schijf-straal
+const PR = 0.85;                // puck-straal
+const RP = 1.5;                 // schijf-straal
 const VMAX = 17;                // schijfsnelheid
 const WIN_GOALS = 5, MATCH_TIME = 90, OT_MAX = 30;
 const GH0 = TB.GH;
 const POST_R = 0.25;
+const GH_SMALL = 2.4;
 
 const FLOWERS = [
   { id: 'multi', w: 22, name: 'TWEEDE PUCK!', col: '#ffe14a' },
@@ -107,9 +108,9 @@ export default {
       const tagTex = canvasTex(256, 96, (c, w, hh) => { c.font = 'bold 58px Fredoka, Arial Black, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 12; c.strokeStyle = 'rgba(10,10,30,.9)'; c.lineJoin = 'round'; c.strokeText(pp.name, w / 2, hh / 2); c.fillStyle = pp.css; c.fillText(pp.name, w / 2, hh / 2); });
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false })); tag.scale.set(2.6, 0.97, 1); tag.renderOrder = 15; scene.add(tag);
       // het poppetje achter het doel
-      const c = makeBrother(i); const kS = 3.3 / c.height; const holder = new THREE.Group(); holder.add(c.group); holder.scale.setScalar(kS); holder.position.set(dir * -(LX + SD + 1.5), 0.05, 0); scene.add(holder);
+      const c = makeBrother(i); const kS = 3.3 / c.height; const holder = new THREE.Group(); holder.add(c.group); holder.scale.setScalar(kS); holder.position.set(dir * -(LX + SD + 0.9), 0.05, 0); scene.add(holder);
       c.faceDir(dir, 0); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
-      const stand = mesh(new THREE.CylinderGeometry(1.6, 1.9, 0.5, 14), mat(0x6a7ab8), { cast: false, pos: [dir * -(LX + SD + 1.5), -0.1, 0] }); scene.add(stand);
+      const stand = mesh(new THREE.CylinderGeometry(1.6, 1.9, 0.5, 14), mat(0x6a7ab8), { cast: false, pos: [dir * -(LX + SD + 0.9), -0.1, 0] }); scene.add(stand);
       const R = RP * lerp(1, pv.size(i), 0.8);
       return { i, dir, g, baseM, goldM, base, stem, ball, ring, shadow, tag, c, holder, R, R0: R, Rcur: R,
         x: dir * -(LX * 0.55), z: 0, vx: 0, vz: 0, tvx: 0, tvz: 0, state: 'idle', chargeT: 0, lt: 0, ldx: dir, ldz: 0, lpow: 0, cd: 0, grace: 0, frozen: 0, golden: false, hits: 0, smashes: 0, pressure: 0, sc: 1, hitPuck: false };
@@ -141,7 +142,7 @@ export default {
     function allocPuck() { return pucks.find((q) => !q.on); }
     function spawnPuck(x, z, vx, vz, kind = 'ice', life = 14) {
       const q = allocPuck(); if (!q) return null;
-      q.on = true; q.x = x; q.z = z; q.vx = vx; q.vz = vz; q.kind = kind; q.life = life; q.stuck = -1; q.lastHit = -1; q.falling = false; q.r = FX.giant > 0 ? 1.15 : PR; q.vis = 1; q.stall = 0;
+      q.on = true; q.x = x; q.z = z; q.vx = vx; q.vz = vz; q.kind = kind; q.life = life; q.stuck = -1; q.lastHit = -1; q.falling = false; q.r = FX.giant > 0 ? PR * 1.6 : PR; q.vis = 1; q.stall = 0;
       setKind(q, kind); q.g.visible = true; q.shadow.visible = true;
       fx.particles.burst(x, 0.4, z, { count: 14, speed: 4, up: 1.2, life: 0.6, size: 0.3, colors: [0xffffff, 0x9fe8ff], gravity: 8 });
       return q;
@@ -155,6 +156,7 @@ export default {
 
     function servePuck(toward) {
       // een puck valt vanuit de lucht in het midden
+      clearPucks(null);
       const q = spawnPuck(0, 0, 0, 0, 'main', 9999); if (!q) return;
       q.falling = true; q.fy = 7; q.fvy = 0; q.life = 9999; q.serveDir = toward; q.vx = q.vz = 0;
       G.state = 'serve'; G.t = 0; refreshHud();
@@ -198,7 +200,7 @@ export default {
       if (finished) return; finished = true;
       const jokes = winner == null ? ['Gelijkspel! Niemand wil verliezen, dus de pinguïns delen de taart.', 'Precies gelijk. De yeti krabt zich verbaasd op zijn hoofd.']
         : [`${names[winner]} is de nieuwe IJskoning${''}! ${names[1 - winner]} glijdt nog steeds uit.`, `${names[winner]} smash de puck als een echte ijsberserker. ${names[1 - winner]} zoekt de puck nog.`, `Het hele ijspubliek joelt voor ${names[winner]}. ${names[1 - winner]} heeft koude voeten.`, `${names[winner]} wint dit ijsgevecht! De draak is onder de indruk.`];
-      ctx.finishPvp({ winner, score: [score[0], score[1]], delay: 800, summary: `${pick(jokes)}${stats.flowers ? ` Er werden ${stats.flowers} ijsbloemen geplukt.` : ''}` });
+      ctx.finishPvp({ winner, score: [score[0], score[1]], delay: 800, summary: `${pick(jokes)}${G.tiebreak ? ' Na de verlenging besliste het veldoverwicht (wie de puck het langst bij de ander hield).' : ''}${stats.flowers ? ` Er werden ${stats.flowers} ijsbloemen geplukt.` : ''}` });
     }
     function endMatch(winner) {
       G.state = 'end'; G.t = 0; G.winner = winner; slow = 1;
@@ -277,6 +279,7 @@ export default {
         q.vx = ox * sp; q.vz = oz * sp; q.stuck = -1;
         p.grace = 0; p.smashes++; stats.smashes[p.i]++;
         const pw = p.lpow || 0.5;
+        if (p.state === 'lunge') { p.state = 'cool'; p.cd = (lead(p.i) >= 3 ? 0.6 : 1.1); }
         fx.particles.burst(q.x, 0.7, q.z, { count: 22 + Math.round(pw * 30), speed: 7 + pw * 5, up: 0.8, life: 0.6, size: 0.4, colors: [0xffffff, 0xffe14a, 0xffa020, 0x9fe8ff], gravity: 6 });
         fx.particles.ring(q.x, 0.5, q.z, { count: 22, speed: 8, color: 0xffe14a, size: 0.35, life: 0.45 });
         fx.texts.add(pw > 0.8 ? 'MEGA SMASH!' : 'SMASH!', q.x, 2.8, q.z, pw > 0.8 ? '#ff5a3a' : '#ffd24a', 1.2 + pw * 0.5);
@@ -392,9 +395,9 @@ export default {
       for (const p of pads) {
         const want = p.R0 * (p.golden ? 1.32 : 1); p.Rcur = damp(p.Rcur, want, 8, dt);
       }
-      for (let s = 0; s < 2; s++) { FX.shrink[s] = Math.max(0, FX.shrink[s] - dt); gh[s] = damp(gh[s], FX.shrink[s] > 0 ? 2.0 : GH0, 5, dt); }
+      for (let s = 0; s < 2; s++) { FX.shrink[s] = Math.max(0, FX.shrink[s] - dt); gh[s] = damp(gh[s], FX.shrink[s] > 0 ? GH_SMALL : GH0, 5, dt); }
       FX.giant = Math.max(0, FX.giant - dt); FX.sticky = Math.max(0, FX.sticky - dt); FX.ghost = Math.max(0, FX.ghost - dt);
-      for (const q of pucks) { if (q.on) q.r = damp(q.r, FX.giant > 0 ? 1.15 : PR, 8, dt); }
+      for (const q of pucks) { if (q.on) q.r = damp(q.r, FX.giant > 0 ? PR * 1.6 : PR, 8, dt); }
 
       // klok
       if (G.state === 'play') {
@@ -408,7 +411,7 @@ export default {
           hud.setTimer(G.timeLeft, 10);
         } else {
           G.otLeft -= dt; hud.setTimer(Math.max(0, G.otLeft), 8);
-          if (G.otLeft <= 0) { let w = pads[0].pressure === pads[1].pressure ? null : (pads[0].pressure > pads[1].pressure ? 0 : 1); audio.sfx('bell', { vol: 1 }); endMatch(w); }
+          if (G.otLeft <= 0) { let w = pads[0].pressure === pads[1].pressure ? null : (pads[0].pressure > pads[1].pressure ? 0 : 1); G.tiebreak = true; audio.sfx('bell', { vol: 1 }); endMatch(w); }
         }
         if (Math.floor(G.timeLeft) !== lastScoreRefresh) { lastScoreRefresh = Math.floor(G.timeLeft); A.scoreboard(names, score, G.ot ? G.otLeft : G.timeLeft, G.ot ? 'GOUDEN GOAL' : null); }
       }
@@ -512,15 +515,15 @@ export default {
     let camX = 0;
     function updateCamera(dt) {
       const asp = camera.aspect || 1.7, tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-      const dist0 = clamp(21.5 / (tanH * asp), 24, 46);
+      const dist0 = clamp(22.5 / (tanH * asp), 26, 50);
       let zoom = 1, lx = 0;
-      if (G.state === 'goal') { G.camPunch = Math.max(0, G.camPunch - dt * 0.55); zoom = 1 - 0.14 * Math.sin(Math.min(1, G.t / 0.5) * Math.PI * 0.5) * (G.t < 2 ? 1 : 0); lx = (G.lastScorerSide ? 1 : -1) * 3.5; }
+      if (G.state === 'goal') { G.camPunch = Math.max(0, G.camPunch - dt * 0.55); zoom = 1 - 0.12 * Math.sin(Math.min(1, G.t / 0.5) * Math.PI * 0.5) * (G.t < 2 ? 1 : 0); lx = (G.lastScorerSide ? 1 : -1) * 3.5; }
       const puckX = pucks.find((q) => q.on && !q.falling); const fol = puckX ? puckX.x * 0.06 : 0;
       camX = damp(camX, lx + fol, 2.5, dt);
       const dist = dist0 * zoom;
       const sway = Math.sin((T + introT) * 0.25) * 0.8;
-      camPosV.set(camX + sway, dist * 0.78, dist * 0.66 + 1.5);
-      camLook.set(camX * 0.6, 0, 0.8);
+      camPosV.set(camX + sway, 1 + dist * 0.64, -1 + dist * 0.77);
+      camLook.set(camX * 0.6, 1, -1);
       camera.position.copy(camPosV); camera.lookAt(camLook);
     }
     function visuals(dt) {

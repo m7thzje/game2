@@ -70,7 +70,7 @@ export default {
     L.sun.intensity = 1.6; L.sun.color.set(0xfff0d0); L.sun.position.set(-6, 14, 26); L.sun.target.position.set(0, 5, 0);
     camera.fov = 40; camera.updateProjectionMatrix();
     const W = buildStall(ctx);
-    const camBase = new THREE.Vector3(0, 7.0, 23.5), camLook = new THREE.Vector3(0, 4.7, 0);
+    const camBase = new THREE.Vector3(0, 7.0, 23.5), camLook = new THREE.Vector3(0, 4.35, 0);
     camera.position.copy(camBase); camera.lookAt(camLook);
 
     let T = 0, introT = 0, done = false, over = false, overT = 0, winnerIdx = -1, resultT = 0, finishAt = -1, finishing = false;
@@ -138,8 +138,8 @@ export default {
 
     // speciale doelwitten
     // -- spook-eend
-    const ghostM = buildModel('ghost'); ghostM.group.scale.setScalar(1.15); ghostM.group.visible = false; scene.add(ghostM.group);
-    const ghost = { kind: 'ghost', mdl: ghostM, group: ghostM.group, x: 0, y: 5, r: 0.95, pts: 4, state: 'wait', t: 2.5, op: 0, alive: false, ph: 0, def: { name: 'spook-eend' } };
+    const ghostM = buildModel('ghost'); ghostM.group.scale.setScalar(1.4); ghostM.group.visible = false; scene.add(ghostM.group);
+    const ghost = { kind: 'ghost', mdl: ghostM, group: ghostM.group, x: 0, y: 5, r: 1.1, pts: 4, state: 'wait', t: 2.5, op: 0, alive: false, ph: 0, def: { name: 'spook-eend' } };
     // -- clown in het raam
     const WINDOWS = [{ x: -9.6, y: 8.7 }, { x: 9.6, y: 8.7 }];
     WINDOWS.forEach((w) => {
@@ -444,7 +444,7 @@ export default {
         ghost.op = Math.max(0, ghost.op - dt * 14); if (ghost.op <= 0) { ghost.state = 'wait'; ghost.group.visible = false; }
       }
       if (ghost.group.visible) {
-        ghost.mdl.mat.opacity = 0.7 * ghost.op; ghost.mdl.aura.material.opacity = 0.22 * ghost.op;
+        ghost.mdl.mat.opacity = 0.88 * ghost.op; ghost.mdl.aura.material.opacity = 0.1 * ghost.op;
         ghost.group.position.set(ghost.x, ghost.y - 0.9 + Math.sin(t * 3 + ghost.ph) * 0.25, 0.4); ghost.group.rotation.y = (ghost.face || 1) * 0.5; ghost.group.rotation.z = Math.sin(t * 4) * 0.12;
         if (Math.random() < dt * 14) fx.particles.emit(ghost.x + rand(-0.4, 0.4), ghost.y - 0.6, 0.6, 0, -0.8, 0, { life: 0.8, size: 0.3, color: 0xbfd8ff, gravity: 0 });
       }
@@ -525,7 +525,7 @@ export default {
       if (over) { overT -= dt; hud.setTimer(Math.max(0, overT), 99); if (overT <= 0 && !finishing) { finishing = true; finishAt = T + 0.3; } }
       else hud.setTimer(Math.max(0, timeLeft), 10);
       if (finishing && T >= finishAt) { finish(); return; }
-      for (const c of ch) updateCrosshair(c, dt);
+      for (const c of (Math.random() < 0.5 ? ch : [ch[1], ch[0]])) updateCrosshair(c, dt);
       spawnTraffic(dt);
       specials(dt, T + introT);
       updateTargets(dt, T + introT); updateBullets(dt);

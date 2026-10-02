@@ -206,7 +206,9 @@ export default {
       dom.root = root; dom.marker = marker; dom.tFill = tFill; dom.tWrap = tWrap; dom.panels = panels;
     }
     function setT(o, key, val, fn) { if (o.last[key] !== val) { o.last[key] = val; fn(val); } }
+    let domOn = false;
     function updateDom() {
+      if (!domOn) return;
       if (!dom.root || !dom.root.isConnected) { buildDom(); if (!dom.root) return; }
       dom.marker.style.left = `${(clamp(lead, -1, 1) + 1) * 50}%`;
       dom.tFill.style.width = `${Math.round(tension * 100)}%`;
@@ -524,6 +526,7 @@ export default {
     function update(dt) {
       dt = Math.min(dt, 0.05); T += dt;
       if (!started) { started = true; startRound(); }
+      domOn = true;
       if (finished) { resultUpdate(dt); return; }
       if (T > 170) forceFinish();
       const inp = [pv.input(0), pv.input(1)];
@@ -540,7 +543,7 @@ export default {
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3();
     function updateCamera(dt, cine) {
       const asp = camera.aspect || 1.7, tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-      const dist = clamp(13.4 / (tanH * asp), 15, 34);
+      const dist = clamp(14.6 / (tanH * asp), 16, 36);
       let lx = 0, ly = 0.5, lk = 0.35;
       if (R.state === 'drop' || R.state === 'lava') { const p = pl[R.loser]; lx = p.x * 0.08; ly = -0.4; }
       else if (R.state === 'pop' || R.state === 'burn') { const p = pl[R.loser]; lx = p.x * 0.1; ly = 0.5; }
@@ -565,8 +568,9 @@ export default {
           if (R.state === 'end' || R.state === 'drop' || R.state === 'lava' || R.state === 'pop' || R.state === 'burn') { /* winnaar blijft staan */ }
         }
         const holder = p.holder, c = p.c;
+        p.jerk = Math.max(0, p.jerk - dt * 6);
         holder.position.set(p.x, p.y, 0);
-        const eff = clamp(p.eff / 11, 0, 1.3);
+        const eff = (tugging || R.state === 'ready') ? clamp(p.eff / 11, 0, 1.3) : 0;
         if (p.st === 'stand') {
           let lean = 0.08 + 0.22 * eff + p.jerk * 0.06;
           const dragged = tugging || R.state === 'ready' ? clamp((i === 0 ? leadV : -leadV) / VMAX, -1, 1) : 0;   // >0 = wordt naar de rand gesleept
@@ -700,7 +704,7 @@ export default {
 
     return {
       update, resultUpdate, introUpdate,
-      onCountdown() { buildDom(); },
+      onCountdown() { /* meters verschijnen zodra het spel begint */ },
       onSwap() { for (const p of pl) { fx.particles.burst(p.x, 2, 0, { count: 18, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); } },
       onDeurman(movers) {
         movers.forEach((m, i) => { if (m) { lead = clamp(lead + (i === 0 ? 0.3 : -0.3), -0.95, 0.95); pl[i].pw = 0; pl[i].rm = 0; pl[i].frozen = 1.2; ctx.shake(0.4); fx.texts.add('-1', pl[i].x, 4.5, 1, '#ff5a5a', 1.4); } });

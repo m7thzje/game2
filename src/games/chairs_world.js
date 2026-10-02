@@ -16,10 +16,13 @@ function mosaicTexture() {
     // ringen
     const rings = [[500, '#d8a62e'], [470, '#7a1424'], [440, '#2a2a6a'], [410, '#e8c25a'], [370, '#7a1424'], [150, '#e8c25a']];
     for (const [r, col] of rings) { g.fillStyle = col; g.beginPath(); g.arc(c, c, r, 0, TAU); g.fill(); }
-    // sterren-patroon
-    g.save(); g.translate(c, c);
-    for (let i = 0; i < 24; i++) { g.rotate(TAU / 24); g.fillStyle = i % 2 ? '#2a2a6a' : '#b8142c'; g.beginPath(); g.moveTo(150, -18); g.lineTo(360, 0); g.lineTo(150, 18); g.closePath(); g.fill(); g.strokeStyle = '#f2d276'; g.lineWidth = 3; g.stroke(); }
-    g.restore();
+    // taartpunten
+    for (let i = 0; i < 24; i++) {
+      const a0 = i / 24 * TAU, a1 = (i + 1) / 24 * TAU;
+      g.fillStyle = i % 2 ? '#2a2a6a' : '#b8142c';
+      g.beginPath(); g.arc(c, c, 365, a0, a1); g.arc(c, c, 160, a1, a0, true); g.closePath(); g.fill();
+      g.strokeStyle = '#f2d276'; g.lineWidth = 4; g.stroke();
+    }
     // midden: kroon
     g.fillStyle = '#7a1424'; g.beginPath(); g.arc(c, c, 128, 0, TAU); g.fill();
     g.fillStyle = '#f2d276'; g.beginPath(); g.moveTo(c - 80, c + 40); g.lineTo(c - 80, c - 30); g.lineTo(c - 40, c + 5); g.lineTo(c, c - 60); g.lineTo(c + 40, c + 5); g.lineTo(c + 80, c - 30); g.lineTo(c + 80, c + 40); g.closePath(); g.fill();
@@ -70,10 +73,10 @@ export function buildHall(scene) {
   add(mesh(new THREE.PlaneGeometry(90, 70), new THREE.MeshStandardMaterial({ map: tex.tiles(22, 17, '#6a5a72', '#3a2f44'), roughness: 0.6, metalness: 0.15 }), { cast: false, pos: [0, -0.02, -8], rot: [-Math.PI / 2, 0, 0] }));
   // arena
   const mosaic = mosaicTexture();
-  const top = new THREE.Mesh(new THREE.CircleGeometry(10.2, 64), new THREE.MeshStandardMaterial({ map: mosaic, roughness: 0.35, metalness: 0.35 }));
+  const top = new THREE.Mesh(new THREE.CircleGeometry(8.9, 64), new THREE.MeshStandardMaterial({ map: mosaic, roughness: 0.35, metalness: 0.35 }));
   top.rotation.x = -Math.PI / 2; top.position.y = 0.52; top.receiveShadow = true; grp.add(top);
-  add(mesh(new THREE.CylinderGeometry(10.4, 10.7, 0.52, 64), mat(0x6a4a2a, { flatShading: false }), { pos: [0, 0.26, 0] }));
-  const rim = new THREE.Mesh(new THREE.TorusGeometry(10.3, 0.2, 8, 80), GOLD); rim.rotation.x = Math.PI / 2; rim.position.y = 0.55; grp.add(rim);
+  add(mesh(new THREE.CylinderGeometry(9.1, 9.4, 0.48, 64), mat(0x6a4a2a, { flatShading: false }), { pos: [0, 0.24, 0] }));
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(9.0, 0.2, 8, 80), GOLD); rim.rotation.x = Math.PI / 2; rim.position.y = 0.55; grp.add(rim);
   // loper naar de troon
   add(mesh(new THREE.PlaneGeometry(4.6, 14), new THREE.MeshStandardMaterial({ map: tex.carpet(1, 4), roughness: 0.9 }), { cast: false, pos: [0, 0.03, -17.2], rot: [-Math.PI / 2, 0, 0] }));
   // achtermuur
@@ -107,7 +110,7 @@ export function buildHall(scene) {
   // balkons voor de uitgevallen spelers
   const balcony = [];
   for (const sx of [-1, 1]) {
-    const bx = sx * 16;
+    const bx = sx * 14.6;
     add(mesh(new THREE.BoxGeometry(7, 1.6, 10), mat(0x5a3a2a), { pos: [bx, 0.8, -3] }));
     add(mesh(new THREE.BoxGeometry(7.4, 0.2, 10.4), GOLD, { pos: [bx, 1.65, -3] }));
     for (let i = 0; i < 6; i++) add(mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.3, 6), GOLD, { pos: [bx - sx * 3.4, 2.4, -7.5 + i * 1.8] }));

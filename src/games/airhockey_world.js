@@ -120,6 +120,21 @@ export function buildArena(ctx, L, colors) {
   // vloer
   const floorT = tex.stone(18, 14);
   const floor = mesh(new THREE.PlaneGeometry(160, 120), new THREE.MeshStandardMaterial({ map: floorT, color: 0x4a5a98, roughness: 0.6, metalness: 0.2 }), { cast: false, pos: [0, -1.6, 0], rot: [-Math.PI / 2, 0, 0] }); scene.add(floor);
+  // magische cirkel op de grotvloer
+  {
+    const rt = canvasTex(1024, 1024, (g, w, h) => {
+      g.translate(w / 2, h / 2); g.strokeStyle = 'rgba(120,220,255,.95)'; g.lineWidth = 6; g.lineCap = 'round';
+      for (const r of [480, 440, 300]) { g.beginPath(); g.arc(0, 0, r, 0, TAU); g.stroke(); }
+      g.lineWidth = 3;
+      for (let i = 0; i < 48; i++) { const a = i / 48 * TAU; g.save(); g.rotate(a); g.beginPath(); g.moveTo(446, 0); g.lineTo(474, 0); g.stroke(); g.restore(); }
+      g.strokeStyle = 'rgba(190,140,255,.9)'; g.lineWidth = 5;
+      for (let k = 0; k < 8; k++) { g.save(); g.rotate(k / 8 * TAU); g.beginPath(); g.moveTo(300, 0); g.lineTo(380, 36); g.lineTo(440, 0); g.lineTo(380, -36); g.closePath(); g.stroke(); g.restore(); }
+      g.strokeStyle = 'rgba(120,220,255,.8)'; g.lineWidth = 4;
+      g.beginPath(); for (let k = 0; k < 6; k++) { const a = k / 6 * TAU; g.lineTo(Math.cos(a) * 296, Math.sin(a) * 296); } g.closePath(); g.stroke();
+    });
+    const circle = new THREE.Mesh(new THREE.PlaneGeometry(88, 88), new THREE.MeshBasicMaterial({ map: rt, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    circle.rotation.x = -Math.PI / 2; circle.position.y = -1.5; scene.add(circle); A.circle = circle;
+  }
   // stalactieten + ijspegels
   const stalM = new THREE.MeshStandardMaterial({ color: 0x4a4e8a, roughness: 0.6, flatShading: true });
   const icicleM = new THREE.MeshStandardMaterial({ color: 0xcfeeff, emissive: 0x3a7ab0, emissiveIntensity: 0.4, roughness: 0.2, transparent: true, opacity: 0.9, flatShading: true });
@@ -204,10 +219,13 @@ export function buildArena(ctx, L, colors) {
   // scorebord
   const sbCanvas = document.createElement('canvas'); sbCanvas.width = 640; sbCanvas.height = 240; const sbG = sbCanvas.getContext('2d');
   const sbTex = new THREE.CanvasTexture(sbCanvas); sbTex.colorSpace = THREE.SRGBColorSpace;
-  const sb = new THREE.Group(); sb.position.set(0, 10.8, -13.5); scene.add(sb);
-  sb.add(mesh(new THREE.BoxGeometry(11.4, 4.4, 0.7), mat(0x2a2f5c, { metalness: 0.4 }), { cast: false }));
-  sb.add(mesh(new THREE.PlaneGeometry(10.8, 3.8), new THREE.MeshBasicMaterial({ map: sbTex, toneMapped: false }), { cast: false, receive: false, pos: [0, 0, 0.36] }));
-  for (const sx of [-1, 1]) sb.add(mesh(new THREE.CylinderGeometry(0.06, 0.06, 18, 4), mat(0x888899, { metalness: 0.6 }), { cast: false, pos: [sx * 4.5, 9.3, 0] }));
+  const sbMat = new THREE.MeshBasicMaterial({ map: sbTex, toneMapped: false });
+  for (const sx of [-1, 1]) {
+    const sb = new THREE.Group(); sb.position.set(sx * 15.5, 6.3, -12.6); sb.scale.setScalar(0.72); sb.rotation.y = -sx * 0.12; scene.add(sb);
+    sb.add(mesh(new THREE.BoxGeometry(11.4, 4.4, 0.7), mat(0x2a2f5c, { metalness: 0.4 }), { cast: false }));
+    sb.add(mesh(new THREE.PlaneGeometry(10.8, 3.8), sbMat, { cast: false, receive: false, pos: [0, 0, 0.36] }));
+    for (const dx of [-1, 1]) sb.add(mesh(new THREE.CylinderGeometry(0.06, 0.06, 18, 4), mat(0x888899, { metalness: 0.6 }), { cast: false, pos: [dx * 4.5, 11.3, 0] }));
+  }
   A.scoreboard = (names, score, secs, note) => {
     const g = sbG, w = 640, h = 240;
     g.fillStyle = '#0c1030'; g.fillRect(0, 0, w, h);
@@ -246,6 +264,7 @@ export function buildArena(ctx, L, colors) {
   A.update = (t, dt) => {
     // kristallen pulseren
     A.crystals.forEach((c, i) => { c.children.forEach((m, k) => { m.material.emissiveIntensity = 0.7 + Math.sin(t * 1.6 + i + k) * 0.25; }); });
+    if (A.circle) A.circle.rotation.z = t * 0.03;
     A.pulse.forEach((s, i) => { s.material.opacity = 0.45 + Math.sin(t * 2 + i) * 0.12 + A.flashT[i] * 0.4; });
     for (let i = 0; i < 2; i++) { A.flashT[i] = Math.max(0, A.flashT[i] - dt); const fl = A.goals[i].flash; fl.material.opacity = A.flashT[i] > 0 ? (Math.sin(t * 40) > 0 ? 0.8 : 0.25) * Math.min(1, A.flashT[i] * 2) : 0; }
     A.lights[0].intensity = 1.5 + Math.sin(t * 1.3) * 0.25; A.lights[1].intensity = 1.35 + Math.sin(t * 1.1 + 2) * 0.25;
@@ -264,7 +283,7 @@ export function buildArena(ctx, L, colors) {
     if (d.on) {
       d.t += dt; const dur = 6.5, u = d.t / dur;
       const x = lerp(-48, 48, d.dir > 0 ? u : 1 - u);
-      dragon.group.position.set(x, 9.5 + Math.sin(d.t * 2.2) * 0.8, -11);
+      dragon.group.position.set(x, 8.2 + Math.sin(d.t * 2.2) * 0.8, -10);
       dragon.group.rotation.y = d.dir > 0 ? Math.PI / 2 : -Math.PI / 2;
       dragon.group.rotation.z = Math.sin(d.t * 2) * 0.08;
       dragon.update(dt);

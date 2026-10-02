@@ -39,7 +39,7 @@ export function makeBars(ctx, { colors, vertical = true, dist = 12, length = 0.6
         it.dotO.scale.set(th * 2.0, th * 2.0, 1); it.dot.scale.set(th * 1.45, th * 1.45, 1);
         it.dotO.position.set(x, yTop - L * v, 0.01); it.dot.position.set(x, yTop - L * v, 0.02);
       } else {
-        const L = halfW * length, y = halfH - halfH * 0.17, xo = halfH * 0.18;
+        const L = halfW * length, y = halfH * 0.58, xo = halfH * 0.1;
         const sg = i === 0 ? -1 : 1, x0 = sg * (halfW - xo);        // buitenrand
         const cx = x0 - sg * L / 2;                                  // midden van de balk (loopt naar het midden)
         it.edge.scale.set(L + 0.06, th + 0.06, 1); it.edge.position.set(cx, y, 0);

@@ -522,7 +522,7 @@ export default {
     return {
       update, resultUpdate, introUpdate,
       onCountdown() { ensureBar(); hud.setTimer(TIME); hud.setHint('★ tegels tellen dubbel  ·  Gouden emmer = reuzen-explosie  ·  Slijm wist verf'); },
-      onStart() { ensureBar(); },
+      onStart() { ensureBar(); setTimeout(() => { if (!done) hud.setHint(null); }, 9000); },
       celebrate(w) { winnerIdx = w; },
       onSwap() { ctx.shake(0.2); },
       onDeurman(movers) {

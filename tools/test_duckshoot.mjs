@@ -64,7 +64,7 @@ async function open(browser, twist) {
 for (const name of scen) {
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   if (name === 'twists') {
-    for (const tw of TWISTS) {
+    for (const tw of (process.env.TW ? process.env.TW.split(',') : TWISTS)) {
       const { page, errors } = await open(browser, tw);
       const res = await page.evaluate(() => { const m = window.__app.mode; let g = 0; while (!m.finished && g++ < 60 * 120) window.__bot(1); const st = m.instance.dbg.state(); return { fin: m.finished, T: +st.T.toFixed(1), sc: st.score, w: m.result && m.result.winner, tw: m.twist.id, sz: st.ch.map((c) => +c.size.toFixed(2)), stats: st.stats.hits }; });
       console.log('twist', tw, JSON.stringify(res), errors.length ? 'ERRORS ' + errors.slice(0, 3).join('|') : 'ok');

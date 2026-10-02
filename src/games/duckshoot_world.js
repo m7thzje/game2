@@ -328,7 +328,7 @@ export function buildStall(ctx) {
   // score-bord
   const board = { c: document.createElement('canvas'), t: null, vals: [-1, -1] };
   board.c.width = 512; board.c.height = 128; board.t = new THREE.CanvasTexture(board.c); board.t.colorSpace = THREE.SRGBColorSpace;
-  const bm = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 1.55), new THREE.MeshBasicMaterial({ map: board.t })); bm.position.set(0, 0.95, 8.54); add(bm);
+  const bm = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 1.4), new THREE.MeshBasicMaterial({ map: board.t })); bm.position.set(0, 0.92, 8.54); add(bm);
   board.draw = (names, vals, cols) => {
     if (board.vals[0] === vals[0] && board.vals[1] === vals[1]) return; board.vals = vals.slice();
     const g = board.c.getContext('2d'); g.fillStyle = '#2a1608'; g.fillRect(0, 0, 512, 128); g.strokeStyle = '#f2c230'; g.lineWidth = 8; g.strokeRect(4, 4, 504, 120);

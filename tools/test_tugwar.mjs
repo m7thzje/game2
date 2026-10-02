@@ -69,8 +69,9 @@ async function installBots(page, cfg) {
 }
 
 for (const name of scen) {
-  if (name === 'bots' || name === 'twists' || name === 'idle' || name === 'timeout') {
+  if (name === 'bots' || name === 'twists' || name === 'idle' || name === 'timeout' || name === 'jor') {
     const list = name === 'twists' ? TWISTS.map((t) => [t, [{ rate: 7, style: 'alt', surge: 1 }, { rate: 5, style: 'mash', surge: 0 }]])
+      : name === 'jor' ? [['none', [{ rate: 4, style: 'mash' }, { rate: 7, style: 'alt', surge: 1 }]], ['slippery', [{ rate: 3, style: 'alt', surge: 0 }, { rate: 3, style: 'alt', surge: 1 }]]]
       : name === 'idle' ? [['none', [{ rate: 0 }, { rate: 0 }]]]
         : name === 'timeout' ? [['none', [{ rate: 3, style: 'mash' }, { rate: 3, style: 'mash' }]]]
           : [
