@@ -117,17 +117,19 @@ export default {
     for (const [x, z] of [[-14, -12.5], [15, -12.8], [30, -12]]) { const s = P.sack(1.7); s.position.set(x, -0.3, z); scene.add(s); }
 
     // hanglampen met lichtbundel
-    for (const [x, z, y] of [[-14, -10, 9], [0, -11, 10], [14, -10, 9], [-26, 0, 9], [26, 0, 9]]) {
+    for (const [x, z, y] of [[-15, -9, 7.5], [15, -9, 7.5], [-24, 2, 7], [24, 2, 7], [0, -12.5, 8.5]]) {
       const g = new THREE.Group(); g.position.set(x, y, z);
-      g.add(mesh(new THREE.CylinderGeometry(0.03, 0.03, 8, 4), mat(0x222222), { cast: false, pos: [0, 4, 0] }));
+      g.add(mesh(new THREE.CylinderGeometry(0.04, 0.04, 8, 4), mat(0x222222), { cast: false, pos: [0, 4, 0] }));
       g.add(mesh(new THREE.ConeGeometry(1.1, 0.8, 10, 1, true), mat(0x30343c, { metalness: 0.6, side: THREE.DoubleSide }), { cast: false, pos: [0, 0, 0] }));
       g.add(mesh(new THREE.SphereGeometry(0.34, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe2a0 }), { cast: false, receive: false, pos: [0, -0.25, 0] }));
       g.add(mesh(new THREE.ConeGeometry(4.2, 9, 14, 1, true), new THREE.MeshBasicMaterial({ color: 0xffd9a0, transparent: true, opacity: 0.07, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }), { cast: false, receive: false, pos: [0, -4.8, 0] }));
       scene.add(g); animated.lamps.push({ g, ph: rand(0, 6) });
     }
     // vlaggen aan de balken
-    for (const [x, col2] of [[-30, 0xd8372c], [-6, 0x3a78e0], [8, 0x2f9e5b], [30, 0xe8c24a]]) {
-      const b = P.banner(col2, 4.2, 1.4); b.position.set(x, 14.2, -17.5); b.scale.setScalar(1.3); scene.add(b); animated.banners.push(b);
+    // balk met wimpels/vlaggen boven de achtergang
+    scene.add(mesh(gBox, mat(0x3a2514), { cast: false, pos: [0, 8.3, -13.5], scale: [70, 0.35, 0.35] }));
+    for (const [x, col2] of [[-27, 0xd8372c], [-16, 0x3a78e0], [-4.5, 0x2f9e5b], [7, 0xe8c24a], [18, 0xd8372c], [29, 0x3a78e0]]) {
+      const b = P.banner(col2, 3.4, 1.5); b.position.set(x, 4.9, -13.4); scene.add(b); animated.banners.push(b);
     }
     // vorkheftrucks
     function makeForklift(color = 0xf0a020, withCrate = false) {
@@ -242,7 +244,7 @@ export default {
         c.group.scale.setScalar(0.92); c.group.position.set(x, 0.06, z); g.add(c.group);
         const ring = mesh(ringGeo, new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.9 }), { cast: false, receive: false, pos: [x, 0.13, z], rot: [Math.PI / 2, 0, 0] }); g.add(ring);
         const label = new THREE.Mesh(labelGeo, new THREE.MeshBasicMaterial({ map: labelTexture(players[i].name, players[i].css), transparent: true, depthWrite: false }));
-        label.renderOrder = 12; g.add(label);
+        label.renderOrder = 12; label.userData.ownTex = true; g.add(label);
         return { c, ring, label, x, z, tx: x, tz: z, bump: 0, bdx: 0, bdz: 0, dir: -1, buf: -1, bufT: 0, cd: 0, held: 0, pushT: 0, i };
       });
       chars.forEach((a) => { a.tx = a.x; a.tz = a.z; });
@@ -528,7 +530,7 @@ export default {
     }
 
     function disposeGroup(g) {
-      g.traverse((o) => { if (o.geometry && o.geometry !== gBox && o.geometry !== ringGeo && o.geometry !== labelGeo) o.geometry.dispose(); });
+      g.traverse((o) => { if (o.geometry && o.geometry !== gBox && o.geometry !== ringGeo && o.geometry !== labelGeo) o.geometry.dispose(); if (o.userData.ownTex && o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
     }
 
     return {

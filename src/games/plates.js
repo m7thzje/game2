@@ -289,7 +289,7 @@ export default {
         const [x, z] = cxz(ci); const grp = new THREE.Group(); grp.position.set(x, 0, z); g.add(grp);
         const glyph = mesh(new THREE.PlaneGeometry(2.1, 2.1), new THREE.MeshBasicMaterial({ map: glyphTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, color: 0xffe9a0 }), { cast: false, receive: false, pos: [0, 0.05, 0], rot: [-Math.PI / 2, 0, 0] });
         const col = mesh(new THREE.CylinderGeometry(0.75, 0.9, 3.2, 14, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe9a0, transparent: true, opacity: 0.13, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }), { cast: false, receive: false, pos: [0, 1.6, 0] });
-        const lab = new THREE.Mesh(labelGeo, new THREE.MeshBasicMaterial({ map: labelTexture('UITGANG', '#ffe9a0', 44), transparent: true, depthWrite: false })); lab.renderOrder = 12; lab.scale.setScalar(0.8); lab.position.set(0, 3.5, 0);
+        const lab = new THREE.Mesh(labelGeo, new THREE.MeshBasicMaterial({ map: labelTexture('UITGANG', '#ffe9a0', 44), transparent: true, depthWrite: false })); lab.renderOrder = 12; lab.userData.ownTex = true; lab.scale.setScalar(0.8); lab.position.set(0, 3.5, 0);
         grp.add(glyph); grp.add(col); grp.add(lab);
         return { ci, x, z, grp, glyph, col, lab, occ: -1 };
       });
@@ -404,7 +404,7 @@ export default {
       // A-knop prompts bij hendels/spiegels
       const mkPrompt = (cell, pi) => {
         const m = new THREE.Mesh(badgeGeo, new THREE.MeshBasicMaterial({ map: badgeTexture(KEY_LABELS[pi].a, players[pi].css), transparent: true, depthWrite: false }));
-        m.renderOrder = 15; const [x, z] = cxz(cell); m.position.set(x + (pi ? 0.5 : -0.5), 2.9, z); m.visible = false; m.userData.cell = cell; m.userData.pi = pi; g.add(m); lv.prompts.push(m);
+        m.renderOrder = 15; m.userData.ownTex = true; const [x, z] = cxz(cell); m.position.set(x + (pi ? 0.5 : -0.5), 2.9, z); m.visible = false; m.userData.cell = cell; m.userData.pi = pi; g.add(m); lv.prompts.push(m);
       };
       for (const o of [...L.levers, ...L.mirrors]) { mkPrompt(o.cell, 0); mkPrompt(o.cell, 1); }
 
@@ -413,7 +413,7 @@ export default {
         const c = ctx.make.brother(i); const [x, z] = cxz(L.starts[i]);
         c.group.scale.setScalar(0.92); c.group.position.set(x, 0, z); g.add(c.group);
         const ring = mesh(ringGeo, new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.9 }), { cast: false, receive: false, pos: [x, 0.1, z], rot: [Math.PI / 2, 0, 0] }); g.add(ring);
-        const label = new THREE.Mesh(labelGeo, new THREE.MeshBasicMaterial({ map: labelTexture(players[i].name, players[i].css), transparent: true, depthWrite: false })); label.renderOrder = 12; g.add(label);
+        const label = new THREE.Mesh(labelGeo, new THREE.MeshBasicMaterial({ map: labelTexture(players[i].name, players[i].css), transparent: true, depthWrite: false })); label.renderOrder = 12; label.userData.ownTex = true; g.add(label);
         return { i, c, ring, label, x, z, q: [], cd: 0, dir: -1, buf: -1, bufT: 0, sink: 0, pop: 0, bump: 0, bdx: 0, bdz: 0, lastCell: L.starts[i], sliding: false };
       });
       // lichtjes op de kristallen
@@ -439,7 +439,7 @@ export default {
         for (let shift = 0; shift <= 16 && !found; shift += 0.5) {
           look.set(cen.x, cen.y, cen.z - shift);
           fitCam.position.set(look.x, look.y + Math.sin(ELEV) * dist, look.z + Math.cos(ELEV) * dist); fitCam.lookAt(look); fitCam.updateMatrixWorld(); fitCam.updateProjectionMatrix();
-          let ok = true; for (const c of corners) { tmpV.copy(c).project(fitCam); if (Math.abs(tmpV.x) > 0.9 || tmpV.y > 0.14 || tmpV.y < -0.76) { ok = false; break; } }
+          let ok = true; for (const c of corners) { tmpV.copy(c).project(fitCam); if (Math.abs(tmpV.x) > 0.9 || tmpV.y > 0.24 || tmpV.y < -0.76) { ok = false; break; } }
           if (ok) { best = dist; bestShift = shift; found = true; }
         }
       }
@@ -689,7 +689,7 @@ export default {
       });
       // lichtstralen
       let bi = 0;
-      for (const sg of d.beam) {
+      if (lv === lvl) for (const sg of d.beam) {
         if (bi >= beamPool.length) break;
         const [x0, z0] = lv.cxz(sg.from), [x1, z1] = lv.cxz(sg.to);
         let ex = x1, ez = z1; if (sg.end) { ex = x0 + (x1 - x0) * 0.5; ez = z0 + (z1 - z0) * 0.5; }
@@ -699,7 +699,7 @@ export default {
         gr.children[0].scale.set(0.07 * (0.9 + Math.sin(t * 30 + bi) * 0.1), len, 0.07 * (0.9 + Math.sin(t * 30 + bi) * 0.1)); gr.children[1].scale.set(0.22, len, 0.22);
         if (sg.end && Math.random() < 0.3) fx.particles.emit(ex, 1.45, ez, rand(-1, 1), rand(0, 1.5), rand(-1, 1), { life: 0.4, size: 0.16, color: 0xbff4ff });
       }
-      for (let k = bi; k < beamPool.length; k++) beamPool[k].visible = false;
+      if (lv === lvl) for (let k = bi; k < beamPool.length; k++) beamPool[k].visible = false;
       // lava bubbels
       if (lv.lavaCells.length && Math.random() < 0.5) { const c = lv.lavaCells[(Math.random() * lv.lavaCells.length) | 0]; const [x, z] = lv.cxz(c); fx.particles.emit(x + rand(-0.8, 0.8), -0.2, z + rand(-0.8, 0.8), rand(-0.2, 0.2), rand(1, 2.4), rand(-0.2, 0.2), { life: rand(0.6, 1.1), size: rand(0.15, 0.3), color: Math.random() < 0.5 ? 0xff7a1a : 0xffd23f, gravity: 2 }); }
       // A-knop prompts
@@ -751,7 +751,7 @@ export default {
         const k = clamp(stateT / 1.2, 0, 1), e = k * k * (3 - 2 * k);
         lvl.g.position.x = 40 * (1 - e); if (prev) prev.g.position.x = -40 * e;
         if (k >= 1) {
-          lvl.g.position.x = 0; if (prev) { scene.remove(prev.g); prev.g.traverse((o) => { if (o.geometry && ![gBox, gCyl, gSph, ringGeo, labelGeo, badgeGeo].includes(o.geometry)) o.geometry.dispose(); }); prev = null; }
+          lvl.g.position.x = 0; if (prev) { scene.remove(prev.g); prev.g.traverse((o) => { if (o.geometry && ![gBox, gCyl, gSph, ringGeo, labelGeo, badgeGeo].includes(o.geometry)) o.geometry.dispose(); if (o.userData.ownTex && o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); prev = null; }
           state = 'play'; stateT = 0; hud.setHint(hintFor(lvl)); lvl.tStart = t;
         }
       }
