@@ -57,14 +57,16 @@ export function buildGarden(ctx, rng) {
   // ---- gaten ----
   const holeMat = new THREE.MeshStandardMaterial({ color: 0x1b0f08, roughness: 1 });
   const moundMat = mat(0x5b3e24, { flatShading: false });
-  W.holes = [];
+  W.holes = []; const pebbles = [];
   for (let r = 0; r < HZ.length; r++) for (let c = 0; c < HX.length; c++) {
     const g = new THREE.Group(); g.position.set(HX[c], 0.16, HZ[r]); scene.add(g);
     const d = mesh(new THREE.CircleGeometry(0.92, 18), holeMat, { cast: false, rot: [-Math.PI / 2, 0, 0], pos: [0, 0.02, 0] }); g.add(d);
     const m = mesh(new THREE.TorusGeometry(1.0, 0.3, 8, 18), moundMat, { rot: [Math.PI / 2, 0, 0], pos: [0, 0.02, 0], scale: [1, 1, 0.55] }); g.add(m);
-    for (let k = 0; k < 4; k++) { const a = rng() * TAU; g.add(mesh(new THREE.DodecahedronGeometry(0.1 + rng() * 0.08, 0), mat(0x8a8a90), { cast: false, pos: [Math.cos(a) * 1.25, 0.06, Math.sin(a) * 1.25] })); }
+    for (let k = 0; k < 4; k++) { const a = rng() * TAU; pebbles.push({ x: HX[c] + Math.cos(a) * 1.25, y: 0.22, z: HZ[r] + Math.sin(a) * 1.25, s: 0.1 + rng() * 0.08, c: 0x8a8a90 }); }
     W.holes.push({ c, r, x: HX[c], z: HZ[r], g, mound: m, shake: 0 });
   }
+
+  scene.add(instanced(new THREE.DodecahedronGeometry(1, 0), mat(0xffffff), pebbles, { cast: false }));
 
   // ---- hekken (instanced) ----
   const posts = [], rails = [];

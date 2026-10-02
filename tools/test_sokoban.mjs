@@ -39,6 +39,7 @@ for (let k = 0; k < 6; k++) {
 await page.waitForFunction(() => window.__app.mode.state === 'play', null, { timeout: 60000 });
 await page.waitForTimeout(500);
 const log = (...a) => console.log(...a);
+const frames = (n) => page.evaluate((n) => new Promise((res) => { let k = 0; const f = () => { if (++k >= n) res(); else requestAnimationFrame(f); }; requestAnimationFrame(f); }), n);
 const dbg = (fn, arg) => page.evaluate(([f, a]) => { const d = window.__app.mode.instance._dbg; return typeof d[f] === 'function' ? d[f](...a) : d[f]; }, [fn, arg || []]);
 
 if (scenario === 'shots') {
@@ -66,16 +67,41 @@ if (scenario === 'input') {
   const keys = ['up', 'down', 'left', 'right'];
   for (const m of sol.path) {
     await page.evaluate(([w, k]) => { window.__app.input.virtual[w][k] = true; }, [m.who, keys[m.d]]);
-    await page.waitForTimeout(260);
+    await frames(3);
     await page.evaluate(([w, k]) => { window.__app.input.virtual[w][k] = false; }, [m.who, keys[m.d]]);
-    await page.waitForTimeout(260);
+    await frames(2); await page.waitForTimeout(300);
+    if (process.env.VERBOSE) log('na', 'DS'[m.who] + '^v<>'[m.d], await page.evaluate(() => JSON.stringify([window.__app.mode.instance._dbg.lvl.p, window.__app.mode.instance._dbg.lvl.c])));
   }
   await page.waitForTimeout(500);
   log('na invoer-afspelen: state=', await dbg('state'), 'opgelost=', await dbg('solved'));
   await page.screenshot({ path: out + '_input.png' });
 }
+if (scenario === 'full') {
+  for (let i = 0; i < LEVELS.length; i++) {
+    const L = parseLevel(LEVELS[i]); const sol = solve(L);
+    await page.waitForFunction(() => window.__app.mode.instance._dbg.state === 'play', null, { timeout: 60000 });
+    if (i === 3) { await page.waitForTimeout(500); await page.screenshot({ path: out + '_slide.png' }); }
+    for (const m of sol.path) await page.evaluate(([w, d]) => window.__app.mode.instance._dbg.move(w, d), [m.who, m.d]);
+    if (i === 2) { await page.waitForTimeout(1500); await page.screenshot({ path: out + '_clear.png' }); }
+    await page.waitForTimeout(300);
+  }
+  await page.waitForFunction(() => window.__app.mode.state === 'result', null, { timeout: 30000 });
+  await page.waitForTimeout(2500);
+  await page.screenshot({ path: out + '_result.png' });
+  log('eindstand: ', await page.evaluate(() => JSON.stringify(window.__app.mode.result)));
+}
+if (scenario === 'reset') {
+  await page.evaluate(() => window.__app.mode.instance._dbg.move(0, 3));
+  await page.evaluate(() => { window.__app.input.virtual[1].b = true; });
+  await frames(12);
+  await page.screenshot({ path: out + '_reset_mid.png' });
+  await frames(8);
+  await page.evaluate(() => { window.__app.input.virtual[1].b = false; });
+  await frames(3);
+  log('na reset: positie', await page.evaluate(() => JSON.stringify(window.__app.mode.instance._dbg.lvl.p)));
+}
 if (scenario === 'timeout') {
-  await dbg('setTime', [1.0]); await page.waitForTimeout(2500);
+  await dbg('setTime', [1.0]); await page.waitForTimeout(6000);
   await page.screenshot({ path: out + '_timeout.png' });
   log('mode.state =', await page.evaluate(() => window.__app.mode.state));
 }

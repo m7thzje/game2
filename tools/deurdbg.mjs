@@ -1,0 +1,26 @@
+import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
+const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' };
+const server = http.createServer((req, res) => { let p = decodeURIComponent(req.url.split('?')[0]); if (p === '/') p = '/index.html'; const f = path.join(root, p); if (!f.startsWith(root) || !fs.existsSync(f)) { res.writeHead(404); res.end(); return; } res.writeHead(200, { 'content-type': mime[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(res); });
+await new Promise((r) => server.listen(0, r)); const port = server.address().port;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
+page.on('pageerror', (e) => console.log('pageerror', e.message));
+await page.goto(`http://localhost:${port}/?hub`);
+await page.waitForFunction(() => window.__app?.mode?.players, null, { timeout: 120000 });
+await page.evaluate(() => { const S = window.__app.S; S.flags.intro = true; S.settings.scare = 2; });
+await page.waitForTimeout(1500);
+const info = await page.evaluate(() => {
+  const m = window.__app.mode; const d = m.W.doors.find((x) => x.owner === 'Bakkerij');
+  m.players.forEach((p, i) => { p.x = d.x + Math.sin(d.yaw) * 5.5 + i * 0.8; p.z = d.z + Math.cos(d.yaw) * 5.5; });
+  m.deur.show(d, { seconds: 60, chase: false });
+  const g = m.deur.m.group; let meshes = 0; g.traverse((o) => { if (o.isMesh) meshes++; });
+  return { vis: g.visible, pos: g.position.toArray(), meshes, inScene: m.scene.children.includes(g), door: [d.x, d.z, d.yaw], parent: g.parent?.type, scale: g.scale.toArray() };
+});
+console.log(JSON.stringify(info));
+await page.evaluate(() => { const m = window.__app.mode; const g = m.deur.m.group.position; m.updateCamera = () => { m.W.jobNpc.catch.group.visible = false; m.life.villagers.forEach((v) => (v.group.visible = false)); m.players.forEach((p) => (p.c.group.visible = false)); m.camera.position.set(g.x + 7, g.y + 2.6, g.z + 1); m.camera.lookAt(g.x, g.y + 1.6, g.z); }; });
+await page.waitForTimeout(3000);
+console.log(JSON.stringify(await page.evaluate(() => { const g = window.__app.mode.deur.m.group; return { vis: g.visible, pos: g.position.toArray(), st: window.__app.mode.deur.state }; })));
+await page.screenshot({ path: '/tmp/deur_dbg.png' });
+await browser.close(); server.close();

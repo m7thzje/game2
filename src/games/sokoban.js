@@ -178,16 +178,12 @@ export default {
 
     function makeCrate(variant) {
       const g = new THREE.Group();
-      const bodyMat = new THREE.MeshStandardMaterial({ map: variant ? crateTexB : crateTexA, roughness: 0.9, emissive: 0x3a2208, emissiveIntensity: 1 });
+      const bodyMat = new THREE.MeshStandardMaterial({ map: variant ? crateTexB : crateTexA, roughness: 0.9, emissive: 0x5a3510, emissiveIntensity: 1 });
       const s = 1.6;
       g.add(mesh(gBox, bodyMat, { pos: [0, s / 2, 0], scale: [s, s, s] }));
       const t2 = 0.14;
       for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(mesh(gBox, crateFrame, { pos: [sx * (s / 2 - t2 / 2 + 0.01), s / 2, sz * (s / 2 - t2 / 2 + 0.01)], scale: [t2, s + 0.02, t2] }));
       for (const y of [0.07, s - 0.07]) g.add(mesh(gBox, crateFrame, { pos: [0, y, 0], scale: [s + 0.03, 0.14, s + 0.03] }));
-      // diagonale plank-bandjes op de zijkanten (herkenbaar als krat)
-      for (const [rx, ry] of [[0, 0], [0, Math.PI / 2]]) {
-        const diag = mesh(gBox, crateFrame, { cast: false, pos: [0, s / 2, 0], rot: [0, ry, 0], scale: [0.1, s * 1.05, s + 0.04] }); diag.rotation.z = 0.0; g.add(diag);
-      }
       return { g, bodyMat, glow: 0, glowT: 0 };
     }
 
@@ -407,7 +403,7 @@ export default {
       for (let i = 0; i < 2; i++) {
         const p = input.p[i], a = lv.chars[i];
         const pr = [p.upP, p.downP, p.leftP, p.rightP], hd = [p.up, p.down, p.left, p.right];
-        for (let d = 0; d < 4; d++) if (pr[d]) { a.dir = d; a.buf = d; a.bufT = 0.2; }
+        for (let d = 0; d < 4; d++) if (pr[d]) { a.dir = d; a.buf = d; a.bufT = 0.3; }
         if (a.dir >= 0 && !hd[a.dir]) a.dir = hd.indexOf(true);
         a.bufT -= dt; a.cd -= dt;
         if (a.cd <= 0) {
@@ -416,7 +412,7 @@ export default {
           a.buf = -1;
           if (d >= 0) {
             const moved = doMove(i, d);
-            a.cd = moved ? (fresh ? STEP * 1.45 : STEP) : (fresh ? 0.12 : 0.28);
+            a.cd = moved ? (fresh ? 0.2 : STEP) : (fresh ? 0.12 : 0.28);
             if (state !== 'play') return;
           }
         }
@@ -464,7 +460,7 @@ export default {
         if (dist > 0.001) { cr.x += dx / dist * mv; cr.z += dz / dist * mv; }
         cr.g.position.set(cr.x, 0.06, cr.z);
         cr.glow = damp(cr.glow, cr.glowT, 8, dt);
-        cr.bodyMat.emissive.setRGB(lerp(0.23, 0.13, cr.glow), lerp(0.13, 0.8, cr.glow), lerp(0.03, 0.33, cr.glow)); cr.bodyMat.emissiveIntensity = lerp(1, 0.42 + Math.sin(t * 5) * 0.07, cr.glow);
+        cr.bodyMat.emissive.setRGB(lerp(0.35, 0.13, cr.glow), lerp(0.21, 0.8, cr.glow), lerp(0.06, 0.33, cr.glow)); cr.bodyMat.emissiveIntensity = lerp(1, 0.42 + Math.sin(t * 5) * 0.07, cr.glow);
       }
       const pulse = 0.75 + Math.sin(t * 4) * 0.25;
       for (const gl of lv.goals) { if (!gl.ok) { gl.beam.scale.set(1 + Math.sin(t * 3 + gl.gi) * 0.06, 1, 1 + Math.sin(t * 3 + gl.gi) * 0.06); } }
@@ -543,7 +539,7 @@ export default {
       onResize() { if (lvl) fitCamera(lvl.L, false); },
       dispose() {},
       // alleen voor tests
-      _dbg: { get lvl() { return lvl; }, get state() { return state; }, move: (who, d) => doMove(who, d), get solved() { return solvedCount; }, setTime: (s) => { timeLeft = s; }, goto: (i) => { if (prev) { scene.remove(prev.g); prev = null; } if (lvl) scene.remove(lvl.g); startLevel(i); fitCamera(lvl.L, true); state = 'play'; stateT = 0; lvl.tStart = t; } },
+      _dbg: { cam: (px, py, pz, lx, ly, lz) => { camPos.set(px, py, pz); camLook.set(lx, ly, lz); camera.position.copy(camPos); camTarget.copy(camLook); camera.lookAt(camLook); }, get lvl() { return lvl; }, get state() { return state; }, move: (who, d) => doMove(who, d), get solved() { return solvedCount; }, setTime: (s) => { timeLeft = s; }, goto: (i) => { if (prev) { scene.remove(prev.g); prev = null; } if (lvl) scene.remove(lvl.g); startLevel(i); fitCamera(lvl.L, true); state = 'play'; stateT = 0; lvl.tStart = t; } },
     };
   },
 };

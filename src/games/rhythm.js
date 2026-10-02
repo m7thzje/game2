@@ -95,14 +95,14 @@ export default {
 
     // ---------- camera ----------
     camera.fov = 52;
-    const camLook = new THREE.Vector3(0, 1.2, -9.5);
-    let camBase = new THREE.Vector3(0, 10.2, 14.6), camT = 0, camKick = 0;
+    const camLook = new THREE.Vector3(0, 1.3, -9.5);
+    let camBase = new THREE.Vector3(0, 9.6, 13.6), camT = 0, camKick = 0;
     function setCam(aspect) {
       const ft = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
       const need = 12.4 / (ft * aspect);             // afstand tot de speellijn zodat alles in beeld past
-      const base = Math.hypot(10.2 - 0.5, 14.6);
+      const base = Math.hypot(9.6 - 0.5, 13.6);
       const f = Math.max(1, need / base);
-      camBase.set(0, 0.5 + (10.2 - 0.5) * f, 14.6 * f);
+      camBase.set(0, 0.5 + (9.6 - 0.5) * f, 13.6 * f);
       camera.position.copy(camBase); camera.lookAt(camLook); camera.updateProjectionMatrix();
     }
     setCam(camera.aspect || 1.7);
@@ -168,7 +168,7 @@ export default {
     const notes = NOTES.map((n) => ({ ...n, state: 'wait', grade: '', hitAt: -9, held: 0, tickT: 0, holdSnd: 0 }));
     const duets = {}; for (const n of notes) if (n.duet) (duets[n.duet] ||= [null, null])[n.pl] = n;
     const stats = { perfect: 0, good: 0, miss: 0, ghost: 0, duetOK: 0, duetTried: 0, holdsDone: 0, maxCombo: 0, perPlayer: [{ hit: 0, miss: 0 }, { hit: 0, miss: 0 }] };
-    let songT = 0, started = false, hype = 45, combo = 0, score = 0, ptr = 0, evI = 0, ending = null, endT = 0, done = false, firework = 0, accPoints = 0;
+    let songT = 0, started = false, hype = 55, combo = 0, score = 0, ptr = 0, evI = 0, ending = null, endT = 0, done = false, firework = 0, accPoints = 0;
     let uiT = 0, coinT = 0, lastSection = '';
     const beatPhase = () => { const b = songT / BEAT; return b - Math.floor(b); };
     const mult = () => 1 + Math.min(3, Math.floor(combo / 10)) * 0.5;
@@ -252,7 +252,7 @@ export default {
     }
     function missNote(n) {
       n.state = 'miss'; combo = 0; stats.miss++; stats.perPlayer[n.pl].miss++;
-      changeHype(-5.5); say('Mis', n.pl, n.lane, '#aaa', 0.5);
+      changeHype(songT < 14 ? -3.4 : -5.5); say('Mis', n.pl, n.lane, '#aaa', 0.5);
       falseNote(n.pl, n.midi);
       pads[n.pl * 4 + n.lane].flash = -1;
       if (n.long) { /* nooit begonnen */ }
@@ -368,13 +368,14 @@ export default {
     }
 
     // ---------- update ----------
+    let hinted = false; const prevStick = [[0, 0], [0, 0]];
     let t = 0, disposed = false, energy = 0, intensity = 0.3;
     function visuals(dt) {
       t += dt;
       const b = beatPhase();
       energy = damp(energy, started ? clamp(hype / 100 * 0.9 + (combo > 15 ? 0.2 : 0), 0, 1) : 0.2, 3, dt);
       intensity = damp(intensity, started ? clamp(hype / 100 + 0.15, 0.2, 1) : 0.25, 2, dt);
-      const shown = stage.update(dt, t, b, started ? hype : 45, energy, intensity);
+      const shown = stage.update(dt, t, b, started ? hype : 55, energy, intensity);
       // snelweg-offset
       const off = songT / BEAT - HW_Z0 / unit;
       hwTex.forEach((tx) => { tx.offset.y = off; });
@@ -400,6 +401,7 @@ export default {
     }
     function update(dt) {
       if (!started) { started = true; songT = 0; }
+      if (!hinted) { hinted = true; hud.setHint('Raak de noten precies <b>op de lijn</b>! Samen duetnoten (goud) raken geeft een bonus.'); setTimeout(() => { if (!disposed) hud.setHint(null); }, 6500); }
       if (!done) {
         if (!ending) {
           songT += dt;
@@ -407,9 +409,15 @@ export default {
           const tp = songT - dt * 0.5;
           for (let pl = 0; pl < 2; pl++) {
             const inp = input.p[pl];
-            if (inp.leftP) press(pl, 0, tp);
-            if (inp.upP) press(pl, 1, tp);
-            if (inp.rightP) press(pl, 2, tp);
+            // knoppen/toetsen (…P = net ingedrukt) + gamepad-stick als aanraking
+            const pv = prevStick[pl];
+            const lP = inp.leftP || (!inp.left && inp.x < -0.6 && pv[0] >= -0.6);
+            const uP = inp.upP || (!inp.up && inp.y < -0.6 && pv[1] >= -0.6);
+            const rP = inp.rightP || (!inp.right && inp.x > 0.6 && pv[0] <= 0.6);
+            pv[0] = inp.x; pv[1] = inp.y;
+            if (lP) press(pl, 0, tp);
+            if (uP) press(pl, 1, tp);
+            if (rP) press(pl, 2, tp);
             if (inp.aP) press(pl, 3, tp);
             if (inp.a && !inp.aP && !notes.some((n) => n.state === 'hold' && n.pl === pl)) pads[pl * 4 + 3].press = Math.max(pads[pl * 4 + 3].press, 0.4);
           }

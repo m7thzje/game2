@@ -211,7 +211,7 @@ export function buildStage(ctx, L) {
       if (u >= 1) { c.on = false; c.m.visible = false; coinsIn++; fx.particles.burst(CASE.x, 0.8, CASE.z, { count: 5, colors: [0xffd23f, 0xffffff], speed: 2.5, size: 0.2, gravity: 6 }); c.arrived = true; }
     }
     const ps = Math.min(1, coinsIn / 30);
-    pile.scale.setScalar(0.01 + ps * 0.95 + Math.min(1, coinsIn / 3) * 0.05);
+    const pk = 0.01 + ps * 0.95 + Math.min(1, coinsIn / 3) * 0.05; pile.scale.set(pk * 1.55, pk * 0.55, pk * 0.95);
     bas.position.y = Math.abs(Math.sin(beat * Math.PI)) * 0.25 * (0.4 + energy);
     bas.rotation.y = Math.sin(t * 2) * 0.15;
     return shown;

@@ -10,7 +10,7 @@ const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css
 const server = http.createServer((req, res) => { let p = decodeURIComponent(req.url.split('?')[0]); if (p === '/') p = '/index.html'; const f = path.join(root, p); if (!f.startsWith(root) || !fs.existsSync(f)) { res.writeHead(404); res.end('nope'); return; } res.writeHead(200, { 'content-type': mime[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(res); });
 await new Promise((r) => server.listen(0, r)); const port = server.address().port;
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
-const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
+const page = await browser.newPage({ viewport: { width: +(process.env.VW || 1100), height: +(process.env.VH || 650) } });
 const errors = [];
 page.on('console', (m) => { const x = m.text(); if ((m.type() === 'error' || m.type() === 'warning') && !/minigame niet geladen|Failed to load resource|ERR_CERT/.test(x)) errors.push(`[${m.type()}] ${x}`); });
 page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
@@ -24,6 +24,13 @@ await page.evaluate(() => { const app = window.__app, i = app.input; i.virtual[0
 await page.waitForFunction(() => window.__app.mode.state === 'countdown', null, { timeout: 90000 });
 await page.evaluate(() => { const app = window.__app; for (let k = 0; k < 120 && app.mode.state !== 'play'; k++) { app.input.update(); app.mode.update(0.05); } app.mode.instance.onStart && 0; });
 console.log('PLAY started');
+if (process.env.AUDIO) {
+  const r = await page.evaluate(async () => { const m = await import('/src/engine/audio.js'); m.audio.init(); window.__ac = { tone: 0, noise: 0, err: 0, maxAhead: 0 }; const a = m.audio; const ot = a.tone.bind(a), on = a.noise.bind(a);
+    a.tone = (...x) => { window.__ac.tone++; try { const w = x[2]?.when; if (w) window.__ac.maxAhead = Math.max(window.__ac.maxAhead, w - a.ctx.currentTime); return ot(...x); } catch (e) { window.__ac.err++; console.error('tone err ' + e.message); } };
+    a.noise = (...x) => { window.__ac.noise++; try { return on(...x); } catch (e) { window.__ac.err++; console.error('noise err ' + e.message); } };
+    return !!a.ctx; });
+  console.log('audio ctx', r);
+}
 const noRender = () => page.evaluate(() => { const r = window.__app.renderer; if (!r.__render) r.__render = r.render.bind(r); r.render = () => {}; });
 const doRender = () => page.evaluate(() => { const r = window.__app.renderer; if (r.__render) r.render = r.__render; });
 await noRender();
@@ -61,5 +68,6 @@ if (SHOT_EVERY > 0) await shot('end');
 console.log(JSON.stringify(await dbg()));
 console.log(JSON.stringify(await page.evaluate(() => window.__app.mode.result)));
 if (process.env.MISSES) console.log(JSON.stringify(await page.evaluate(() => window.__app.mode.instance.debug.notes.filter((n) => n.state === 'miss').map((n) => [+n.t.toFixed(2), n.lane, n.pl, n._off && +n._off.toFixed(2), n._skip]))));
+if (process.env.AUDIO) console.log('AUDIO', JSON.stringify(await page.evaluate(() => window.__ac)));
 console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 15).join('\n') : 'NO ERRORS');
 await browser.close(); server.close();

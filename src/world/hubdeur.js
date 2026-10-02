@@ -13,7 +13,7 @@ import { DEURMAN_HINTS } from './story.js';
 export class HubDeurman {
   constructor(hub) {
     this.hub = hub; this.scene = hub.scene;
-    this.m = makeDeurman(1.0); this.m.group.visible = false; this.scene.add(this.m.group);
+    this.m = makeDeurman(1.35); this.m.group.visible = false; this.scene.add(this.m.group);
     this.state = 'idle'; this.timer = 55; this.door = null; this.banish = 0; this.t = 0; this.stT = 0; this.hb = 0; this.tele = 6; this.hinted = 0;
     this.bar = h('div', { class: 'hud-deur', style: { display: 'none' } }, h('div', { class: 'lbl' }, '👁️ De Deurman'), h('div', { class: 'bar' }, h('i')));
     ui.hudEl.append(this.bar);

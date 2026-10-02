@@ -38,6 +38,7 @@ for (let k = 0; k < 6; k++) {
 await page.waitForFunction(() => window.__app.mode.state === 'play', null, { timeout: 60000 });
 await page.waitForTimeout(500);
 const log = (...a) => console.log(...a);
+const frames = (n) => page.evaluate((n) => new Promise((res) => { let k = 0; const f = () => { if (++k >= n) res(); else requestAnimationFrame(f); }; requestAnimationFrame(f); }), n);
 const dbg = (fn, arg) => page.evaluate(([f, a]) => { const d = window.__app.mode.instance._dbg; return typeof d[f] === 'function' ? d[f](...a) : d[f]; }, [fn, arg || []]);
 
 if (scenario === 'shots') {
@@ -68,11 +69,11 @@ if (scenario === 'input') {
   const L = parseLevel(LEVELS[0]); const sol = solve(L);
   const keys = ['up', 'down', 'left', 'right'];
   for (const m of sol.path) {
-    if (m.a === 4) { await page.evaluate(([w]) => { window.__app.input.virtual[w].a = true; }, [m.who]); await page.waitForTimeout(300); await page.evaluate(([w]) => { window.__app.input.virtual[w].a = false; }, [m.who]); await page.waitForTimeout(300); continue; }
+    if (m.a === 4) { await page.evaluate(([w]) => { window.__app.input.virtual[w].a = true; }, [m.who]); await frames(3); await page.evaluate(([w]) => { window.__app.input.virtual[w].a = false; }, [m.who]); await frames(2); await page.waitForTimeout(300); continue; }
     await page.evaluate(([w, k]) => { window.__app.input.virtual[w][k] = true; }, [m.who, keys[m.a]]);
-    await page.waitForTimeout(300);
+    await frames(3);
     await page.evaluate(([w, k]) => { window.__app.input.virtual[w][k] = false; }, [m.who, keys[m.a]]);
-    await page.waitForTimeout(300);
+    await frames(2); await page.waitForTimeout(300);
   }
   await page.waitForTimeout(600);
   log('na invoer-afspelen: state=', await dbg('state'), 'klaar=', await dbg('done'));

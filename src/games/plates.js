@@ -99,7 +99,7 @@ export default {
 
     // ------------------------------------------------------------------ de slapende draak
     function makeDragon() {
-      const g = new THREE.Group(); const S = 1.7; g.scale.setScalar(S);
+      const g = new THREE.Group(); const S = 1.4; g.scale.setScalar(S);
       const scaleMat = new THREE.MeshStandardMaterial({ color: 0x2fae98, roughness: 0.5, metalness: 0.3, emissive: 0x0f5a50, emissiveIntensity: 0.9 });
       const darkScale = new THREE.MeshStandardMaterial({ color: 0x1f7f78, roughness: 0.6, metalness: 0.2, emissive: 0x083a38, emissiveIntensity: 0.8 });
       const bellyMat = new THREE.MeshStandardMaterial({ color: 0xf2cc70, roughness: 0.6, emissive: 0x6a4a10, emissiveIntensity: 0.8 });
@@ -115,9 +115,8 @@ export default {
       wingGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0.5, 0, 0, -0.7, 2.6, 0.2, -1.2, 0, 0, 0.5, 2.6, 0.2, -1.2, 3.8, 0.5, 0.0, 0, 0, 0.5, 3.8, 0.5, 0.0, 2.0, 0.1, 1.1], 3)); wingGeo.computeVertexNormals();
       const wingMat = new THREE.MeshStandardMaterial({ color: 0x1d8a82, emissive: 0x0a4a48, emissiveIntensity: 0.9, side: THREE.DoubleSide, flatShading: true, roughness: 0.7 });
       for (const sx of [-1, 1]) {
-        const wing = new THREE.Group(); wing.position.set(sx * 1.2, 1.95, -0.7); wing.rotation.set(0.1, sx * 0.2, sx * -0.95); wing.scale.set(sx * 0.62, 0.62, 0.62); g.add(wing);
+        const wing = new THREE.Group(); wing.position.set(sx * 1.35, 2.0, -0.7); wing.rotation.set(0.1, sx * 0.2, sx * -1.15); wing.scale.set(sx * 0.55, 0.55, 0.55); g.add(wing);
         wing.add(new THREE.Mesh(wingGeo, wingMat));
-        wing.add(mesh(new THREE.CylinderGeometry(0.07, 0.1, 3.9, 5), hornMat, { pos: [1.9, 0.3, -0.3], rot: [Math.PI / 2 - 1.35, 0, 0], cast: false }));
       }
       // voorpoten
       for (const sx of [-1, 1]) {
@@ -461,7 +460,7 @@ export default {
 
     function startLevel(idx, snap) {
       lvl = buildLevel(idx); fitCamera(lvl.L, snap);
-      dragonTargetZ = -(lvl.L.h * C / 2) - 9.5;
+      dragonTargetZ = -(lvl.L.h * C / 2) - 8;
       hud.setHint(hintFor(lvl)); updateHud();
     }
     let dragonTargetZ = -17;

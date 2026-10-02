@@ -112,8 +112,9 @@ export default {
     function makeHammer() {
       const g = new THREE.Group();
       g.add(mesh(new THREE.CylinderGeometry(0.07, 0.08, 1.15, 7), mat(0x8a5a2b), { pos: [0, -0.35, 0] }));
-      g.add(mesh(new THREE.BoxGeometry(1.2, 0.8, 0.8), new THREE.MeshStandardMaterial({ color: 0xc08a58, roughness: 0.9, flatShading: true }), { pos: [0, -1.05, 0] }));
-      for (const sx of [-0.45, 0.45]) g.add(mesh(new THREE.BoxGeometry(0.12, 0.84, 0.84), mat(0x55565e, { metalness: 0.6, roughness: 0.4 }), { pos: [sx, -1.05, 0] }));
+      g.add(mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.25, 14), new THREE.MeshStandardMaterial({ color: 0xc08a58, roughness: 0.9 }), { pos: [0, -1.05, 0], rot: [0, 0, Math.PI / 2] }));
+      for (const sx of [-0.48, 0.48]) g.add(mesh(new THREE.CylinderGeometry(0.455, 0.455, 0.14, 14), mat(0x55565e, { metalness: 0.6, roughness: 0.4, flatShading: false }), { pos: [sx, -1.05, 0], rot: [0, 0, Math.PI / 2] }));
+      for (const sx of [-1, 1]) g.add(mesh(new THREE.CircleGeometry(0.4, 14), mat(0xe0b078, { flatShading: false }), { cast: false, pos: [sx * 0.626, -1.05, 0], rot: [0, sx * Math.PI / 2, 0] }));
       g.add(mesh(new THREE.SphereGeometry(0.085, 6, 5), mat(0x55565e), { cast: false, pos: [0, 0.27, 0] }));
       return g;
     }
