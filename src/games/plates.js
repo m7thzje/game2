@@ -91,7 +91,7 @@ export default {
     { const d = new THREE.Object3D(); const cc = new THREE.Color(); const cols = [0x59e0ff, 0xd070ff, 0x6affb0, 0xff7ad0, 0x8a7aff];
       for (let i = 0; i < 60; i++) {
         const side = rng() < 0.5 ? -1 : 1;
-        d.position.set(side * (14 + rng() * 38), 0.8 + rng() * 1.2, -4 - rng() * 36); const s = 0.8 + rng() * 2.2; d.scale.set(s, s * (1 + rng()), s); d.rotation.set((rng() - 0.5) * 0.5, rng() * 3, (rng() - 0.5) * 0.5); d.updateMatrix();
+        d.position.set(side * (22 + rng() * 38), 0.8 + rng() * 1.2, -22 - rng() * 36); const s = 0.8 + rng() * 1.6; d.scale.set(s, s * (1 + rng()), s); d.rotation.set((rng() - 0.5) * 0.5, rng() * 3, (rng() - 0.5) * 0.5); d.updateMatrix();
         farCrystals.setMatrixAt(i, d.matrix); farCrystals.setColorAt(i, cc.setHex(cols[i % cols.length]));
       }
     }
@@ -99,7 +99,7 @@ export default {
 
     // ------------------------------------------------------------------ de slapende draak
     function makeDragon() {
-      const g = new THREE.Group(); const S = 2.6; g.scale.setScalar(S);
+      const g = new THREE.Group(); const S = 2.0; g.scale.setScalar(S);
       const scaleMat = new THREE.MeshStandardMaterial({ color: 0x5e38b0, roughness: 0.55, metalness: 0.25, emissive: 0x1d0a4a, emissiveIntensity: 0.8 });
       const bellyMat = new THREE.MeshStandardMaterial({ color: 0xe8c068, roughness: 0.6, emissive: 0x4a3010, emissiveIntensity: 0.6 });
       const hornMat = mat(0xf0e6c8, { flatShading: false });
@@ -179,19 +179,19 @@ export default {
     { const coins = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.28, 0.28, 0.07, 10), new THREE.MeshStandardMaterial({ color: 0xffcf3a, emissive: 0xaa6a00, emissiveIntensity: 0.55, metalness: 0.8, roughness: 0.3 }), 110);
       const gems = new THREE.InstancedMesh(new THREE.OctahedronGeometry(0.3, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: 0x555555, roughness: 0.2, flatShading: true }), 26);
       const d = new THREE.Object3D(); const cc = new THREE.Color(); const cols = [0x59e0ff, 0xff5a8a, 0x6affb0, 0xd070ff, 0xffe14a];
-      for (let i = 0; i < 110; i++) { const side = i % 2 ? 1 : -1; const rr = rng() * 5.2; const a = rng() * TAU; d.position.set(side * (9 + Math.cos(a) * rr * 0.8) , 0.1 + (1 - rr / 5.2) * 1.3 + rng() * 0.3, -17 + Math.sin(a) * rr * 0.6 - 1); d.rotation.set(rng() * 3, rng() * 3, rng() * 3); d.updateMatrix(); coins.setMatrixAt(i, d.matrix); }
-      for (let i = 0; i < 26; i++) { const side = i % 2 ? 1 : -1; const rr = rng() * 4; const a = rng() * TAU; d.position.set(side * (9 + Math.cos(a) * rr * 0.8), 0.7 + (1 - rr / 4) * 1.2, -17 + Math.sin(a) * rr * 0.6 - 1); d.rotation.set(rng() * 3, rng() * 3, rng() * 3); d.scale.setScalar(0.8 + rng() * 0.8); d.updateMatrix(); gems.setMatrixAt(i, d.matrix); gems.setColorAt(i, cc.setHex(cols[i % cols.length])); }
+      for (let i = 0; i < 110; i++) { const side = i % 2 ? 1 : -1; const rr = rng() * 5.2; const a = rng() * TAU; d.position.set(side * (9 + Math.cos(a) * rr * 0.8) , 0.1 + (1 - rr / 5.2) * 1.3 + rng() * 0.3, -24 + Math.sin(a) * rr * 0.6 - 1); d.rotation.set(rng() * 3, rng() * 3, rng() * 3); d.updateMatrix(); coins.setMatrixAt(i, d.matrix); }
+      for (let i = 0; i < 26; i++) { const side = i % 2 ? 1 : -1; const rr = rng() * 4; const a = rng() * TAU; d.position.set(side * (9 + Math.cos(a) * rr * 0.8), 0.7 + (1 - rr / 4) * 1.2, -24 + Math.sin(a) * rr * 0.6 - 1); d.rotation.set(rng() * 3, rng() * 3, rng() * 3); d.scale.setScalar(0.8 + rng() * 0.8); d.updateMatrix(); gems.setMatrixAt(i, d.matrix); gems.setColorAt(i, cc.setHex(cols[i % cols.length])); }
       scene.add(coins); scene.add(gems);
     }
 
     // ------------------------------------------------------------------ gedeelde materialen
     const stoneTex = tex.stone(1, 1);
-    const floorMat = new THREE.MeshStandardMaterial({ map: stoneTex, color: 0x9a9cc0, roughness: 0.95 });
+    const floorMat = new THREE.MeshStandardMaterial({ map: stoneTex, color: 0xffffff, roughness: 0.9, emissive: 0x2a2850, emissiveIntensity: 0.7 });
     const iceMat = new THREE.MeshStandardMaterial({ map: tex.ice(1, 1), color: 0xcfeaff, roughness: 0.12, metalness: 0.25, emissive: 0x2a6a9a, emissiveIntensity: 0.35 });
     const lavaTex = tex.lava(1, 1).clone(); lavaTex.needsUpdate = true; lavaTex.userData.keep = true;
     const lavaMat = new THREE.MeshStandardMaterial({ map: lavaTex, emissive: 0xff5a10, emissiveMap: lavaTex, emissiveIntensity: 0.9, roughness: 0.6 });
     const rockMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true });
-    const rockBaseMat = new THREE.MeshStandardMaterial({ map: stoneTex, color: 0x59577a, roughness: 1 });
+    const rockBaseMat = new THREE.MeshStandardMaterial({ map: stoneTex, color: 0x4a4868, roughness: 1 });
     const crystalMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const glyphTex = glyphTexture();
     const dark = mat(0x23202e); const metal = mat(0x7e8294, { metalness: 0.7, roughness: 0.4 });
@@ -241,10 +241,10 @@ export default {
       const mk = (list, material, h, y, shade) => {
         if (!list.length) return null;
         const im = new THREE.InstancedMesh(gBox, material, list.length); im.receiveShadow = true;
-        list.forEach((i, n) => { const [x, z] = cxz(i); dummy.position.set(x, y, z); dummy.rotation.set(0, 0, 0); dummy.scale.set(C - 0.04, h, C - 0.04); dummy.updateMatrix(); im.setMatrixAt(n, dummy.matrix); im.setColorAt(n, cc.setHSL(0.66, 0.12, shade + ((i * 7) % 5) * 0.015)); });
+        list.forEach((i, n) => { const [x, z] = cxz(i); dummy.position.set(x, y, z); dummy.rotation.set(0, 0, 0); dummy.scale.set(C - 0.04, h, C - 0.04); dummy.updateMatrix(); im.setMatrixAt(n, dummy.matrix); im.setColorAt(n, cc.setHSL(0.68, 0.15, shade + ((i * 7) % 5) * 0.02)); });
         g.add(im); return im;
       };
-      mk(floors, floorMat, 0.7, -0.35, 0.72); mk(ices, iceMat, 0.7, -0.35, 0.86);
+      mk(floors, floorMat, 0.7, -0.35, 0.78); mk(ices, iceMat, 0.7, -0.35, 0.9);
       const lavaMesh = mk(lavas, lavaMat, 0.4, -0.5, 1.0);
       if (lavas.length) { const [lx, lz] = cxz(lavas[(lavas.length / 2) | 0]); lv.lavaPos = [lx, lz]; }
       lv.lavaCells = lavas;
@@ -256,12 +256,12 @@ export default {
       const bases = [];
       for (let y = -3; y < L.h + 3; y++) for (let x = -3; x < L.w + 3; x++) {
         if (!isRock(x, y)) continue;
-        if (!near(x, y, 3)) continue;
+        if (!near(x, y, 2)) continue;
         const adj = near(x, y, 1);
         const [px, pz] = [(x - (L.w - 1) / 2) * C, (y - (L.h - 1) / 2) * C];
-        if (adj) bases.push([px, pz, 0.9 + rr() * 0.3]);
+        if (adj) bases.push([px, pz, 0.7 + rr() * 0.25]);
         const n = adj ? 2 : 1;
-        for (let k = 0; k < n; k++) rocks.push([px + (rr() - 0.5) * 0.9, pz + (rr() - 0.5) * 0.9, adj ? 0.75 + rr() * 0.55 : 1.4 + rr() * 1.6, 0.8 + rr() * 0.5, adj ? 0 : 1]);
+        for (let k = 0; k < n; k++) rocks.push([px + (rr() - 0.5) * 0.9, pz + (rr() - 0.5) * 0.9, adj ? 0.7 + rr() * 0.5 : 1.0 + rr() * 0.9, 0.75 + rr() * 0.4, adj ? 0 : 1]);
       }
       const rim = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), rockMat, rocks.length); rim.castShadow = true; rim.receiveShadow = true;
       rocks.forEach((r, n) => { dummy.position.set(r[0], r[2] * 0.45 - 0.1, r[1]); dummy.rotation.set(rr() * 3, rr() * 3, rr() * 3); dummy.scale.set(r[3] * 0.95, r[2] * 0.75, r[3] * 0.95); dummy.updateMatrix(); rim.setMatrixAt(n, dummy.matrix); rim.setColorAt(n, cc.setHSL(0.68 + rr() * 0.05, 0.2 + rr() * 0.1, r[4] ? 0.3 + rr() * 0.1 : 0.42 + rr() * 0.12)); });
@@ -296,12 +296,13 @@ export default {
       lv.gates = L.gates.map((gt, gi) => {
         const [x, z] = cxz(gt.cell); const grp = new THREE.Group(); grp.position.set(x, 0, z); g.add(grp);
         const m = chMat[gt.ch]; let moving, closedY = 0, openY = -2.0;
+        if (gt.kind !== 'bridge') grp.add(mesh(gBox, new THREE.MeshBasicMaterial({ color: CH_COLORS[gt.ch], transparent: true, opacity: 0.35 }), { cast: false, receive: false, pos: [0, 0.02, 0], scale: [C - 0.1, 0.04, C - 0.1] }));
         if (gt.kind === 'door') {
           const sz = spanZ(gt.cell); const holder = new THREE.Group(); grp.add(holder); if (!sz) holder.rotation.y = Math.PI / 2; // bars along z
           for (const s of [-1, 1]) { holder.add(mesh(gBox, mat(0x4b4860), { pos: [0, 1.05, s * 0.93], scale: [0.36, 2.1, 0.3] })); holder.add(mesh(new THREE.OctahedronGeometry(0.2, 0), m, { cast: false, pos: [0, 2.25, s * 0.93] })); }
           holder.add(mesh(gBox, mat(0x4b4860), { pos: [0, 2.0, 0], scale: [0.3, 0.2, 2.0] }));
           moving = new THREE.Group(); holder.add(moving);
-          for (let b = -3; b <= 3; b++) moving.add(mesh(gBox, metal, { pos: [0, 0.9, b * 0.26], scale: [0.1, 1.8, 0.09] }));
+          for (let b = -3; b <= 3; b++) moving.add(mesh(gBox, metal, { pos: [0, 0.9, b * 0.26], scale: [0.16, 1.8, 0.12] }));
           moving.add(mesh(gBox, m, { cast: false, pos: [0, 1.2, 0], scale: [0.14, 0.14, 1.7] }));
           openY = -1.95;
         } else if (gt.kind === 'wall') {
@@ -420,18 +421,25 @@ export default {
     // ------------------------------------------------------------------ camera
     const fitCam = new THREE.PerspectiveCamera(46, 16 / 9, 0.1, 500);
     const camPos = new THREE.Vector3(), camLook = new THREE.Vector3(), camTarget = new THREE.Vector3();
-    const ELEV = 55 * Math.PI / 180;
+    const ELEV = 52 * Math.PI / 180;
     function fitCamera(L, snap) {
       fitCam.fov = camera.fov; fitCam.aspect = camera.aspect || 16 / 9; fitCam.updateProjectionMatrix();
-      const hw = L.w * C / 2 + 0.6, hd = L.h * C / 2 + 0.6; const cen = new THREE.Vector3(0, 0.3, -1.2);
-      const corners = []; for (const sx of [-1, 1]) for (const sz of [-1, 1]) for (const y of [0, 2.2]) corners.push(new THREE.Vector3(sx * hw, y, sz * hd));
-      let best = 60;
-      for (let dist = 12; dist < 75; dist += 0.4) {
-        fitCam.position.set(cen.x, cen.y + Math.sin(ELEV) * dist, cen.z + Math.cos(ELEV) * dist); fitCam.lookAt(cen); fitCam.updateMatrixWorld(); fitCam.updateProjectionMatrix();
-        let ok = true; for (const c of corners) { tmpV.copy(c).project(fitCam); if (Math.abs(tmpV.x) > 0.92 || tmpV.y > 0.5 || tmpV.y < -0.74) { ok = false; break; } }
-        if (ok) { best = dist; break; }
+      let x0 = 99, x1 = -99, y0 = 99, y1 = -99;
+      for (let i = 0; i < L.n; i++) if (L.terrain[i] !== 0 && L.terrain[i] !== 2 || L.objKind[i]) { const gx = i % L.w, gy = (i / L.w) | 0; x0 = Math.min(x0, gx); x1 = Math.max(x1, gx); y0 = Math.min(y0, gy); y1 = Math.max(y1, gy); }
+      const ox = (x0 + x1) / 2 - (L.w - 1) / 2, oz = (y0 + y1) / 2 - (L.h - 1) / 2;
+      const hw = (x1 - x0 + 1) * C / 2 + 1.0, hd = (y1 - y0 + 1) * C / 2 + 1.0; const cen = new THREE.Vector3(ox * C, 0.3, oz * C);
+      const corners = []; for (const sx of [-1, 1]) for (const sz of [-1, 1]) for (const y of [0, 2.2]) corners.push(new THREE.Vector3(cen.x + sx * hw, y, cen.z + sz * hd));
+      let best = 60, bestShift = 0, found = false;
+      const look = new THREE.Vector3();
+      for (let dist = 12; dist < 80 && !found; dist += 0.5) {
+        for (let shift = 0; shift <= 16 && !found; shift += 0.5) {
+          look.set(cen.x, cen.y, cen.z - shift);
+          fitCam.position.set(look.x, look.y + Math.sin(ELEV) * dist, look.z + Math.cos(ELEV) * dist); fitCam.lookAt(look); fitCam.updateMatrixWorld(); fitCam.updateProjectionMatrix();
+          let ok = true; for (const c of corners) { tmpV.copy(c).project(fitCam); if (Math.abs(tmpV.x) > 0.9 || tmpV.y > 0.2 || tmpV.y < -0.74) { ok = false; break; } }
+          if (ok) { best = dist; bestShift = shift; found = true; }
+        }
       }
-      camPos.set(cen.x, cen.y + Math.sin(ELEV) * best, cen.z + Math.cos(ELEV) * best); camLook.copy(cen);
+      camLook.set(cen.x, cen.y, cen.z - bestShift); camPos.set(camLook.x, camLook.y + Math.sin(ELEV) * best, camLook.z + Math.cos(ELEV) * best);
       if (snap) { camera.position.copy(camPos); camera.lookAt(camLook); camTarget.copy(camLook); }
     }
     function updateCamera(dt) {
@@ -448,7 +456,7 @@ export default {
 
     function startLevel(idx, snap) {
       lvl = buildLevel(idx); fitCamera(lvl.L, snap);
-      dragonTargetZ = -(lvl.L.h * C / 2) - 8.5;
+      dragonTargetZ = -(lvl.L.h * C / 2) - 11;
       hud.setHint(hintFor(lvl)); updateHud();
     }
     let dragonTargetZ = -17;

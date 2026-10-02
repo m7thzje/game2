@@ -34,14 +34,14 @@ const fin = async () => { console.log(JSON.stringify(await dbg())); console.log(
 
 if (scen === 'showcase') {
   await step(2); await page.evaluate(() => { window.__app.mode.instance.debug.zoom = 0.62; });
-  await page.evaluate(() => { const d = window.__app.mode.instance.debug; d.pl[0].x = -3; d.pl[0].z = 8; d.pl[1].x = 9; d.pl[1].z = 7; d.spawn('goblin', -7, 2); d.spawn('runner', 8, -3); d.spawn('brute', 6, 5); });
+  await page.evaluate(() => { const d = window.__app.mode.instance.debug; d.pl[0].x = -3; d.pl[0].z = 5; d.pl[1].x = 6; d.pl[1].z = 5; d.spawn('goblin', -7, 2); d.spawn('runner', 8, -3); d.spawn('brute', 6, 5); });
   await step(36, '(k) => { const d = window.__app.mode.instance.debug; d.pl.forEach((p) => p.inv = 100); }'); console.log(JSON.stringify(await page.evaluate(() => { const p = window.__app.mode.instance.debug.pl[1]; return { roll: p.roll, tilt: p.tilt, q: p.piv.quaternion.toArray(), ko: p.ko, pose: p.c.pose, y: p.holder.position.y, rotx: p.c.body.rotation.x, legL: p.c.legL.rotation.x }; }))); await shot('s1_carry');
   await page.evaluate(() => { const d = window.__app.mode.instance.debug; d.pl.forEach((p) => p.inv = 0); d.ko(0); });
   await step(10); await shot('s2_ko');
-  await page.evaluate(() => { const d = window.__app.mode.instance.debug; d.pl[1].x = d.pl[0].x + 1.5; d.pl[1].z = d.pl[0].z; for (const e of d.enemies.slice()) { e.hp = 0; e.dying = 0.01; } });
+  await page.evaluate(() => { const d = window.__app.mode.instance.debug; d.pl[1].x = d.pl[0].x + 1.5; d.pl[1].z = d.pl[0].z; d.pl[0].x = -2; d.pl[0].z = 3; d.pl[1].x = -0.5; d.pl[1].z = 3; for (const e of d.enemies.slice()) { e.hp = 0; e.dying = 0.01; } });
   await step(25, '(k) => { window.__app.input.virtual[1].a = true; }'); await shot('s3_reviving');
   await step(25, '(k) => { window.__app.input.virtual[1].a = true; }'); await page.evaluate(() => { window.__app.input.virtual[1].a = false; }); await step(6); await shot('s4_revived');
-  await page.evaluate(() => { const d = window.__app.mode.instance.debug; for (const e of d.enemies.slice()) { e.hp = 0; e.dying = 0.01; } d.spawn('bomber', 9, 0); d.spawn('bomber', -9, -1); d.pl[0].x = 0; d.pl[0].z = 8; d.pl[1].x = 3; d.pl[1].z = 8; });
+  await page.evaluate(() => { const d = window.__app.mode.instance.debug; for (const e of d.enemies.slice()) { e.hp = 0; e.dying = 0.01; } d.spawn('bomber', 9, 0); d.spawn('bomber', -9, -1); d.pl[0].x = -3; d.pl[0].z = 5; d.pl[1].x = 3; d.pl[1].z = 5; });
   await step(60); await shot('s5_bomb');
   await page.evaluate(() => { const i = window.__app.input; i.virtual[0].x = 1; i.virtual[0].b = true; });
   await step(3); await page.evaluate(() => { window.__app.input.virtual[0].b = false; }); await shot('s6_roll');

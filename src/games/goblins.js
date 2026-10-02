@@ -26,7 +26,7 @@ const TYPES = {
 };
 const CS = 1.22;   // vergroting van poppetjes zodat ze goed leesbaar zijn
 const SPECS = {
-  goblin: { scale: 0.85 * CS },
+  goblin: { scale: 0.85 * CS, shirt: 0x9a6a30, pants: 0x5a4a34, skin: 0x86cc4a },
   runner: { scale: 0.72 * CS, skin: 0xd0d84a, shirt: 0xd8a02a, pants: 0x5a4a20, hair: 0xe8a010 },
   brute: { scale: 1.3 * CS, bodyW: 1.75, skin: 0x5f9a3a, shirt: 0x8a3a2a, pants: 0x3a2a20, hat: 'horns', headScale: 1.1, hair: 0x1a2a10 },
   bomber: { scale: 0.82 * CS, skin: 0x8fd06a, shirt: 0xb03a2a, hat: 'beanie', hatColor: 0x2a2a2a, hatColor2: 0xff5a2a, backpack: 0x2a2a2a },
@@ -108,6 +108,7 @@ export default {
 
     // ---------- hulp ----------
     const rng = ctx.rng;
+    let disposed = false;
     let t = 0, gameT = 0, endT = -1, over = false, outcome = null;
     const hitSrc = {};
     let sheepLeft = SHEEP_N, score = 0, killsMain = 0, spawnedMain = 0, hitsTaken = 0, kosCount = 0, revives = 0, bossDown = false, rescued = 0;
@@ -364,7 +365,8 @@ export default {
       b.ring.scale.setScalar(BOMB_R); b.disc.scale.setScalar(BOMB_R);
       e.c.swing(); audio.sfx('throw', { vol: 0.4 });
     }
-    const decals = []; for (let k = 0; k < 6; k++) { const d = mesh(new THREE.CircleGeometry(1, 20), new THREE.MeshBasicMaterial({ color: 0x050403, transparent: true, opacity: 0, depthWrite: false }), { cast: false, rot: [-Math.PI / 2, 0, 0] }); d.visible = false; d.position.y = 0.05; scene.add(d); decals.push({ m: d, life: 0 }); }
+    const scorchTex = canvasTex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 4, 32, 32, 30); gr.addColorStop(0, 'rgba(0,0,0,.85)'); gr.addColorStop(0.55, 'rgba(10,6,4,.6)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
+    const decals = []; for (let k = 0; k < 6; k++) { const d = mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: scorchTex, transparent: true, opacity: 0, depthWrite: false }), { cast: false, rot: [-Math.PI / 2, 0, 0] }); d.visible = false; d.position.y = 0.05; scene.add(d); decals.push({ m: d, life: 0 }); }
     let decalI = 0;
     const flash = new THREE.PointLight(0xffa040, 0, 20, 1.6); scene.add(flash); let flashT = 0;
     function explode(x, z, y = 0.5, harmless = false) {
@@ -374,12 +376,12 @@ export default {
       flash.position.set(x, 2.5, z); flash.intensity = harmless ? 3 : 8; flashT = 0.35;
       ctx.shake(harmless ? 0.25 : 0.65);
       if (harmless) return;
-      const d = decals[decalI++ % decals.length]; d.m.visible = true; d.m.position.x = x; d.m.position.z = z; d.m.scale.setScalar(BOMB_R * 0.9); d.life = 7; d.m.material.opacity = 0.55;
+      const d = decals[decalI++ % decals.length]; d.m.visible = true; d.m.position.x = x; d.m.position.z = z; d.m.scale.setScalar(BOMB_R * 1.0); d.life = 7; d.m.material.opacity = 0.8;
       for (const s of sheep) {
         if (s.state === 'gone' || s.state === 'carried') continue;
         if (Math.hypot(s.x - x, s.z - z) < BOMB_R + 0.3) {
           s.lives--; fx.particles.burst(s.x, 1, s.z, { count: 8, colors: [0x333333, 0xff8a2a], speed: 3, size: 0.3 });
-          if (s.lives <= 0) { const ex = exitPoint(s.x, s.z); s.state = 'fleeing'; s.fleeX = ex[0]; s.fleeZ = ex[1]; fx.texts.add('Auw! Hij rent weg!', s.x, 3, s.z, '#ff9a5a', 1.1); bleat(); }
+          if (s.lives <= 0) { const ex = exitPoint(s.x, s.z); s.state = 'fleeing'; s.fleeX = ex[0]; s.fleeZ = ex[1]; fx.texts.add('Auw! Hij rent weg!', s.x + rand(-1, 1), 3.4, s.z, '#ff9a5a', 1.1); bleat(); }
           else { singe(s); fx.texts.add('Geschroeid!', s.x, 3, s.z, '#ffb27a', 1); bleat(); s.state = 'return'; sheepTarget(s); }
         }
       }
@@ -505,7 +507,7 @@ export default {
       hud.showBig('Goblin-koning verslagen!', 2200, '#7aff9a');
       for (const o of enemies.slice()) if (o !== e && !o.dying) { if (o.carrying) dropSheep(o); killEnemy(o); }
       for (const b of bombs) if (b.on) { explode(b.x, b.z, b.y, true); b.on = false; b.g.visible = b.ring.visible = b.disc.visible = false; }
-      for (let k = 0; k < 6; k++) setTimeout(() => { if (!over) fx.particles.burst(e.x + rand(-2, 2), 2 + rand(0, 2), e.z + rand(-2, 2), { count: 30, colors: [0xffe14a, 0xff6fa5, 0x58e0ff, 0xffffff], speed: 7, size: 0.4 }); }, 150 * k);
+      for (let k = 0; k < 6; k++) setTimeout(() => { if (!disposed) fx.particles.burst(e.x + rand(-2, 2), 2 + rand(0, 2), e.z + rand(-2, 2), { count: 30, colors: [0xffe14a, 0xff6fa5, 0x58e0ff, 0xffffff], speed: 7, size: 0.4 }); }, 150 * k);
       endGame('win');
     }
 
@@ -536,6 +538,7 @@ export default {
     }
 
     // ---------- HUD ----------
+    let lastHint = '';
     function hudUpdate() {
       const s = '🐑'.repeat(sheepLeft) + '·'.repeat(SHEEP_N - sheepLeft);
       hud.setScore(`${s}   Golf ${Math.min(wave + 1, 3)}/3`);
@@ -549,7 +552,7 @@ export default {
       const ko = pl.find((p) => p.ko);
       if (king && king.active && !king.dying) hint = `<b style="color:#ff8a6a">👑 Goblin-koning</b>`;
       if (ko && !over) { const o = pl[1 - ko.i]; hint += (hint ? '<br>' : '') + `${players[ko.i].name} is KO! ${players[o.i].name}: sta naast hem en houd <kbd>${o.i ? 'Enter' : 'F'}</kbd> ingedrukt`; }
-      hud.setHint(hint || null);
+      if (hint !== lastHint) { lastHint = hint; hud.setHint(hint || null); }
       hud.setTimer(null);
     }
 
@@ -570,7 +573,7 @@ export default {
             p.ko = false; p.hp = 2; p.inv = 3; p.rev = 0; revives++;
             fx.particles.burst(p.x, 1.2, p.z, { count: 24, colors: [0xff5a8a, 0xffd0e0, 0xffffff], speed: 5, size: 0.35 });
             fx.texts.add('Gered!', p.x, 3, p.z, '#7aff9a', 1.3); audio.sfx('powerup'); hud.toast(`${players[p.i].name} is er weer bij!`, 1600);
-            c.pose = 'cheer'; setTimeout(() => { if (!p.ko && !over) c.pose = 'idle'; }, 800);
+            c.pose = 'cheer'; setTimeout(() => { if (!disposed && !p.ko && !over) c.pose = 'idle'; }, 800);
           }
           c.pose = p.ko ? 'sad' : c.pose;
           c.speed = 0;
@@ -835,7 +838,7 @@ export default {
     }
     function updateBombs(dt) {
       if (flashT > 0) { flashT -= dt; flash.intensity = Math.max(0, flash.intensity - dt * 24); if (flashT <= 0) flash.intensity = 0; }
-      for (const d of decals) if (d.life > 0) { d.life -= dt; d.m.material.opacity = Math.min(0.55, d.life / 4 * 0.55); if (d.life <= 0) d.m.visible = false; }
+      for (const d of decals) if (d.life > 0) { d.life -= dt; d.m.material.opacity = Math.min(0.8, d.life / 4 * 0.8); if (d.life <= 0) d.m.visible = false; }
       for (const b of bombs) {
         if (!b.on) continue;
         b.t += dt; const k = b.t / b.T;
@@ -933,7 +936,7 @@ export default {
       introUpdate: idleUpdate,
       resultUpdate(dt) { t += dt; ambient(dt); pl.forEach((p) => { p.c.update(dt); }); for (const s of sheep) updateSheep(s, dt); for (const e of enemies.slice()) updateEnemy(e, dt); },
       onResize() { setCam(camera.aspect); },
-      dispose() {},
+      dispose() { disposed = true; },
       debug: { pl, sheep, enemies, bombs, loseAll: () => sheep.forEach((q) => loseSheep(q, null)), advance: (v) => { gameT += v; }, killKing: () => { const k = spawnEnemy('king', 0, -8); if (k) { k.hp = 1; k.state = 'seek'; hitEnemy(k, 1, 0, 1); } }, pickups, ko: (i) => { const p = pl[i]; for (let k = 0; k < 3; k++) { p.inv = 0; p.roll = 0; hurtPlayer(p, p.x + 1, p.z, 'x'); } }, drop: (x, z, k) => dropPickup(x, z, k), spawn: (ty, x, z) => spawnEnemy(ty, x, z), get state() { return { wave, stage, waveT, sheepLeft, score, over, outcome, kills: killsMain, spawned: spawnedMain, hitsTaken, hitSrc: JSON.stringify(hitSrc), king: king && king.active ? king.hp : null }; }, set zoom(v) { zoomMul = v; }, set god(v) { pl.forEach((p) => { p.hp = 3; p.inv = 1e6; }); } },
     };
   },

@@ -139,8 +139,21 @@ export function buildWorld(ctx) {
   const camp = P.campfire(); camp.position.set(CAMP.x, 0, CAMP.z); scene.add(camp); anim.fire = camp;
   obstacles.push({ x: CAMP.x, z: CAMP.z, r: 1.1 });
   for (const a of [0.7, 2.4, 4.2]) S.add(mesh(new THREE.CylinderGeometry(0.22, 0.22, 1.6, 8), mat(0x6b4a2e), { pos: [CAMP.x + Math.cos(a) * 2.2, 0.25, CAMP.z + Math.sin(a) * 2.2], rot: [Math.PI / 2, 0, a + Math.PI / 2] }));
-  // herder Sjoerd
-  const sjoerd = makeNPC('shepherd'); sjoerd.group.position.set(CAMP.x + 1.9, 0, CAMP.z - 1.5); sjoerd.faceTowards(0, 0); scene.add(sjoerd.group); sjoerd.pose = 'wave';
+  // herder Sjoerd (bevroren pose, samengevoegd = weinig draw calls; hij reageert met hupjes)
+  const sjC = makeNPC('shepherd'); sjC.faceDir(-CAMP.x, -CAMP.z); sjC.pose = 'wave';
+  for (let k = 0; k < 40; k++) sjC.update(0.05);
+  const sjFrozen = bake(sjC.group, true);
+  const sjGroup = new THREE.Group(); sjGroup.add(sjFrozen); sjGroup.position.set(CAMP.x + 1.9, 0, CAMP.z - 1.5); scene.add(sjGroup);
+  const sjoerd = { group: sjGroup, pose: 'wave', t: 0, hop: 0,
+    update(dt) {
+      this.t += dt; const P_ = this.pose;
+      let y = 0, rz = 0, sy = 1;
+      if (P_ === 'scared') { y = Math.abs(Math.sin(this.t * 16)) * 0.25; rz = Math.sin(this.t * 30) * 0.05; }
+      else if (P_ === 'cheer') { y = Math.abs(Math.sin(this.t * 7)) * 0.5; rz = Math.sin(this.t * 7) * 0.06; }
+      else if (P_ === 'sad') { sy = 0.93; rz = 0.08; }
+      else { rz = Math.sin(this.t * 2) * 0.03; y = Math.abs(Math.sin(this.t * 1.3)) * 0.04; }
+      sjGroup.position.y = y; sjGroup.rotation.z = rz; sjGroup.scale.y = sy;
+    } };
   const staff = new THREE.Group(); staff.add(mesh(new THREE.CylinderGeometry(0.04, 0.05, 2.1, 5), mat(0x6b4a2e), { pos: [0, 1.0, 0] })); staff.add(mesh(new THREE.TorusGeometry(0.17, 0.035, 5, 10, Math.PI * 1.4), mat(0x6b4a2e), { pos: [0, 2.1, 0], rot: [0, 0, 0.3] }));
   staff.position.set(CAMP.x + 2.5, 0, CAMP.z - 1.1); S.add(staff);
 
@@ -176,6 +189,26 @@ export function buildWorld(ctx) {
   for (const [x, z] of [[12.8, 4.9], [13.9, 5.7]]) { const c = P.crate(1.0); c.position.set(x, 0, z); c.rotation.y = R(0, 1); S.add(c); }
   obstacles.push({ x: 13.4, z: 5.3, r: 1.1 });
   const bar = P.barrel(1.1); bar.position.set(11.8, 0, 6.4); S.add(bar); obstacles.push({ x: 11.8, z: 6.4, r: 0.6 });
+
+  // ---------- vijver ----------
+  const pond = new THREE.Group(); pond.position.set(-15.3, 0, 8.2); scene.add(pond);
+  const waterTex = tex.water(2, 2);
+  const water = mesh(new THREE.CircleGeometry(2.6, 28), new THREE.MeshStandardMaterial({ map: waterTex, color: 0xa8c8ff, emissive: 0x1a3a6a, emissiveIntensity: 0.7, roughness: 0.2, metalness: 0.1 }), { cast: false, pos: [0, 0.07, 0], rot: [-Math.PI / 2, 0, 0], scale: [1.35, 1.0, 1] });
+  water.scale.set(1.35, 0.95, 1); pond.add(water); anim.water = waterTex;
+  const rimM = mat(0x8a8c94);
+  for (let i = 0; i < 14; i++) { const a = i / 14 * TAU; S.add(mesh(new THREE.DodecahedronGeometry(R(0.28, 0.45), 0), rimM, { pos: [-15.3 + Math.cos(a) * 3.6, 0.12, 8.2 + Math.sin(a) * 2.55], rot: [R(0, 3), R(0, 3), 0], scale: [1, 0.6, 1] })); }
+  const padM = mat(0x3a9a4a, { flatShading: false, side: THREE.DoubleSide });
+  for (let i = 0; i < 6; i++) S.add(mesh(new THREE.CircleGeometry(0.36, 8), padM, { cast: false, pos: [-15.3 + R(-2.3, 2.3), 0.1, 8.2 + R(-1.4, 1.4)], rot: [-Math.PI / 2, 0, R(0, 6)] }));
+  const reedM = mat(0x4f8f3a);
+  for (let i = 0; i < 12; i++) { const a = R(2.5, 5.9); S.add(mesh(new THREE.ConeGeometry(0.05, R(0.9, 1.5), 4), reedM, { pos: [-15.3 + Math.cos(a) * 3.3, 0.6, 8.2 + Math.sin(a) * 2.3], rot: [R(-0.2, 0.2), 0, R(-0.2, 0.2)] })); }
+  // kar met hooi
+  const cart = new THREE.Group(); cart.position.set(-1.4, 0, -10.2); cart.rotation.y = 0.35; S.add(cart);
+  cart.add(mesh(new THREE.BoxGeometry(2.4, 0.2, 1.4), mat(0x8a6238), { pos: [0, 0.75, 0] }));
+  for (const sz of [-0.7, 0.7]) cart.add(mesh(new THREE.BoxGeometry(2.4, 0.45, 0.1), mat(0x7a5530), { pos: [0, 1.0, sz] }));
+  cart.add(mesh(new THREE.SphereGeometry(0.85, 8, 6), hayM, { pos: [0, 1.15, 0], scale: [1.2, 0.55, 0.75] }));
+  for (const sz of [-0.8, 0.8]) { cart.add(mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.12, 12), mat(0x5b3d24), { pos: [0.3, 0.5, sz], rot: [Math.PI / 2, 0, 0] })); }
+  cart.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.2, 5), mat(0x5b3d24), { pos: [-2.1, 0.7, 0], rot: [0, 0, Math.PI / 2 - 0.1] }));
+  obstacles.push({ x: -1.4, z: -10.2, r: 1.4 });
 
   // ---------- grastufjes ----------
   const tufts = [];
@@ -251,6 +284,7 @@ export function buildWorld(ctx) {
     flameIM.instanceMatrix.needsUpdate = true;
     bannerT -= dt;
     if (bannerT <= 0) { bannerT = 0.05; for (let k = 0; k < anim.banners.length; k++) { const c = anim.banners[k], p = c.geometry.attributes.position, b = c.userData.base; for (let i = 0; i < p.count; i++) { const x = b[i * 3] + 0.45; p.setZ(i, Math.sin(t * 3 + x * 4 + k) * 0.1 * x); } p.needsUpdate = true; } }
+    if (anim.water) { anim.water.offset.x = t * 0.02; anim.water.offset.y = Math.sin(t * 0.3) * 0.03; }
     const pa = anim.fireflies.geometry.attributes.position;
     for (let i = 0; i < NF; i++) { const b = anim.fireflyBase[i]; pa.setXYZ(i, b.x + Math.sin(t * b.sp + b.ph) * 2.2, b.y + Math.sin(t * b.sp * 1.7 + b.ph) * 0.5, b.z + Math.cos(t * b.sp * 0.8 + b.ph) * 2.2); }
     pa.needsUpdate = true;

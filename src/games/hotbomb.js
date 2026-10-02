@@ -56,9 +56,9 @@ export default {
     const { scene, camera, fx, players, input, audio, hud } = ctx;
     ctx.lights('dusk', { shadow: 19, center: [0, 0, 0], fogNear: 70, fogFar: 170 });
     const arena = buildArena(ctx);
-    camera.fov = 44; camera.updateProjectionMatrix();
+    camera.fov = 30; camera.updateProjectionMatrix();
     let fit = 1;
-    const placeCam = (shakeY = 0) => { camera.position.set(0, (25.5 + shakeY) * fit, 17.5 * fit + 0.0); camera.lookAt(0, 0, 1.4); };
+    const placeCam = (shakeY = 0) => { camera.position.set(0, (28 + shakeY) * fit, 26 * fit); camera.lookAt(0, 0.5, 0.8); };
     function onResize(w, hh) { fit = clamp(1.7 / (w / hh), 1, 1.6); placeCam(); }
     onResize(innerWidth, innerHeight);
 
@@ -73,7 +73,7 @@ export default {
     const E = [0, 1, 2, 3].map((i) => {
       const brother = i < 2;
       const c = brother ? ctx.make.brother(i) : ctx.make.npc('jester', npcSpecs[i - 2]);
-      const x = Math.cos(SLOT_ANG[i]) * 5.5, z = Math.sin(SLOT_ANG[i]) * 5.5;
+      const x = Math.cos(SLOT_ANG[i]) * 4.3, z = Math.sin(SLOT_ANG[i]) * 4.3;
       c.group.position.set(x, 0, z); scene.add(c.group);
       const name = brother ? players[i].name : NAMES_NPC[i - 2];
       const ring = mesh(new THREE.RingGeometry(0.62, 0.8, 24), new THREE.MeshBasicMaterial({ color: COLORS[i], transparent: true, opacity: 0.9, depthWrite: false }), { cast: false, receive: false, rot: [-Math.PI / 2, 0, 0] });
@@ -111,6 +111,8 @@ export default {
     fuse.add(mesh(new THREE.CylinderGeometry(0.035, 0.05, 0.4, 5), mat(0x2a1a0e), { cast: false, pos: [0.06, 0.18, 0], rot: [0, 0, -0.35] }));
     const spark = mesh(new THREE.SphereGeometry(0.1, 7, 5), new THREE.MeshBasicMaterial({ color: 0xffd23f }), { cast: false, receive: false, pos: [0.15, 0.38, 0] }); fuse.add(spark);
     const bombLight = new THREE.PointLight(0xff5a1a, 0, 12, 1.5); bomb.add(bombLight);
+    const haloTex = canvasTex(64, 64, (g, w, hh) => { const gr = g.createRadialGradient(32, 32, 2, 32, 32, 32); gr.addColorStop(0, 'rgba(255,200,80,.95)'); gr.addColorStop(0.45, 'rgba(255,90,20,.45)'); gr.addColorStop(1, 'rgba(255,60,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, hh); });
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false })); halo.scale.set(2.6, 2.6, 1); halo.renderOrder = 18; bomb.add(halo);
     bomb.visible = false;
     const bombWorld = new THREE.Vector3();
 
@@ -290,9 +292,11 @@ export default {
           if (Math.random() < 0.004) A.orbit = -A.orbit;
         } else {
           // domme nar: reageert laat, rent recht van de bomhouder weg (de rand in) en dwaalt rond
-          if (d < 4.2 && A.react <= -1) A.react = 0.55;      // schrikt pas na een tijdje
-          const panic = d < 4.2 && A.react <= 0;
-          if (A.wanderT <= 0) { const a = Math.random() * TAU, r = Math.random() * (ARENA_R - 2); A.wander = [Math.cos(a) * r, Math.sin(a) * r]; A.wanderT = rand(1.2, 3); if (Math.random() < 0.25) A.wanderT = rand(0.6, 1.2), A.stand = true; else A.stand = false; if (d >= 4.2) A.react = -1; }
+          if (d < 4.2) A.scare = (A.scare || 0) + dt; else A.scare = 0;
+          A.freeze = (A.freeze || 0) - dt;
+          const panic = A.scare > 0.55 && A.freeze <= 0;
+          if (panic && Math.random() < 0.005) A.freeze = 0.7;     // staat even verstijfd
+          if (A.wanderT <= 0) { const a = Math.random() * TAU, r = Math.random() * (ARENA_R - 1.5); A.wander = [Math.cos(a) * r, Math.sin(a) * r]; A.wanderT = rand(1.2, 3); A.stand = Math.random() < 0.25; if (A.stand) A.wanderT = rand(0.6, 1.2); }
           if (panic) {
             let ax = away.x + (Math.random() - 0.5) * 0.5, az = away.z + (Math.random() - 0.5) * 0.5; const rep = { x: 0, z: 0 }; obstacleRepel(e, rep, 0.6); ax += rep.x; az += rep.z; const L2 = Math.hypot(ax, az) || 1; intent.dx = ax / L2; intent.dz = az / L2;
             if (d < 2.6 && e.sprintCd <= 0 && Math.random() < 0.05) intent.sprint = true;
@@ -302,7 +306,7 @@ export default {
             if (L2 < 0.6) { intent.dx = 0; intent.dz = 0; }
           }
           // soms stormt hij de bomhouder juist tegemoet ("domt in")
-          if (!panic && Math.random() < 0.0015) { A.react = -1; A.wander = [hold.x, hold.z]; A.wanderT = 1.4; A.stand = false; }
+          if (!panic && Math.random() < 0.0015) { A.wander = [hold.x, hold.z]; A.wanderT = 1.4; A.stand = false; }
           // duikt soms zomaar
           if (Math.random() < 0.003 && e.dashCd <= 0) intent.dive = true;
         }
@@ -312,15 +316,14 @@ export default {
     // spectator (uitgeschakeld) beweegt langs de rand
     function spectatorUpdate(e, dt) {
       if (e.state !== 'out') return;
-      let move = 0;
-      if (e.brother && !e.autoplay) { const inp = input.p[e.i]; move = inp.x; if (inp.aP && e.cheerCd <= 0) cheer(e); }
-      else { e.npcCheer = (e.npcCheer || 1) - dt; if (e.npcCheer <= 0) { e.npcCheer = rand(1.5, 3.5); e.c.jump(); } move = Math.sin(st.t * 0.6 + e.i) * 0.4; }
-      // x-input beweegt langs de rand (rechts = met de klok mee gezien vanaf boven, afhankelijk van positie)
-      e.ang += move * dt * 1.6 * (e.z > 0 ? -1 : 1) * -1;
-      e.ang = e.ang;
+      let mx = 0, mz = 0;
+      if (e.brother && !e.autoplay) { const inp = input.p[e.i]; mx = inp.x; mz = inp.y; if (inp.aP && e.cheerCd <= 0) cheer(e); }
+      else { e.npcCheer = (e.npcCheer || 1) - dt; if (e.npcCheer <= 0) { e.npcCheer = rand(1.5, 3.5); e.c.jump(); } mx = Math.sin(st.t * 0.6 + e.i) * 0.4; }
+      const move = mx * -Math.sin(e.ang) + mz * Math.cos(e.ang);   // schermrichting -> langs de rand
+      e.ang += move * dt * 0.62;
       e.x = Math.cos(e.ang) * RIM_R; e.z = Math.sin(e.ang) * RIM_R;
-      e.c.group.position.set(e.x, 0.6, e.z); e.c.faceDir(-Math.cos(e.ang), -Math.sin(e.ang));
-      e.c.speed = Math.abs(move) * 0.7; e.cheerCd -= dt;
+      e.c.group.position.set(e.x, 0.56, e.z); e.c.faceDir(-Math.cos(e.ang), -Math.sin(e.ang));
+      e.c.speed = Math.abs(move) * 0.8; e.cheerCd -= dt;
       e.c.pose = e.cheerCd > 1.2 ? 'cheer' : 'dance';
       e.c.update(dt);
     }
@@ -373,7 +376,7 @@ export default {
     function spawnPower() {
       if (powerups.length >= 2) return;
       const type = Math.random() < 0.5 ? 'shield' : 'ice';
-      const a = Math.random() * TAU, r = 2.5 + Math.random() * 6;
+      const a = Math.random() * TAU, r = 2.5 + Math.random() * 4.6;
       const x = Math.cos(a) * r, z = Math.sin(a) * r;
       if (OBSTACLES.some(([ox, oz, rr]) => Math.hypot(x - ox, z - oz) < rr + 1.2)) return;
       const g = new THREE.Group(); g.position.set(x, 0, z); scene.add(g);
@@ -448,7 +451,7 @@ export default {
     function startIntermission() {
       st.round++; st.phase = 'inter'; st.timer = 2.4; st.banner = 0;
       const survivors = alive(); const n = survivors.length;
-      survivors.forEach((e) => { e.c.pose = 'idle'; e.target = { x: Math.cos(SLOT_ANG[e.i]) * 5.5, z: Math.sin(SLOT_ANG[e.i]) * 5.5 }; e.dashT = 0; e.knockT = 0; e.stun = 0; e.sprintT = 0; e.iceT = 0; e.slowT = 0; e.holder = false; });
+      survivors.forEach((e) => { e.c.pose = 'idle'; e.target = { x: Math.cos(SLOT_ANG[e.i]) * 4.3, z: Math.sin(SLOT_ANG[e.i]) * 4.3 }; e.dashT = 0; e.knockT = 0; e.stun = 0; e.sprintT = 0; e.iceT = 0; e.slowT = 0; e.holder = false; });
       st.holder = null; updateRoster();
       hud.showBig(st.round === N_ROUNDS ? 'Laatste ronde!' : `Ronde ${st.round}`, 1300, '#ffe14a');
       audio.sfx('go', { vol: 0.7 });
@@ -471,10 +474,10 @@ export default {
         const hd = st.holder;
         const prog = 1 - clamp(st.fuse / st.fuseMax, 0, 1);
         const beat = Math.max(0, 1 - ((st.fuseMax - st.fuse) - st.lastBeat) / 0.25);
-        let bx = hd.x, bz = hd.z, by = hd.c.height + 0.95;
+        let bx = hd.x, bz = hd.z, by = hd.c.height + 1.15;
         if (st.bombFly) {
           const f = st.bombFly; f.t += dt / 0.3; const k = Math.min(1, f.t);
-          bx = lerp(f.fx, hd.x, k); bz = lerp(f.fz, hd.z, k); by = lerp(hd.c.height + 0.95, hd.c.height + 0.95, k) + Math.sin(k * Math.PI) * 2.2;
+          bx = lerp(f.fx, hd.x, k); bz = lerp(f.fz, hd.z, k); by = hd.c.height + 1.15 + Math.sin(k * Math.PI) * 2.2;
           if (k >= 1) st.bombFly = null;
         }
         bomb.position.set(bx, by + Math.sin(st.t * 9) * 0.04, bz);
@@ -483,6 +486,7 @@ export default {
         const warm = new THREE.Color().setHSL(0.04 - prog * 0.04, 1, 0.18 + prog * 0.3);
         bombMat.emissive.copy(warm); bombMat.emissiveIntensity = 0.3 + prog * 1.6 + beat * 0.9;
         bombMat.color.setHSL(0.08 - prog * 0.06, 0.5 + prog * 0.3, 0.38 - prog * 0.06);
+        halo.material.opacity = 0.35 + prog * 0.45 + beat * 0.3; halo.scale.setScalar((2.2 + prog * 1.0 + beat * 0.6) / Math.max(0.5, bomb.scale.x));
         bombLight.intensity = (2 + prog * 22) * (0.6 + beat * 0.8); bombLight.color.setHSL(0.05, 1, 0.5);
         spark.scale.setScalar(0.8 + Math.random() * 0.8);
         spark.getWorldPosition(bombWorld);
@@ -518,9 +522,8 @@ export default {
       const live = alive().filter((e) => e.state === 'play');
       if (st.lock > 0) st.lock -= dt;
       for (const e of live) {
-        let intent;
-        if (e.brother && !e.autoplay && !aiOnly) intent = playerIntent(e); else intent = aiIntent(e, dt);
-        if (st.phase === 'inter' || st.phase === 'setup') intent = { dx: 0, dz: 0, dive: false, sprint: false };
+        let intent = { dx: 0, dz: 0, dive: false, sprint: false };
+        if (st.phase === 'round') intent = (e.brother && !e.autoplay && !aiOnly) ? playerIntent(e) : aiIntent(e, dt);
         if (st.phase === 'inter' && e.target) { // schuif naar de startpositie
           const dx = e.target.x - e.x, dz = e.target.z - e.z, d = Math.hypot(dx, dz);
           if (d > 0.15) { const sp = Math.min(d * 3.5, 8); e.x += dx / d * sp * dt; e.z += dz / d * sp * dt; e.fx = dx / d; e.fz = dz / d; e.c.faceDir(dx, dz); e.c.speed = Math.min(1, sp / BASE); } else e.c.speed = 0;
@@ -624,6 +627,7 @@ export default {
     // (introUpdate ververst alleen decor en poppetjes)
     return {
       update, onResize,
+      onStart() { hud.setTimer(null); hud.setScore(`Ronde 1/${N_ROUNDS}   ·   Nog 4 over`); hud.setPlayerInfo(0, '🏃 Houd afstand'); hud.setPlayerInfo(1, '🏃 Houd afstand'); hud.setHint('Wie de <b>bom</b> heeft tikt iemand aan met <kbd>A</kbd> (duik) · zonder bom: ren weg, <kbd>B</kbd> = sprint · <kbd>A</kbd> duwt een nar weg!'); },
       introUpdate: (dt) => { idle(dt); },
       resultUpdate: (dt) => { arena.update(st.t += dt, dt, 1); visuals(0); for (const e of E) { if (e.state === 'play') e.c.update(dt); else if (e.state === 'out') spectatorUpdate(e, dt); } },
       dispose() { roster.remove(); style.remove(); },
