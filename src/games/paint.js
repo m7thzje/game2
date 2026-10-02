@@ -115,7 +115,7 @@ export default {
     }
 
     // ------------------------------------------------------------------ spelers
-    const START = [[-4.5, 4.5], [4.5, 4.5]];
+    const START = [[-3.75, 3.75], [3.75, 3.75]];
     const pl = players.map((pp, i) => {
       const c = makeBrother(i); const holder = new THREE.Group(); holder.add(c.group); scene.add(holder);
       // verfkwast in de hand
@@ -166,14 +166,14 @@ export default {
         sp.spawnT -= dt;
         if (sp.spawnT <= 0) {
           sp.on = true; sp.x = 0; sp.z = -HALF + 2.2; sp.vx = 0; sp.vz = 0; sp.grow = 0; spongeG.visible = true; spongeBlob.visible = true; spongeTarget(); sp.retarget = 3;
-          hud.showBig('SCHOONMAAK-SLIJM!', 1100, '#fff06a'); audio.sfx('boing', { vol: 0.8 }); audio.sfx('sparkle', { vol: 0.5 }); ctx.shake(0.3);
+          hud.showBig('SCHOONMAAK-SLIJM!', 800, '#fff06a'); audio.sfx('boing', { vol: 0.8 }); audio.sfx('sparkle', { vol: 0.5 }); ctx.shake(0.3);
           fx.particles.burst(sp.x, 0.5, sp.z, { count: 40, speed: 5, up: 1.4, life: 1.0, size: 0.5, colors: [0xffffff, 0xcfeaff, 0xfff6a0], gravity: 3 });
         }
         return;
       }
       sp.grow = Math.min(1, sp.grow + dt * 2.2);
       const speedNow = Math.hypot(sp.vx, sp.vz);
-      const cruise = 3.0 + 1.8 * clamp(T / TIME, 0, 1) + (finalMode ? 0.8 : 0);
+      const cruise = 2.5 + 1.3 * clamp(T / TIME, 0, 1) + (finalMode ? 0.5 : 0);
       sp.retarget -= dt; if (sp.retarget <= 0 || Math.hypot(sp.tx - sp.x, sp.tz - sp.z) < 1.2) { spongeTarget(); sp.retarget = rand(2.4, 4.2); }
       const dx = sp.tx - sp.x, dz = sp.tz - sp.z, dl = Math.hypot(dx, dz) || 1;
       if (speedNow > cruise * 1.35) { const f = Math.exp(-1.15 * dt); sp.vx *= f; sp.vz *= f; }
@@ -185,7 +185,7 @@ export default {
       // tegels wissen
       const gx0 = cellOf(sp.x - 1.6), gx1 = cellOf(sp.x + 1.6), gz0 = cellOf(sp.z - 1.6), gz1 = cellOf(sp.z + 1.6);
       for (let gz = gz0; gz <= gz1; gz++) for (let gx = gx0; gx <= gx1; gx++) {
-        if (Math.hypot(cellC(gx) - sp.x, cellC(gz) - sp.z) > 1.3) continue;
+        if (Math.hypot(cellC(gx) - sp.x, cellC(gz) - sp.z) > 1.05) continue;
         const idx = gz * N + gx; const o = owner[idx];
         if (o) { if (paintTile(idx, 0, true)) { stats.wiped[o - 1]++; if (Math.random() < 0.5) fx.particles.burst(cellC(gx), 0.4, cellC(gz), { count: 4, speed: 2.2, up: 1.5, life: 0.7, size: 0.35, colors: [0xffffff, 0xcfeaff], gravity: 2 }); } }
       }
@@ -249,7 +249,7 @@ export default {
       if (!bk.on) {
         if (T >= bk.next) {
           bk.on = true; bk.life = 9; bk.t = 0; bk.x = 0; bk.z = 0; bucketG.visible = true; bucketG.position.set(0, 0, 0); bk.n++;
-          hud.showBig('GOUDEN EMMER!', 1000, '#ffe45a'); audio.sfx('powerup', { vol: 0.8 }); audio.sfx('sparkle', { vol: 0.7 }); shock(0, 0, 5, 0xffe36a, 0.7);
+          hud.showBig('GOUDEN EMMER!', 750, '#ffe45a'); audio.sfx('powerup', { vol: 0.8 }); audio.sfx('sparkle', { vol: 0.7 }); shock(0, 0, 5, 0xffe36a, 0.7);
           fx.particles.ring(0, 0.5, 0, { count: 30, speed: 5, color: 0xffe36a, size: 0.4, life: 0.7 });
         }
         return;
@@ -270,7 +270,7 @@ export default {
           const cols = [PLAYER_COLORS[p.i], 0xffe36a, 0xffffff];
           fx.particles.burst(bk.x, 1.2, bk.z, { count: 120, speed: 11, up: 1.5, life: 1.3, size: 0.55, colors: cols, gravity: 9 });
           fx.particles.ring(bk.x, 0.6, bk.z, { count: 44, speed: 9, color: 0xffe36a, size: 0.45, life: 0.8 });
-          fx.texts.add('BOEM! GOUD!', bk.x, 4.2, bk.z, '#ffe45a', 1.5); hud.showBig(`${names[p.i]}: VERF-EXPLOSIE!`, 1100, p.i ? '#8fb8ff' : '#7dffa8');
+          fx.texts.add('BOEM! GOUD!', bk.x, 4.2, bk.z, '#ffe45a', 1.5); hud.showBig('VERF-EXPLOSIE!', 750, p.i ? '#8fb8ff' : '#7dffa8');
           audio.sfx('explode', { vol: 0.7 }); audio.sfx('powerup', { vol: 0.8 }); audio.sfx('splash', { vol: 0.8 }); ctx.shake(0.9); p.hop = 1; p.c.swing();
           break;
         }
@@ -395,7 +395,7 @@ export default {
         const c = p.c;
         p.hop = Math.max(0, p.hop - dt / (0.45 / Math.sqrt(pvp.gravity)));
         const hopH = Math.sin(p.hop * Math.PI) * 0.95 / Math.pow(pvp.gravity, 0.6) * (p.hop > 0 ? 1 : 0);
-        const S = 1.45 * p.sz; p.holder.scale.setScalar(S); p.holder.position.set(p.x, hopH, p.z);
+        const S = 1.6 * p.sz; p.holder.scale.setScalar(S); p.holder.position.set(p.x, hopH, p.z);
         c.faceDir(Math.sin(p.face), Math.cos(p.face));
         const speedN = Math.hypot(p.vx, p.vz);
         c.speed = done ? 0 : clamp(speedN / (6.3 * pvp.speed(i)), 0, 1);
@@ -437,7 +437,7 @@ export default {
     }
 
     // ------------------------------------------------------------------ camera
-    const camBase = new THREE.Vector3(0, 21, 24), camLook = new THREE.Vector3(0, 1.5, -2.2);
+    const camBase = new THREE.Vector3(0, 20, 23), camLook = new THREE.Vector3(0, 1.2, -0.4);
     function cam(t) { camera.position.set(camBase.x + Math.sin(t * 0.3) * 0.5, camBase.y + Math.sin(t * 0.4) * 0.15, camBase.z); camera.lookAt(camLook); }
 
     // ------------------------------------------------------------------ einde
@@ -485,7 +485,7 @@ export default {
       }
       if (over) { overT -= dt; hud.setTimer(Math.max(0, overT), 99); if (overT <= 0) { finishGame(); return; } } else hud.setTimer(timeLeft, 10);
       if (!finalMode && timeLeft <= FINAL && !over) {
-        finalMode = true; hud.showBig('DUBBELE VERFBOMMEN!', 1500, '#ffe14a'); audio.sfx('powerup', { vol: 0.8 }); audio.sfx('bell', { vol: 0.5 }); ctx.shake(0.4);
+        finalMode = true; hud.showBig('DUBBELE BOMMEN!', 1100, '#ffe14a'); audio.sfx('powerup', { vol: 0.8 }); audio.sfx('bell', { vol: 0.5 }); ctx.shake(0.4);
         pl.forEach((p) => { p.charges = Math.max(p.charges, 2); });
       }
       if (freeze > 0) freeze -= dt;
@@ -521,7 +521,7 @@ export default {
 
     return {
       update, resultUpdate, introUpdate,
-      onCountdown() { ensureBar(); hud.setTimer(TIME); hud.setHint('★ Regenboogtegels tellen dubbel  ·  Gouden emmer = reuzen-verfexplosie  ·  Het Schoonmaak-Slijm wist alles op zijn pad'); },
+      onCountdown() { ensureBar(); hud.setTimer(TIME); hud.setHint('★ tegels tellen dubbel  ·  Gouden emmer = reuzen-explosie  ·  Slijm wist verf'); },
       onStart() { ensureBar(); },
       celebrate(w) { winnerIdx = w; },
       onSwap() { ctx.shake(0.2); },

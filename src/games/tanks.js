@@ -2,11 +2,11 @@ import * as THREE from 'three';
 import { mat, mesh, clamp, lerp, damp, rand, pick, TAU, mulberry32, smoothstep } from '../engine/util.js';
 import { makeBrother, Dragon, PLAYER_COLORS } from '../engine/chars.js';
 import * as P from '../engine/props.js';
-import { Terrain, buildBackdrop, buildCastle, makeProjectile, labelSprite, windArrowSprite, buildWindsock, animateWindsock, buildDecor } from './tanks_world.js';
+import { Terrain, buildBackdrop, buildCastle, makeProjectile, labelSprite, windArrowSprite, buildWindsock, animateWindsock, buildDecor, makeBird } from './tanks_world.js';
 
 // Kanonnenduel — beurtgebaseerd Worms/Tanks-duel op één scherm. Verwoestbaar landschap, wind, gekke projectielen en chaosbeurten.
 
-const X0 = -36, X1 = 36, NCOL = 288;
+const X0 = -50, X1 = 50, NCOL = 400, XW = 39;
 const CASTLE_X = [-25, 25], BASE_Y = 6.6;
 const HP_MAX = 100;
 const G0 = 17;
@@ -68,9 +68,9 @@ export default {
         const x = terrain.xAt(i);
         let h = 4.4 + 1.7 * Math.sin(x * 0.17 + ph1) + 1.0 * Math.sin(x * 0.41 + ph2) + 0.45 * Math.sin(x * 0.9 + ph3);
         h += mid * Math.exp(-(((x - mid2) / 7.5) ** 2));
-        const e = Math.max(0, Math.abs(x) - 31); h += e * e * 0.9;
+        const e = Math.max(0, Math.abs(x) - 33); h += e * e * 0.12;
         for (const cx of CASTLE_X) { const d = Math.abs(x - cx); const w = smoothstep(8, 4.3, d); h = lerp(h, BASE_Y, w); if (d <= 4.3) terrain.lockMin[i] = BASE_Y - 0.15; }
-        terrain.h[i] = clamp(h, 1.2, 17);
+        terrain.h[i] = clamp(h, 1.2, 15);
       }
       terrain.rebuild();
     }
@@ -78,9 +78,11 @@ export default {
     // wolken
     const clouds = [];
     for (let i = 0; i < 9; i++) { const c = P.cloud(1.2 + wrng() * 1.6); c.position.set(-80 + wrng() * 160, 22 + wrng() * 12, -14 - wrng() * 30); scene.add(c); clouds.push({ c, sp: 0.6 + wrng() * 0.8 }); }
+    const birds = [];
+    for (let i = 0; i < 5; i++) { const b = makeBird(); b.position.set(-60 + wrng() * 120, 16 + wrng() * 12, -18 - wrng() * 10); b.scale.setScalar(1.3 + wrng()); scene.add(b); birds.push({ b, sp: 2.5 + wrng() * 2, ph: wrng() * 6 }); }
     // windzak + windpijl
     const sock = buildWindsock(); sock.position.set(0, terrain.heightAt(0), -0.2); scene.add(sock);
-    const arrow = windArrowSprite(); arrow.position.set(0, 27.5, 1); scene.add(arrow);
+    const arrow = windArrowSprite(); arrow.position.set(0, 22, -6); scene.add(arrow);
 
     // ------------------------------------------------------------ kastelen en spelers
     const SIDE = [1, -1];
@@ -88,24 +90,25 @@ export default {
       const cx = CASTLE_X[i];
       const cs = buildCastle(PLAYER_COLORS[i], SIDE[i]);
       cs.group.position.set(cx, BASE_Y - 0.1, 0); scene.add(cs.group);
-      const c = makeBrother(i); c.group.scale.setScalar(1.35); c.group.position.set(cx - SIDE[i] * 1.55, BASE_Y + 5.3, 0.5); scene.add(c.group);
+      const c = makeBrother(i); c.group.scale.setScalar(1.7); c.group.position.set(cx - SIDE[i] * 1.55, BASE_Y + 5.3, 0.5); scene.add(c.group);
       c.faceDir(SIDE[i] * 0.7, 0.8);
       // hp-balk
       const bar = new THREE.Group(); bar.position.set(cx, BASE_Y + 13.3, 1.2); scene.add(bar);
       const back = new THREE.Mesh(new THREE.PlaneGeometry(7.2, 0.95), new THREE.MeshBasicMaterial({ color: 0x1a1020, transparent: true, opacity: 0.8, depthTest: false })); back.renderOrder = 21; bar.add(back);
-      const chip = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.6), new THREE.MeshBasicMaterial({ color: 0xffffff, depthTest: false })); chip.renderOrder = 22; bar.add(chip);
-      const fill = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.6), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], depthTest: false })); fill.renderOrder = 23; bar.add(fill);
+      const chip = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.6), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthTest: false })); chip.renderOrder = 22; bar.add(chip);
+      const fill = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.6), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, depthTest: false })); fill.renderOrder = 23; bar.add(fill);
       const lab = labelSprite(`${names[i]}  100`, players[i].css, { w: 320, h: 80, size: 46, scaleX: 5.2 }); lab.position.set(0, 1.35, 0); bar.add(lab);
       // krachtmeter bij het kanon
       const pm = new THREE.Group(); pm.position.set(cx + SIDE[i] * 1.3, BASE_Y + 9.3, 1.2); pm.visible = false; scene.add(pm);
       const pmBack = new THREE.Mesh(new THREE.PlaneGeometry(3.4, 0.55), new THREE.MeshBasicMaterial({ color: 0x120a1a, transparent: true, opacity: 0.85, depthTest: false })); pmBack.renderOrder = 21; pm.add(pmBack);
-      const pmFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.34), new THREE.MeshBasicMaterial({ color: 0x66ff66, depthTest: false })); pmFill.renderOrder = 22; pm.add(pmFill);
-      const turnTag = labelSprite('', '#fff', { w: 300, h: 80, size: 40, scaleX: 5.0 }); turnTag.position.set(cx, BASE_Y + 16.6, 1.2); turnTag.visible = false; scene.add(turnTag);
+      const pmFill = new THREE.Mesh(new THREE.PlaneGeometry(1, 0.34), new THREE.MeshBasicMaterial({ color: 0x66ff66, transparent: true, depthTest: false })); pmFill.renderOrder = 22; pm.add(pmFill);
+      const turnTag = labelSprite('', '#fff', { w: 300, h: 80, size: 40, scaleX: 6.4 }); turnTag.position.set(cx, BASE_Y + 16.6, 1.2); turnTag.visible = false; scene.add(turnTag);
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.1, 24), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.9, depthTest: false })); ring.renderOrder = 20; ring.position.set(cx + SIDE[i] * 1.3, BASE_Y + 6.25, 1.0); ring.visible = false; scene.add(ring);
       return {
         i, cx, cs, c, bar, fill, chip, lab, pm, pmFill, turnTag, ring, hp: HP_MAX, shownHp: HP_MAX, chipHp: HP_MAX, side: SIDE[i],
         x0: cx - 4.0, x1: cx + 4.0, y0: BASE_Y - 0.6, y1: BASE_Y + 6.8, dmgLevel: 0, towerFall: [0, 0], ko: false, koT: 0, smokeT: 0, poseT: 0, pose: 'idle',
-        pivot: new THREE.Vector3(cx + SIDE[i] * 1.3, BASE_Y - 0.1 + 6.25, 0.2), recoil: 0,
+        pivot: new THREE.Vector3(cx + SIDE[i] * 1.3, BASE_Y - 0.1 + 6.25, 0.2), recoil: 0, fling: null,
+        rubble: Array.from({ length: 7 }, (_, k) => { const r = P.rock(0.7 + (k % 3) * 0.35, k % 2 ? 0x8a8c94 : 0x6e6a66); r.position.set(cx + (k - 3) * 0.95, BASE_Y + 0.5 + (k % 2) * 0.2, 0.5 + (k % 3 - 1) * 0.7); r.visible = false; scene.add(r); return r; }),
       };
     });
     const protectRing = [];  // (gereserveerd)
@@ -129,7 +132,7 @@ export default {
       const dx = Math.max(c.x0 - x, 0, x - c.x1), dy = Math.max(c.y0 - y, 0, y - c.y1);
       return Math.hypot(dx, dy);
     }
-    function castleAt(x, y, r) { for (const c of castles) { if (c.ko) continue; if (x > c.x0 - r && x < c.x1 + r && y > c.y0 - r && y < c.y1 + r) return c; } return null; }
+    function castleAt(x, y, r, skip = -1) { for (const c of castles) { if (c.ko || c.i === skip) continue; if (x > c.x0 - r && x < c.x1 + r && y > c.y0 - r && y < c.y1 + r) return c; } return null; }
     function windAcc(pr) { return S.wind * 0.12 * pr.type.windK * (0.5 + 0.5 * GS); }
     function gravAcc() { return G0 * GS * S.gdir; }
 
@@ -144,12 +147,12 @@ export default {
       const m = muzzle({ i: p.i, ang, side: p.side });
       const g = makeProjectile(type.id);
       const giant = S.chaos && S.chaos.id === 'giant';
-      const sc = giant ? 2.3 : 1;
+      const sc = (giant ? 2.2 : 1) * 1.7;
       g.scale.setScalar(sc); g.position.set(m.x, m.y, ZP); scene.add(g);
       const boost = p.boosted ? 1.25 : 1;
       const pr = {
         owner: p.i, type, g, x: m.x, y: m.y, vx: p.side * Math.cos(a) * v, vy: Math.sin(a) * v, rad: g.userData.radius * sc, scale: sc,
-        R: type.R * (giant ? 1.65 : 1) * boost, dmg: type.dmg, state: 'fly', t: 0, contacts: 0, trailT: 0, spin: (type.id === 'cow' ? 3 : 7) * (rng() < 0.5 ? -1 : 1), rot: 0, rollT: 0, slowT: 0, wob: 0, dead: false, bestD: 999, scT: 0,
+        R: type.R * (giant ? 1.6 : 1) * boost, dmg: type.dmg, state: 'fly', t: 0, contacts: 0, trailT: 0, spin: (type.id === 'cow' ? 3 : 7) * (rng() < 0.5 ? -1 : 1), rot: 0, rollT: 0, slowT: 0, wob: 0, dead: false, bestD: 999, scT: 0,
       };
       projs.push(pr); return pr;
     }
@@ -247,8 +250,8 @@ export default {
     }
     function damage(c, dm, by, direct) {
       if (c.ko) return;
-      c.hp = Math.max(0, c.hp - dm);
-      const att = pl[by];
+      dm = Math.min(dm, c.hp); c.hp -= dm;
+      const att = pl[by]; 
       if (c.i !== by) { att.dealt += dm; if (direct || dm >= 20) att.hits++; }
       fx.texts.add(`-${dm}`, c.cx, BASE_Y + 9, 1.4, c.i === by ? '#ff8a8a' : '#ff5a5a', 1.5 + dm / 50);
       c.pose = 'scared'; c.poseT = 1.3; audio.sfx('hit', { vol: 0.8 });
@@ -257,7 +260,7 @@ export default {
       fx.particles.burst(c.cx + rand(-2, 2), BASE_Y + 4, ZP + 1.5, { count: 26, speed: 6, up: 1.5, life: 1.0, size: 0.6, colors: [0x9b9ca3, 0x7e7e86, 0xb0a090], gravity: 14 });
       const lvl = c.hp <= 0 ? 3 : c.hp <= 34 ? 2 : c.hp <= 67 ? 1 : 0;
       while (c.dmgLevel < lvl && c.dmgLevel < 2) { c.dmgLevel++; c.towerFall[c.dmgLevel - 1] = 0.001; audio.sfx('thud', { vol: 0.9 }); ctx.shake(0.7); }
-      if (c.hp <= 0) { c.ko = true; c.koT = 0; S.koCount = (S.koCount || 0) + 1; }
+      if (c.hp <= 0) { c.ko = true; c.koT = 0; S.koCount = (S.koCount || 0) + 1; c.fling = { x: c.c.group.position.x, y: c.c.group.position.y, vx: -c.side * 6 + rand(-1, 1), vy: 15, rot: 0, landed: false, t: 0 }; }
       refreshHud();
     }
 
@@ -295,7 +298,7 @@ export default {
         // schade als de vlam het kasteel kan bereiken
         const reach = castleDist(mx + dr.dir * 4.5, my, enemy) < 1.6 || castleDist(mx, my, enemy) < 5.5 && Math.sign(enemy.cx - mx) === dr.dir;
         dr.dmgT -= dt;
-        if (reach && dr.dmgT <= 0 && !enemy.ko) { dr.dmgT = 0.4; damage(enemy, 5, dr.owner, false); pl[dr.owner].dealt += 0; fx.particles.burst(enemy.cx - enemy.side * 2.6, BASE_Y + 3.8, ZP + 1.4, { count: 12, speed: 3, up: 1.4, life: 0.8, size: 0.7, colors: [0xff7a1a, 0xffd23f, 0x444444], gravity: -2 }); }
+        if (reach && dr.dmgT <= 0 && !enemy.ko) { dr.dmgT = 0.35; damage(enemy, 3, dr.owner, false); fx.particles.burst(enemy.cx - enemy.side * 2.6, BASE_Y + 3.8, ZP + 1.4, { count: 12, speed: 3, up: 1.4, life: 0.8, size: 0.7, colors: [0xff7a1a, 0xffd23f, 0x444444], gravity: -2 }); }
         terrain.scorch(mx + dr.dir * 3, 0.45, 2.0);
       }
       if (dr.life <= 0) {
@@ -321,8 +324,8 @@ export default {
         pr.vx += (-sl * G0 * 0.45 + pr.dirx * 4.2) * h; pr.vx *= (1 - 0.1 * h);
         pr.x += pr.vx * h; pr.rollT += h;
         pr.y = terrain.heightAt(pr.x) + pr.rad * 0.85;
-        const cc = castleAt(pr.x, pr.y, pr.rad * 0.4);
-        if (cc || pr.x < X0 + 1 || pr.x > X1 - 1 || pr.rollT > 4.4 || (Math.abs(pr.vx) < 1.2 && (pr.slowT += h) > 0.6)) { explode(pr, pr.x, pr.y); return; }
+        const cc = castleAt(pr.x, pr.y, pr.rad * 0.4, pr.t < 0.55 ? pr.owner : -1);
+        if (cc || pr.x < -XW + 2 || pr.x > XW - 2 || pr.rollT > 4.4 || (Math.abs(pr.vx) < 1.2 && (pr.slowT += h) > 0.6)) { explode(pr, pr.x, pr.y); return; }
         pr.scT -= h; if (pr.scT <= 0) { pr.scT = 0.12; terrain.scorch(pr.x, 0.5, 1.4); }
         if (Math.random() < h * 70) fx.particles.emit(pr.x - Math.sign(pr.vx) * 0.5, pr.y + rand(-0.2, 0.6), ZP, rand(-1, 1), rand(1, 3), 0, { life: rand(0.3, 0.6), size: rand(0.5, 0.9), color: [0xff7a1a, 0xffc93a, 0xff4a1a][Math.floor(rng() * 3)], gravity: -2 });
         return;
@@ -330,8 +333,8 @@ export default {
       // vlucht
       pr.vy -= gravAcc() * h; pr.vx += windAcc(pr) * h;
       pr.x += pr.vx * h; pr.y += pr.vy * h;
-      if (pr.x < X0 - 3 || pr.x > X1 + 3 || pr.y < -8 || pr.y > 75) { pr.dead = true; scene.remove(pr.g); fx.texts.add('Weg...', clamp(pr.x, X0 + 4, X1 - 4), clamp(pr.y, 2, 28), ZP, '#cfcfcf', 0.9); audio.sfx('miss', { vol: 0.4 }); return; }
-      const cc = castleAt(pr.x, pr.y, pr.rad * 0.5);
+      if (pr.x < -XW || pr.x > XW || pr.y < -8 || pr.y > 75) { pr.dead = true; scene.remove(pr.g); fx.texts.add('Weg...', clamp(pr.x, -XW + 4, XW - 4), clamp(pr.y, 2, 28), ZP, '#cfcfcf', 0.9); audio.sfx('miss', { vol: 0.4 }); return; }
+      const cc = castleAt(pr.x, pr.y, pr.rad * 0.5, pr.t < 0.55 ? pr.owner : -1);
       if (cc) {
         if (type.id === 'egg') { hatch(pr, pr.x, pr.y); return; }
         explode(pr, pr.x, pr.y); return;
@@ -404,9 +407,9 @@ export default {
         vy += ay * h; vx += ax * h; x += vx * h; y += vy * h; t += h;
         if (collide) {
           const ec = castles[1 - p.i]; best = Math.min(best, castleDist(x, y, ec));
-          if (castleAt(x, y, 0.3)) { hit = true; endX = x; endY = y; break; }
+          if (castleAt(x, y, 0.3, t < 0.55 ? p.i : -1)) { hit = true; endX = x; endY = y; break; }
           if (y < terrain.heightAt(x) + 0.2 && t > 0.15) { endX = x; endY = y; break; }
-          if (x < X0 || x > X1 || y < -8 || y > 75) break;
+          if (x < -XW || x > XW || y < -8 || y > 75) break;
         }
         if (!collide && k % 14 === 13 && out.length < NPREV) out.push([x, y]);
       }
@@ -428,7 +431,7 @@ export default {
     const bar = (v) => { const n = Math.round(v / 10); return '▮'.repeat(n) + '▯'.repeat(10 - n); };
     function refreshHud() {
       const w = S.wind, arrows = Math.abs(w) < 0.5 ? '–' : (w > 0 ? '▶'.repeat(Math.ceil(Math.abs(w) / 4)) : '◀'.repeat(Math.ceil(Math.abs(w) / 4)));
-      hud.setScore(`Beurt ${Math.max(1, S.turn)}   Wind ${arrows} ${Math.abs(Math.round(w))}`);
+      if (hud.scoreEl) hud.scoreEl.style.whiteSpace = 'nowrap'; hud.setScore(`Beurt ${Math.max(1, S.turn)} · Wind ${arrows} ${Math.abs(Math.round(w))}`);
       for (const p of pl) {
         const c = castles[p.i];
         const active = S.shooters.includes(p.i) && (S.phase === 'aim' || S.phase === 'fly');
@@ -444,6 +447,7 @@ export default {
 
     // ------------------------------------------------------------ beurten
     function nextChaos() {
+      if (S.forceChaos) { const id = S.forceChaos; S.forceChaos = null; return CHAOS.find((c) => c.id === id); }
       if (S.bag.length === 0) { S.bag = CHAOS.map((c) => c.id).sort(() => rng() - 0.5); }
       const id = S.bag.pop(); return CHAOS.find((c) => c.id === id);
     }
@@ -483,7 +487,7 @@ export default {
         if (S.chaos) { hud.showBig(S.chaos.name, 1500, S.chaos.color); hud.toast(S.chaos.desc, 2600); audio.sfx('bell', { vol: 0.5 }); audio.tone(110, 0.8, { type: 'sawtooth', vol: 0.12, slide: 330, filter: 600 }); }
         else if (S.turn > 1) audio.sfx('select', { vol: 0.5 });
         const p0 = pl[S.shooters[0]];
-        if (!S.sim && p0.boosted) { hud.toast(`🍀 Comeback! ${names[p0.i]} krijgt ${p0.extra ? 'een extra schot en ' : ''}een grotere knal!`, 2800); fx.texts.add('COMEBACK!', castles[p0.i].cx, BASE_Y + 12, 1.2, '#7aff9a', 1.4); }
+        if (!S.sim && p0.boosted) { hud.toast(p0.extra ? '🍀 Comeback! Extra schot + grotere knal!' : '🍀 Comeback! Grotere knal!', 2600); fx.texts.add('COMEBACK!', castles[p0.i].cx, BASE_Y + 12, 1.2, '#7aff9a', 1.4); }
       } else { hud.toast('🍀 Extra schot!', 1600); fx.texts.add('EXTRA SCHOT!', castles[S.shooters[0]].cx, BASE_Y + 12, 1.2, '#7aff9a', 1.3); audio.sfx('powerup', { vol: 0.6 }); }
       refreshHud(); setHint();
       for (const c of castles) { c.turnTag.visible = false; }
@@ -575,18 +579,18 @@ export default {
     const camP = new THREE.Vector3(0, 14, 70), camL = new THREE.Vector3(0, 10.5, 0);
     function camera_(dt, mode = 0) {
       const aspect = camera.aspect || 1.7;
-      const half = 35.5;
+      const half = 37;
       const dist = Math.max(48, half / (Math.tan(camera.fov * Math.PI / 360) * aspect));
       let tx = 0, zoom = 1, ty = 10.5;
       if (S.phase === 'fly' && projs.length) {
         let fxp = 0, n = 0; for (const pr of projs) { fxp += pr.x; n++; } fxp /= n;
-        tx = clamp(fxp * 0.5, -18, 18); zoom = 0.82;
+        tx = clamp(fxp * 0.35, -11, 11); zoom = 0.92;
       } else if (S.phase === 'aim' && S.shooters.length === 1) {
         tx = castles[S.shooters[0]].cx * 0.12;
       }
-      if (mode === 1) { tx = Math.sin(introT * 0.5) * 12; zoom = 0.9 + 0.1 * Math.cos(introT * 0.5); }
+      if (mode === 1) { tx = Math.sin(introT * 0.5) * 7; zoom = 1; }
       if (S.phase === 'ko' || S.phase === 'end') { const w = S.koWinner; const l = w == null ? null : castles[1 - w]; tx = l ? l.cx * 0.55 : 0; zoom = 0.8; }
-      sleepers.camX = damp(sleepers.camX, tx, 3, dt); sleepers.camZoom = damp(sleepers.camZoom, zoom, 2.5, dt);
+      sleepers.camX = damp(sleepers.camX, tx, 3, dt); sleepers.camZoom = damp(sleepers.camZoom, zoom, 4, dt);
       const d = dist * sleepers.camZoom;
       camP.set(sleepers.camX, 14.8 - (1 - sleepers.camZoom) * 6, d); camL.set(sleepers.camX, ty, 0);
       camera.position.copy(camP); camera.lookAt(camL);
@@ -614,6 +618,7 @@ export default {
         // ineenstorten
         if (c.ko) {
           c.koT += dt;
+          for (const r of c.rubble) r.visible = c.koT > 0.7;
           const k = clamp(c.koT / 1.6, 0, 1);
           cs.keep.scale.y = lerp(1, 0.18, k * k); cs.keep.position.y = 0; cs.towerOut.visible = c.towerFall[1] === 0 && k < 0.2; cs.towerIn.visible = c.towerFall[0] === 0 && k < 0.2;
           cs.flag.visible = k < 0.3; cs.barrel.parent.parent.visible = k < 0.5;
@@ -634,7 +639,17 @@ export default {
         if (done) { /* celebrate zet pose */ }
         else ch.pose = c.pose !== 'idle' ? c.pose : c.ko ? 'scared' : active && !pl[c.i].fired ? 'point' : 'idle';
         ch.update(dt);
-        ch.faceDir(c.side * 0.75, 0.85);
+        if (c.fling) {
+          const f = c.fling; f.t += dt;
+          if (!f.landed) {
+            f.vy -= 26 * dt; f.x += f.vx * dt; f.y += f.vy * dt; f.rot += dt * 9 * -c.side;
+            const gy = terrain.heightAt(f.x);
+            if (f.y <= gy && f.vy < 0) { f.landed = true; f.y = gy; ch.group.rotation.z = 0; ch.group.rotation.x = 0; c.pose = 'sad'; c.poseT = 99; fx.particles.dust(f.x, gy, ZP + 1, 10, 0xb8a888); audio.sfx('thud', { vol: 0.6 }); fx.texts.add('Auw!', f.x, gy + 3, 1.2, '#ffd24a', 1.0); }
+            else { ch.group.rotation.z = f.rot; ch.pose = 'scared'; }
+          }
+          ch.group.position.set(f.x, f.y, 0.9);
+          if (!f.landed) { ch.group.rotation.y = 0; ch.yaw = 0; ch.targetYaw = 0; }
+        } else ch.faceDir(c.side * 0.75, 0.85);
         // meter + ring
         const pa = pl[c.i];
         const showMeter = active && !pa.fired && !pa.locked;
@@ -651,7 +666,8 @@ export default {
       const t = T + introT;
       for (const cl of clouds) { cl.c.position.x += (windNow * 0.35 + cl.sp * 0.4) * dt; if (cl.c.position.x > 90) cl.c.position.x = -90; if (cl.c.position.x < -90) cl.c.position.x = 90; }
       animateWindsock(sock, windNow, t);
-      arrow.position.y = 27.5 + Math.sin(t * 1.6) * 0.3;
+      for (const bd of birds) { bd.b.position.x += (bd.sp + windNow * 0.25) * dt; bd.b.position.y += Math.sin(t * 0.7 + bd.ph) * dt * 0.8; if (bd.b.position.x > 70) bd.b.position.x = -70; if (bd.b.position.x < -70) bd.b.position.x = 70; for (const w of bd.b.userData.wings) w.w.rotation.z = w.sd * Math.sin(t * 9 + bd.ph) * 0.7; }
+      arrow.position.y = 22 + Math.sin(t * 1.6) * 0.3;
       // wind-streepjes en bladeren
       S.leafT = (S.leafT || 0) - dt;
       if (S.leafT <= 0 && Math.abs(windNow) > 0.5) {
@@ -659,6 +675,7 @@ export default {
         const dir = Math.sign(windNow);
         fx.particles.emit(dir > 0 ? -37 : 37, rand(5, 26), rand(0, 2), dir * Math.abs(windNow) * rand(1.6, 2.6), rand(-0.5, 0.5), 0, { life: 9, size: 0.2, color: Math.abs(windNow) > 12 ? 0xcfe8ff : 0xffffff, gravity: 0, shrink: false });
       }
+      if (wantFlip0() && Math.random() < dt * 14) fx.particles.emit(rand(-40, 40), rand(-4, 6), rand(0, 3), 0, rand(1, 3), 0, { life: 3.5, size: 0.35, color: Math.random() < 0.5 ? 0xd89cff : 0xffffff, gravity: -3, shrink: false });
       if (S.chaos && S.chaos.id === 'storm' && Math.random() < dt * 40) fx.particles.emit(rand(-40, 40), 32, rand(0, 3), Math.sign(windNow) * 18, -22, 0, { life: 1.2, size: 0.3, color: 0x9fc8ff, gravity: 0, shrink: false });
       // decor wiegt
       for (const d of decor) { if (!d.obj.visible) continue; d.obj.rotation.z = Math.sin(t * 1.5 + d.x) * 0.02 * (1 + Math.abs(windNow) * 0.15) * (d.kind === 'tree' ? 1 : 0.5); }
@@ -669,11 +686,14 @@ export default {
       }
       // licht bij chaos
       const wantStorm = S.chaos && S.chaos.id === 'storm' ? 1 : 0, wantFlip = S.chaos && S.chaos.id === 'flip' ? 1 : 0;
-      sleepers.lightK = damp(sleepers.lightK, wantStorm * 0.5 + wantFlip * 0.35, 3, dt);
+      sleepers.lightK = damp(sleepers.lightK, wantStorm * 0.8 + wantFlip * 0.4, 3, dt);
+      scene.backgroundIntensity = 1 - sleepers.lightK * 0.75;
+      for (const m of bg.layers) m.material.color.setRGB(1 - sleepers.lightK * (wantFlip ? 0.5 : 0.8), 1 - sleepers.lightK * (wantFlip ? 0.7 : 0.8), 1 - sleepers.lightK * (wantFlip ? 0.2 : 0.7));
       L.sun.intensity = baseSun * (1 - sleepers.lightK * 0.6); L.hemi.intensity = baseHemi * (1 - sleepers.lightK * 0.35);
       if (wantFlip) L.hemi.color.setRGB(0.8, 0.6, 1.0); else L.hemi.color.setRGB(0.75, 0.88, 1.0);
       bg.sun.visible = !wantStorm;
     }
+    const wantFlip0 = () => S.chaos && S.chaos.id === 'flip' && S.phase !== 'ko';
     let windShown = 0;
 
     // ------------------------------------------------------------ hoofdlus
@@ -725,13 +745,14 @@ export default {
       onStart() { refreshHud(); },
       onSwap(sw) {
         for (const c of castles) fx.particles.burst(c.pivot.x, c.pivot.y + 2, 1, { count: 26, speed: 5, up: 1, life: 0.9, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff], gravity: 4 });
-        hud.toast(sw ? `Wissel! ${names[0]} bestuurt nu het kanon van ${names[1]} (en andersom)!` : 'Terug naar je eigen kanon.', 2600);
+        hud.toast(sw ? 'Wissel! Je schiet met het kanon van de ander!' : 'Terug naar je eigen kanon.', 2600);
       },
       celebrate(w) { for (const c of castles) { c.c.pose = c.i === w ? 'cheer' : 'sad'; c.pose = c.c.pose; c.poseT = 99; } },
       dispose() { },
       dbg: {
         state: () => ({ T, phase: S.phase, turn: S.turn, shooters: S.shooters.slice(), chaos: S.chaos && S.chaos.id, wind: S.wind, gameT: S.gameT, done, ended: S.ended, hp: castles.map((c) => c.hp), dealt: pl.map((p) => p.dealt), shots: pl.map((p) => p.shots), projs: projs.length, dragons: dragons.length, types: pl.map((p) => p.type.id), ang: pl.map((p) => p.ang), pow: pl.map((p) => p.pow), aimT: S.aimT, winner: S.koWinner, gdir: S.gdir, sim: S.sim, bestMiss: pl.map((p) => p.bestMiss) }),
         pl, castles, terrain, predict: (i, a, pw) => predict(pl[i], a, pw, true), projs, S,
+        startChaos: (id) => { S.forceChaos = id; S.turn = Math.floor(S.turn / 4) * 4 + 3; startTurn(); },
         setAim: (i, a, pw) => { pl[i].ang = a; pl[i].pow = pw; },
         fireNow: (i) => fire(pl[i]),
         setType: (i, id) => { pl[i].type = TYPE_BY_ID[id]; },

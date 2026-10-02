@@ -73,36 +73,36 @@ export function buildLavaWorld(ctx, L) {
 
   // ---------------- klippen ----------------
   const stoneSide = new THREE.MeshStandardMaterial({ map: tex.stone(5, 1.3), color: 0xb08c80, roughness: 1, flatShading: true });
-  const deckMat = new THREE.MeshStandardMaterial({ map: tex.planks(7, 3, '#9a6a3c'), roughness: 0.95 });
+  const deckMat = new THREE.MeshStandardMaterial({ map: tex.planks(7, 2, '#9a6a3c'), color: 0xd6c6b6, roughness: 0.95 });
   const darkWood = mat(0x4a2e18);
   for (const sd of [-1, 1]) {
     const g = new THREE.Group(); g.scale.x = sd; scene.add(g);   // spiegelen rond x=0 (rechter klif = sd 1)
     const rockH = 4.2;
-    g.add(mesh(new THREE.BoxGeometry(19, rockH, 12.5), stoneSide, { cast: false, pos: [CLIFF_E - 0.5 + 9.5, -0.45 - rockH / 2, 0] }));
+    g.add(mesh(new THREE.BoxGeometry(19, rockH, 7.6), stoneSide, { cast: false, pos: [CLIFF_E - 0.5 + 9.5, -0.45 - rockH / 2, 0] }));
     // uitstekende rotsblokken onder de rand
-    for (let i = 0; i < 5; i++) g.add(mesh(new THREE.DodecahedronGeometry(0.9 + rng() * 0.7, 0), mat(0x6e5660), { cast: false, pos: [CLIFF_E - 0.7 - rng() * 0.6, -1.5 - rng() * 2.2, -5 + i * 2.6 + rng()], scale: [1, 0.8, 1] }));
-    g.add(mesh(new THREE.BoxGeometry(15, 0.45, 10.4), deckMat, { receive: true, cast: false, pos: [CLIFF_E + 7.5, -0.225, 0] }));
+    for (let i = 0; i < 3; i++) g.add(mesh(new THREE.DodecahedronGeometry(0.5 + rng() * 0.4, 0), mat(0x6e5660), { cast: false, pos: [CLIFF_E - 0.45 - rng() * 0.3, -1.6 - rng() * 1.8, -2.5 + i * 2.5 + rng()], scale: [1, 0.8, 1] }));
+    g.add(mesh(new THREE.BoxGeometry(15, 0.45, 6.0), deckMat, { receive: true, cast: false, pos: [CLIFF_E + 7.5, -0.225, 0] }));
     // dekbalken
-    for (let i = 0; i < 4; i++) g.add(mesh(new THREE.BoxGeometry(0.4, 0.3, 10.8), darkWood, { cast: false, pos: [CLIFF_E + 0.2 + i * 4.4, -0.15, 0] }));
+    for (let i = 0; i < 4; i++) g.add(mesh(new THREE.BoxGeometry(0.4, 0.3, 6.3), darkWood, { cast: false, pos: [CLIFF_E + 0.2 + i * 4.4, -0.15, 0] }));
     // gebroken plankjes die over de rand hangen
-    for (let i = 0; i < 5; i++) { const p = mesh(new THREE.BoxGeometry(0.9 + rng() * 0.7, 0.14, 0.7), mat(0x6e4a28), { cast: false, pos: [CLIFF_E - 0.2 - rng() * 0.3, -0.5 - rng() * 0.6, -4 + i * 2 + rng()], rot: [0, rng() - 0.5, 0.7 + rng() * 0.6] }); g.add(p); }
+    for (let i = 0; i < 5; i++) { const p = mesh(new THREE.BoxGeometry(0.7 + rng() * 0.5, 0.14, 0.6), mat(0x6e4a28), { cast: false, pos: [CLIFF_E - 0.2 - rng() * 0.3, -0.5 - rng() * 0.6, -2.6 + i * 1.2 + rng() * 0.3], rot: [0, rng() - 0.5, 0.7 + rng() * 0.6] }); g.add(p); }
     // rood-wit gestreepte randpalen
-    for (const z of [-4.9, 4.9]) {
+    for (const z of [-2.7, 2.7]) {
       g.add(mesh(new THREE.CylinderGeometry(0.2, 0.24, 1.8, 6), mat(0x5a3a20), { pos: [CLIFF_E + 0.35, 0.9, z] }));
       g.add(mesh(new THREE.SphereGeometry(0.3, 8, 6), mat(0xd8372c, { flatShading: false }), { cast: false, pos: [CLIFF_E + 0.35, 1.9, z] }));
     }
     // waarschuwingsbord
-    const sign = mesh(new THREE.BoxGeometry(2.2, 1.1, 0.12), new THREE.MeshStandardMaterial({ map: tex.sign('PAS OP\nLAVA!', { w: 256, h: 128, size: 40, bg: '#a82a1a', fg: '#ffe9b0' }), roughness: 0.9 }), { cast: false, pos: [CLIFF_E + 1.4, 1.5, -4.6], rot: [0, -0.25, 0] });
+    const sign = mesh(new THREE.BoxGeometry(2.2, 1.1, 0.12), new THREE.MeshStandardMaterial({ map: tex.sign('PAS OP\nLAVA!', { w: 256, h: 128, size: 40, bg: '#a82a1a', fg: '#ffe9b0' }), roughness: 0.9 }), { cast: false, pos: [CLIFF_E + 1.6, 1.5, -2.5], rot: [0, -0.25, 0] });
     sign.scale.x = sd;   // tekst niet gespiegeld
-    g.add(sign, mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.6, 5), darkWood, { cast: false, pos: [CLIFF_E + 1.4, 0.8, -4.6] }));
+    g.add(sign, mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.6, 5), darkWood, { cast: false, pos: [CLIFF_E + 1.6, 0.8, -2.5] }));
     // rommel op de klif
-    const b1 = P.barrel(1.2); b1.position.set(CLIFF_E + 11.5, 0, -4); g.add(b1);
-    const b2 = P.barrel(1); b2.position.set(CLIFF_E + 12.8, 0, -3.2); g.add(b2);
-    const c1 = P.crate(1.4); c1.position.set(CLIFF_E + 11.2, 0, 3.8); c1.rotation.y = 0.4; g.add(c1);
-    const c2 = P.crate(1.1); c2.position.set(CLIFF_E + 12.6, 0, 4.4); g.add(c2);
-    const coil = mesh(new THREE.TorusGeometry(0.7, 0.2, 6, 14), mat(0xb9904e, { flatShading: false }), { cast: false, pos: [CLIFF_E + 9.2, 0.2, -4.2], rot: [Math.PI / 2, 0, 0] }); g.add(coil);
+    const b1 = P.barrel(1.2); b1.position.set(CLIFF_E + 11.5, 0, -2.0); g.add(b1);
+    const b2 = P.barrel(1); b2.position.set(CLIFF_E + 12.8, 0, -1.4); g.add(b2);
+    const c1 = P.crate(1.4); c1.position.set(CLIFF_E + 11.2, 0, 1.9); c1.rotation.y = 0.4; g.add(c1);
+    const c2 = P.crate(1.1); c2.position.set(CLIFF_E + 12.6, 0, 2.2); g.add(c2);
+    const coil = mesh(new THREE.TorusGeometry(0.7, 0.2, 6, 14), mat(0xb9904e, { flatShading: false }), { cast: false, pos: [CLIFF_E + 9.2, 0.2, -2.0], rot: [Math.PI / 2, 0, 0] }); g.add(coil);
     // brazier
-    const br = brazier(); br.position.set(sd * 0 + CLIFF_E + 9.5, 0, -5.2); g.add(br); W.braziers.push(br);
+    const br = brazier(); br.position.set(CLIFF_E + 8.8, 0, -2.5); g.add(br); W.braziers.push(br);
   }
   // ---------------- achterwand: kasteel in de berg ----------------
   const wallM = new THREE.MeshStandardMaterial({ map: tex.stone(16, 5), color: 0x8c7a82, roughness: 1, flatShading: true });
@@ -177,6 +177,12 @@ export function buildLavaWorld(ctx, L) {
     W.ripple(x, z, big); W.ripple(x, z, big * 1.5);
     flashV = 3.2 * big;
   };
+  // vurige zuil bij een plons
+  const colMat = new THREE.MeshBasicMaterial({ color: 0xff8a1c, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+  const col = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 1.9, 1, 14, 1, true), colMat); col.visible = false; scene.add(col);
+  const col2 = new THREE.Mesh(new THREE.CylinderGeometry(0.35, 1.0, 1, 10, 1, true), colMat.clone()); col2.material.color.set(0xffe070); col2.visible = false; scene.add(col2);
+  let colT = 9, colBig = 1;
+  W.column = (x, z, big = 1) => { colT = 0; colBig = big; col.position.set(x, LAVA_Y, z); col2.position.set(x, LAVA_Y, z); col.visible = col2.visible = true; };
   W.plume = (x, z) => {
     fx.particles.burst(x, LAVA_Y + 0.3, z, { count: 36, speed: 6, up: 3.2, spread: 0.35, life: 1.3, size: 0.4, colors: [0xff8a1c, 0xffd23f, 0xff4a0a], gravity: 12 });
     W.ripple(x, z, 0.5);
@@ -207,6 +213,11 @@ export function buildLavaWorld(ctx, L) {
     // pluimen + vonken
     plumeT -= dt; if (plumeT <= 0) { plumeT = 2.2 + Math.random() * 2.6; const side = Math.random() < 0.5 ? -1 : 1; W.plume(side * (CLIFF_E + 1 + Math.random() * 16) * (Math.random() < 0.5 ? 1 : 0.35), -10 + Math.random() * 19); }
     emberAcc += dt * 16; while (emberAcc > 1) { emberAcc -= 1; fx.particles.emit((Math.random() - 0.5) * 34, LAVA_Y + 0.2, -9 + Math.random() * 20, (Math.random() - 0.5) * 0.8, 2 + Math.random() * 3.5, (Math.random() - 0.5) * 0.8, { life: 2.4 + Math.random() * 1.6, size: 0.12 + Math.random() * 0.14, color: Math.random() < 0.6 ? 0xff9a2a : 0xffe07a, gravity: -0.6 }); }
+    // zuil
+    if (colT < 1.0) {
+      colT += dt; const k = clamp(colT / 0.9, 0, 1), h = (0.3 + Math.sin(Math.min(1, k * 1.6) * Math.PI * 0.5) * 9) * colBig;
+      for (const [m, w] of [[col, 1], [col2, 0.6]]) { m.scale.set(w * colBig * (1 + k * 0.6), h, w * colBig * (1 + k * 0.6)); m.position.y = LAVA_Y + h / 2; m.material.opacity = (1 - k) * 0.55; }
+    } else if (col.visible) col.visible = col2.visible = false;
     // ringen
     for (const r of W.rings) { if (!r.on) continue; r.t += dt; const k = r.t / 1.1; if (k >= 1) { r.on = false; r.m.visible = false; continue; } r.m.scale.setScalar(1 + k * 9 * r.big); r.m.material.opacity = (1 - k) * 0.8; }
     // flits

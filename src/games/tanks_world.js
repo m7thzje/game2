@@ -29,7 +29,7 @@ function terrainTexture() {
 }
 
 export class Terrain {
-  constructor(scene, { x0 = -36, x1 = 36, n = 288, zF = 3.2, zB = 3.2, bottom = -5 } = {}) {
+  constructor(scene, { x0 = -50, x1 = 50, n = 400, zF = 3.2, zB = 3.2, bottom = -40 } = {}) {
     this.x0 = x0; this.x1 = x1; this.n = n; this.dx = (x1 - x0) / n; this.zF = zF; this.zB = zB; this.bottom = bottom;
     this.h = new Float32Array(n + 1); this.burn = new Float32Array(n + 1); this.lockMin = new Float32Array(n + 1).fill(-1.5);
     const V = (n + 1) * 4;
@@ -90,9 +90,9 @@ export class Terrain {
       set(k, x, y, zF, nx, ny, 0, x * 0.1, 0.07, dark + tint, dark, dark);
       set(k + 1, x, y, -zB, nx, ny, 0, x * 0.1, 0.07, dark + tint, dark, dark);
       set(k + 2, x, mf, zF, 0, 0, 1, x * 0.1, 0.0 + (y - mf) * 0.25 / 0.9 * 0.9 + 0.0, 1 - b * 0.55, 1 - b * 0.55, 1 - b * 0.55);
-      set(k + 3, x, bottom, zF, 0, 0, 1, x * 0.1, 1.0, 0.8, 0.8, 0.8);
+      set(k + 3, x, bottom, zF, 0, 0, 1, x * 0.1, 1.0, 0.16, 0.14, 0.16);
       // v-coordinaat: boven 0, grasrand bij 0.22
-      uv[(k) * 2 + 1] = 0.02; uv[(k + 2) * 2 + 1] = 0.26;
+      uv[(k) * 2 + 1] = 0.98; uv[(k + 1) * 2 + 1] = 0.98; uv[(k + 2) * 2 + 1] = 0.74; uv[(k + 3) * 2 + 1] = 0.0;
     }
     this.geo.attributes.position.needsUpdate = true; this.geo.attributes.normal.needsUpdate = true; this.geo.attributes.uv.needsUpdate = true; this.geo.attributes.color.needsUpdate = true;
     this.geo.computeBoundingSphere();
@@ -101,53 +101,59 @@ export class Terrain {
 }
 
 // ---------------------------------------------------------------- achtergrond
-function mountainTex(base, snow, seed, jag, h0, castle = false) {
+function rangeTex(base, snow, seed, jag) {
   return canvasTex(1024, 256, (g, w, h) => {
-    const r = mulberry32(seed);
-    g.clearRect(0, 0, w, h);
+    const r = mulberry32(seed); const h0 = 128;
     const pts = [];
-    let y = h0;
-    for (let x = 0; x <= w; x += 16) { y = h0 + Math.sin(x * 0.011 + seed) * jag + Math.sin(x * 0.037 + seed * 2) * jag * 0.5 + (r() - 0.5) * jag * 0.35; pts.push([x, y]); }
-    const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, base[0]); gr.addColorStop(1, base[1]);
+    for (let x = 0; x <= w; x += 16) pts.push([x, h0 + Math.sin(x * 0.011 + seed) * jag + Math.sin(x * 0.037 + seed * 2) * jag * 0.5 + (r() - 0.5) * jag * 0.35]);
+    const gr = g.createLinearGradient(0, h0 - jag * 1.6, 0, h); gr.addColorStop(0, base[0]); gr.addColorStop(1, base[1]);
     g.fillStyle = gr; g.beginPath(); g.moveTo(0, h); for (const [x, yy] of pts) g.lineTo(x, yy); g.lineTo(w, h); g.closePath(); g.fill();
-    // sneeuwtoppen
     g.fillStyle = snow;
     for (let i = 1; i < pts.length - 1; i++) {
-      if (pts[i][1] < pts[i - 1][1] && pts[i][1] < pts[i + 1][1] && pts[i][1] < h0 - jag * 0.2) {
+      if (pts[i][1] < pts[i - 1][1] && pts[i][1] < pts[i + 1][1] && pts[i][1] < h0 - jag * 0.25) {
         const [px, py] = pts[i]; g.beginPath(); g.moveTo(px, py); g.lineTo(px - 26, py + 30); g.lineTo(px - 10, py + 24); g.lineTo(px, py + 38); g.lineTo(px + 12, py + 24); g.lineTo(px + 28, py + 32); g.closePath(); g.fill();
       }
     }
-    if (castle) { // het Speelhal-kasteel in de berg
-      const cx = w * 0.5;
-      g.fillStyle = '#4b4560';
-      g.fillRect(cx - 120, h0 - 10, 240, 120);
-      for (const [dx, hh, ww] of [[-130, 90, 36], [130, 90, 36], [-70, 120, 30], [70, 120, 30], [0, 150, 52]]) {
-        g.fillStyle = '#5a5372'; g.fillRect(cx + dx - ww / 2, h0 + 110 - hh, ww, hh);
-        g.fillStyle = '#c0392b'; g.beginPath(); g.moveTo(cx + dx - ww / 2 - 5, h0 + 110 - hh); g.lineTo(cx + dx, h0 + 110 - hh - ww * 0.9); g.lineTo(cx + dx + ww / 2 + 5, h0 + 110 - hh); g.closePath(); g.fill();
-        g.fillStyle = '#ffd86a'; g.fillRect(cx + dx - 3, h0 + 110 - hh + 14, 6, 11); g.fillRect(cx + dx - 3, h0 + 110 - hh + 40, 6, 11);
-      }
-      g.fillStyle = '#2a1830'; g.beginPath(); g.moveTo(cx - 20, h0 + 110); g.lineTo(cx - 20, h0 + 82); g.arc(cx, h0 + 82, 20, Math.PI, 0); g.lineTo(cx + 20, h0 + 110); g.closePath(); g.fill();
-      g.fillStyle = '#ffe9a0'; g.font = 'bold 15px sans-serif'; g.textAlign = 'center'; g.fillText('SPEELHAL', cx, h0 + 54);
-      g.fillStyle = '#d8372c'; g.fillRect(cx - 1, h0 - 100, 2, 40); g.beginPath(); g.moveTo(cx + 1, h0 - 100); g.lineTo(cx + 22, h0 - 93); g.lineTo(cx + 1, h0 - 86); g.fill();
+  });
+}
+// de grote berg met het Speelhal-kasteel erin
+function castleMountainTex() {
+  return canvasTex(512, 384, (g, w, h) => {
+    const cx = w / 2;
+    const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, '#9aa6cc'); gr.addColorStop(0.5, '#7684ac'); gr.addColorStop(1, '#5d6a92');
+    g.fillStyle = gr; g.beginPath(); g.moveTo(0, h); g.lineTo(60, 250); g.lineTo(130, 190); g.lineTo(190, 120); g.lineTo(225, 60); g.lineTo(256, 26); g.lineTo(290, 70); g.lineTo(330, 130); g.lineTo(390, 185); g.lineTo(450, 250); g.lineTo(w, h); g.closePath(); g.fill();
+    g.fillStyle = '#f2f6ff'; g.beginPath(); g.moveTo(256, 26); g.lineTo(225, 60); g.lineTo(240, 62); g.lineTo(250, 80); g.lineTo(262, 64); g.lineTo(280, 66); g.lineTo(290, 70); g.closePath(); g.fill();
+    // kasteel (uitgehakt in de berg)
+    const by = 330;
+    g.fillStyle = '#4d4666'; g.fillRect(cx - 120, by - 118, 240, 118);
+    for (const [dx, hh, ww, rc] of [[-130, 120, 38, '#c0392b'], [130, 120, 38, '#2f6fe0'], [-72, 158, 34, '#2f6fe0'], [72, 158, 34, '#c0392b'], [0, 196, 56, '#e8b83a']]) {
+      g.fillStyle = '#5c5578'; g.fillRect(cx + dx - ww / 2, by - hh, ww, hh);
+      g.fillStyle = rc; g.beginPath(); g.moveTo(cx + dx - ww / 2 - 6, by - hh); g.lineTo(cx + dx, by - hh - ww * 1.0); g.lineTo(cx + dx + ww / 2 + 6, by - hh); g.closePath(); g.fill();
+      g.fillStyle = '#ffd86a'; g.fillRect(cx + dx - 3, by - hh + 14, 7, 12); g.fillRect(cx + dx - 3, by - hh + 44, 7, 12);
     }
+    g.fillStyle = '#2a1830'; g.beginPath(); g.moveTo(cx - 24, by); g.lineTo(cx - 24, by - 40); g.arc(cx, by - 40, 24, Math.PI, 0); g.lineTo(cx + 24, by); g.closePath(); g.fill();
+    g.fillStyle = '#ffe9a0'; g.font = 'bold 20px sans-serif'; g.textAlign = 'center'; g.fillText('SPEELHAL', cx, by - 78);
+    g.strokeStyle = '#d8372c'; g.lineWidth = 3; g.beginPath(); g.moveTo(cx, by - 196 - 56); g.lineTo(cx, by - 196 - 100); g.stroke(); g.fillStyle = '#d8372c'; g.beginPath(); g.moveTo(cx, by - 196 - 100); g.lineTo(cx + 30, by - 196 - 90); g.lineTo(cx, by - 196 - 80); g.fill();
   });
 }
 
 export function buildBackdrop(scene) {
   const grp = new THREE.Group(); scene.add(grp);
-  const layers = [
-    { z: -150, y: 22, w: 520, h: 130, tex: mountainTex(['#b9c4e4', '#dfe6f6'], '#ffffff', 11, 34, 128), fog: false },
-    { z: -105, y: 14, w: 400, h: 100, tex: mountainTex(['#8f9fcb', '#bcc8e6'], '#f4f7ff', 27, 30, 120, true), fog: false },
-    { z: -62, y: 6, w: 300, h: 75, tex: mountainTex(['#5b7fa8', '#8fb0c8'], '#eef6ff', 41, 24, 135), fog: false },
+  const bands = [
+    { z: -60, y: 21, w: 340, h: 62, tex: rangeTex(['#5f86ae', '#86aac4'], '#eef6ff', 41, 26) },
+    { z: -110, y: 33, w: 470, h: 80, tex: rangeTex(['#8196c2', '#aebbdc'], '#f4f7ff', 27, 30) },
+    { z: -170, y: 46, w: 620, h: 98, tex: rangeTex(['#aab6dc', '#d6def2'], '#ffffff', 11, 34) },
   ];
   const out = [];
-  for (const L of layers) {
+  for (const L of bands) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(L.w, L.h), new THREE.MeshBasicMaterial({ map: L.tex, transparent: true, fog: false, depthWrite: false }));
-    m.position.set(0, L.y + L.h / 2 - 8, L.z); grp.add(m); out.push(m);
+    m.position.set(0, L.y, L.z); grp.add(m); out.push(m);
   }
+  const big = new THREE.Mesh(new THREE.PlaneGeometry(76, 57), new THREE.MeshBasicMaterial({ map: castleMountainTex(), transparent: true, fog: false, depthWrite: false }));
+  big.position.set(-4, 24, -92); grp.add(big);
   // zon
   const sunT = canvasTex(128, 128, (g, w) => { const gr = g.createRadialGradient(64, 64, 4, 64, 64, 62); gr.addColorStop(0, 'rgba(255,255,230,1)'); gr.addColorStop(0.25, 'rgba(255,240,170,.95)'); gr.addColorStop(1, 'rgba(255,230,120,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, w); });
-  const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunT, transparent: true, depthWrite: false, fog: false })); sun.scale.set(30, 30, 1); sun.position.set(-38, 36, -140); grp.add(sun);
+  const sun = new THREE.Sprite(new THREE.SpriteMaterial({ map: sunT, transparent: true, depthWrite: false, fog: false })); sun.scale.set(34, 34, 1); sun.position.set(-62, 62, -175); grp.add(sun);
   return { group: grp, layers: out, sun };
 }
 
@@ -267,8 +273,8 @@ export function windArrowSprite() {
   const w = 384, h = 128;
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const tx = new THREE.CanvasTexture(c); tx.colorSpace = THREE.SRGBColorSpace;
-  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthTest: false, opacity: 0.95 }));
-  s.scale.set(11, 3.67, 1); s.renderOrder = 22;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, opacity: 0.88 }));
+  s.scale.set(10, 3.33, 1); s.renderOrder = 6; s.material.depthTest = false;
   s.userData.draw = (wind, extra = '') => {
     const g = c.getContext('2d'); g.clearRect(0, 0, w, h);
     const dir = wind >= 0 ? 1 : -1, len = Math.min(1, Math.abs(wind) / 10);
@@ -325,4 +331,14 @@ export function buildDecor(scene, terrain, rng, avoid = []) {
   }
   for (let i = 0; i < 4; i++) { const x = -30 + rng() * 60; if (avoid.some((a) => Math.abs(x - a) < 5)) continue; const m = P.mushroom(0.8 + rng() * 0.5); add(m, x, 'mush'); }
   return items;
+}
+
+// kleine vogeltjes in de lucht
+export function makeBird(color = 0x2a2438) {
+  const g = new THREE.Group();
+  const m = new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide });
+  g.add(new THREE.Mesh(new THREE.SphereGeometry(0.28, 6, 5), m));
+  const wings = [1, -1].map((sd) => { const w = new THREE.Group(); const q = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.3), m); q.position.x = sd * 0.45; w.add(q); g.add(w); return { w, sd }; });
+  g.userData.wings = wings;
+  return g;
 }

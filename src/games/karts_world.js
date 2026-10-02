@@ -44,7 +44,7 @@ function mudTexture() {
 function chevronTex(c1, c2) {
   return canvasTex(128, 128, (g, w, h) => {
     g.fillStyle = c1; g.fillRect(0, 0, w, h); g.fillStyle = c2;
-    for (let i = -1; i < 4; i++) { g.beginPath(); g.moveTo(0, i * 36 + 30); g.lineTo(w / 2, i * 36); g.lineTo(w, i * 36 + 30); g.lineTo(w, i * 36 + 52); g.lineTo(w / 2, i * 36 + 22); g.lineTo(0, i * 36 + 52); g.fill(); }
+    for (let i = 0; i < 2; i++) { const y = i * 64 + 6; g.beginPath(); g.moveTo(8, y + 44); g.lineTo(w / 2, y + 6); g.lineTo(w - 8, y + 44); g.lineTo(w - 8, y + 60); g.lineTo(w / 2, y + 24); g.lineTo(8, y + 60); g.fill(); }
   }, { repeat: [1, 1] });
 }
 function checkerTexture(n = 8) {
@@ -65,11 +65,11 @@ export function emojiTex(e) {
 }
 
 // lint van de weg langs het circuit: laterale offsets lat0..lat1, hoogte y
-export function strip(C, i0, i1, lat0, lat1, y, vDiv = 8, colorFn = null) {
+export function strip(C, i0, i1, lat0, lat1, y, vDiv = 8, local = false) {
   const n = i1 - i0 + 1, pos = new Float32Array(n * 6), uv = new Float32Array(n * 4), nor = new Float32Array(n * 6), idx = [];
   for (let a = 0; a < n; a++) {
     const k = i0 + a, A = pointAt(C, k, lat0), B = pointAt(C, k, lat1);
-    pos.set([A.x, y, A.z, B.x, y, B.z], a * 6); uv.set([0, k / vDiv, 1, k / vDiv], a * 4); nor.set([0, 1, 0, 0, 1, 0], a * 6);
+    pos.set([A.x, y, A.z, B.x, y, B.z], a * 6); const vv = local ? (a / (n - 1)) * vDiv : k / vDiv; uv.set([0, vv, 1, vv], a * 4); nor.set([0, 1, 0, 0, 1, 0], a * 6);
     if (a < n - 1) { const b = a * 2; idx.push(b, b + 1, b + 2, b + 1, b + 3, b + 2); }
   }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setIndex(idx);
@@ -114,7 +114,7 @@ export function buildWorld(ctx, C) {
 
   // turbopijlen
   const padM = new THREE.MeshBasicMaterial({ map: chevronTex('#1a3a8a', '#7fe8ff'), side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 });
-  C.zones.pads.forEach((rg) => { const g = strip(C, rg[0] - 1, rg[1] + 1, -HALF_W * 0.7, HALF_W * 0.7, 0.1, 4); add(mesh(g, padM, { cast: false })); });
+  C.zones.pads.forEach((rg) => { const g = strip(C, rg[0] - 1, rg[1] + 2, -HALF_W * 0.7, HALF_W * 0.7, 0.1, 2, true); add(mesh(g, padM, { cast: false })); });
 
   // ---- hegge langs de weg (1 InstancedMesh) ----
   {
@@ -167,8 +167,10 @@ export function buildWorld(ctx, C) {
     for (const sx of [-1, 1]) { grp.add(mesh(new THREE.BoxGeometry(0.8, 6.5, 0.8), mat(0x9b9ca3), { pos: [sx * (HALF_W + 1.2), 3.25, 0] })); grp.add(mesh(new THREE.ConeGeometry(0.75, 1.1, 4), mat(0xb5483a), { pos: [sx * (HALF_W + 1.2), 7.0, 0], rot: [0, Math.PI / 4, 0] })); }
     grp.add(mesh(new THREE.BoxGeometry(HALF_W * 2 + 3, 1.7, 0.5), new THREE.MeshStandardMaterial({ map: tex.sign('START  •  FINISH', { w: 512, h: 96, size: 52, bg: '#2a2a3a', fg: '#ffe14a', border: '#e8c24a' }), roughness: 0.8 }), { pos: [0, 6.3, 0] }));
     grp.add(mesh(new THREE.BoxGeometry(HALF_W * 2 + 3, 0.5, 0.52), new THREE.MeshStandardMaterial({ map: checkerTexture(24) }), { pos: [0, 5.2, 0] }));
+    const big = mesh(new THREE.BoxGeometry(9.5, 1.9, 0.3), new THREE.MeshStandardMaterial({ map: tex.sign('START  •  FINISH', { w: 512, h: 96, size: 52, bg: '#2a2a3a', fg: '#ffe14a', border: '#e8c24a' }), roughness: 0.8 }), { pos: [s.x, 8.4, s.z], rot: [-0.5, 0, 0] }); add(big);
+    for (const sx of [-1, 1]) add(mesh(new THREE.CylinderGeometry(0.1, 0.1, 3.4, 5), mat(0x6b4a2e), { pos: [s.x + sx * 3.2, 6.8, s.z] }));
     // vlaggetjes langs de start
-    for (const sx of [-1, 1]) for (let i = 0; i < 2; i++) { const bn = P.banner(i % 2 ? 0x3a78e0 : 0x2f9e5b, 2.6, 0.9); bn.position.set(sx * (HALF_W + 3.6), 0, -3 - i * 6); bn.rotation.y = sx > 0 ? 0 : Math.PI; add(bn); bn.parent !== scene && scene.add(bn); upd.push((t) => P.animateBanner(bn, t)); }
+    for (const sx of [-1, 1]) for (let i = 0; i < 2; i++) { const bn = P.banner(i % 2 ? 0x3a78e0 : 0x2f9e5b, 2.6, 0.9); bn.position.set(sx * (HALF_W + 3.6), 0, -3 - i * 6); bn.rotation.y = sx > 0 ? 0 : Math.PI; add(bn); upd.push((t) => P.animateBanner(bn, t)); }
     grp.position.set(s.x, 0, s.z);
   }
 
@@ -184,17 +186,23 @@ export function buildWorld(ctx, C) {
     for (const sx of [-1, 1]) { const f = mesh(new THREE.CylinderGeometry(0.1, 0.1, 1.6, 6), mat(0x5b3d24), { pos: [sx * (HALF_W + 0.9), 0.8, len / 2] }); g.add(f); const fl = mesh(new THREE.ConeGeometry(0.25, 0.7, 6), new THREE.MeshBasicMaterial({ color: 0xffa020 }), { cast: false, pos: [sx * (HALF_W + 0.9), 1.9, len / 2] }); g.add(fl); upd.push((t) => { fl.scale.y = 1 + Math.sin(t * 14 + sx) * 0.2; }); }
   }
 
-  // ---- kasteel in het grasveld (rechts-midden) ----
-  const keep = new THREE.Group(); keep.position.set(8.5, 0, -6.2); add(keep);
+  // ---- ridderkamp in het grasveld (laag, zodat het de baan erachter niet verbergt) ----
   {
-    const sm = new THREE.MeshStandardMaterial({ map: tex.stone(4, 1), roughness: 1, flatShading: true });
-    keep.add(mesh(new THREE.BoxGeometry(11, 4.2, 4), sm, { pos: [0, 2.1, 0] }));
-    for (let i = 0; i < 9; i++) keep.add(mesh(new THREE.BoxGeometry(0.9, 0.8, 4.2), sm, { pos: [-5 + i * 1.25, 4.6, 0] }));
-    for (const sx of [-1, 1]) { const t = P.tower(8.5, 1.5); t.position.set(sx * 6.2, 0, 0); keep.add(t); const bn = P.banner(sx > 0 ? 0x3a78e0 : 0x2f9e5b, 2.2, 1.2); bn.position.set(sx * 6.2, 12.4, 0); keep.add(bn); upd.push((t2) => P.animateBanner(bn, t2 + sx)); }
-    const mid = P.tower(11, 1.7); mid.position.set(0, 4.2, -0.4); mid.scale.set(1, 1, 1); keep.add(mid);
-    const gate = mesh(new THREE.BoxGeometry(2.2, 2.8, 0.4), new THREE.MeshStandardMaterial({ color: 0x3a2412, roughness: 1 }), { pos: [0, 1.4, 2.05] }); keep.add(gate);
-    keep.add(mesh(new THREE.CylinderGeometry(1.1, 1.1, 0.4, 10, 1, false, 0, Math.PI), new THREE.MeshStandardMaterial({ color: 0x3a2412 }), { pos: [0, 2.8, 2.05], rot: [Math.PI / 2, 0, 0] }));
-    for (const sx of [-1, 1]) keep.add(mesh(new THREE.BoxGeometry(0.7, 1.0, 0.15), new THREE.MeshStandardMaterial({ color: 0xffd27a, emissive: 0xffa838, emissiveIntensity: 0.7 }), { cast: false, pos: [sx * 3, 2.6, 2.05] }));
+    const camp = new THREE.Group(); camp.position.set(8, 0, -6.4); add(camp);
+    const stripe = (c1, c2) => canvasTex(64, 32, (g, w, h) => { for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? c2 : c1; g.fillRect(i * w / 8, 0, w / 8 + 1, h); } }, { repeat: [1, 1] });
+    [[-6, 0.5, 0xd8372c, '#d8372c'], [-0.5, -1.2, 0x3a78e0, '#3a78e0'], [5.2, 0.4, 0xe8c24a, '#e8c24a']].forEach(([x, z, col, css], i) => {
+      const t = new THREE.Group(); t.position.set(x, 0, z); camp.add(t);
+      t.add(mesh(new THREE.ConeGeometry(2.5, 3.4, 8), new THREE.MeshStandardMaterial({ map: stripe(css, '#f4f0e6'), roughness: 0.95, side: THREE.DoubleSide }), { pos: [0, 1.9, 0] }));
+      t.add(mesh(new THREE.CylinderGeometry(2.5, 2.5, 0.9, 8, 1, true), new THREE.MeshStandardMaterial({ map: stripe(css, '#f4f0e6'), roughness: 0.95, side: THREE.DoubleSide }), { pos: [0, 0.45, 0] }));
+      t.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.6, 4), mat(0x5b3d24), { pos: [0, 4.4, 0] }));
+      t.add(mesh(new THREE.BoxGeometry(0.9, 0.5, 0.04), mat(col), { cast: false, pos: [0.5, 4.9, 0] }));
+      t.add(mesh(new THREE.BoxGeometry(1.0, 1.5, 0.1), mat(0x2a1a0e), { pos: [0, 0.75, 2.45 * 0.92], rot: [0, 0, 0] }));
+    });
+    const f = P.fence(10, 0.9); f.position.set(-0.5, 0, 4.2); camp.add(f);
+    const hay = P.sack(1.6, 0xd8b84a); hay.position.set(7.4, 0, 3.4); camp.add(hay); const hay2 = P.sack(1.3, 0xd8b84a); hay2.position.set(-7.6, 0, 3); camp.add(hay2);
+    const b1 = P.barrel(1.2); b1.position.set(2.4, 0, 1.8); camp.add(b1); const b2 = P.barrel(1.2); b2.position.set(3.6, 0, 2.3); camp.add(b2);
+    const sh = P.chest(false); sh.position.set(-3.3, 0, 2.4); sh.scale.setScalar(1.3); camp.add(sh);
+    const bn = P.banner(0xb04aa0, 3.4, 1.6); bn.position.set(10.4, 0, -1.4); camp.add(bn); upd.push((t2) => P.animateBanner(bn, t2 + 1));
   }
   // windmolen in de linker-uitsparing van de bocht, toren (poorthuis) in de rechter
   const wm = P.windmill(0.7); wm.position.set(6, 0, 11); add(wm);

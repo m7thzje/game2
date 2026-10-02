@@ -170,14 +170,14 @@ export function buildCourt(ctx, { HX, HZ }) {
   // ---- muren en torens
   const wallMat = new THREE.MeshStandardMaterial({ map: tex.stone(14, 2), roughness: 0.95, flatShading: true });
   const back = mesh(new THREE.BoxGeometry(50, 7, 2.2), wallMat, { pos: [0, 3.5, -12.6] }); root.add(back);
-  const sideL = mesh(new THREE.BoxGeometry(2, 3.4, 24), new THREE.MeshStandardMaterial({ map: tex.stone(8, 1), roughness: 0.95, flatShading: true }), { pos: [-FLOOR_X - 2.6, 1.7, -0.4] });
+  const sideL = mesh(new THREE.BoxGeometry(2, 2.4, 24), new THREE.MeshStandardMaterial({ map: tex.stone(8, 1), roughness: 0.95, flatShading: true }), { pos: [-FLOOR_X - 2.6, 1.2, -0.4] });
   const sideR = sideL.clone(); sideR.position.x = FLOOR_X + 2.6; root.add(sideL, sideR);
   const front = mesh(new THREE.BoxGeometry(40, 0.9, 1.2), wallMat, { pos: [0, 0.35, FLOOR_Z + 2.2] }); root.add(front);
   { // kantelen, kijkspleten, gloeiende ramen, deuropening
     const mb = new MB(), glowMb = new MB();
     for (let x = -24; x <= 24; x += 1.7) mb.box(1.0, 0.9, 1.0, STONE, x, 7.45, -11.8);
     for (let x = -24; x <= 24; x += 1.7) mb.box(1.0, 0.9, 1.0, STONE, x, 7.45, -13.4);
-    for (const s of [-1, 1]) for (let z = -12; z <= 10.5; z += 1.9) mb.box(0.9, 0.8, 0.9, STONE, s * (FLOOR_X + 2.6), 3.8, z);
+    for (const s of [-1, 1]) for (let z = -12; z <= 10.5; z += 1.9) mb.box(0.9, 0.7, 0.9, STONE, s * (FLOOR_X + 2.6), 2.75, z);
     for (let x = -18; x <= 18; x += 2.2) mb.box(1.0, 0.6, 0.5, STONE, x, 1.15, FLOOR_Z + 2.2);
     for (const x of [-16, -9, 9, 16]) { // hoge boogramen met gloed
       mb.box(1.8, 3.0, 0.5, 0x4a4650, x, 4.0, -11.4); mb.cyl(0.9, 0.9, 0.5, 0x4a4650, x, 5.5, -11.4, 10, Math.PI / 2, 0, 0);
@@ -197,7 +197,7 @@ export function buildCourt(ctx, { HX, HZ }) {
   [[-5.5, 0xd8372c], [5.5, 0xd8372c], [-11, 0x2f9e5b], [11, 0x3a78e0], [-1.6, 0xe8c24a], [1.6, 0xe8c24a]].forEach(([x, c]) => { const b = P.banner(c, 2.2, 1.0); b.position.set(x, 7.9, -12.2); root.add(b); banners.push(b); });
   // tapijten (wandkleden) aan de zijmuren: simpele gekleurde panelen
   for (const s of [-1, 1]) for (const z of [-6, 1, 7]) {
-    const tapestry = mesh(new THREE.PlaneGeometry(2.4, 2.4), new THREE.MeshStandardMaterial({ map: tex.carpet(1, 1), roughness: 1 }), { cast: false, pos: [s * (FLOOR_X + 1.55), 2.0, z], rot: [0, -s * Math.PI / 2, 0] });
+    const tapestry = mesh(new THREE.PlaneGeometry(2.0, 1.8), new THREE.MeshStandardMaterial({ map: tex.carpet(1, 1), roughness: 1 }), { cast: false, pos: [s * (FLOOR_X + 1.55), 1.3, z], rot: [0, -s * Math.PI / 2, 0] });
     root.add(tapestry);
   }
 

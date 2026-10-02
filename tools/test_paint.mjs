@@ -89,6 +89,16 @@ for (const name of scen) {
     const { page, errors } = await open(browser, 'deurman');
     const res = await page.evaluate(() => { window.__bot(60 * 20); const i = window.__app.mode.instance; const a = i.dbg.state().cnt.slice(); i.onDeurman([true, false]); const b = i.dbg.state(); window.__bot(2); return { a, b: window.__app.mode.instance.dbg.state().cnt }; });
     console.log('deurman', JSON.stringify(res), errors.length ? 'ERRORS ' + errors.join('|') : 'ok');
+  } else if (name === 'tie') {
+    const { page, errors } = await open(browser, 'none');
+    const res = await page.evaluate(() => {
+      window.__skill = [0, 0]; const m = window.__app.mode, d = m.instance.dbg;
+      window.__bot(60 * 59.5);
+      d.owner.fill(0); d.tp(0, -3.75, 3.75); d.tp(1, 3.75, 3.75); d.sp.on = false; d.sp.spawnT = 999;
+      let g = 0; while (!m.finished && g++ < 60 * 40) window.__bot(1);
+      const st = d.state(); return { fin: m.finished, T: +st.T.toFixed(1), sc: st.sc, over: st.over, w: m.result && m.result.winner, sum: m.result && m.result.summary };
+    });
+    console.log('tie', JSON.stringify(res), errors.length ? 'ERRORS ' + errors.join('|') : 'ok');
   } else if (name === 'shots') {
     const { page, errors } = await open(browser, process.env.TW || null);
     const shot = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(700); await page.screenshot({ path: `/tmp/paint_${tag}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };

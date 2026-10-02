@@ -3,6 +3,7 @@ import { mat, mesh, glow, canvasTex, clamp, lerp, damp, rand, pick, TAU, mulberr
 import { tex } from '../engine/textures.js';
 import * as P from '../engine/props.js';
 import { makeNPC, Animal, Dragon, makeDeurman } from '../engine/chars.js';
+import { mergeStatic } from './quickdraw_merge.js';
 
 // Het fantasy-dorp bij zonsondergang voor "Snelle Vingers: Duel bij Zonsondergang".
 // buildWorld(ctx) -> { update(t,dt), chicken(), bell(), crow(), deurman(), hiccup(), fire(), say(), panel, audience, ... }
@@ -106,7 +107,7 @@ export function buildWorld(ctx) {
   const cc = [0xff8a6a, 0xffb07a, 0xd070a0, 0x8a5aa8, 0xff9a7a, 0xffc890, 0xb8609a];
   for (let i = 0; i < 9; i++) {
     const c = mesh(new THREE.SphereGeometry(1, 10, 6), new THREE.MeshBasicMaterial({ color: cc[i % cc.length], fog: false, transparent: true, opacity: 0.85 }), { cast: false, receive: false, scale: [rand(10, 20), rand(0.8, 1.5), rand(2, 4)] });
-    c.position.set(-70 + i * 17 + rand(-4, 4), rand(24, 52), -92 - rand(0, 8)); scene.add(c); clouds.push(c);
+    c.position.set(-70 + i * 17 + rand(-4, 4), rand(24, 52), -92 - rand(0, 8)); c.userData.dyn = true; scene.add(c); clouds.push(c);
   }
   ups.push((t, dt) => { for (const c of clouds) { c.position.x += dt * 0.35; if (c.position.x > 90) c.position.x = -90; } });
   const mtnCols = [0x4a3566, 0x3e2d5c, 0x56406f, 0x34264e];
@@ -123,8 +124,14 @@ export function buildWorld(ctx) {
     cs.add(mesh(new THREE.BoxGeometry(9, 4, 2.4), mat(0x6a6478), { pos: [0, 2, 0] }));
     cs.traverse((o) => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = false; } }); scene.add(cs); }
   // ver weg-draak (silhouet, cirkelt)
-  const farDragon = new Dragon(0x3a2a5a, 0.9); farDragon.group.position.set(24, 22, -60); scene.add(farDragon.group);
-  ups.push((t, dt) => { farDragon.update(dt); const a = t * 0.18; farDragon.group.position.set(22 + Math.cos(a) * 20, 21 + Math.sin(t * 0.6) * 2, -62 + Math.sin(a) * 10); farDragon.group.rotation.y = -a + Math.PI; farDragon.group.rotation.z = -0.25; });
+  const farDragon = new THREE.Group(); farDragon.userData.dyn = true; scene.add(farDragon);
+  { const dm = new THREE.MeshBasicMaterial({ color: 0x2a1c44, fog: true, side: THREE.DoubleSide });
+    farDragon.add(mesh(new THREE.CapsuleGeometry(0.7, 3.2, 3, 8), dm, { cast: false, receive: false, rot: [Math.PI / 2, 0, 0] }));
+    farDragon.add(mesh(new THREE.ConeGeometry(0.5, 3.0, 5), dm, { cast: false, receive: false, rot: [-Math.PI / 2, 0, 0], pos: [0, 0, -3.6] }));
+    farDragon.add(mesh(new THREE.CapsuleGeometry(0.28, 1.6, 3, 6), dm, { cast: false, receive: false, rot: [0.8, 0, 0], pos: [0, 0.9, 2.3] }));
+    const wg = new THREE.BufferGeometry(); wg.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0.8, 0, 0, -1, 4.6, 0.4, -1.4, 0, 0, 0.8, 4.6, 0.4, -1.4, 6.2, 0.7, 0.4], 3));
+    farDragon.userData.wings = [1, -1].map((sd) => { const p = new THREE.Group(); const w = new THREE.Mesh(wg, dm); w.scale.x = sd; p.add(w); p.position.set(sd * 0.5, 0.5, 0.2); farDragon.add(p); return { p, sd }; }); }
+  ups.push((t, dt) => { const a = t * 0.18; const f = Math.sin(t * 3.2); for (const w of farDragon.userData.wings) w.p.rotation.z = w.sd * (f * 0.6 + 0.1); farDragon.position.set(22 + Math.cos(a) * 20, 21 + Math.sin(t * 0.6) * 2, -62 + Math.sin(a) * 10); farDragon.rotation.y = -a + Math.PI; farDragon.rotation.z = -0.25; });
 
   // ---------------- grond ----------------
   const ground = mesh(new THREE.PlaneGeometry(260, 200), new THREE.MeshStandardMaterial({ map: tex.dirt(70, 55), roughness: 1 }), { cast: false });
@@ -147,24 +154,24 @@ export function buildWorld(ctx) {
   const beam = mat(0x3e2a1a);
   tavern.add(mesh(new THREE.BoxGeometry(15.4, 1.0, 7.4), stone, { pos: [0, 0.5, 0] }));
   tavern.add(mesh(new THREE.BoxGeometry(15, 3.4, 7), plaster, { pos: [0, 2.7, 0] }));            // y 1 .. 4.4
-  tavern.add(mesh(new THREE.BoxGeometry(11.6, 2.9, 6.4), plaster, { pos: [0, 5.85, -0.2] }));    // y 4.4 .. 7.3
+  tavern.add(mesh(new THREE.BoxGeometry(11.6, 2.5, 6.4), plaster, { pos: [0, 5.65, -0.2] }));    // y 4.4 .. 6.9
   for (const x of [-7.4, -3.7, 3.7, 7.4]) tavern.add(mesh(new THREE.BoxGeometry(0.28, 3.5, 0.28), beam, { pos: [x, 2.7, 3.55] }));
-  for (const x of [-5.7, -2.9, 2.9, 5.7]) tavern.add(mesh(new THREE.BoxGeometry(0.24, 2.9, 0.24), beam, { pos: [x, 5.85, 3.05] }));
+  for (const x of [-5.7, -2.9, 2.9, 5.7]) tavern.add(mesh(new THREE.BoxGeometry(0.24, 2.5, 0.24), beam, { pos: [x, 5.65, 3.05] }));
   tavern.add(mesh(new THREE.BoxGeometry(15.2, 0.3, 0.34), beam, { pos: [0, 4.42, 3.55] }));
-  tavern.add(mesh(new THREE.BoxGeometry(11.8, 0.26, 0.3), beam, { pos: [0, 7.3, 3.05] }));
+  tavern.add(mesh(new THREE.BoxGeometry(11.8, 0.26, 0.3), beam, { pos: [0, 6.9, 3.05] }));
   // dak (gevel naar voren)
   const rm = new THREE.MeshStandardMaterial({ map: tex.roof(3, 2, '#8a3a42'), roughness: 0.95, flatShading: true });
-  { const sh = new THREE.Shape(); sh.moveTo(-6.6, 0); sh.lineTo(0, 2.7); sh.lineTo(6.6, 0); sh.closePath();
-    const roof = mesh(new THREE.ExtrudeGeometry(sh, { depth: 7.6, bevelEnabled: false }), rm, { pos: [0, 7.3, -4.0] }); tavern.add(roof); }
+  { const sh = new THREE.Shape(); sh.moveTo(-6.6, 0); sh.lineTo(0, 2.0); sh.lineTo(6.6, 0); sh.closePath();
+    const roof = mesh(new THREE.ExtrudeGeometry(sh, { depth: 7.6, bevelEnabled: false }), rm, { pos: [0, 6.9, -4.0] }); tavern.add(roof); }
   // lagere dakjes links/rechts
   for (const s of [-1, 1]) { const r = mesh(new THREE.BoxGeometry(2.6, 0.22, 7.8), rm, { pos: [s * 6.55, 4.9, 0], rot: [0, 0, -s * 0.28] }); tavern.add(r); }
-  tavern.add(mesh(new THREE.BoxGeometry(0.9, 2.6, 0.9), mat(0x7a6a5a), { pos: [3.6, 9.2, -1.8] }));
+  tavern.add(mesh(new THREE.BoxGeometry(0.9, 2.2, 0.9), mat(0x7a6a5a), { pos: [3.6, 8.3, -1.8] }));
   // deur + zwaaideurtjes (saloon)
   tavern.add(mesh(new THREE.BoxGeometry(2.7, 2.9, 0.3), mat(0x1a0e08), { pos: [0, 2.45, 3.45] }));
   tavern.add(mesh(new THREE.BoxGeometry(2.9, 0.22, 0.4), beam, { pos: [0, 3.95, 3.55] }));
   const saloon = [];
   for (const s of [-1, 1]) {
-    const piv = new THREE.Group(); piv.position.set(s * 1.3, 0, 3.7); tavern.add(piv);
+    const piv = new THREE.Group(); piv.userData.dyn = true; piv.position.set(s * 1.3, 0, 3.7 - 9); scene.add(piv);
     const leaf = mesh(new THREE.BoxGeometry(1.25, 1.25, 0.1), new THREE.MeshStandardMaterial({ map: tex.planks(1, 1, '#9a6a3a'), roughness: 0.9 }), { pos: [-s * 0.62, 1.9, 0] });
     for (let k = 0; k < 4; k++) leaf.add(mesh(new THREE.BoxGeometry(0.06, 1.0, 0.04), mat(0x5a3a1c), { cast: false, pos: [-0.45 + k * 0.3, 0, 0.07] }));
     piv.add(leaf); saloon.push({ piv, s, v: 0 });
@@ -180,24 +187,26 @@ export function buildWorld(ctx) {
   tavern.add(mesh(new THREE.BoxGeometry(4.4, 0.95, 0.14), new THREE.MeshStandardMaterial({ map: tex.sign('De Gouden Draak', { w: 512, h: 112, size: 52, bg: '#6a3a1a', fg: '#ffd96a' }), roughness: 0.9 }), { pos: [0, 4.0, 3.72] }));
   // lantaarns bij de deur
   const lanterns = [];
-  for (const x of [-2.2, 2.2]) { const l = mesh(new THREE.BoxGeometry(0.3, 0.42, 0.3), new THREE.MeshStandardMaterial({ color: 0xffd27a, emissive: 0xffb040, emissiveIntensity: 1.6 }), { cast: false, pos: [x, 3.3, 3.8] }); tavern.add(l); lanterns.push(l); }
+  for (const x of [-2.2, 2.2]) { const l = mesh(new THREE.BoxGeometry(0.3, 0.42, 0.3), new THREE.MeshStandardMaterial({ color: 0xffd27a, emissive: 0xffb040, emissiveIntensity: 1.6 }), { cast: false, pos: [x, 3.3, 3.8 - 9] }); l.userData.dyn = true; scene.add(l); lanterns.push(l); }
   const doorLight = new THREE.PointLight(0xffa850, 1.6, 14, 1.6); doorLight.position.set(0, 2.6, 6.2); tavern.add(doorLight);
   ups.push((t) => { doorLight.intensity = 1.5 + Math.sin(t * 9) * 0.12 + Math.sin(t * 5.3) * 0.1; lanterns.forEach((l, i) => { l.material.emissiveIntensity = 1.5 + Math.sin(t * 11 + i * 2) * 0.25; }); });
 
   // Deurman-raam (boven, midden)
-  const WIN = { x: 0, y: 5.9, z: -9 + 3.05 };
+  const WIN = { x: 0, y: 5.65, z: -9 + 3.05 };
   const frame = new THREE.Group(); frame.position.set(WIN.x, WIN.y, WIN.z); tavern.parent.add(frame);
-  frame.add(mesh(new THREE.BoxGeometry(2.0, 1.9, 0.2), beam));
-  frame.add(mesh(new THREE.BoxGeometry(1.6, 1.5, 0.24), new THREE.MeshStandardMaterial({ color: 0x0a0608, emissive: 0x1a0808, emissiveIntensity: 0.5 }), { cast: false, pos: [0, 0, 0.02] }));
+  frame.add(mesh(new THREE.BoxGeometry(3.3, 2.3, 0.2), beam));
+  frame.add(mesh(new THREE.BoxGeometry(2.9, 1.95, 0.24), new THREE.MeshStandardMaterial({ color: 0x0a0608, emissive: 0x2a0c0c, emissiveIntensity: 0.7 }), { cast: false, pos: [0, 0, 0.02] }));
   const shutters = [];
-  for (const s of [-1, 1]) { const piv = new THREE.Group(); piv.position.set(s * 0.82, 0, 0.14); frame.add(piv); piv.add(mesh(new THREE.BoxGeometry(0.82, 1.5, 0.06), new THREE.MeshStandardMaterial({ map: tex.planks(1, 1, '#3a6a4a'), roughness: 0.9 }), { pos: [-s * 0.41, 0, 0] })); shutters.push({ piv, s }); }
-  const deur = makeDeurman(0.85);
-  const deurPivot = new THREE.Group(); deurPivot.position.set(WIN.x, WIN.y, WIN.z - 0.1); scene.add(deurPivot);
-  deur.group.position.set(0, -2.07, -0.28); deurPivot.add(deur.group); deurPivot.scale.setScalar(0.001); deurPivot.visible = false;
-  let deurT = -1, deurEyes = 0;
+  for (const s of [-1, 1]) { const piv = new THREE.Group(); piv.userData.dyn = true; piv.position.set(s * 1.5, 0, 0.14); frame.add(piv); piv.add(mesh(new THREE.BoxGeometry(1.46, 1.95, 0.06), new THREE.MeshStandardMaterial({ map: tex.planks(1, 1, '#3a6a4a'), roughness: 0.9 }), { pos: [-s * 0.73, 0, 0] })); shutters.push({ piv, s }); }
+  const DS = 2.0;
+  const deur = makeDeurman(DS);
+  const deurPivot = new THREE.Group(); deurPivot.userData.dyn = true; deurPivot.position.set(WIN.x, WIN.y - 0.1, WIN.z - 0.1); scene.add(deurPivot);
+  deur.group.position.set(0, -2.43 * DS + 0.2, -0.55); deurPivot.add(deur.group); deurPivot.scale.setScalar(0.001); deurPivot.visible = false;
+  const deurLight = new THREE.PointLight(0xff4020, 0, 9, 2); deurLight.position.set(0, WIN.y, WIN.z + 1.2); scene.add(deurLight);
+  let deurT = -1;
 
   // ---------------- draak op het dak ----------------
-  const dragon = new Dragon(0x2f9a52, 0.85); dragon.group.position.set(0.2, 10.2, -9.4); dragon.group.rotation.y = 0.05; scene.add(dragon.group);
+  const dragon = new Dragon(0x2f9a52, 1.1); dragon.group.userData.dyn = true; dragon.group.position.set(0.0, 9.7, -9.6); dragon.group.rotation.y = 0.85; scene.add(dragon.group);
   const dragonHead = dragon.neck.children.find((c) => c.isGroup);
   let roar = 0, hik = 0, fireT = 0;
   const fireLight = new THREE.PointLight(0xff8a30, 0, 40, 1.4); fireLight.position.set(0, 12, -6); scene.add(fireLight);
@@ -208,13 +217,13 @@ export function buildWorld(ctx) {
   const hR = P.houseSimple(6, 5, 4, { wall: '#d8e4d0', roof: '#b0702a', thatch: true }); hR.position.set(15.2, 0, -7); hR.rotation.y = -0.55; scene.add(hR);
   const hL2 = P.houseSimple(6, 6, 5, { wall: '#efe2c4', roof: '#4a6aa0' }); hL2.position.set(-26, 0, -18); hL2.rotation.y = 0.3; scene.add(hL2);
   const hR2 = P.houseSimple(7, 6, 4.6, { wall: '#e4d4c0', roof: '#a04a3a' }); hR2.position.set(26, 0, -17); hR2.rotation.y = -0.35; scene.add(hR2);
-  { const wm = P.windmill(1.1); wm.position.set(-38, 0, -34); wm.rotation.y = 0.5; scene.add(wm); const hub = wm.userData.blades; ups.push((t, dt) => { hub.rotation.z += dt * 0.5; }); }
+  { const wm = P.windmill(1.1); wm.position.set(-38, 0, -34); wm.rotation.y = 0.5; scene.add(wm); const hub = wm.userData.blades; hub.userData.dyn = true; ups.push((t, dt) => { hub.rotation.z += dt * 0.5; }); }
   for (const [x, z, s] of [[-8.6, -4.6, 1], [-9.6, -3.6, 0.9], [-8.9, -3.4, 0.8]]) { const b = P.barrel(s); b.position.set(x, 0, z); scene.add(b); }
   { const b = P.barrel(1); b.position.set(-8.8, 0.9, -4.2); b.scale.setScalar(0.85); scene.add(b); }
   for (const [x, z, s] of [[8.4, -4.4, 1.1], [9.6, -4.6, 0.9]]) { const c = P.crate(s); c.position.set(x, 0, z); c.rotation.y = x * 0.2; scene.add(c); }
   { const c = P.crate(0.8); c.position.set(8.8, 1.1, -4.4); c.rotation.y = 0.5; scene.add(c); }
   scene.add(hayBale(11.4, -3.2, 0.3), hayBale(12.6, -2.6, -0.5)); const hb = hayBale(11.9, -2.9, 0.1); hb.position.y = 1.35; hb.scale.setScalar(0.9); scene.add(hb);
-  for (const x of [-6.4, 6.4]) { const lp = P.lampPost(); lp.position.set(x, 0, -5.4); scene.add(lp); ups.push((t) => { const m = lp.children[1].material; if (m) m.emissiveIntensity = 1.8 + Math.sin(t * 8 + x) * 0.3; }); }
+  for (const x of [-6.4, 6.4]) { const lp = P.lampPost(); lp.position.set(x, 0, -5.4); const lm = lp.children[1].material; scene.add(lp); ups.push((t) => { const m = lm; if (m) m.emissiveIntensity = 1.8 + Math.sin(t * 8 + x) * 0.3; }); }
   { const pst = new THREE.Group(); pst.position.set(5.9, 0, -4.6); pst.add(mesh(new THREE.CylinderGeometry(0.06, 0.07, 2, 5), mat(0x5a3a1c), { pos: [0, 1, 0] })); const w = wanted(); w.position.set(0, 2.2, 0.1); pst.add(w); pst.rotation.y = -0.3; pst.position.x = 7.6; scene.add(pst); }
   // drinkbak
   { const tr = mesh(new THREE.BoxGeometry(2.4, 0.6, 0.8), mat(0x6a4a2a), { pos: [-5.6, 0.3, -4.1] }); scene.add(tr); scene.add(mesh(new THREE.BoxGeometry(2.1, 0.06, 0.55), new THREE.MeshStandardMaterial({ color: 0x3a8ad0, emissive: 0x103050, emissiveIntensity: 0.4 }), { cast: false, pos: [-5.6, 0.58, -4.1] })); }
@@ -225,7 +234,7 @@ export function buildWorld(ctx) {
     cart.add(mesh(new THREE.BoxGeometry(2.2, 0.8, 1.2), mat(0xc9a050), { pos: [0, 1.5, 0] }));
     scene.add(cart); }
   // bomen / dennen verderop
-  for (let i = 0; i < 22; i++) { const side = i % 2 ? 1 : -1; const t = i % 3 ? P.pine(rand(6, 10), 0x1f4d3a) : P.tree(rand(5, 7), 0x4a7a3a); t.position.set(side * rand(19, 52), 0, -rand(8, 48)); scene.add(t); }
+  for (let i = 0; i < 18; i++) { const side = i % 2 ? 1 : -1; const t = i % 3 ? P.pine(rand(6, 10), 0x1f4d3a) : P.tree(rand(5, 7), 0x4a7a3a); t.position.set(side * rand(19, 52), 0, -rand(8, 48)); scene.add(t); }
   // bloemetjes / struikjes
   for (const [x, z] of [[-9.5, 1.5], [10.5, 2], [-13.5, 4], [14, 5]]) { const f = P.flowerPatch(0xff6fa5, 6, 1); f.position.set(x, 0, z); scene.add(f); }
   for (const [x, z] of [[-11, 3], [12.5, 0.5], [-16, 0]]) { const b = P.bush(1.3, 0x4a7a3a); b.position.set(x, 0, z); scene.add(b); }
@@ -234,7 +243,7 @@ export function buildWorld(ctx) {
   const crows = [];
   const perches = [[-6.2, 4.95, -9.0, 0.3], [-5.0, 4.95, -9.0, -0.4], [6.1, 4.95, -9.0, 0.2], [-6.4, 3.0, -5.4, 0.0], [3.9, 9.7, -9.0, 0.1]];
   perches.forEach(([x, y, z, ry], i) => {
-    const c = crowMesh(); c.position.set(x, y + 0.3, z); c.rotation.y = ry; scene.add(c);
+    const c = crowMesh(); c.userData.dyn = true; c.position.set(x, y + 0.3, z); c.rotation.y = ry; scene.add(c);
     crows.push({ g: c, home: new THREE.Vector3(x, y + 0.3, z), ry, state: 'sit', t: 0, dir: i % 2 ? 1 : -1, peck: rand(0, 6) });
   });
   function crowUpdate(k, dt) {
@@ -268,7 +277,7 @@ export function buildWorld(ctx) {
   };
 
   // ---------------- kip ----------------
-  const chicken = new Animal('chicken'); chicken.group.scale.setScalar(1.7); chicken.group.visible = false; scene.add(chicken.group);
+  const chicken = new Animal('chicken'); chicken.group.userData.dyn = true; chicken.group.scale.setScalar(1.7); chicken.group.visible = false; scene.add(chicken.group);
   let chT = -1;
   W.chicken = () => {
     chT = 0; chicken.group.visible = true; chicken.speed = 1;
@@ -291,7 +300,7 @@ export function buildWorld(ctx) {
   });
 
   // ---------------- bel ----------------
-  const bellPost = new THREE.Group(); bellPost.position.set(-8.4, 0, 0.6); scene.add(bellPost);
+  const bellPost = new THREE.Group(); bellPost.userData.dyn = true; bellPost.position.set(-8.4, 0, 0.6); scene.add(bellPost);
   bellPost.add(mesh(new THREE.CylinderGeometry(0.14, 0.2, 5.4, 6), mat(0x5a3a1c), { pos: [0, 2.7, 0] }));
   bellPost.add(mesh(new THREE.BoxGeometry(2.2, 0.2, 0.25), mat(0x5a3a1c), { pos: [0.8, 5.3, 0] }));
   bellPost.add(mesh(new THREE.BoxGeometry(0.2, 1.1, 0.2), mat(0x5a3a1c), { pos: [0.5, 4.9, 0], rot: [0, 0, 0.8] }));
@@ -307,21 +316,21 @@ export function buildWorld(ctx) {
   ups.push((t, dt) => { bellT += dt; bellAmp = Math.max(0, bellAmp - dt * 0.5); bellPiv.rotation.z = Math.sin(bellT * 8) * bellAmp; });
 
   // ---------------- Deurman ----------------
-  W.deurman = () => { deurT = 0; deurPivot.visible = true; audio.sfx('creak', { vol: 0.8 }); audio.sfx('heartbeat', { vol: 0.7 }); W.say('Niet bewegen!', 0, 8.6, -4.6, { dur: 1.7, color: '#8a1a1a', scale: 1.5 }); return 2.0; };
+  W.deurman = () => { deurT = 0; deurPivot.visible = true; audio.sfx('creak', { vol: 0.8 }); audio.sfx('heartbeat', { vol: 0.7 }); W.say('Niet bewegen!', -3.4, 7.5, -4.4, { dur: 1.8, color: '#8a1a1a', scale: 1.7 }); return 2.0; };
   ups.push((t, dt) => {
     if (deurT >= 0) {
       deurT += dt;
       const u = clamp(deurT / 0.35, 0, 1), out = deurT < 1.65 ? u : clamp(1 - (deurT - 1.65) / 0.3, 0, 1);
       deurPivot.scale.setScalar(Math.max(0.001, out));
       for (const s of shutters) s.piv.rotation.y = s.s * out * 1.9;
-      deur.update(dt); deur.torso.rotation.x = 0.55 + Math.sin(deurT * 3) * 0.05; deur.head.rotation.z = Math.sin(deurT * 6) * 0.25; deur.torso.parent.position.y = -2.07;
-      if (deurT > 2.0) { deurT = -1; deurPivot.visible = false; for (const s of shutters) s.piv.rotation.y = 0; }
+      deur.update(dt); deur.torso.rotation.x = 0.5 + Math.sin(deurT * 3) * 0.05; deur.head.rotation.z = Math.sin(deurT * 6) * 0.25; deurLight.intensity = out * 2.2;
+      if (deurT > 2.0) { deurT = -1; deurPivot.visible = false; deurLight.intensity = 0; for (const s of shutters) s.piv.rotation.y = 0; }
     }
   });
 
   // ---------------- draak: hik (nep) en vuur (echt) ----------------
   W.hiccup = () => {
-    hik = 0.9; W.say('hik!', 0.2, 12.9, -7.6, { dur: 0.9, scale: 1.1, color: '#2a7a3a' });
+    hik = 0.9; W.say('hik!', 1.2, 12.0, -7.6, { dur: 0.9, scale: 1.1, color: '#2a7a3a' });
     audio.tone(330, 0.12, { type: 'sine', vol: 0.18, slide: 760 }); audio.tone(520, 0.1, { type: 'sine', vol: 0.12, slide: 980, delay: 0.1 });
     return 1.0;
   };
@@ -335,8 +344,8 @@ export function buildWorld(ctx) {
     dragon.update(dt);
     hik = Math.max(0, hik - dt); roar = Math.max(0, roar - dt);
     const wingOpen = roar > 0 ? 0.55 : 0.0;
-    dragon.wings.forEach((w) => { w.p.rotation.z = w.sd * (roar > 0 ? 0.4 + Math.sin(t * 9) * 0.25 : 1.15 + Math.sin(t * 2) * 0.05); });
-    dragon.group.position.y = 10.2 + (roar > 0 ? 0.35 : 0) + Math.sin(t * 1.5) * 0.03;
+    dragon.wings.forEach((w) => { w.p.rotation.z = w.sd * (roar > 0 ? 0.25 + Math.sin(t * 9) * 0.4 : 0.5 + Math.sin(t * 2) * 0.06); });
+    dragon.group.position.y = 9.7 + (roar > 0 ? 0.3 : 0) + Math.sin(t * 1.5) * 0.03;
     dragon.neck.rotation.x = roar > 0 ? -1.0 + Math.sin(t * 30) * 0.03 : hik > 0 ? -0.55 + Math.sin(hik * 30) * 0.2 : -0.12 + Math.sin(t * 1.6) * 0.08;
     dragonEye.visible = roar > 0;
     if (hik > 0.4 && Math.random() < 0.7) { dragonHead.getWorldPosition(V); fx.particles.emit(V.x, V.y + 0.3, V.z + 0.3, rand(-0.6, 0.6), rand(1.5, 3), rand(0.5, 1.5), { life: 0.6, size: 0.45, color: pick([0xffd8a0, 0xb0b0b0, 0xffa040]), gravity: -1 }); }
@@ -344,7 +353,7 @@ export function buildWorld(ctx) {
       fireT -= dt; dragonHead.getWorldPosition(V);
       for (let i = 0; i < 9; i++) {
         const c = pick([0xff3a10, 0xff7a10, 0xffb020, 0xffe060, 0xffffff]);
-        fx.particles.emit(V.x + rand(-0.3, 0.3), V.y + 0.2, V.z + 0.2, rand(-3.5, 3.5), rand(7, 13), rand(1.5, 5.5), { life: rand(0.7, 1.3), size: rand(0.7, 1.5), color: c, gravity: -1.5 });
+        fx.particles.emit(V.x + rand(-0.3, 0.3), V.y + 0.2, V.z + 0.2, rand(0.5, 5), rand(4.5, 10), rand(3, 8), { life: rand(0.7, 1.3), size: rand(0.7, 1.5), color: c, gravity: -1.5 });
       }
       fireLight.intensity = 3 + Math.random() * 4;
     } else fireLight.intensity = damp(fireLight.intensity, 0, 6, dt);
@@ -353,7 +362,7 @@ export function buildWorld(ctx) {
 
   // ---------------- tuimelende struik ----------------
   const weed = new THREE.Mesh(new THREE.IcosahedronGeometry(0.75, 1), new THREE.MeshStandardMaterial({ color: 0x8a6a3a, wireframe: true, roughness: 1 }));
-  weed.castShadow = true; scene.add(weed);
+  weed.castShadow = true; weed.userData.dyn = true; scene.add(weed);
   const weed2 = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5, 1), new THREE.MeshStandardMaterial({ color: 0x9a7a44, wireframe: true, roughness: 1 })); weed.add(weed2);
   let weedT = 4, weedDir = 1, weedOn = false, weedX = 0;
   ups.push((t, dt) => {
@@ -380,12 +389,12 @@ export function buildWorld(ctx) {
     ['bard', 10.2, -2.4, 0], ['guard', 9.0, -3.5, 0], ['kid', 11.2, -0.6, 0], ['princess', 12.4, -3.1, 0],
   ];
   crowd.forEach(([kind, x, z], i) => {
-    const c = makeNPC(kind); c.group.position.set(x, 0, z); c.group.scale.setScalar(1.12); scene.add(c.group);
+    const c = makeNPC(kind); c.group.userData.dyn = true; c.group.position.set(x, 0, z); c.group.scale.setScalar(1.12); scene.add(c.group);
     c.faceDir(-x, 4 - z); c.yaw = c.targetYaw;
     W.audience.push({ c, base: [x, z], t: rand(0, 6), pose: 'idle', hold: 0, hop: 0 });
   });
   // wie er in de buurt van de taverne zit
-  { const sk = makeNPC('skeleton'); sk.group.position.set(4.9, 0.55, -4.3); sk.group.scale.setScalar(1.0); sk.pose = 'sit'; scene.add(sk.group); sk.faceDir(-0.3, 1); sk.yaw = sk.targetYaw;
+  { const sk = makeNPC('skeleton'); sk.group.userData.dyn = true; sk.group.position.set(4.9, 0.55, -4.3); sk.group.scale.setScalar(1.0); sk.pose = 'sit'; scene.add(sk.group); sk.faceDir(-0.3, 1); sk.yaw = sk.targetYaw;
     scene.add(mesh(new THREE.CylinderGeometry(0.35, 0.35, 0.55, 8), mat(0x6a4a2a), { pos: [4.9, 0.28, -4.5] }));
     W.skeleton = sk; }
   W.react = (pose, dur = 1.2, who = null) => { for (const a of W.audience) { if (who && !who.includes(a.c)) continue; a.pose = pose; a.hold = dur + Math.random() * 0.5; if (pose === 'cheer') a.hop = 1; } };
@@ -416,12 +425,13 @@ export function buildWorld(ctx) {
   // ---------------- het grote signaalbord (midden, boven de duellisten) ----------------
   const panel = liveCanvas(512, 512, () => {});
   const panelMesh = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 4.2), new THREE.MeshBasicMaterial({ map: panel.t, transparent: true, depthTest: false, fog: false }));
-  panelMesh.position.set(0, 5.4, 0.5); panelMesh.renderOrder = 17; panelMesh.visible = false; scene.add(panelMesh);
+  panelMesh.userData.dyn = true; panelMesh.position.set(0, 5.4, 0.5); panelMesh.renderOrder = 17; panelMesh.visible = false; scene.add(panelMesh);
   W.panelMesh = panelMesh; W.panelTex = panel;
 
   // ---------------- sfeer-stof ----------------
   ups.push((t, dt) => { if (Math.random() < dt * 5) fx.particles.emit(14, rand(0.1, 1.2), rand(-6, 6), rand(-4.5, -3), rand(-0.1, 0.4), rand(-0.5, 0.5), { life: 4, size: 0.28, color: 0xe8b890, gravity: 0, shrink: false }); });
 
+  W.mergedCount = mergeStatic(scene);
   W.update = (t, dt) => { for (const f of ups) f(t, dt); };
   W.deurmanEye = () => deurPivot.visible;
   W.disposeExtra = () => {};

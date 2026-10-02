@@ -118,7 +118,7 @@ export function buildPaintHall(ctx) {
 
   // zuilen met verfstrepen
   const pilTex = pillarCanvas();
-  for (const [x, z] of [[-14, -13], [14, -13], [-15.5, 3], [15.5, 3], [-15.5, 12], [15.5, 12]]) {
+  for (const [x, z] of [[-14, -13], [14, -13], [-21, 1], [21, 1]]) {
     const g = new THREE.Group(); g.position.set(x, 0, z);
     g.add(mesh(new THREE.CylinderGeometry(1.0, 1.0, 13, 14), new THREE.MeshStandardMaterial({ map: pilTex, roughness: 0.8 }), { pos: [0, 6.5, 0] }));
     g.add(mesh(new THREE.CylinderGeometry(1.4, 1.5, 0.7, 14), mat(0xcfc5e0), { pos: [0, 0.2, 0] }));
