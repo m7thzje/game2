@@ -131,6 +131,9 @@ export default {
     for (const [x, col2] of [[-27, 0xd8372c], [-16, 0x3a78e0], [-4.5, 0x2f9e5b], [7, 0xe8c24a], [18, 0xd8372c], [29, 0x3a78e0]]) {
       const b = P.banner(col2, 3.4, 1.5); b.position.set(x, 4.9, -13.4); scene.add(b); animated.banners.push(b);
     }
+    // lantaarnpalen en vlaggen langs de zijkanten van het podium (altijd in beeld)
+    for (const [x, z] of [[-12.6, -6.5], [12.6, -6.5], [-12.6, 6.5], [12.6, 6.5]]) { const lp = P.lampPost(0xffd27a); lp.position.set(x, -0.3, z); lp.scale.setScalar(1.5); scene.add(lp); }
+    for (const [x, c2] of [[-12.6, 0xd8372c], [12.6, 0x3a78e0]]) { const b = P.banner(c2, 3.2, 1.3); b.position.set(x, -0.3, 0); b.scale.setScalar(1.5); b.rotation.y = x < 0 ? 0 : Math.PI; scene.add(b); animated.banners.push(b); }
     // vorkheftrucks
     function makeForklift(color = 0xf0a020, withCrate = false) {
       const g = new THREE.Group();
