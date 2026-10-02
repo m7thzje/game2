@@ -31,6 +31,7 @@ export const app = {
   async playGame(id, { practice = false, back = 'hub' } = {}) {
     const def = await loadGame(id);
     app.setMode(null);
+    ui.fade(0, 500);   // kwam uit het dorp met een zwart scherm: nu weer zichtbaar maken
     app.setMode(new MinigameMode(app, def, {
       practice,
       onDone: async (res) => { await ui.fade(1, 300); if (back === 'hub') await app.goHub({ result: res, from: id }); else if (back === 'menu') await app.goMenu(); ui.fade(0, 500); },

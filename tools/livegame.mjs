@@ -1,0 +1,14 @@
+import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+const id = process.argv[2] || 'whack'; const base = process.argv[3] || 'https://m7thzje.github.io/game2/';
+const proxy = process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY } : undefined;
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', proxy, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox', '--ignore-certificate-errors'] });
+const page = await (await browser.newContext({ viewport: { width: 1000, height: 600 }, ignoreHTTPSErrors: true })).newPage();
+const errors = [];
+page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '').split('\n').slice(0, 5).join('\n')));
+page.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && !/CERT|fonts|ERR_CERT/.test(m.text())) errors.push(`[${m.type()}] ` + m.text().slice(0, 300)); });
+await page.goto(`${base}?game=${id}&x=${Date.now()}`);
+await page.waitForTimeout(12000);
+console.log('mode', await page.evaluate(() => window.__app?.mode?.constructor?.name + ' ' + window.__app?.mode?.state));
+await page.screenshot({ path: `/tmp/live_${id}.png` });
+console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS');
+await browser.close();

@@ -28,6 +28,8 @@ log('menu open?', await page.evaluate(() => !!window.__app.mode.menu), await pag
 for (let i = 0; i < 40; i++) { const nm = await page.evaluate(() => window.__app.mode.constructor.name); if (nm === 'MinigameMode') break; await press(0, 'a'); await page.waitForTimeout(300); }
 await page.waitForTimeout(1500);
 log('mode na ja:', await page.evaluate(() => window.__app.mode.constructor.name + ' ' + (window.__app.mode.state || '')));
+await page.waitForTimeout(1500);
+log('fade-overlay na klus starten (moet 0 zijn):', await page.evaluate(() => getComputedStyle(document.getElementById('fade')).opacity));
 await page.screenshot({ path: '/tmp/e2e_3_intro.png' });
 // 2. minigame afronden
 await press(0, 'a'); await press(1, 'a'); await page.waitForTimeout(6000);
