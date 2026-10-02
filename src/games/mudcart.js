@@ -9,7 +9,7 @@ import { buildWorld, roadY, roadSlope, LOG_X, S3A, S3B, GATE_X, barkTexture, rin
 // Karretje uit de Modder — synchroon duwen in drie fasen: modder (samen op de maat), boomstam (hefboom + duwen,
 // rollen wisselen) en een glibberhelling (om de beurt tikken).
 
-const DURATION = 58;
+const DURATION = 60;
 const P1_END = 30;                              // einde modderstuk
 const XS = [31.15, 32.72, 34.28, 35.85];        // grenzen van de 3 segmenten onder de boomstam
 const P3_START = S3A;                           // begin helling
@@ -29,7 +29,7 @@ export default {
   giver: 'Karrenman Koen',
   icon: '🛒',
   mode: 'coop',
-  time: 55,
+  time: 60,
   pay: 1.1,
   music: 'game',
   blurb: 'Koens karretje met melkkannen en appels zit muurvast in de modder! Duw <b>precies tegelijk</b> op de maat. Daarna ligt er een <b>boomstam</b>: één broer heft hem met de hefboom, de ander duwt — en jullie wisselen om en om. Op de <b>glibberhelling</b> tikken jullie juist <b>om de beurt</b>, anders glijdt het karretje terug!',
@@ -380,7 +380,7 @@ export default {
       if (win) {
         phaseTimes.p3 = el;
         const left = timeLeft;
-        const stars = left >= 19 && bestCombo >= 12 ? 3 : left >= 6 ? 2 : 1;
+        const stars = left >= 18 && bestCombo >= 10 ? 3 : left >= 7 ? 2 : 1;
         pl.forEach((p) => { p.c.pose = 'cheer'; });
         for (const n of world.crowd) n.pose = 'cheer';
         world.npcs.koen.pose = 'cheer'; world.npcs.koen.group.position.set(GATE_X - 9, roadY(GATE_X - 9), 7); world.npcs.koen.faceDir(1, -1);
