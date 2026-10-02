@@ -102,14 +102,53 @@ for (const name of scen) {
     };
   }, { sk: SK[name] || SK.avg, seed: 4242 });
 
+  if (name === 'kinds') {
+    await page.evaluate(() => { const inst = window.__app.mode.instance; const d = inst.dbg; d.spawn('mole', 0, 0); d.spawn('golden', 1, 0); d.spawn('helmet', 2, 0); d.spawn('bomb', 3, 0); d.spawn('hedgehog', 0, 1); d.spawn('mole', 1, 1); d.spawn('golden', 3, 2); window.__step(40); window.__app.mode.paused = true; });
+    await page.waitForTimeout(800); await page.screenshot({ path: `/tmp/${GAME}_kinds.png` });
+    console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS');
+    await browser.close(); continue;
+  }
+  if (name === 'giant') {
+    const out = await page.evaluate(() => {
+      const app = window.__app, mode = app.mode, inst = mode.instance, inp = app.input; const log = [];
+      const dt = 1 / 60;
+      const step = (n, f) => { for (let k = 0; k < n; k++) { for (const i of [0, 1]) { const v = inp.virtual[i]; v.a = v.up = v.down = v.left = v.right = false; } if (f) f(k); inp.update(); mode.update(dt); } };
+      // wacht op reuzenmol
+      let g = 0; while (g++ < 60 * 30) { step(1); const gi = inst.dbg.giant(); if (gi && gi.state === 'up') break; }
+      const gi0 = inst.dbg.giant(); log.push('giant at ' + JSON.stringify(gi0.cells) + ' left=' + gi0.left.toFixed(1));
+      // navigeren
+      const goto = (i, cell) => { for (let n = 0; n < 12; n++) { const me = inst.dbg.state().p[i]; if (me.col === cell[0] && me.row === cell[1]) return; step(1, () => { const v = inp.virtual[i]; if (me.col < cell[0]) v.right = true; else if (me.col > cell[0]) v.left = true; else if (me.row < cell[1]) v.down = true; else v.up = true; }); step(5); } };
+      goto(0, gi0.cells[0]); goto(1, gi0.cells[1]);
+      log.push('positions ' + JSON.stringify(inst.dbg.state().p.map((q) => [q.col, q.row])) + ' giant left=' + inst.dbg.giant().left.toFixed(1));
+      const k0 = inst.dbg.state().giantsKilled;
+      // A: alleen speler 0 slaat (2x)
+      step(1, () => { inp.virtual[0].a = true; }); step(40); step(1, () => { inp.virtual[0].a = true; }); step(40);
+      log.push('A killed=' + (inst.dbg.state().giantsKilled - k0) + ' firstHit=' + JSON.stringify(inst.dbg.giant()?.firstHit));
+      // B: 0 slaat, 1 slaat 0.6 s later
+      step(1, () => { inp.virtual[0].a = true; }); step(36); step(1, () => { inp.virtual[1].a = true; }); step(40);
+      log.push('B (te laat) killed=' + (inst.dbg.state().giantsKilled - k0) + ' left=' + (inst.dbg.giant()?.left ?? -1).toFixed(1));
+      // C: 0 slaat, 1 slaat 0.25 s later
+      step(1, () => { inp.virtual[0].a = true; }); step(14); step(1, () => { inp.virtual[1].a = true; }); step(30);
+      log.push('C (samen) killed=' + (inst.dbg.state().giantsKilled - k0) + ' score=' + inst.dbg.state().score);
+      return log;
+    });
+    console.log(out.join('\n'));
+    console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS');
+    await browser.close(); continue;
+  }
   if (name === 'shots') {
     const marks = [['t5', 's.T>5'], ['t12', 's.T>12'], ['giant', 'false']];
     for (const [tag, cond] of [['early', 's.T>6'], ['mid', 's.T>14.5'], ['late', 's.T>26']]) {
       await page.evaluate((c) => window.__step(60 * 60, new Function('s', 'return ' + c)), cond);
+      await page.evaluate(() => { window.__app.mode.paused = true; });
       await page.waitForTimeout(700);
       await page.screenshot({ path: `/tmp/${GAME}_${tag}.png` });
+      await page.evaluate(() => { window.__app.mode.paused = false; });
       console.log('shot', tag);
     }
+    await page.evaluate(() => { window.__app.mode.paused = false; });
+    for (let k = 0; k < 400; k++) { const ok = await page.evaluate(() => { window.__step(1); const st = window.__app.mode.instance.dbg.state(); return st.p.some((q) => q.sw > 0.06 && q.sw < 0.12); }); if (ok) break; }
+    await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(700); await page.screenshot({ path: `/tmp/${GAME}_swing.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot swing');
     // wacht tot reuzenmol zichtbaar
     for (let k = 0; k < 40; k++) { const ok = await page.evaluate(() => { window.__step(10); const g = window.__app.mode.instance.dbg.giant(); return g && g.state === 'up'; }); if (ok) break; }
     await page.waitForTimeout(500); await page.screenshot({ path: `/tmp/${GAME}_giant.png` }); console.log('shot giant');

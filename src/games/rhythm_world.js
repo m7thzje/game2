@@ -29,7 +29,7 @@ export function buildStage(ctx, L) {
     h.position.set(x, 0, z); h.rotation.y = Math.atan2(-x, 30 - z) * 0.5 + (x < 0 ? -0.1 : 0.1) * 0; S.add(h);
   });
   // billboard met de poster van DutchTuber
-  const PW = 9.5, PH = PW * 1.5, PY = 8.6, PZ = -37;
+  const PW = 7.4, PH = PW * 1.5, PY = 6.9, PZ = -37;
   for (const sx of [-1, 1]) S.add(mesh(new THREE.CylinderGeometry(0.25, 0.3, PY + PH / 2, 6), mat(0x5b3d24), { pos: [sx * (PW / 2 + 0.4), (PY + PH / 2) / 2 - 0.5, PZ - 0.3] }));
   S.add(mesh(new THREE.BoxGeometry(PW + 1.0, PH + 1.0, 0.4), mat(0x3a2a1c), { pos: [0, PY, PZ - 0.35] }));
   const poster = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), new THREE.MeshBasicMaterial({ map: tex.poster('DutchTuber'), fog: false, color: 0xe8e8f0 }));
@@ -50,14 +50,14 @@ export function buildStage(ctx, L) {
   }
 
   // ---------- fontein ----------
-  const fnt = new THREE.Group(); fnt.position.set(-22.5, 0, -6); S.add(fnt);
+  const fnt = new THREE.Group(); fnt.position.set(-19.5, 0, -11); S.add(fnt);
   const stoneM = new THREE.MeshStandardMaterial({ map: tex.stone(2, 1), roughness: 0.95, flatShading: true });
   fnt.add(mesh(new THREE.CylinderGeometry(3.0, 3.2, 0.9, 16), stoneM, { pos: [0, 0.45, 0] }));
   fnt.add(mesh(new THREE.CylinderGeometry(0.5, 0.7, 2.0, 8), stoneM, { pos: [0, 1.4, 0] }));
   fnt.add(mesh(new THREE.CylinderGeometry(1.4, 0.8, 0.35, 12), stoneM, { pos: [0, 2.2, 0] }));
   fnt.add(mesh(new THREE.SphereGeometry(0.35, 8, 6), stoneM, { pos: [0, 2.6, 0] }));
   const wat = new THREE.Mesh(new THREE.CircleGeometry(2.8, 20), new THREE.MeshStandardMaterial({ color: 0x4aa8f0, emissive: 0x1a5a9a, emissiveIntensity: 0.6, roughness: 0.15 }));
-  wat.rotation.x = -Math.PI / 2; wat.position.set(-22.5, 0.88, -6); scene.add(wat);
+  wat.rotation.x = -Math.PI / 2; wat.position.set(-19.5, 0.88, -11); scene.add(wat);
 
   // ---------- lampionnen ----------
   const lampPos = [];
@@ -112,15 +112,15 @@ export function buildStage(ctx, L) {
   let coinsIn = 0;
 
   // ---------- hype-toren (gedeelde publieksmeter) ----------
-  const tower = new THREE.Group(); tower.position.set(0, 0, -7); scene.add(tower);
+  const tower = new THREE.Group(); tower.position.set(0, 0, -6); scene.add(tower);
   tower.add(mesh(new THREE.CylinderGeometry(0.95, 1.15, 0.5, 12), mat(0x3a2a1c), { pos: [0, 0.25, 0] }));
   const tubeM = new THREE.MeshStandardMaterial({ color: 0x9ab8ff, transparent: true, opacity: 0.25, roughness: 0.05, side: THREE.DoubleSide });
-  const TH = 6.4;
-  tower.add(new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.55, TH, 14, 1, true), tubeM)).position.y = 0.5 + TH / 2;
+  const TH = 3.6;
+  tower.add(new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, TH, 14, 1, true), tubeM)).position.y = 0.5 + TH / 2;
   const fillM = new THREE.MeshBasicMaterial({ color: 0xffd24a });
-  const fillMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1, 14), fillM); tower.add(fillMesh);
-  const orb = new THREE.Mesh(new THREE.SphereGeometry(0.62, 12, 10), fillM); orb.position.y = 0.5 + TH + 0.5; tower.add(orb);
-  const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.4, 0), new THREE.MeshBasicMaterial({ color: 0xffffff })); star.position.y = TH + 1.8; tower.add(star);
+  const fillMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 1, 14), fillM); tower.add(fillMesh);
+  const orb = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 10), fillM); orb.position.y = 0.5 + TH + 0.35; tower.add(orb);
+  const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.4, 0), new THREE.MeshBasicMaterial({ color: 0xffffff })); star.position.y = TH + 1.3; tower.add(star);
   for (let i = 1; i < 5; i++) tower.add(mesh(new THREE.TorusGeometry(0.58, 0.03, 4, 14), mat(0xffffff, { flatShading: false }), { cast: false, pos: [0, 0.5 + TH * i / 5, 0], rot: [Math.PI / 2, 0, 0] }));
   const lbl = new THREE.Mesh(new THREE.PlaneGeometry(2.4, 0.9), new THREE.MeshBasicMaterial({ map: tex.sign('PUBLIEK', { w: 256, h: 96, size: 44, bg: '#3a1a5a' }), transparent: true }));
   lbl.position.set(0, 0.95, 1.2); lbl.rotation.x = -0.55; tower.add(lbl);
@@ -175,7 +175,7 @@ export function buildStage(ctx, L) {
   // ---------- Bard Bas (bevroren, hupt mee) ----------
   const basC = makeNPC('bard'); basC.faceDir(0.4, 1); basC.pose = 'dance';
   for (let k = 0; k < 12; k++) basC.update(0.05);
-  const bas = new THREE.Group(); bas.add(bake(basC.group, true)); bas.position.set(-12.2, 0, -5); bas.scale.setScalar(1.25); scene.add(bas);
+  const bas = new THREE.Group(); bas.add(bake(basC.group, true)); bas.position.set(-11.8, 0, -10); bas.scale.setScalar(1.25); scene.add(bas);
 
   scene.add(bake(S));
 
@@ -200,7 +200,7 @@ export function buildStage(ctx, L) {
     const k = clamp(hype / 100, 0.001, 1);
     fillMesh.scale.y = k * TH; fillMesh.position.y = 0.5 + (k * TH) / 2;
     tmpC.setHSL(lerp(0.0, 0.33, Math.min(1, k * 1.15)) + (k > 0.9 ? Math.sin(t * 6) * 0.1 : 0), 0.95, 0.55); fillM.color.copy(tmpC);
-    star.rotation.y = t * 2; star.rotation.x = t * 1.3; star.position.y = TH + 1.8 + Math.sin(t * 3) * 0.1; star.scale.setScalar(0.7 + k * 0.8);
+    star.rotation.y = t * 2; star.rotation.x = t * 1.3; star.position.y = TH + 1.3 + Math.sin(t * 3) * 0.1; star.scale.setScalar(0.6 + k * 0.6);
     orb.scale.setScalar(0.85 + k * 0.3 + Math.pow(1 - beat, 3) * 0.1);
     // muntjes
     for (const c of coins) {

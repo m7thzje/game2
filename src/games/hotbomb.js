@@ -15,6 +15,7 @@ const DASH_V = 15.5, DASH_T = 0.25, DASH_CD = 1.05, RECOVER_T = 0.38;
 const BODY_R = 0.55, HIT_R = 1.35;
 const BOMB_LOCK = 0.6;                   // na een tik kan de bom 0,6 s niet verder springen
 const NAMES_NPC = ['Fonkel', 'Dobber'];
+const _warm = new THREE.Color();
 
 function nameSprite(text, color) {
   const t = canvasTex(256, 64, (g, w, hh) => {
@@ -112,7 +113,7 @@ export default {
     const spark = mesh(new THREE.SphereGeometry(0.1, 7, 5), new THREE.MeshBasicMaterial({ color: 0xffd23f }), { cast: false, receive: false, pos: [0.15, 0.38, 0] }); fuse.add(spark);
     const bombLight = new THREE.PointLight(0xff5a1a, 0, 12, 1.5); bomb.add(bombLight);
     const haloTex = canvasTex(64, 64, (g, w, hh) => { const gr = g.createRadialGradient(32, 32, 2, 32, 32, 32); gr.addColorStop(0, 'rgba(255,150,60,.8)'); gr.addColorStop(0.5, 'rgba(255,70,20,.35)'); gr.addColorStop(1, 'rgba(255,60,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, hh); });
-    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false })); halo.scale.set(2.6, 2.6, 1); halo.renderOrder = 18; bomb.add(halo);
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: true })); halo.scale.set(2.6, 2.6, 1); halo.renderOrder = 18; bomb.add(halo);
     bomb.visible = false;
     const bombWorld = new THREE.Vector3();
 
@@ -485,9 +486,9 @@ export default {
         bomb.position.set(bx, by + Math.sin(st.t * 9) * 0.04, bz);
         const sc = 1 + beat * (0.18 + prog * 0.15) + prog * 0.12; bomb.scale.setScalar(sc * 1.2);
         bomb.rotation.y = Math.sin(st.t * 2.2) * 0.35; bomb.rotation.z = Math.sin(st.t * 7) * (0.04 + prog * 0.18);
-        const warm = new THREE.Color().setHSL(0.065 - prog * 0.065, 1, 0.2 + prog * 0.28);
+        const warm = _warm.setHSL(0.065 - prog * 0.065, 1, 0.2 + prog * 0.28);
         bombMat.emissive.copy(warm); bombMat.emissiveIntensity = 0.3 + prog * 1.6 + beat * 0.9;
-        bombMat.color.setHSL(0.08 - prog * 0.06, 0.5 + prog * 0.3, 0.38 - prog * 0.06);
+        bombMat.color.setHSL(0.07 - prog * 0.05, 0.55 + prog * 0.25, 0.24 - prog * 0.04);
         halo.material.opacity = 0.3 + prog * 0.35 + beat * 0.25; halo.scale.setScalar((2.0 + prog * 0.8 + beat * 0.5) / Math.max(0.5, bomb.scale.x));
         bombLight.intensity = (2 + prog * 22) * (0.6 + beat * 0.8); bombLight.color.setHSL(0.05, 1, 0.5);
         spark.scale.setScalar(0.8 + Math.random() * 0.8);
@@ -507,7 +508,7 @@ export default {
           const hot = e.holder; const s = hot ? 1.3 + Math.sin(st.t * 14) * 0.15 : 1; e.ring.scale.set(s, s, s);
           e.ring.material.color.setHex(hot ? (e.immT > 0 ? 0xffffff : 0xff3a1a) : e.color); e.ring.material.opacity = hot ? 0.95 : 0.75;
         }
-        e.tag.position.set(e.x, (e.state === 'out' ? 0.6 : 0) + e.c.height + 0.65, e.z + 0.2);
+        e.tag.position.set(e.x, (e.state === 'out' ? 0.56 : 0) + 0.15, e.z + 1.05);
         e.shield.visible = e.shieldT > 0 && e.alive;
         if (e.shield.visible) { e.shield.position.set(e.x, 1.0, e.z); const s = 1 + Math.sin(st.t * 8 + e.i) * 0.04; e.shield.scale.set(s, s, s); e.shield.material.opacity = e.shieldT < 1.2 ? 0.15 + Math.abs(Math.sin(st.t * 18)) * 0.25 : 0.32; }
         e.ice.visible = e.iceT > 0 && e.alive;
@@ -632,7 +633,7 @@ export default {
     hud.setHint('Wie de <b>bom</b> heeft tikt iemand aan met <kbd>A</kbd> (duik) · zonder bom: ren weg, <kbd>B</kbd> = sprint · <kbd>A</kbd> duwt een nar weg!');
     updateRoster();
     placeCam();
-    const idle = (dt) => { st.t += dt; arena.update(st.t, dt, 0.2); for (const e of E) { e.c.update(dt); e.tag.position.set(e.x, e.c.height + 0.65, e.z + 0.2); e.ring.position.set(e.x, 0.06, e.z); } placeCam(); };
+    const idle = (dt) => { st.t += dt; arena.update(st.t, dt, 0.2); for (const e of E) { e.c.update(dt); e.tag.position.set(e.x, 0.15, e.z + 1.05); e.ring.position.set(e.x, 0.06, e.z); } placeCam(); };
     // (introUpdate ververst alleen decor en poppetjes)
     return {
       update, onResize,

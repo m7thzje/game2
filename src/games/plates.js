@@ -57,7 +57,7 @@ export default {
 
   create(ctx) {
     const { scene, camera, fx, players, input, audio, hud } = ctx;
-    ctx.lights('cave', { shadow: 18, center: [0, 0, 0], fogNear: 40, fogFar: 120 });
+    const lt = ctx.lights('cave', { shadow: 18, center: [0, 0, 0], fogNear: 40, fogFar: 120 }); lt.sun.intensity = 1.5; lt.hemi.intensity = 1.35;
     scene.fog = new THREE.Fog(0x0c0818, 45, 120);
     scene.background = new THREE.Color(0x0c0818);
     camera.fov = 46; camera.updateProjectionMatrix();
@@ -99,7 +99,7 @@ export default {
 
     // ------------------------------------------------------------------ de slapende draak
     function makeDragon() {
-      const g = new THREE.Group(); const S = 2.0; g.scale.setScalar(S);
+      const g = new THREE.Group(); const S = 1.7; g.scale.setScalar(S);
       const scaleMat = new THREE.MeshStandardMaterial({ color: 0x2fae98, roughness: 0.5, metalness: 0.3, emissive: 0x0f5a50, emissiveIntensity: 0.9 });
       const darkScale = new THREE.MeshStandardMaterial({ color: 0x1f7f78, roughness: 0.6, metalness: 0.2, emissive: 0x083a38, emissiveIntensity: 0.8 });
       const bellyMat = new THREE.MeshStandardMaterial({ color: 0xf2cc70, roughness: 0.6, emissive: 0x6a4a10, emissiveIntensity: 0.8 });
@@ -198,7 +198,7 @@ export default {
     const rockBaseMat = new THREE.MeshStandardMaterial({ map: stoneTex, color: 0x4a4868, roughness: 1 });
     const crystalMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
     const glyphTex = glyphTexture();
-    const dark = mat(0x23202e); const metal = mat(0x7e8294, { metalness: 0.7, roughness: 0.4 });
+    const dark = mat(0x23202e); const metal = mat(0xa0a4c0, { metalness: 0.6, roughness: 0.4 }); const standMat = mat(0x6a668f);
     const beamCore = new THREE.MeshBasicMaterial({ color: 0xe8fcff, transparent: true, opacity: 0.95, depthWrite: false, blending: THREE.AdditiveBlending });
     const beamGlow = new THREE.MeshBasicMaterial({ color: 0x59d8ff, transparent: true, opacity: 0.28, depthWrite: false, blending: THREE.AdditiveBlending });
     const ringGeo = new THREE.TorusGeometry(0.62, 0.07, 6, 24);
@@ -303,8 +303,8 @@ export default {
         if (gt.kind !== 'bridge') grp.add(mesh(gBox, new THREE.MeshBasicMaterial({ color: CH_COLORS[gt.ch], transparent: true, opacity: 0.35 }), { cast: false, receive: false, pos: [0, 0.02, 0], scale: [C - 0.1, 0.04, C - 0.1] }));
         if (gt.kind === 'door') {
           const sz = spanZ(gt.cell); const holder = new THREE.Group(); grp.add(holder); if (!sz) holder.rotation.y = Math.PI / 2; // bars along z
-          for (const s of [-1, 1]) { holder.add(mesh(gBox, mat(0x4b4860), { pos: [0, 1.05, s * 0.93], scale: [0.36, 2.1, 0.3] })); holder.add(mesh(new THREE.OctahedronGeometry(0.2, 0), m, { cast: false, pos: [0, 2.25, s * 0.93] })); }
-          holder.add(mesh(gBox, mat(0x4b4860), { pos: [0, 2.0, 0], scale: [0.3, 0.2, 2.0] }));
+          for (const s of [-1, 1]) { holder.add(mesh(gBox, standMat, { pos: [0, 1.05, s * 0.93], scale: [0.36, 2.1, 0.3] })); holder.add(mesh(new THREE.OctahedronGeometry(0.2, 0), m, { cast: false, pos: [0, 2.25, s * 0.93] })); }
+          holder.add(mesh(gBox, standMat, { pos: [0, 2.0, 0], scale: [0.3, 0.2, 2.0] }));
           moving = new THREE.Group(); holder.add(moving);
           for (let b = -3; b <= 3; b++) moving.add(mesh(gBox, metal, { pos: [0, 0.9, b * 0.26], scale: [0.16, 1.8, 0.12] }));
           moving.add(mesh(gBox, m, { cast: false, pos: [0, 1.2, 0], scale: [0.14, 0.14, 1.7] }));
@@ -318,10 +318,11 @@ export default {
           openY = -1.9;
         } else { // brug
           moving = new THREE.Group(); grp.add(moving);
-          moving.add(mesh(gBox, new THREE.MeshStandardMaterial({ map: tex.planks(1, 1, '#6b4a7a'), roughness: 0.8 }), { pos: [0, -0.1, 0], scale: [C - 0.06, 0.24, C - 0.06] }));
+          moving.add(mesh(gBox, new THREE.MeshStandardMaterial({ map: tex.planks(1, 1, '#c9a070'), roughness: 0.8, emissive: 0x3a2a18, emissiveIntensity: 0.6 }), { pos: [0, -0.1, 0], scale: [C - 0.06, 0.24, C - 0.06] }));
           moving.add(mesh(gBox, m, { cast: false, pos: [0, 0.03, C / 2 - 0.12], scale: [C - 0.1, 0.07, 0.1] })); moving.add(mesh(gBox, m, { cast: false, pos: [0, 0.03, -C / 2 + 0.12], scale: [C - 0.1, 0.07, 0.1] }));
           moving.add(mesh(gBox, m, { cast: false, pos: [C / 2 - 0.12, 0.03, 0], scale: [0.1, 0.07, C - 0.1] })); moving.add(mesh(gBox, m, { cast: false, pos: [-C / 2 + 0.12, 0.03, 0], scale: [0.1, 0.07, C - 0.1] }));
           closedY = -1.3; openY = 0;
+          const ghost = mesh(gBox, new THREE.MeshBasicMaterial({ color: CH_COLORS[gt.ch], transparent: true, opacity: 0.28, depthWrite: false }), { cast: false, receive: false, pos: [0, 0.03, 0], scale: [C - 0.2, 0.02, C - 0.2] }); grp.add(ghost);
           // zo lijkt een gesloten brug 'weg'
         }
         const o = { gt, grp, moving, amt: gt.kind === 'bridge' ? 0 : 0, kind: gt.kind, closedY, openY, x, z };
@@ -333,7 +334,7 @@ export default {
 
       lv.plates = L.plates.map((pl, pi) => {
         const [x, z] = cxz(pl.cell); const grp = new THREE.Group(); grp.position.set(x, 0, z); g.add(grp);
-        grp.add(mesh(new THREE.CylinderGeometry(0.82, 0.9, 0.12, 20), mat(0x3a3750), { pos: [0, 0.04, 0] }));
+        grp.add(mesh(new THREE.CylinderGeometry(0.82, 0.9, 0.12, 20), standMat, { pos: [0, 0.04, 0] }));
         const disc = mesh(new THREE.CylinderGeometry(0.62, 0.64, 0.14, 20), new THREE.MeshStandardMaterial({ color: CH_COLORS[pl.ch], emissive: CH_COLORS[pl.ch], emissiveIntensity: 0.3, roughness: 0.5 }), { pos: [0, 0.12, 0] });
         const ring = mesh(new THREE.TorusGeometry(0.76, 0.06, 6, 28), chMat[pl.ch], { cast: false, pos: [0, 0.12, 0], rot: [Math.PI / 2, 0, 0] });
         grp.add(disc); grp.add(ring);
@@ -342,7 +343,7 @@ export default {
 
       lv.levers = L.levers.map((lvr, li) => {
         const [x, z] = cxz(lvr.cell); const grp = new THREE.Group(); grp.position.set(x, 0, z); g.add(grp);
-        grp.add(mesh(gBox, mat(0x4b4860), { pos: [0, 0.4, 0], scale: [1.3, 0.8, 1.3] }));
+        grp.add(mesh(gBox, standMat, { pos: [0, 0.4, 0], scale: [1.3, 0.8, 1.3] }));
         const pivot = new THREE.Group(); pivot.position.set(0, 0.85, 0); grp.add(pivot);
         pivot.add(mesh(gCyl, metal, { pos: [0, 0.6, 0], scale: [0.07, 1.2, 0.07] }));
         pivot.add(mesh(gSph, chMat[lvr.ch], { cast: false, pos: [0, 1.25, 0], scale: 0.2 }));
@@ -352,7 +353,7 @@ export default {
 
       lv.mirrors = L.mirrors.map((mr, mi) => {
         const [x, z] = cxz(mr.cell); const grp = new THREE.Group(); grp.position.set(x, 0, z); g.add(grp);
-        grp.add(mesh(new THREE.CylinderGeometry(0.55, 0.7, 0.7, 10), mat(0x4b4860), { pos: [0, 0.35, 0] }));
+        grp.add(mesh(new THREE.CylinderGeometry(0.55, 0.7, 0.7, 10), standMat, { pos: [0, 0.35, 0] }));
         const rot = new THREE.Group(); rot.position.set(0, 1.55, 0); grp.add(rot);
         rot.add(mesh(gBox, new THREE.MeshStandardMaterial({ color: 0xbff0ff, emissive: 0x3aa8e0, emissiveIntensity: 0.7, transparent: true, opacity: 0.82, metalness: 0.9, roughness: 0.08 }), { cast: false, scale: [1.75, 1.7, 0.1] }));
         rot.add(mesh(gBox, metal, { cast: false, pos: [0, 0.9, 0], scale: [1.85, 0.08, 0.14] })); rot.add(mesh(gBox, metal, { cast: false, pos: [0, -0.9, 0], scale: [1.85, 0.08, 0.14] }));
@@ -363,7 +364,7 @@ export default {
 
       lv.emitters = L.emitters.map((em) => {
         const [x, z] = cxz(em.cell); const grp = new THREE.Group(); grp.position.set(x, 0, z); g.add(grp);
-        grp.add(mesh(new THREE.CylinderGeometry(0.7, 0.9, 0.9, 8), mat(0x3a3750), { pos: [0, 0.45, 0] }));
+        grp.add(mesh(new THREE.CylinderGeometry(0.7, 0.9, 0.9, 8), standMat, { pos: [0, 0.45, 0] }));
         const cr = mesh(new THREE.OctahedronGeometry(0.55, 0), new THREE.MeshBasicMaterial({ color: 0xbff4ff }), { cast: false, pos: [0, 1.5, 0], scale: [0.7, 1.3, 0.7] });
         grp.add(cr);
         const dx = DIRS[em.dir][0], dz = DIRS[em.dir][1];
@@ -373,7 +374,7 @@ export default {
 
       lv.sensors = L.sensors.map((sn, si) => {
         const [x, z] = cxz(sn.cell); const grp = new THREE.Group(); grp.position.set(x, 0, z); g.add(grp);
-        grp.add(mesh(new THREE.CylinderGeometry(0.7, 0.9, 0.7, 8), mat(0x3a3750), { pos: [0, 0.35, 0] }));
+        grp.add(mesh(new THREE.CylinderGeometry(0.7, 0.9, 0.7, 8), standMat, { pos: [0, 0.35, 0] }));
         grp.add(mesh(new THREE.TorusGeometry(0.6, 0.09, 6, 20), chMat[sn.ch], { cast: false, pos: [0, 1.0, 0], rot: [Math.PI / 2, 0, 0] }));
         const crm = new THREE.MeshStandardMaterial({ color: 0x2a2a3a, emissive: CH_COLORS[sn.ch], emissiveIntensity: 0.0, roughness: 0.2, flatShading: true });
         const cr = mesh(new THREE.OctahedronGeometry(0.42, 0), crm, { cast: false, pos: [0, 1.2, 0], scale: [0.8, 1.2, 0.8] }); grp.add(cr);
@@ -439,7 +440,7 @@ export default {
         for (let shift = 0; shift <= 16 && !found; shift += 0.5) {
           look.set(cen.x, cen.y, cen.z - shift);
           fitCam.position.set(look.x, look.y + Math.sin(ELEV) * dist, look.z + Math.cos(ELEV) * dist); fitCam.lookAt(look); fitCam.updateMatrixWorld(); fitCam.updateProjectionMatrix();
-          let ok = true; for (const c of corners) { tmpV.copy(c).project(fitCam); if (Math.abs(tmpV.x) > 0.9 || tmpV.y > 0.2 || tmpV.y < -0.74) { ok = false; break; } }
+          let ok = true; for (const c of corners) { tmpV.copy(c).project(fitCam); if (Math.abs(tmpV.x) > 0.9 || tmpV.y > 0.14 || tmpV.y < -0.76) { ok = false; break; } }
           if (ok) { best = dist; bestShift = shift; found = true; }
         }
       }
@@ -460,7 +461,7 @@ export default {
 
     function startLevel(idx, snap) {
       lvl = buildLevel(idx); fitCamera(lvl.L, snap);
-      dragonTargetZ = -(lvl.L.h * C / 2) - 11;
+      dragonTargetZ = -(lvl.L.h * C / 2) - 9.5;
       hud.setHint(hintFor(lvl)); updateHud();
     }
     let dragonTargetZ = -17;

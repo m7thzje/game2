@@ -452,6 +452,7 @@ export default {
         if (p.bt) {
           const st = p.bt.st;
           if (st.type === 'board') {
+            if (!st.item || st.item.chopped) { p.c.update(dt); continue; }
             const ing = ING[st.item.k];
             st.progress += dt / ing.chop; st.chopping = 0.12;
             p.swingT -= dt; if (p.swingT <= 0) { p.swingT = 0.24; p.c.swing(); audio.sfx('chop', { vol: 0.55, rate: 0.9 + Math.random() * 0.3 }); fx.particles.burst(st.x + rand(-0.3, 0.3), CY + 0.3, st.z + rand(-0.2, 0.2), { count: 3, color: [0xf2dfa8, 0xf08a1c, 0xb53f3f, 0xefc27a, 0xffd23f][['ui', 'wortel', 'vlees', 'brood', 'kaas'].indexOf(st.item.k)], speed: 1.6, size: 0.14 }); }

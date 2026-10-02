@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mat, mesh, clamp, lerp, damp, rand, pick, TAU, mulberry32 } from '../engine/util.js';
+import { mat, mesh, clamp, lerp, damp, rand, pick, TAU, mulberry32, canvasTex } from '../engine/util.js';
 import { makeBrother, PLAYER_COLORS } from '../engine/chars.js';
 import { buildGarden, HX, HZ } from './whack_world.js';
 
@@ -9,7 +9,7 @@ import { buildGarden, HX, HZ } from './whack_world.js';
 
 const DURATION = 50;
 const COLS = HX.length, ROWS = HZ.length;
-const STAND = 1.75;              // afstand van boer tot gat (boer staat achter het gat en slaat naar de camera)
+const STAND = 1.85, PSCALE = 1.2;              // afstand van boer tot gat (boer staat achter het gat en slaat naar de camera)
 const IMPACT = 0.13;             // seconden tussen A en inslag
 const GIANT_TIMES = [15, 30, 42];
 const GIANT_WINDOW = 0.4;
@@ -51,7 +51,7 @@ export default {
       hedge: mat(0xa8835a, { flatShading: false }), nose: mat(0xf29aa8, { flatShading: false }), noseDark: mat(0x2a1c14, { flatShading: false }),
       pink: mat(0xf4a6b0, { flatShading: false }), black: new THREE.MeshStandardMaterial({ color: 0x15121a, roughness: 0.3 }), white: new THREE.MeshBasicMaterial({ color: 0xffffff }),
       yellow: mat(0xffc93c, { flatShading: false, metalness: 0.2 }), bombM: new THREE.MeshStandardMaterial({ color: 0x1c1c24, roughness: 0.35, metalness: 0.5 }),
-      spike: mat(0x5a4028), crown: new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xa87000, emissiveIntensity: 0.5, metalness: 0.8, roughness: 0.3 }),
+      spike: mat(0x4a3220, { emissive: 0x2a1a0c }), crown: new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xa87000, emissiveIntensity: 0.5, metalness: 0.8, roughness: 0.3 }),
     };
     const flameM = new THREE.MeshBasicMaterial({ color: 0xff9a2a }), lampM = new THREE.MeshBasicMaterial({ color: 0xfff2a0 });
 
@@ -79,7 +79,7 @@ export default {
       helmet.add(mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.1, 8), lampM, { cast: false, pos: [0, 0.22, 0.46], rot: [Math.PI / 2, 0, 0] }));
       helmet.visible = false;
       // bom
-      const bomb = new THREE.Group(); bomb.position.y = 1.18; body.add(bomb);
+      const bomb = new THREE.Group(); bomb.position.y = 1.25; bomb.scale.setScalar(1.25); body.add(bomb);
       bomb.add(mesh(new THREE.SphereGeometry(0.4, 12, 10), M.bombM));
       bomb.add(mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.14, 8), M.black, { pos: [0, 0.4, 0] }));
       bomb.add(mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.3, 4), mat(0xd8c08a), { cast: false, pos: [0.05, 0.58, 0], rot: [0, 0, -0.4] }));
@@ -87,8 +87,8 @@ export default {
       bomb.add(mesh(new THREE.SphereGeometry(0.1, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff4040 }), { cast: false, pos: [0, 0.1, 0.38] })); // rood lampje
       bomb.visible = false;
       // stekels
-      const spikes = new THREE.InstancedMesh(new THREE.ConeGeometry(0.1, 0.5, 5), M.spike, SPIKE_DIRS.length); spikes.castShadow = true;
-      { const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s = new THREE.Vector3(1, 1, 1); SPIKE_DIRS.forEach((d, i) => { const dir = new THREE.Vector3(d[0], d[1], d[2]).normalize(); q.setFromUnitVectors(up, dir); m4.compose(new THREE.Vector3(dir.x * 0.62, 0.42 + dir.y * 0.7, dir.z * 0.6 - 0.05), q, s); spikes.setMatrixAt(i, m4); }); spikes.frustumCulled = false; }
+      const spikes = new THREE.InstancedMesh(new THREE.ConeGeometry(0.13, 0.78, 5), M.spike, SPIKE_DIRS.length); spikes.castShadow = true;
+      { const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), s = new THREE.Vector3(1, 1, 1); SPIKE_DIRS.forEach((d, i) => { const dir = new THREE.Vector3(d[0], d[1], d[2]).normalize(); q.setFromUnitVectors(up, dir); m4.compose(new THREE.Vector3(dir.x * 0.7, 0.42 + dir.y * 0.78, dir.z * 0.68 - 0.05), q, s); spikes.setMatrixAt(i, m4); }); spikes.frustumCulled = false; }
       spikes.visible = false; body.add(spikes);
       // kroon + wenkbrauwen (reuzenmol)
       const crown = new THREE.Group(); crown.position.y = 1.0; body.add(crown);
@@ -98,7 +98,8 @@ export default {
       const brows = new THREE.Group(); body.add(brows);
       for (const sx of [-1, 1]) brows.add(mesh(new THREE.BoxGeometry(0.3, 0.07, 0.07), M.black, { cast: false, pos: [sx * 0.23, 0.88, 0.52], rot: [0, 0, -sx * 0.4] }));
       brows.visible = false;
-      if (giant) { root.scale.setScalar(2.45); crown.visible = true; brows.visible = true; }
+      if (!giant) root.scale.setScalar(1.15);
+      if (giant) { root.scale.setScalar(2.2); crown.visible = true; brows.visible = true; }
       scene.add(root);
       return { root, rise, body, bodyMesh, nose, eyes, helmet, bomb, flame, spikes, crown, giant, state: 'free', t: 0, r: 0, kind: 'mole', hp: 1, hole: null, upT: 1, ph: 0, blink: 0, bonkT: 0, id: 0, spark: 0, hit: null, tag: 0 };
     }
@@ -110,9 +111,9 @@ export default {
     // ---------- hamer ----------
     function makeHammer() {
       const g = new THREE.Group();
-      g.add(mesh(new THREE.CylinderGeometry(0.065, 0.075, 1.5, 7), mat(0x8a5a2b), { pos: [0, -0.5, 0] }));
-      g.add(mesh(new THREE.BoxGeometry(1.0, 0.62, 0.62), mat(0xb88252), { pos: [0, -1.38, 0] }));
-      for (const sx of [-0.38, 0.38]) g.add(mesh(new THREE.BoxGeometry(0.1, 0.66, 0.66), mat(0x55565e, { metalness: 0.6, roughness: 0.4 }), { pos: [sx, -1.38, 0] }));
+      g.add(mesh(new THREE.CylinderGeometry(0.07, 0.08, 1.15, 7), mat(0x8a5a2b), { pos: [0, -0.35, 0] }));
+      g.add(mesh(new THREE.BoxGeometry(1.2, 0.8, 0.8), new THREE.MeshStandardMaterial({ color: 0xc08a58, roughness: 0.9, flatShading: true }), { pos: [0, -1.05, 0] }));
+      for (const sx of [-0.45, 0.45]) g.add(mesh(new THREE.BoxGeometry(0.12, 0.84, 0.84), mat(0x55565e, { metalness: 0.6, roughness: 0.4 }), { pos: [sx, -1.05, 0] }));
       g.add(mesh(new THREE.SphereGeometry(0.085, 6, 5), mat(0x55565e), { cast: false, pos: [0, 0.27, 0] }));
       return g;
     }
@@ -120,21 +121,23 @@ export default {
     // ---------- spelers ----------
     const START = [[1, 1], [2, 1]];
     const pl = players.map((p, i) => {
-      const c = makeBrother(i); c.group.position.set(HX[START[i][0]], 0.16, HZ[START[i][1]] - STAND); scene.add(c.group);
+      const c = makeBrother(i); c.group.position.set(HX[START[i][0]], 0.16, HZ[START[i][1]] - STAND); c.group.scale.setScalar(PSCALE); scene.add(c.group);
       const h = makeHammer(); c.hold(h, 'r');
       const ring = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.07, 6, 28), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.9, depthWrite: false })); ring.rotation.x = Math.PI / 2; scene.add(ring);
       const arrow = new THREE.Group(); scene.add(arrow);
       arrow.add(mesh(new THREE.ConeGeometry(0.34, 0.6, 4), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i] }), { cast: false, rot: [Math.PI, Math.PI / 4, 0], pos: [0, 0, 0] }));
       arrow.add(mesh(new THREE.BoxGeometry(0.16, 0.5, 0.16), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i] }), { cast: false, pos: [0, 0.5, 0] }));
-      return { i, c, hammer: h, ring, arrow, col: START[i][0], row: START[i][1], px: HX[START[i][0]], pz: HZ[START[i][1]] - STAND, sw: -1, stun: 0, heldDir: null, heldT: 0, armA: -2.6, score: 0, hits: 0, golden: 0, giants: 0, bonks: 0, swings: 0, misses: 0, lastHitT: -9, cheer: 0, queued: false };
+      const tagTex = canvasTex(256, 96, (g, w, hh) => { g.font = 'bold 54px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(20,10,30,.9)'; g.lineJoin = 'round'; g.strokeText(p.name, w / 2, hh / 2); g.fillStyle = p.css; g.fillText(p.name, w / 2, hh / 2); });
+      const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false })); tag.scale.set(2.0, 0.75, 1); tag.renderOrder = 15; scene.add(tag);
+      return { i, c, tag, hammer: h, ring, arrow, col: START[i][0], row: START[i][1], px: HX[START[i][0]], pz: HZ[START[i][1]] - STAND, sw: -1, stun: 0, heldDir: null, heldT: 0, armA: -2.6, score: 0, hits: 0, golden: 0, giants: 0, bonks: 0, swings: 0, misses: 0, lastHitT: -9, cheer: 0, queued: false };
     });
 
     // ---------- toestand ----------
     let T = 0, timeLeft = DURATION, done = false, score = 0, combo = 0, bestCombo = 0, lastHitT = -9, spawnT = 1.0, giantIdx = 0, giantsKilled = 0, giantsSeen = 0;
     let molesHit = 0, goldenHit = 0, helmetHit = 0, bombsHit = 0, hedgeHit = 0, escaped = 0, teamBonuses = 0, whiffs = 0;
     let lastScorer = { t: -9, i: -1 }, idc = 1, introT = 0, demoT = 0.8;
-    const camBase = new THREE.Vector3(0, 16.5, 12.8);
-    function placeCam(dt, t) { camera.position.set(Math.sin(t * 0.25) * 0.6, camBase.y + Math.sin(t * 0.3) * 0.2, camBase.z); camera.lookAt(0, 0.4, 0.5); }
+    const camBase = new THREE.Vector3(0, 14.0, 11.2);
+    function placeCam(dt, t) { camera.position.set(Math.sin(t * 0.25) * 0.6, camBase.y + Math.sin(t * 0.3) * 0.2, camBase.z); camera.lookAt(0, 0.3, -0.7); }
     placeCam(0, 0);
 
     hud.setTimer(DURATION); hud.setScore('Punten: 0'); hud.setPlayerInfo(0, '0 punten'); hud.setPlayerInfo(1, '0 punten');
@@ -167,7 +170,7 @@ export default {
     function updateActor(a, dt) {
       if (a.state === 'free') return;
       a.t += dt; a.ph += dt;
-      const s = a.giant ? 2.45 : 1;
+      const s = a.giant ? 2.2 : 1;
       if (a.state === 'rise') { a.r = Math.min(1, a.t / (a.giant ? 0.55 : 0.17)); if (a.r >= 1) { a.state = 'up'; a.t = 0; } }
       else if (a.state === 'up') {
         a.r = 1; if (!a.giant && a.t > a.upT) { sendDown(a); if (!a.demo && a.kind !== 'bomb' && a.kind !== 'hedgehog') { escaped++; } }
@@ -265,7 +268,7 @@ export default {
 
     function startGiant() {
       // kies twee naast elkaar liggende gaten zonder bezetting
-      const options = []; for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS - 1; c++) options.push([r, c]);
+      const options = []; for (let r = 0; r < ROWS - 1; r++) for (let c = 0; c < COLS - 1; c++) options.push([r, c]);
       options.sort(() => Math.random() - 0.5);
       const [r, c] = options[0]; const a = holeAt(c, r), b = holeAt(c + 1, r);
       for (const q of pool) if (q.hole === a || q.hole === b) { sendDown(q, true); }
@@ -316,23 +319,24 @@ export default {
         const dx = tx - p.px, dz = tz - p.pz; const dist = Math.hypot(dx, dz);
         p.px = damp(p.px, tx, 20, dt); p.pz = damp(p.pz, tz, 20, dt);
         p.c.group.position.set(p.px, 0.16, p.pz);
+        p.tag.position.set(p.px, 0.16 + p.c.height * PSCALE + 0.75 + Math.sin(T * 4 + i) * 0.05, p.pz);
         p.c.speed = clamp(dist * 0.9, 0, 1);
         p.c.faceDir(dist > 1.2 ? dx : 0, dist > 1.2 ? dz : 1);
         if (dist <= 1.2) p.c.faceDir(0, 1);
         if (active && p.stun <= 0 && p.cheer <= 0) p.c.pose = 'idle'; else if (p.cheer > 0) { p.cheer -= dt; p.c.pose = 'cheer'; }
         p.c.update(dt);
         // hamer-arm (eigen animatie, zodat de klap snel en zichtbaar is)
-        let ang;
-        const rest = -2.55 + Math.sin(T * 3 + i) * 0.04;
-        if (p.stun > 0) ang = -1.4;
+        let ang, angZ;
+        const rest = -3.0 + Math.sin(T * 3 + i) * 0.05, restZ = -0.55;
+        if (p.stun > 0) { ang = -1.4; angZ = -0.1; }
         else if (p.sw >= 0) {
           p.sw += dt; const t = p.sw;
-          if (t < 0.065) ang = lerp(rest, -3.05, t / 0.065);
-          else if (t < IMPACT) ang = lerp(-3.05, -1.0, (t - 0.065) / (IMPACT - 0.065));
-          else { if (!p.impacted && active) { p.impacted = true; impact(p); } if (t < 0.27) ang = -1.0; else if (t < 0.5) ang = lerp(-1.0, rest, (t - 0.27) / 0.23); else { ang = rest; p.sw = -1; } }
+          if (t < 0.065) { ang = lerp(rest, -3.2, t / 0.065); angZ = lerp(restZ, -0.4, t / 0.065); }
+          else if (t < IMPACT) { const k = (t - 0.065) / (IMPACT - 0.065); ang = lerp(-3.2, -1.0, k); angZ = lerp(-0.4, -0.08, k); }
+          else { if (!p.impacted && active) { p.impacted = true; impact(p); } if (t < 0.27) { ang = -1.0; angZ = -0.08; } else if (t < 0.5) { const k = (t - 0.27) / 0.23; ang = lerp(-1.0, rest, k); angZ = lerp(-0.08, restZ, k); } else { ang = rest; angZ = restZ; p.sw = -1; } }
           if (!active) { p.impacted = true; }
-        } else ang = rest;
-        p.c.armR.rotation.x = ang; p.c.armR.rotation.z = -0.12;
+        } else { ang = rest; angZ = restZ; }
+        p.c.armR.rotation.x = ang; p.c.armR.rotation.z = angZ;
         p.c.armL.rotation.x = -0.4; p.c.armL.rotation.z = 0.2;
         // cursor
         const h = holeAt(p.col, p.row);
@@ -413,6 +417,8 @@ export default {
       onStart() { clearActors(); spawnT = 0.6; },
       dispose() {},
       dbg: {
+        spawn: (kind, c, r, upT = 30) => spawn(kind, holeAt(c, r), upT),
+        giantNow: () => startGiant(),
         state: () => ({ T, score, combo, bestCombo, timeLeft, done, molesHit, goldenHit, helmetHit, bombsHit, hedgeHit, escaped, teamBonuses, whiffs, giantsKilled, giantsSeen, p: pl.map((p) => ({ col: p.col, row: p.row, stun: p.stun, score: p.score, sw: p.sw })) }),
         actors: () => pool.filter((a) => a.state !== 'free').map((a) => ({ col: a.hole.c, row: a.hole.r, kind: a.kind, state: a.state, r: a.r, hp: a.hp, id: a.id, left: a.upT - a.t })),
         giant: () => (giant.state === 'free' ? null : { state: giant.state, r: giant.r, cells: giant.cells.map((h) => [h.c, h.r]), firstHit: giant.firstHit, left: giant.stay - giant.t }),
