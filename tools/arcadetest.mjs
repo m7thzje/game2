@@ -12,7 +12,8 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
-const ALL = ['dodgeball', 'cakefight', 'tugwar', 'airhockey', 'quickdraw', 'memory', 'paint', 'duckshoot', 'karts', 'climb', 'tanks', 'chairs', 'ticktock', 'minecart', 'buttons', 'vines', 'screws', 'chop'];
+const ALL_OLD = ['dodgeball', 'cakefight', 'tugwar', 'airhockey', 'quickdraw', 'memory', 'paint', 'duckshoot', 'karts', 'climb', 'tanks', 'chairs', 'ticktock', 'minecart', 'buttons', 'vines', 'screws', 'chop'];
+const ALL = (await import('/home/user/game2/src/games/index.js')).ARCADE_IDS;
 const ids = process.argv.slice(2).length ? process.argv.slice(2) : ALL;
 const errors = [];
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
