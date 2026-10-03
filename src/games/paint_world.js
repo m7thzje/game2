@@ -101,8 +101,10 @@ export function buildPaintHall(ctx) {
     g.add(mesh(new THREE.CylinderGeometry(0.07, 0.07, 2.4, 6), mat(0xe8c24a, { metalness: 0.6 }), { rot: [0, 0, Math.PI / 2], pos: [0, 0.05, 0] }));
     add(g); anim.push((t) => { g.rotation.x = Math.sin(t * 1.3 + x) * 0.05; g.rotation.z = Math.sin(t * 0.9 + x * 2) * 0.03; });
   };
-  banner(0x2f9e5b, -10.5, 12.6, -16.1); banner(0x3a78e0, 10.5, 12.6, -16.1);
-  banner(0xd8372c, -3, 12.8, -16.1); banner(0xd8372c, 3, 12.8, -16.1);
+  // banieren in de kleuren van de spelers (slot 0 links, slot 1 rechts; Juul, als die meedoet, hangt in het midden)
+  const pc = ctx.players || [], c3 = pc.length > 2 ? pc[2].color : 0xd8372c;
+  banner(pc[0] ? pc[0].color : 0x2f9e5b, -10.5, 12.6, -16.1); banner(pc[1] ? pc[1].color : 0x3a78e0, 10.5, 12.6, -16.1);
+  banner(c3, -3, 12.8, -16.1); banner(c3, 3, 12.8, -16.1);
 
   // fakkels (zonder lichtbron; gloeiende vlammen)
   const flames = [];

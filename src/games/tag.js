@@ -20,6 +20,8 @@ const GIFTS = {
   swap: { name: 'BOMMEN-WISSEL!', css: '#ff6ad8', hex: 0xff6ad8, w: 25 },
   shield: { name: 'SCHILD!', css: '#ffd23f', hex: 0xffd23f, w: 25 },
 };
+// kleur per spelers-id (Wes groen, Jor blauw, Juul oranje): hex, css voor de vloer, lichte tekstkleur
+const HEX_ID = [0x35c46f, 0x4a8cff, 0xff9a3a], CSS_ID = ['rgba(60,200,120,1)', 'rgba(70,140,255,1)', 'rgba(255,154,58,1)'], LITE_ID = ['#7dffb0', '#8fb8ff', '#ffc27a'], LITEHEX_ID = [0x7dffb0, 0x8fb8ff, 0xffc27a];
 const LAYOUT = [['fountain', 0, 0], ['pillar', 6.5, 4.6], ['pillar', 6.5, -4.6], ['pillar', -6.5, 4.6], ['pillar', -6.5, -4.6], ['crates', 8.2, 0], ['crates', -8.2, 0], ['barrels', 3.2, 6.3], ['barrels', -3.2, 6.3], ['barrels', 3.2, -6.3], ['barrels', -3.2, -6.3], ['bush', 12.4, 5.4], ['bush', -12.4, 5.4], ['bush', 12.4, -5.4], ['bush', -12.4, -5.4]];
 const OBST_KINDS = ['pillar', 'barrels', 'crates', 'bush'];
 
@@ -43,9 +45,10 @@ export default {
   giver: 'Bommenbaas Boris',
   icon: '💣',
   mode: 'pvp',
+  players: [2, 3],
   time: 90,
   music: 'game_fast',
-  blurb: 'Eén broer heeft de <b>bom</b>! Tik de ander aan en de bom gaat over. Ontploft hij in jouw handen, dan verlies je een <b>leven</b> (je hebt er 3). Wie de bom heeft rent iets sneller. Pas op voor <b>kippen</b> en de <b>ufo</b>!',
+  blurb: 'Eén broer heeft de <b>bom</b>! Tik de ander aan en de bom gaat over. Ontploft hij in jouw handen, dan verlies je een <b>leven</b> (je hebt er 3). Wie de bom heeft rent iets sneller. Pas op voor <b>kippen</b> en de <b>ufo</b>! Met <b>Juul</b> erbij is het vrij voor allen: wie zijn drie levens kwijt is, ligt eruit.',
   controls: ['{move} rennen', '{a} sprint (houd in) en duik (tik)', '{b} bananenschil neerleggen'],
   tip: 'Een geduikte tik reikt verder. Leg een schil achter je neer: wie erop stapt, glijdt weg! Na een knal krijgt wie voor staat de volgende bom.',
 
@@ -59,8 +62,12 @@ export default {
     L.hemi.intensity = 1.2; L.hemi.color.set(0xb8c4ff); L.hemi.groundColor.set(0x6a5a8a);
     L.sun.color.set(0xdfe6ff); L.sun.intensity = 2.0; L.sun.position.set(-10, 30, 14);
     camera.fov = 46; camera.updateProjectionMatrix();
-    const colorsHex = [0x35c46f, 0x4a8cff], colorsCss = ['rgba(60,200,120,1)', 'rgba(70,140,255,1)'];
-    const world = buildArena(ctx, colorsCss, colorsHex);
+    const NP = players.length;
+    const colorsHex = players.map((p) => HEX_ID[p.id]), colorsCss = players.map((p) => CSS_ID[p.id]);
+    const lite = (i) => LITE_ID[players[i].id], liteHex = (i) => LITEHEX_ID[players[i].id];
+    // startplekken: 2 spelers links/rechts; 3 spelers een (bijna gelijkzijdige) driehoek
+    const STARTS = NP === 2 ? [[-START_X, 0], [START_X, 0]] : [[-8, 6], [8, 6], [0, -7]];
+    const world = buildArena(ctx, colorsCss, colorsHex, STARTS);
 
     // ---------------- spelers ----------------
     const pl = players.map((pp, i) => {
@@ -72,7 +79,7 @@ export default {
       const bubble = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0xffe9a0, transparent: true, opacity: 0.32, depthWrite: false, blending: THREE.AdditiveBlending })); bubble.visible = false; scene.add(bubble);
       const sbBg = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.26), new THREE.MeshBasicMaterial({ color: 0x120a22, transparent: true, opacity: 0.8, depthWrite: false })); sbBg.rotation.x = -Math.PI / 2; sbBg.renderOrder = 4; scene.add(sbBg);
       const sbFg = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 0.16), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, depthWrite: false })); sbFg.rotation.x = -Math.PI / 2; sbFg.renderOrder = 5; scene.add(sbFg);
-      return { i, c, holder, k, size, R: 0.62 * size, ring, shadow, tag, bubble, sbBg, sbFg, lives: LIVES, dir: i ? -1 : 1,
+      return { i, c, holder, k, size, R: 0.62 * size, ring, shadow, tag, bubble, sbBg, sbFg, lives: LIVES, out: false,
         x: 0, z: 0, y: 0, vx: 0, vz: 0, vy: 0, fx: i ? -1 : 1, fz: 0, hasBomb: false, stam: 1, exh: false, regen: 0, dive: 0, dvx: 0, dvz: 0, diveCd: 0, slide: 0, safe: 0, stun: 0, slip: 0, svx: 0, svz: 0, speedT: 0, shield: 0, trapCd: 0, spin: 0, fly: 0,
         stats: { tags: 0, peels: 0, slips: 0, dives: 0, items: 0, booms: 0 } };
     });
@@ -98,10 +105,11 @@ export default {
       fx.particles.burst(o.x, 0.5, o.z, { count: 10, speed: 4, up: 0.5, life: 0.8, size: 0.7, colors: [0x333344, 0x555566], gravity: -1 });
     }
     // vrije plek (niet bij spelers/obstakels/muren)
-    function freeSpot(minPl = 4, minOb = 2.6, side = 0, tries = 40) {
+    function freeSpot(minPl = 4, minOb = 2.6, side = 0, tries = 40, near = null) {
       for (let k = 0; k < tries; k++) {
         const x = (side ? side * rand(1.5, AX - 2) : rand(-AX + 2, AX - 2)), z = rand(-AZ + 2, AZ - 2);
-        if (pl.some((p) => Math.hypot(p.x - x, p.z - z) < minPl)) continue;
+        if (pl.some((p) => !p.out && Math.hypot(p.x - x, p.z - z) < minPl)) continue;
+        if (near && Math.hypot(near[0] - x, near[1] - z) > near[2]) continue;
         if (obst.some((o) => Math.hypot(o.x - x, o.z - z) < o.r + minOb - 1)) continue;
         if (chickens.some((c) => Math.hypot(c.x - x, c.z - z) < 1.5)) continue;
         return [x, z];
@@ -132,14 +140,15 @@ export default {
     const ufoWarn = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.5, 24), new THREE.MeshBasicMaterial({ color: 0xff5a3a, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })); ufoWarn.rotation.x = -Math.PI / 2; ufoWarn.position.y = 0.07; ufoWarn.visible = false; scene.add(ufoWarn);
 
     // ---------------- toestand ----------------
-    const R = { state: 'ready', t: 0, holder: -1, carry: -1, fuse: 0, fuse0: 12, count: 0, matchT: MATCH_T, sd: false, tickT: 0, giftT: 4.5, victim: -1, winner: -1 };
+    const R = { state: 'ready', t: 0, holder: -1, carry: -1, fuse: 0, fuse0: 12, count: 0, matchT: NP === 3 ? MATCH_T - 10 : MATCH_T, sd: false, tickT: 0, giftT: 4.5, victim: -1, winner: -1 };
     let T = 0, introT = 0, finished = false, slow = 1, slowT = 0, camPunch = 0, camFocus = null;
     const stats = { passes: 0, chicken: 0, ufo: 0, peels: 0, slips: 0, booms: 0 };
     const hearts = (i) => '♥'.repeat(pl[i].lives) + '♡'.repeat(LIVES - pl[i].lives);
     const holderP = () => (R.holder >= 0 ? pl[R.holder] : null);
     function refreshHud() {
-      hud.setScore(`${names[0]} ${hearts(0)}  –  ${hearts(1)} ${names[1]}`);
+      hud.setScore(NP === 2 ? `${names[0]} ${hearts(0)}  –  ${hearts(1)} ${names[1]}` : pl.map((p) => `${names[p.i]} ${p.out ? '✖' : hearts(p.i)}`).join('  –  '));
       for (const p of pl) {
+        if (p.out) { if (p.lastTxt !== 'uit') { p.lastTxt = 'uit'; hud.setPlayerInfo(p.i, 'UIT! (kijkt mee)'); } continue; }
         const bar = '▮'.repeat(Math.round(p.stam * 5)) + '▯'.repeat(5 - Math.round(p.stam * 5));
         const bits = [p.hasBomb ? `BOM ${Math.max(0, Math.ceil(R.fuse))}s` : R.carry >= 0 && R.state === 'play' ? 'kip rent weg!' : 'ren!', `⚡${bar}`];
         if (p.shield > 0) bits.push('schild'); if (p.speedT > 0) bits.push('turbo'); if (p.safe > 0) bits.push('veilig');
@@ -148,16 +157,22 @@ export default {
     }
 
     // ---------------- ronde-flow ----------------
-    function placeAtStart(p) { p.x = (p.i ? 1 : -1) * START_X; p.z = 0; p.y = 0; p.vx = p.vz = p.vy = 0; p.fx = p.i ? -1 : 1; p.fz = 0; p.dive = p.slide = p.stun = p.slip = p.fly = p.spin = 0; p.safe = 0; p.stam = 1; p.exh = false; p.diveCd = 0; p.holder.rotation.set(0, 0, 0); p.holder.visible = true; p.c.faceDir(p.fx, 0); p.c.pose = 'idle'; }
+    function placeAtStart(p) { p.x = STARTS[p.i][0]; p.z = STARTS[p.i][1]; p.y = 0; p.vx = p.vz = p.vy = 0; { const l = Math.hypot(p.x, p.z) || 1; p.fx = -p.x / l; p.fz = NP === 2 ? 0 : -p.z / l; } p.dive = p.slide = p.stun = p.slip = p.fly = p.spin = 0; p.safe = 0; p.stam = 1; p.exh = false; p.diveCd = 0; p.holder.rotation.set(0, 0, 0); p.holder.visible = true; p.c.faceDir(p.fx, p.fz); p.c.pose = 'idle'; }
     function startRound(first) {
       R.count++; R.state = 'ready'; R.t = 0; R.carry = -1; R.fuse0 = R.fuse = FUSE[Math.min(R.count - 1, FUSE.length - 1)] * (R.sd ? 0.65 : 1); R.tickT = 0.5; R.giftT = 4;
-      for (const p of pl) { placeAtStart(p); p.hasBomb = false; p.speedT = p.shield = 0; }
+      for (const p of pl) { placeAtStart(p); p.hasBomb = false; p.speedT = p.shield = 0; if (p.out) { p.holder.visible = false; p.x = 0; p.z = -AZ - 6; } }
       for (const pe of peels) { pe.on = false; pe.m.visible = false; }
       for (const g of gifts) { g.on = false; g.g.visible = false; }
       // wie voor staat krijgt de bom; gelijk: de ander dan degene die net de bom had
-      let h; if (pl[0].lives !== pl[1].lives) h = pl[0].lives > pl[1].lives ? 0 : 1; else h = first ? (Math.random() < 0.5 ? 0 : 1) : 1 - Math.max(0, R.victim);
+      let h;
+      if (NP === 2) { if (pl[0].lives !== pl[1].lives) h = pl[0].lives > pl[1].lives ? 0 : 1; else h = first ? (Math.random() < 0.5 ? 0 : 1) : 1 - Math.max(0, R.victim); }
+      else {   // vrij voor allen: wie voor staat (meeste levens) krijgt de bom; bij gelijke stand loot het, niet de vorige ontploffer
+        const alive = pl.filter((p) => !p.out), mx = Math.max(...alive.map((p) => p.lives)); let pool = alive.filter((p) => p.lives === mx);
+        if (pool.length > 1 && !first) { const q = pool.filter((p) => p.i !== R.victim); if (q.length) pool = q; }
+        h = pick(pool).i;
+      }
       R.holder = h; pl[h].hasBomb = true; U.t = Math.max(U.t, 5); for (const c of chickens) { c.state = 'wander'; c.cd = Math.max(c.cd, 3); }
-      if (!first) hud.showBig(`BOM VOOR ${names[h].toUpperCase()}!`, 1100, h ? '#8fb8ff' : '#7dffb0');
+      if (!first) hud.showBig(`BOM VOOR ${names[h].toUpperCase()}!`, 1100, lite(h));
       audio.sfx('bell', { vol: 0.5 }); refreshHud();
     }
     function passBomb(from, to, how = 'tag') {
@@ -184,37 +199,56 @@ export default {
       for (const pe of peels) if (pe.on && Math.hypot(pe.x - bx, pe.z - bz) < BLAST_R) { pe.on = false; pe.m.visible = false; }
       if (U.ob && Math.hypot(U.ob.x - bx, U.ob.z - bz) < BLAST_R) { /* ufo-obstakel hangt in de lucht: veilig */ }
       const sc = scorches[scorchN++ % scorches.length]; sc.visible = true; sc.position.set(bx, 0.03 + (scorchN % 6) * 0.002, bz); sc.scale.setScalar(BLAST_R * 1.5); sc.rotation.z = Math.random() * 6;
-      const o = pl[1 - h.i]; const dx = o.x - bx, dz = o.z - bz, d = Math.hypot(dx, dz) || 1;
-      if (d < BLAST_R + 3) { o.vx += dx / d * 14; o.vz += dz / d * 14; o.stun = 0.5; }
+      for (const o of pl) { if (o === h || o.out) continue; const dx = o.x - bx, dz = o.z - bz, d = Math.hypot(dx, dz) || 1; if (d < BLAST_R + 3) { o.vx += dx / d * 14; o.vz += dz / d * 14; o.stun = 0.5; } }
       h.fly = 1; h.vy = 13; h.spin = 14; h.vx = (Math.random() - 0.5) * 6; h.vz = (Math.random() - 0.5) * 6; h.c.pose = 'scared'; h.hasBomb = false; R.holder = -1;
       for (const c of chickens) if (Math.hypot(c.x - bx, c.z - bz) < BLAST_R) { c.state = 'dizzy'; c.ct = 2; fx.particles.burst(c.x, 1, c.z, { count: 18, speed: 5, up: 1, life: 1, size: 0.4, colors: [0xffffff, 0xf6f1e4], gravity: 3 }); }
       if (n) fx.texts.add(`${n} obstakel${n > 1 ? 's' : ''} weg!`, bx, 5.4, bz, '#ffd23f', 1.2);
       bomb.visible = false; fuseSp.visible = false;
     }
+    // winner = slot of -1 (gelijkspel, alleen bij 3 spelers)
     function endMatch(winner) {
       R.state = 'end'; R.t = 0; R.winner = winner; hud.setTimer(null);
-      pl[winner].c.pose = 'cheer'; pl[1 - winner].c.pose = 'sad'; audio.sfx('win', { vol: 0.5 });
-      hud.showBig(`${names[winner]} WINT!`, 1600, winner ? '#8fb8ff' : '#7dffb0');
+      pl.forEach((p) => { p.c.pose = winner < 0 ? 'idle' : p.i === winner ? 'cheer' : 'sad'; p.holder.visible = true; }); audio.sfx(winner < 0 ? 'good' : 'win', { vol: 0.5 });
+      hud.showBig(winner < 0 ? 'GELIJKSPEL!' : `${names[winner]} WINT!`, 1600, winner < 0 ? '#ffe14a' : lite(winner));
+    }
+    // 3 spelers, noodbom: wie de meeste levens heeft wint; bij gelijk liever niet de ontploffer, daarna de meeste tikken, anders gelijkspel
+    function sdWinner(victim) {
+      const alive = pl.filter((p) => !p.out), mx = Math.max(...alive.map((p) => p.lives)); let c = alive.filter((p) => p.lives === mx);
+      if (c.length > 1) { const q = c.filter((p) => p.i !== victim.i); if (q.length) c = q; }
+      if (c.length > 1) { const mt = Math.max(...c.map((p) => p.stats.tags)); c = c.filter((p) => p.stats.tags === mt); }
+      return c.length === 1 ? c[0].i : -1;
     }
     function finishMatch() {
       if (finished) return; finished = true;
-      const w = R.winner, l = 1 - w;
+      const w = R.winner;
+      let l; if (NP === 2) l = 1 - w; else { const others = pl.filter((p) => p.i !== w); const mn = Math.min(...others.map((p) => p.lives)); const ls = others.filter((p) => p.lives === mn); l = (ls.find((p) => p.i === R.victim) || ls[0]).i; }
+      if (w < 0) { ctx.finishPvp({ winner: null, score: pl.map((p) => p.lives), delay: 700, summary: `Gelijkspel! Alle bommen zijn op, niemand wil de winnaar zijn. Er waren ${stats.booms} ontploffingen, de bom ging ${stats.passes}x over.` }); return; }
       const jokes = [`${names[l]} werd gebombardeerd tot ${names[l]}-confetti. ${names[w]} wint!`, `${names[l]} hield de bom net iets te lang vast. ${names[w]} danst.`, `Boris de Bommenbaas knikt goedkeurend naar ${names[w]}. ${names[l]} ruikt naar rook.`, `${names[w]} kan zeker niet tegen hete aardappelen, maar is er wel goed in. ${names[l]} is gaar.`];
-      ctx.finishPvp({ winner: w, score: [pl[0].lives, pl[1].lives], delay: 700, summary: `${pick(jokes)} Er waren ${stats.booms} ontploffingen, de bom ging ${stats.passes}x over${stats.chicken ? `, de kippen bezorgden hem ${stats.chicken}x` : ''}${stats.peels ? ` en er werd ${stats.slips}x uitgegleden over ${stats.peels} schillen` : ''}.${R.sd ? ' De noodbom besliste het duel.' : ''}` });
+      ctx.finishPvp({ winner: w, score: pl.map((p) => p.lives), delay: 700, summary: `${pick(jokes)} Er waren ${stats.booms} ontploffingen, de bom ging ${stats.passes}x over${stats.chicken ? `, de kippen bezorgden hem ${stats.chicken}x` : ''}${stats.peels ? ` en er werd ${stats.slips}x uitgegleden over ${stats.peels} schillen` : ''}.${R.sd ? ' De noodbom besliste het duel.' : ''}` });
     }
 
     // ---------------- kadootjes ----------------
     function spawnGift() {
       const free = gifts.filter((g) => !g.on); if (!free.length) return;
       const tot = free.reduce((a, g) => a + GIFTS[g.type].w, 0); let r = Math.random() * tot, g = free[0]; for (const q of free) { r -= GIFTS[q.type].w; if (r <= 0) { g = q; break; } }
-      const trailing = pl[0].lives === pl[1].lives ? 0 : (pl[0].lives < pl[1].lives ? -1 : 1);
-      const sp = freeSpot(4, 2.2, trailing && Math.random() < 0.6 ? trailing : 0); if (!sp) return;
+      let sp;
+      if (NP === 2) { const trailing = pl[0].lives === pl[1].lives ? 0 : (pl[0].lives < pl[1].lives ? -1 : 1); sp = freeSpot(4, 2.2, trailing && Math.random() < 0.6 ? trailing : 0); }
+      else {   // 3 spelers: kadootjes vaker in de buurt van wie achterstaat
+        const al = pl.filter((p) => !p.out), mn = Math.min(...al.map((p) => p.lives)), tr = al.filter((p) => p.lives === mn);
+        sp = freeSpot(4, 2.2, 0, 40, tr.length === 1 && Math.random() < 0.6 ? [tr[0].x, tr[0].z, 12] : null);
+      }
+      if (!sp) return;
       g.on = true; g.x = sp[0]; g.z = sp[1]; g.t = 0; g.life = 14; g.g.visible = true; g.g.position.set(g.x, 0, g.z);
       fx.particles.ring(g.x, 0.4, g.z, { count: 18, speed: 3, color: GIFTS[g.type].hex, size: 0.3, life: 0.6 }); audio.sfx('sparkle', { vol: 0.4 }); if (!stats.giftTold) { stats.giftTold = true; hud.toast('🎁 Een kadootje! Raak het aan voor een power-up', 1800); }
     }
-    function randomTeleportSpot(p) { const o = pl[1 - p.i]; for (let k = 0; k < 40; k++) { const x = rand(-AX + 2, AX - 2), z = rand(-AZ + 2, AZ - 2); if (Math.hypot(o.x - x, o.z - z) < 10) continue; if (obst.some((q) => solid(q) && Math.hypot(q.x - x, q.z - z) < q.r + p.R + 0.6)) continue; return [x, z]; } return [(o.x > 0 ? -1 : 1) * 10, 0]; }
+    // de "ander" voor een kadootje/kip: wie de meeste levens heeft (bij gelijk de dichtstbijzijnde bij `ref`); bij 2 spelers gewoon de andere
+    function pickOther(p, ref = p) {
+      const al = pl.filter((q) => q !== p && !q.out); if (al.length < 2) return al[0] || pl[(p.i + 1) % NP];
+      const mx = Math.max(...al.map((q) => q.lives)); return al.filter((q) => q.lives === mx).sort((a, b) => Math.hypot(a.x - ref.x, a.z - ref.z) - Math.hypot(b.x - ref.x, b.z - ref.z))[0];
+    }
+    function randomTeleportSpot(p) { const o = pickOther(p), others = pl.filter((q) => q !== p && !q.out), far = NP === 2 ? 10 : 7; for (let k = 0; k < 40; k++) { const x = rand(-AX + 2, AX - 2), z = rand(-AZ + 2, AZ - 2); if (others.some((q) => Math.hypot(q.x - x, q.z - z) < far)) continue; if (obst.some((q) => solid(q) && Math.hypot(q.x - x, q.z - z) < q.r + p.R + 0.6)) continue; return [x, z]; } return [(o.x > 0 ? -1 : 1) * 10, 0]; }
     function takeGift(g, p) {
-      g.on = false; g.g.visible = false; const d = GIFTS[g.type], o = pl[1 - p.i]; stats.items = (stats.items || 0) + 1; p.stats.items++;
+      g.on = false; g.g.visible = false; const d = GIFTS[g.type], o = pickOther(p); stats.items = (stats.items || 0) + 1; p.stats.items++;
       fx.particles.burst(p.x, 1.2, p.z, { count: 32, speed: 6, up: 1.4, life: 0.9, size: 0.4, colors: [d.hex, 0xffffff], gravity: 4 });
       fx.texts.add(d.name, p.x, 4.2, p.z, d.css, 1.5); audio.sfx('powerup', { vol: 0.8 }); ctx.shake(0.2);
       if (g.type === 'speed') p.speedT = 6;
@@ -253,7 +287,7 @@ export default {
         c.t -= dt; const dx = c.tx - c.x, dz = c.tz - c.z, d = Math.hypot(dx, dz);
         if (d < 0.6 || c.t <= 0) { c.tx = rand(-AX + 2, AX - 2); c.tz = rand(-AZ + 2, AZ - 2); c.t = rand(2, 5); }
         // schrik van de spelers
-        let fx_ = 0, fz_ = 0; for (const p of pl) { const ex = c.x - p.x, ez = c.z - p.z, e = Math.hypot(ex, ez); if (e < 3) { fx_ += ex / (e || 1) * (3 - e); fz_ += ez / (e || 1) * (3 - e); } }
+        let fx_ = 0, fz_ = 0; for (const p of pl) { if (p.out) continue; const ex = c.x - p.x, ez = c.z - p.z, e = Math.hypot(ex, ez); if (e < 3) { fx_ += ex / (e || 1) * (3 - e); fz_ += ez / (e || 1) * (3 - e); } }
         const sp = c.state === 'flee' ? 6 : 2.4, ux = dx / (d || 1) + fx_ * 0.6, uz = dz / (d || 1) + fz_ * 0.6, ul = Math.hypot(ux, uz) || 1;
         c.x += ux / ul * sp * dt; c.z += uz / ul * sp * dt; a.speed = 1; a.targetYaw = Math.atan2(ux, uz);
         if (c.state === 'flee') { c.ct -= dt; if (c.ct <= 0) c.state = 'wander'; }
@@ -281,8 +315,8 @@ export default {
       a.update(dt); a.group.position.set(c.x, 0, c.z); c.sh.position.set(c.x, 0.03, c.z);
     }
     function steal(c, h) {
-      R.carry = chickens.indexOf(c); c.from = h.i; c.to = 1 - h.i; c.state = 'carry'; c.ct = 3.4; c.dz = 0; h.hasBomb = false; R.holder = -1; c.cd = 8;
-      fx.texts.add('KIP-DIEF!', h.x, 3.6, h.z, '#ffd23f', 1.7); hud.showBig('🐔 KIP-DIEF!', 900, '#ffd23f'); hud.toast(`Een kip steelt de bom van ${names[h.i]} en brengt hem naar ${names[1 - h.i]}!`, 2200);
+      R.carry = chickens.indexOf(c); c.from = h.i; c.to = pickOther(h, c).i; c.state = 'carry'; c.ct = 3.4; c.dz = 0; h.hasBomb = false; R.holder = -1; c.cd = 8;
+      fx.texts.add('KIP-DIEF!', h.x, 3.6, h.z, '#ffd23f', 1.7); hud.showBig('🐔 KIP-DIEF!', 900, '#ffd23f'); hud.toast(`Een kip steelt de bom van ${names[h.i]} en brengt hem naar ${names[c.to]}!`, 2200);
       audio.tone(520, 0.16, { type: 'square', vol: 0.15, slide: 900 }); audio.tone(700, 0.12, { type: 'square', vol: 0.12, slide: 400, delay: 0.14 }); audio.sfx('pop', { vol: 0.6 }); fx.particles.burst(c.x, 1.2, c.z, { count: 20, speed: 5, up: 1.5, life: 0.8, size: 0.35, colors: [0xffffff, 0xf6f1e4], gravity: 4 });
     }
     function dropBomb(c, why) {
@@ -334,12 +368,13 @@ export default {
 
     // ---------------- spelersfysica ----------------
     function stepPlayer(p, dt, live) {
-      const inp = pv.input(p.i), o = pl[1 - p.i];
+      if (p.out) { p.vx = p.vz = 0; return; }
+      const inp = pv.input(p.i);
       p.safe = Math.max(0, p.safe - dt); p.stun = Math.max(0, p.stun - dt); p.slip = Math.max(0, p.slip - dt); p.speedT = Math.max(0, p.speedT - dt); p.shield = Math.max(0, p.shield - dt); p.diveCd = Math.max(0, p.diveCd - dt); p.trapCd = Math.max(0, p.trapCd - dt); p.slide = Math.max(0, p.slide - dt);
       let mx = 0, mz = 0;
       if (live && p.stun <= 0 && p.slip <= 0 && p.fly <= 0) { mx = inp.x; mz = inp.y; const m = Math.hypot(mx, mz); if (m > 1) { mx /= m; mz /= m; } }
       const moving = Math.hypot(mx, mz) > 0.25; if (moving) { p.fx = mx; p.fz = mz; }
-      const trailing = p.lives < o.lives;
+      const trailing = pl.some((q) => q !== p && !q.out && q.lives > p.lives);
       // sprint + duik
       let sprinting = false, spd = (p.hasBomb ? RUN_HOLD : RUN) * pv.speed(p.i) * (p.speedT > 0 ? 1.35 : 1);
       if (live && p.stun <= 0 && p.slip <= 0 && p.fly <= 0) {
@@ -356,7 +391,7 @@ export default {
       // snelheid
       if (p.fly > 0) { p.fly -= dt; p.vy -= 36 * dt; p.y += p.vy * dt; p.vx *= Math.exp(-1.4 * dt); p.vz *= Math.exp(-1.4 * dt); if (p.y <= 0) { p.y = 0; p.vy = 0; p.fly = 0; p.spin = 0; p.stun = 0.4; p.c.pose = 'sad'; fx.particles.dust(p.x, 0, p.z, 8, 0x555566); audio.sfx('thud', { vol: 0.5 }); } }
       else if (p.slip > 0) { const f = Math.exp(-1.0 * dt); p.svx *= f; p.svz *= f; p.vx = p.svx; p.vz = p.svz; }
-      else if (p.dive > 0) { p.dive -= dt; p.vx = p.dvx * DIVE_V * pv.speed(p.i); p.vz = p.dvz * DIVE_V * pv.speed(p.i); if (Math.random() < dt * 50) fx.particles.emit(p.x - p.dvx * 0.5, 0.4, p.z - p.dvz * 0.5, 0, 0.3, 0, { life: 0.3, size: 0.5, color: p.i ? 0x8fb8ff : 0x7dffb0, gravity: 0 }); }
+      else if (p.dive > 0) { p.dive -= dt; p.vx = p.dvx * DIVE_V * pv.speed(p.i); p.vz = p.dvz * DIVE_V * pv.speed(p.i); if (Math.random() < dt * 50) fx.particles.emit(p.x - p.dvx * 0.5, 0.4, p.z - p.dvz * 0.5, 0, 0.3, 0, { life: 0.3, size: 0.5, color: liteHex(p.i), gravity: 0 }); }
       else if (p.stun > 0) { const f = Math.exp(-lerp(4, 0.8, SLIP) * dt); p.vx *= f; p.vz *= f; }
       else { const acc = lerp(p.slide > 0 ? 6 : 22, p.slide > 0 ? 1.2 : 2.0, SLIP), k = 1 - Math.exp(-acc * dt); p.vx += (mx * spd - p.vx) * k; p.vz += (mz * spd - p.vz) * k; }
       p.x += p.vx * dt; p.z += p.vz * dt;
@@ -379,15 +414,17 @@ export default {
         R.matchT -= dt;
         for (const p of pl) stepPlayer(p, dt, true);
         // spelers uit elkaar duwen
-        const a = pl[0], b = pl[1]; { const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz), m = a.R + b.R; if (d < m && d > 1e-4) { const pen = m - d, wa = b.size / (a.size + b.size); a.x -= dx / d * pen * wa; a.z -= dz / d * pen * wa; b.x += dx / d * pen * (1 - wa); b.z += dz / d * pen * (1 - wa); } }
+        for (let ia = 0; ia < NP; ia++) for (let ib = ia + 1; ib < NP; ib++) { const a = pl[ia], b = pl[ib]; if (a.out || b.out) continue;{ const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz), m = a.R + b.R; if (d < m && d > 1e-4) { const pen = m - d, wa = b.size / (a.size + b.size); a.x -= dx / d * pen * wa; a.z -= dz / d * pen * wa; b.x += dx / d * pen * (1 - wa); b.z += dz / d * pen * (1 - wa); } } }
         // tikken
         const h = holderP();
         if (h && R.carry < 0) {
-          const o = pl[1 - h.i], d = Math.hypot(o.x - h.x, o.z - h.z), reach = h.R + o.R + (h.dive > 0 ? 0.45 : 0.18);
+          for (const o of pl.filter((q) => q !== h && !q.out).sort((a, b) => Math.hypot(a.x - h.x, a.z - h.z) - Math.hypot(b.x - h.x, b.z - h.z))) {   // dichtstbijzijnde eerst
+          const d = Math.hypot(o.x - h.x, o.z - h.z), reach = h.R + o.R + (h.dive > 0 ? 0.45 : 0.18);
           if (d < reach && o.fly <= 0 && h.fly <= 0) {
-            if (o.safe > 0) { /* nog onaantastbaar */ }
-            else if (o.shield > 0) { o.shield = 0; h.stun = 0.9; const dx = h.x - o.x, dz = h.z - o.z, dd = Math.hypot(dx, dz) || 1; h.vx = dx / dd * 12; h.vz = dz / dd * 12; h.dive = 0; fx.texts.add('BOING!', o.x, 3.4, o.z, '#ffe14a', 1.5); fx.particles.burst(o.x, 1.2, o.z, { count: 30, speed: 6, up: 1, life: 0.6, size: 0.45, colors: [0xffe9a0, 0xffffff], gravity: 3 }); audio.sfx('boing', { vol: 0.8 }); audio.sfx('ding', { vol: 0.4 }); ctx.shake(0.3); o.safe = 0.6; }
-            else passBomb(h, o, 'tag');
+            if (o.safe > 0) { continue; /* nog onaantastbaar: de volgende kan wel */ }
+            else if (o.shield > 0) { o.shield = 0; h.stun = 0.9; const dx = h.x - o.x, dz = h.z - o.z, dd = Math.hypot(dx, dz) || 1; h.vx = dx / dd * 12; h.vz = dz / dd * 12; h.dive = 0; fx.texts.add('BOING!', o.x, 3.4, o.z, '#ffe14a', 1.5); fx.particles.burst(o.x, 1.2, o.z, { count: 30, speed: 6, up: 1, life: 0.6, size: 0.45, colors: [0xffe9a0, 0xffffff], gravity: 3 }); audio.sfx('boing', { vol: 0.8 }); audio.sfx('ding', { vol: 0.4 }); ctx.shake(0.3); o.safe = 0.6; break; }
+            else { passBomb(h, o, 'tag'); break; }
+          }
           }
         }
         // lont
@@ -413,7 +450,12 @@ export default {
         ufoStep(dt);
         if (R.t > 2.3) {
           const v = pl[R.victim];
-          if (v.lives <= 0 || R.sd) endMatch(1 - v.i); else startRound(false);
+          if (NP === 2) { if (v.lives <= 0 || R.sd) endMatch(1 - v.i); else startRound(false); }
+          else {
+            if (v.lives <= 0) { v.out = true; v.holder.visible = false; fx.texts.add('UIT!', v.x, 3.5, v.z, '#ff7a7a', 1.6); hud.toast(`${names[v.i]} ligt eruit!`, 1800); }
+            const alive = pl.filter((p) => !p.out);
+            if (alive.length <= 1) endMatch(alive.length ? alive[0].i : sdWinner(v)); else if (R.sd) endMatch(sdWinner(v)); else startRound(false);
+          }
         }
       } else if (R.state === 'end') {
         for (const p of pl) stepPlayer(p, dt, false); for (const c of chickens) chickenStep(c, dt);
@@ -441,7 +483,8 @@ export default {
       let tx = 0, tz = 0.6, k = 1;
       if (camFocus && R.state === 'boom') { tx = camFocus[0] * 0.6; tz = camFocus[1] * 0.6 + 0.6; k = 0.75; }
       else {
-        const mx = (pl[0].x + pl[1].x) / 2, mz = (pl[0].z + pl[1].z) / 2, sx = Math.abs(pl[0].x - pl[1].x), sz = Math.abs(pl[0].z - pl[1].z);
+        const al = pl.filter((p) => !p.out), xs = al.map((p) => p.x), zs = al.map((p) => p.z), x0 = Math.min(...xs), x1 = Math.max(...xs), z0 = Math.min(...zs), z1 = Math.max(...zs);
+        const mx = (x0 + x1) / 2, mz = (z0 + z1) / 2, sx = x1 - x0, sz = z1 - z0;
         const half = Math.max(10, sx / 2 + 7, (sz / 2 + 5) * (camera.aspect || 1.7)); k = clamp(half / (AX + 1), 0.62, 1); const lim = (AX + 1) * (1 - k); tx = clamp(mx, -lim, lim); tz = 0.6 + clamp(mz * 0.7, -3.5, 3.5) * (1 - k) / 0.38;
       }
       cam.x = damp(cam.x, tx, 3, dt); cam.z = damp(cam.z, tz, 3, dt); cam.k = damp(cam.k, k, 2.4, dt);
@@ -456,6 +499,7 @@ export default {
       for (const p of pl) {
         const hv = Math.hypot(p.vx, p.vz), diving = p.dive > 0;
         p.holder.position.set(p.x, p.y, p.z);
+        if (p.out) { p.holder.visible = p.ring.visible = p.shadow.visible = p.tag.visible = p.bubble.visible = p.sbBg.visible = p.sbFg.visible = false; continue; }
         p.c.speed = p.fly > 0 || p.slip > 0 ? 0 : clamp(hv / (RUN * 1.4), 0, 1); p.c.air = p.fly > 0 || (GRAV < 1 && Math.sin(tt * 3 + p.i) > 0.2 && hv > 1);
         if (R.state === 'ready') p.c.faceDir(p.fx, p.fz); else if (diving) p.c.faceDir(p.dvx, p.dvz); else if (hv > 0.8 && p.stun <= 0) p.c.faceDir(p.vx, p.vz);
         if (R.state !== 'end' && R.state !== 'boom') p.c.pose = diving ? 'push' : p.slip > 0 || p.stun > 0 ? 'scared' : p.hasBomb ? 'carry' : 'idle';
@@ -509,7 +553,7 @@ export default {
       onSwap() { for (const p of pl) fx.particles.burst(p.x, 1.2, p.z, { count: 20, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) {
         movers.forEach((m, i) => {
-          if (!m) return; const p = pl[i];
+          if (!m || pl[i].out) return; const p = pl[i];
           if (p.hasBomb && R.state === 'play') { R.fuse = Math.max(0.8, R.fuse - 3); fx.texts.add('LONT KORTER!', p.x, 3.8, p.z, '#ff7a7a', 1.4); } else { p.stun = 1.1; p.stam = 0; fx.texts.add('DEURMAN BOOS!', p.x, 3.8, p.z, '#ff7a7a', 1.4); }
           audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4);
         });
@@ -517,7 +561,7 @@ export default {
       celebrate(w) { for (const p of pl) { p.c.pose = p.i === w ? 'cheer' : 'sad'; p.holder.visible = true; p.holder.rotation.set(0, 0, 0); } },
       dispose() {},
       dbg: {
-        state: () => ({ T, rstate: R.state, fuse: +R.fuse.toFixed(2), fuse0: R.fuse0, holder: R.holder, carry: R.carry, count: R.count, matchT: +R.matchT.toFixed(1), sd: R.sd, finished, winner: R.winner, lives: pl.map((p) => p.lives), stats,
+        state: () => ({ T, rstate: R.state, fuse: +R.fuse.toFixed(2), fuse0: R.fuse0, holder: R.holder, carry: R.carry, count: R.count, matchT: +R.matchT.toFixed(1), sd: R.sd, finished, winner: R.winner, lives: pl.map((p) => p.lives), out: pl.map((p) => p.out), stats,
           pl: pl.map((p) => ({ x: +p.x.toFixed(2), z: +p.z.toFixed(2), vx: +p.vx.toFixed(1), vz: +p.vz.toFixed(1), stam: +p.stam.toFixed(2), exh: p.exh, dive: p.dive, safe: +p.safe.toFixed(2), stun: +p.stun.toFixed(2), slip: p.slip, bomb: p.hasBomb, sh: p.shield > 0, spd: p.speedT > 0, tags: p.stats.tags, peels: p.stats.peels, slips: p.stats.slips, dives: p.stats.dives, items: p.stats.items, booms: p.stats.booms, trapCd: p.trapCd })),
           obst: obst.map((o) => ({ k: o.kind, x: +o.x.toFixed(1), z: +o.z.toFixed(1), r: o.r, st: o.state })), peels: peels.filter((q) => q.on).map((q) => ({ x: q.x, z: q.z })), gifts: gifts.filter((g) => g.on).map((g) => g.type), ufo: U.state, chickens: chickens.map((c) => ({ x: +c.x.toFixed(1), z: +c.z.toFixed(1), st: c.state })) }),
         pl, obst, chickens, R, U,
@@ -525,7 +569,7 @@ export default {
         giveBomb: (i) => { for (const p of pl) p.hasBomb = false; pl[i].hasBomb = true; R.holder = i; R.carry = -1; },
         setFuse: (t) => { R.fuse = t; }, setMatchT: (t) => { R.matchT = t; }, explode, spawnGift: (type) => { const g = gifts.find((q) => q.type === type); if (g && !g.on) { const sp = freeSpot(3, 2) || [0, 5]; g.on = true; g.x = sp[0]; g.z = sp[1]; g.t = 0; g.life = 14; g.g.visible = true; } },
         giveGift: (i, type) => takeGift(gifts.find((q) => q.type === type), pl[i]), ufoNow: () => { U.t = 0; }, stealNow: (ci = 0) => { const h = holderP(); if (h) { const c = chickens[ci]; c.x = h.x + 0.3; c.z = h.z; c.cd = 0; c.state = 'wander'; steal(c, h); } },
-        setLives: (a, b) => { pl[0].lives = a; pl[1].lives = b; refreshHud(); },
+        setLives: (...v) => { pl.forEach((p, i) => { if (v[i] != null) p.lives = v[i]; }); refreshHud(); },
       },
     };
   },

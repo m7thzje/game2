@@ -115,7 +115,7 @@ export function makeUfo() {
 export function scorchTexture() { return canvasTex(128, 128, (g) => { const gr = g.createRadialGradient(64, 64, 4, 64, 64, 62); gr.addColorStop(0, 'rgba(10,6,8,.92)'); gr.addColorStop(0.55, 'rgba(20,10,10,.75)'); gr.addColorStop(0.8, 'rgba(255,120,30,.35)'); gr.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); }); }
 
 // ---------------- vloer ----------------
-function floorTexture(colors) {
+function floorTexture(colors, starts) {
   const { AX, AZ } = ARENA, W = 1024, H = Math.round(1024 * AZ / AX);
   return canvasTex(W, H, (g, w, h) => {
     const r = mulberry32(8), px = w / (2 * AX), pz = h / (2 * AZ);
@@ -133,8 +133,8 @@ function floorTexture(colors) {
     for (let k = 0; k < 16; k++) { const a = k / 16 * TAU; g.save(); g.rotate(a); g.fillStyle = 'rgba(255,200,80,.8)'; g.beginPath(); g.moveTo(3.55 * px, 0); g.lineTo(4.0 * px, -0.16 * px); g.lineTo(4.0 * px, 0.16 * px); g.closePath(); g.fill(); g.restore(); }
     g.restore();
     // startcirkels in spelerskleur
-    [-1, 1].forEach((sd, i) => {
-      g.save(); g.translate(w / 2 + sd * 11.2 * px, h / 2); g.scale(1, pz / px);
+    starts.forEach(([sx, sz], i) => {
+      g.save(); g.translate(w / 2 + sx * px, h / 2 + sz * pz); g.scale(1, pz / px);
       const gr = g.createRadialGradient(0, 0, 4, 0, 0, 2.6 * px); gr.addColorStop(0, colors[i].replace('1)', '.5)')); gr.addColorStop(1, colors[i].replace('1)', '0)')); g.fillStyle = gr; g.beginPath(); g.arc(0, 0, 2.6 * px, 0, TAU); g.fill();
       g.strokeStyle = colors[i]; g.lineWidth = 7; g.beginPath(); g.arc(0, 0, 1.9 * px, 0, TAU); g.stroke();
       g.lineWidth = 4; for (let k = 0; k < 6; k++) { const a = k / 6 * TAU; g.beginPath(); g.moveTo(Math.cos(a) * 1.3 * px, Math.sin(a) * 1.3 * px); g.lineTo(Math.cos(a + 0.5) * 1.3 * px, Math.sin(a + 0.5) * 1.3 * px); g.stroke(); }
@@ -144,14 +144,14 @@ function floorTexture(colors) {
 }
 
 // ---------------- hele omgeving ----------------
-export function buildArena(ctx, colorsCss, colorsHex) {
+export function buildArena(ctx, colorsCss, colorsHex, starts = [[-11.2, 0], [11.2, 0]]) {
   const { scene, fx } = ctx; const { AX, AZ } = ARENA; const rng = mulberry32(99);
   const W = { t: 0, torches: [], banners: [] };
   scene.background = skyTexture('#06081c', '#2a2552'); scene.fog = new THREE.Fog(0x181a3a, 55, 150);
   const root = new THREE.Group(); scene.add(root);
   const stoneT = tex.stone(1, 1);
   // vloer
-  const floorT = floorTexture(colorsCss);
+  const floorT = floorTexture(colorsCss, starts);
   const floor = mesh(new THREE.PlaneGeometry(2 * AX, 2 * AZ), new THREE.MeshStandardMaterial({ map: floorT, roughness: 0.85 }), { cast: false, pos: [0, 0, 0], rot: [-Math.PI / 2, 0, 0] }); scene.add(floor);
   // buitengrond
   const ground = mesh(new THREE.CircleGeometry(120, 24), new THREE.MeshStandardMaterial({ map: tex.cobble(30, 30), color: 0x6a6a90, roughness: 1 }), { cast: false, pos: [0, -0.02, 0], rot: [-Math.PI / 2, 0, 0] }); scene.add(ground);
@@ -181,7 +181,9 @@ export function buildArena(ctx, colorsCss, colorsHex) {
   const stick = new THREE.Group(); for (const p of tp) { stick.add(mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.9, 5), M(0x4a3322), { cast: false, pos: [p[0], p[1] - 0.45, p[2]] })); stick.add(mesh(new THREE.CylinderGeometry(0.2, 0.1, 0.2, 6), M(0x333340, { metalness: 0.5 }), { cast: false, pos: [p[0], p[1] - 0.05, p[2]] })); } scene.add(stick); mergeStatic(stick);
   const gl = []; for (const p of tp.filter((_, i) => i % 2 === 0)) { const s = glowSprite(0xff8a30, 5.5, 0.45); s.position.set(p[0], p[1] + 0.3, p[2]); scene.add(s); gl.push(s); }
   W.torches = tp;
-  [-1, 1].forEach((sd, i) => { for (const x of [sd * 8.5, sd * 3.3]) { const g = new THREE.Group(); g.position.set(x, 3.4, -AZ + 0.25); g.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.4, 5), M(0x4a3322), { cast: false, rot: [0, 0, Math.PI / 2], pos: [0, 1.5, 0] })); const cl = mesh(new THREE.PlaneGeometry(1.5, 2.8, 4, 6), new THREE.MeshStandardMaterial({ color: colorsHex[i], side: THREE.DoubleSide, roughness: 0.8 }), { cast: false, pos: [0, 0.1, 0.05] }); g.add(cl); g.userData.cloth = cl; g.userData.base = cl.geometry.attributes.position.array.slice(); scene.add(g); W.banners.push(g); } });
+  // spandoeken: slot 0 links, slot 1 rechts; bij 3 spelers hangt het derde (Juul) in het midden
+  const three = colorsHex.length > 2;
+  [-1, 1].forEach((sd, i) => { for (const [x, ci] of [[sd * 8.5, i], [sd * 3.3, three ? 2 : i]]) { const g = new THREE.Group(); g.position.set(x, 3.4, -AZ + 0.25); g.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 1.4, 5), M(0x4a3322), { cast: false, rot: [0, 0, Math.PI / 2], pos: [0, 1.5, 0] })); const cl = mesh(new THREE.PlaneGeometry(1.5, 2.8, 4, 6), new THREE.MeshStandardMaterial({ color: colorsHex[ci], side: THREE.DoubleSide, roughness: 0.8 }), { cast: false, pos: [0, 0.1, 0.05] }); g.add(cl); g.userData.cloth = cl; g.userData.base = cl.geometry.attributes.position.array.slice(); scene.add(g); W.banners.push(g); } });
   // sterren
   { const n = 260, p = new Float32Array(n * 3); for (let i = 0; i < n; i++) { const a = rng() * TAU, e = 0.12 + rng() * 0.5, r = 150; p[i * 3] = Math.cos(a) * Math.cos(e) * r; p[i * 3 + 1] = Math.sin(e) * r + 10; p[i * 3 + 2] = -Math.abs(Math.sin(a)) * Math.cos(e) * r - 20; }
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(p, 3)); scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: false, fog: false, transparent: true, opacity: 0.8 })));

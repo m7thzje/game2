@@ -1,4 +1,5 @@
 // Gebruik: node tools/test_karts.mjs [scenario...] [twist=<id>]
+//   Achtervoegsel 3 (race3, both3, timeout3, idle3, items3, twists3, shots3) = 3 spelers (?players=3, Juul = slot 2); all3 = alle 3-speler-scenario's.
 //   scenario: race (bot-race, versneld, geen renderen), both (beide spelers winnen), timeout (tijdslimiet), idle (niemand rijdt),
 //             items (alle voorwerpen/gimmicks), shots (screenshots), twists (alle twists een stukje racen)
 // Versneld (zonder renderen) potjes Kasteel-Kartrace laten spelen door bots; rapporteert winnaar, tijden, en of finishPvp wordt aangeroepen.
@@ -17,45 +18,46 @@ await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
 const argv = process.argv.slice(2);
 const twistArg = (argv.find((a) => a.startsWith('twist=')) || '').slice(6);
-const scen = argv.filter((a) => !a.includes('=')).length ? argv.filter((a) => !a.includes('=')) : ['race', 'both', 'timeout', 'idle', 'items'];
+let scen = argv.filter((a) => !a.includes('=')).length ? argv.filter((a) => !a.includes('=')) : ['race', 'both', 'timeout', 'idle', 'items'];
+if (scen.includes('all3')) scen = ['race3', 'both3', 'timeout3', 'idle3', 'items3', 'twists3'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 let failures = 0;
 const check = (ok, msg) => { console.log((ok ? '  OK   ' : '  FAIL ') + msg); if (!ok) failures++; };
 
-async function open(twist, quality = 'low') {
+async function open(twist, quality = 'low', np = 2) {
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1000, height: 600 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=karts&quality=${quality}${twist ? '&twist=' + twist : ''}`);
+  await page.goto(`http://localhost:${port}/?game=karts&quality=${quality}${np === 3 ? '&players=3' : ''}${twist ? '&twist=' + twist : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
-  await page.evaluate(async () => {
+  await page.evaluate(async (np) => {
     const app = window.__app, mode = app.mode, inp = app.input;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (let i = 0; i < np; i++) inp.virtual[i].a = true; inp.update(); mode.update(0.016);
+    for (let i = 0; i < np; i++) inp.virtual[i].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
-  });
+  }, np);
   // bot + helpers in de pagina
-  await page.evaluate(() => {
+  await page.evaluate((np) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input, C = inst.dbg.C;
     let s = 12345; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
     const angDiff = (a, b) => { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return d; };
-    const skill = [{ look: 8, drift: 0.55, item: 0.02, err: 0.15 }, { look: 8, drift: 0.55, item: 0.02, err: 0.15 }];
+    const skill = Array.from({ length: np }, () => ({ look: 8, drift: 0.55, item: 0.02, err: 0.15 }));
     window.__skill = skill; window.__mode = 'drive'; window.__log = [];
     const pt = (idx, lat) => { const N = C.N, i0 = ((Math.floor(idx) % N) + N) % N, i1 = (i0 + 1) % N, t = idx - Math.floor(idx); const x = C.X[i0] + (C.X[i1] - C.X[i0]) * t, z = C.Z[i0] + (C.Z[i1] - C.Z[i0]) * t; let tx = C.TX[i0], tz = C.TZ[i0]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l; return [x - tz * lat, z + tx * lat]; };
     window.__run = (n, stop) => {
       const dt = 1 / 60;
       for (let q = 0; q < n && (!m.finished || window.__post); q++) {
         const st = inst.dbg.state(); if (stop && stop(st)) return true;
-        for (const i of [0, 1]) {
+        for (let i = 0; i < np; i++) {
           const v = inp.virtual[i], k = st.k[i], sk = skill[i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
           if (window.__mode === 'idle') continue;
           if (m.state !== 'play') continue;
           const look = sk.look + Math.max(0, k.fwd) * 0.45;
-          let lat = ((i ? 1 : -1) * 0.8) + Math.sin(st.T * 0.7 + i) * 1.2;
+          let lat = (np === 3 ? (i - 1) : (i ? 1 : -1)) * 0.8 + Math.sin(st.T * 0.7 + i) * 1.2;
           const [tx, tz] = pt(k.idx + look, lat);
           const want = Math.atan2(tx - k.x, tz - k.z), ad = angDiff(k.th, want);
           // gebruik de ruwe (niet-getwiste) richting: bij 'invert' etc. regelt de bot via window.__flip
@@ -71,15 +73,15 @@ async function open(twist, quality = 'low') {
       }
       return false;
     };
-  });
+  }, np);
   return { browser, page, errors };
 }
 const S = (page) => page.evaluate(() => window.__app.mode.instance.dbg.state());
 
-async function raceScenario(name, { twist = 'none', skill0, skill1, maxSec = 130, flip = false, label } = {}) {
+async function raceScenario(name, { twist = 'none', skill0, skill1, skills, maxSec = 130, flip = false, label, np = 2 } = {}) {
   console.log(`\n== ${label || name} ${twist ? '(twist ' + twist + ')' : ''}`);
-  const { browser, page, errors } = await open(twist);
-  await page.evaluate(([a, b, f]) => { if (a) Object.assign(window.__skill[0], a); if (b) Object.assign(window.__skill[1], b); window.__flip = f; }, [skill0, skill1, flip]);
+  const { browser, page, errors } = await open(twist, 'low', np);
+  await page.evaluate(([sk, f]) => { sk.forEach((a, i) => { if (a) Object.assign(window.__skill[i], a); }); window.__flip = f; }, [skills || [skill0, skill1], flip]);
   let finished = false, st;
   await page.evaluate(() => { window.__fin = null; const m = window.__app.mode; const orig = m.finishPvp.bind(m); let called = 0; m.finishPvp = (res) => { called++; window.__fin = { res, called, t: m.instance.dbg.state().T }; return orig(res); }; m.ctx.finishPvp = (res) => m.finishPvp(res); });
   for (let c = 0; c < maxSec * 60 / 600 + 10 && !finished; c++) {
@@ -87,40 +89,72 @@ async function raceScenario(name, { twist = 'none', skill0, skill1, maxSec = 130
   }
   const fin = await page.evaluate(() => window.__fin);
   check(finished && fin && fin.called === 1, `finishPvp precies 1x aangeroepen (T=${fin ? fin.t.toFixed(1) : '-'} s)`);
+  if (fin) check(fin.res.winner >= 0 && fin.res.winner < np, `winnaar is een geldig slot (${fin.res.winner})`);
   if (fin) console.log('   winnaar', fin.res.winner, 'score', JSON.stringify(fin.res.score), '|', fin.res.summary.replace(/<[^>]+>/g, ''));
   check(errors.length === 0, `geen console-fouten${errors.length ? '\n' + errors.slice(0, 5).join('\n') : ''}`);
   await browser.close();
   return fin;
 }
 
-for (const name of scen) {
+for (const raw of scen) {
+  const np = raw.endsWith('3') ? 3 : 2, name = raw.replace(/3$/, '');
   if (name === 'race') {
-    const f = await raceScenario('race', { label: 'bots (gelijk)' });
+    const f = await raceScenario('race', { label: `bots (gelijk, ${np} spelers)`, np });
+    if (np === 3 && f) { check(f.res.score.slice().sort().join() === '10,3,6'.split(',').sort().join() || JSON.stringify(f.res.score.slice().sort((a, b) => b - a)) === '[10,6,3]', `positiepunten 10/6/3 (${JSON.stringify(f.res.score)})`); }
     check(f && f.t > 35 && f.t < 105, `racetijd ${f ? f.t.toFixed(1) : '-'} s ligt in 35-105 s`);
   } else if (name === 'both') {
     const w = [];
-    for (const [a, b] of [[{ err: 0 }, { look: 5, drift: 0 }], [{ look: 5, drift: 0 }, { err: 0 }]]) { const f = await raceScenario('both', { skill0: a, skill1: b, label: 'wie wint?' }); if (f) w.push(f.res.winner); }
-    check(w.includes(0) && w.includes(1), `beide spelers kunnen winnen (winnaars: ${w.join(',')})`);
+    const good = { err: 0 }, bad = { look: np === 3 ? 4 : 5, drift: 0 };
+    const cfgs = np === 3 ? [[good, bad, bad], [bad, good, bad], [bad, bad, good]] : [[good, bad], [bad, good]];
+    for (const [target, sk] of cfgs.entries()) {   // de goede bot hoort te winnen; door de loting van de banen en de items mag een tweede/derde poging
+      for (let poging = 0; poging < (np === 3 ? 3 : 1); poging++) { const f = await raceScenario('both', { skills: sk, label: `wie wint? slot ${target} rijdt goed (${np} spelers)`, np }); if (f && (f.res.winner === target || poging === (np === 3 ? 2 : 0))) { w.push(f.res.winner); break; } }
+    }
+    check(Array.from({ length: np }, (_, i) => w.includes(i)).every(Boolean), `alle spelers kunnen winnen (winnaars: ${w.join(',')})`);
   } else if (name === 'timeout') {
     // beide karts rijden maar het kan niet binnen de tijd -> traag: slowmo twist + bot die bijna stilstaat
-    console.log('\n== timeout (karts staan stil, tijdslimiet)');
-    const { browser, page, errors } = await open('none');
+    console.log(`\n== timeout (karts staan stil, tijdslimiet, ${np} spelers)`);
+    const { browser, page, errors } = await open('none', 'low', np);
     await page.evaluate(() => { window.__mode = 'idle'; window.__fin = null; const m = window.__app.mode; const orig = m.finishPvp.bind(m); let called = 0; m.finishPvp = (res) => { called++; window.__fin = { res, called }; return orig(res); }; m.ctx.finishPvp = (res) => m.finishPvp(res); });
     // één kart rijdt heel even zodat er een winnaar op voorsprong is
-    await page.evaluate(() => { window.__app.mode.instance.dbg.warp(1, 40, 0, 0); });
+    await page.evaluate((np) => { window.__app.mode.instance.dbg.warp(np === 3 ? 2 : 1, 40, 0, 0); }, np);
     for (let c = 0; c < 14 && !(await page.evaluate(() => window.__app.mode.finished)); c++) await page.evaluate(() => window.__run(600));
     const fin = await page.evaluate(() => window.__fin);
-    check(fin && fin.called === 1 && fin.res.winner === 1, `bij tijdslimiet wint de leider (winnaar ${fin && fin.res.winner}, aantal ${fin && fin.called})`);
+    check(fin && fin.called === 1 && fin.res.winner === (np === 3 ? 2 : 1), `bij tijdslimiet wint de leider (winnaar ${fin && fin.res.winner}, aantal ${fin && fin.called})`);
     check(errors.length === 0, 'geen console-fouten' + (errors.length ? '\n' + errors.join('\n') : ''));
     await browser.close();
   } else if (name === 'idle') {
-    console.log('\n== idle (niemand doet iets: toch einde via tijd)');
-    const { browser, page, errors } = await open('none');
+    console.log(`\n== idle (niemand doet iets: toch einde via tijd, ${np} spelers)`);
+    const { browser, page, errors } = await open('none', 'low', np);
     await page.evaluate(() => { window.__mode = 'idle'; window.__fin = null; const m = window.__app.mode; const orig = m.finishPvp.bind(m); let called = 0; m.finishPvp = (res) => { called++; window.__fin = { res, called }; return orig(res); }; m.ctx.finishPvp = (res) => m.finishPvp(res); });
     for (let c = 0; c < 14 && !(await page.evaluate(() => window.__app.mode.finished)); c++) await page.evaluate(() => window.__run(600));
     const fin = await page.evaluate(() => window.__fin);
     check(fin && fin.called === 1, `finishPvp aangeroepen (winnaar ${fin && fin.res.winner})`);
     check(errors.length === 0, 'geen console-fouten' + (errors.length ? '\n' + errors.join('\n') : ''));
+    await browser.close();
+  } else if (name === 'items' && np === 3) {
+    console.log('\n== items met 3 karts: mikken op de koploper');
+    const { browser, page, errors } = await open('none', 'low', 3);
+    const dbg = (fn, ...a) => page.evaluate(fn, ...a);
+    // startgrid: 3 verschillende banen naast elkaar, alle drie op dezelfde rij
+    const g0 = await dbg(() => { const d = window.__app.mode.instance.dbg; return d.karts.map((k) => ({ idx: +k.loc.idx.toFixed(1), lat: +k.loc.lat.toFixed(2) })); });
+    check(new Set(g0.map((g) => g.lat)).size === 3 && g0.every((g) => Math.abs(g.idx - g0[0].idx) < 0.6), `startgrid: 3 banen op één rij (${JSON.stringify(g0.map((g) => g.lat))})`);
+    // vuurbal van kart 0 op een rechte: kart 1 (achter) en kart 2 (voorop) allebei in het zoekbereik -> raakt de koploper (kart 2)
+    await dbg(() => { const d = window.__app.mode.instance.dbg; window.__mode = 'idle'; window.__run(200); d.warp(0, 60, 0, 6); d.warp(1, 70, -2.5, 6); d.warp(2, 73, 2.5, 6); d.karts.forEach((k) => { k.invT = 0; k.spinT = 0; }); d.giveItem(0, 'fire'); d.use(0); });
+    await dbg(() => window.__run(100, (s) => s.k[1].spin > 0 || s.k[2].spin > 0));
+    let st = await S(page); check(st.k[2].spin > 0 && !(st.k[1].spin > 0), `vuurbal mikt op de koploper (spin 1: ${st.k[1].spin.toFixed(2)}, spin 2: ${st.k[2].spin.toFixed(2)})`);
+    // draak: bom valt (65%) voor de koploper; gewoon laten vliegen zonder fouten
+    await dbg(() => { const d = window.__app.mode.instance.dbg; d.dragonNow(); window.__run(60 * 8); });
+    st = await dbg(() => { const d = window.__app.mode.instance.dbg; return { s: d.D.state, b: d.bombs.length, p: d.patches.length }; });
+    check(st.s === 'fly' || st.s === 'wait', `draak vliegt zonder fouten (${JSON.stringify(st)})`);
+    // koeien: steken over (voor de koploper)
+    await dbg(() => { const d = window.__app.mode.instance.dbg; d.cowAt(0); window.__run(60 * 3); });
+    st = await dbg(() => window.__app.mode.instance.dbg.cows.map((c) => c.state)); check(st[0] === 'cross' || st[0] === 'wait', `koe-logica werkt (${st})`);
+    // power-ups voor de achterste hebben meer kans op goud: gouden paddenstoel en banaan gebruiken
+    await dbg(() => { const d = window.__app.mode.instance.dbg; d.giveItem(2, 'gold'); d.use(2); d.giveItem(1, 'banana'); d.use(1); });
+    st = await S(page); check(st.k[2].boost > 3, 'gouden paddenstoel (kart 3) werkt');
+    await dbg(() => { const i = window.__app.mode.instance; i.onDeurman([true, false, true]); });
+    st = await S(page); check(st.k[0].freeze > 1 && st.k[1].freeze <= 0 && st.k[2].freeze > 1, `onDeurman met 3 booleans bevriest alleen de bewegers (${st.k.map((q) => q.freeze.toFixed(1))})`);
+    check(errors.length === 0, 'geen console-fouten' + (errors.length ? '\n' + errors.slice(0, 6).join('\n') : ''));
     await browser.close();
   } else if (name === 'items') {
     console.log('\n== items en gimmicks');
@@ -164,12 +198,12 @@ for (const name of scen) {
   } else if (name === 'twists') {
     for (const t of TWISTS) {
       if (twistArg && t !== twistArg) continue;
-      const f = await raceScenario('twist', { twist: t, flip: t === 'invert', label: 'twist ' + t, maxSec: 140 });
+      const f = await raceScenario('twist', { twist: t, flip: t === 'invert', label: `twist ${t} (${np} spelers)`, maxSec: 140, np });
       check(!!f, `twist ${t}: afgerond`);
     }
   } else if (name === 'shots') {
-    const tag = twistArg || 'none';
-    const { browser, page, errors } = await open(twistArg || 'none', process.env.Q || 'low');
+    const tag = (twistArg || 'none') + (np === 3 ? '_3sp' : '');
+    const { browser, page, errors } = await open(twistArg || 'none', process.env.Q || 'low', np);
     const snap = async (n) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.screenshot({ path: `/tmp/karts_${tag}_${n}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); };
     await page.evaluate(() => window.__run(60 * 5)); await snap('start');
     await page.evaluate(() => window.__run(60 * 12)); await snap('run1');

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { mat, mesh, clamp, lerp, damp, dampAngle, rand, pick, TAU, canvasTex, mulberry32 } from '../engine/util.js';
-import { makeBrother, PLAYER_COLORS } from '../engine/chars.js';
+import { makeBrother } from '../engine/chars.js';
 import { Slime } from '../engine/chars.js';
 import * as P from '../engine/props.js';
 import { buildPaintHall } from './paint_world.js';
@@ -12,11 +12,16 @@ import { buildPaintHall } from './paint_world.js';
 const N = 12, TS = 1.5, HALF = N * TS / 2, NN = N * N;
 const TIME = 60, FINAL = 10, OVERTIME = 8;
 const CHARGE_MAX = 3;
-const TILE_COL = {
-  0: [new THREE.Color(0xe6decc), new THREE.Color(0xcfc5ae)],
-  1: [new THREE.Color(0x2fcf70), new THREE.Color(0x27b862)],
-  2: [new THREE.Color(0x3f86ff), new THREE.Color(0x3373e6)],
-};
+// tegelkleuren (licht/donker) per spelers-id: Wes groen, Jor blauw, Juul oranje
+const TILE_ID = [
+  [new THREE.Color(0x2fcf70), new THREE.Color(0x27b862)],
+  [new THREE.Color(0x3f86ff), new THREE.Color(0x3373e6)],
+  [new THREE.Color(0xffa23a), new THREE.Color(0xec8a24)],
+];
+const NEUTRAL = [new THREE.Color(0xe6decc), new THREE.Color(0xcfc5ae)];
+// bar-kleur (verloop) en lichte tekstkleur per spelers-id
+const BAR_ID = ['linear-gradient(#4ee08a,#27b862)', 'linear-gradient(#6aa0ff,#3373e6)', 'linear-gradient(#ffbe6a,#ec8a24)'];
+const LITE_ID = ['#7dffa8', '#8fb8ff', '#ffc27a'];
 const cellC = (g) => (g - (N - 1) / 2) * TS;
 const cellOf = (v) => clamp(Math.floor(v / TS + N / 2), 0, N - 1);
 
@@ -26,18 +31,21 @@ export default {
   giver: 'Schilder Splash',
   icon: '🎨',
   mode: 'pvp',
+  players: [2, 3],
   time: TIME,
   pay: 1,
   music: 'game_fast',
   twists: ['invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'],
-  blurb: 'In de <b>Toverschilderszaal</b> is de vloer een groot schilderbord! Verf zoveel mogelijk tegels in jouw kleur: <b>Wes is groen, Jor is blauw</b>. Overschilderen mag! Pas op voor het <b>Schoonmaak-Slijm</b> dat alle verf wegpoetst, pak de <b>Gouden Verfemmer</b> in het midden en jaag op de <b>regenboog-tegels</b> (tellen dubbel). Wie na 60 seconden de meeste punten heeft, wint!',
-  controls: ['{move} lopen = tegels verven', '{a} verfbom (3x3 rondom jou)', '{b} sprint met breed verfspoor (duwt je broer weg)'],
-  tip: 'Botst je tegen het Schoonmaak-Slijm? Dan stuiter je hem weg: stuur hem naar het gebied van je broer! In de laatste 10 seconden zijn verfbommen veel groter.',
+  blurb: 'In de <b>Toverschilderszaal</b> is de vloer een groot schilderbord! Verf zoveel mogelijk tegels in jouw kleur: <b>Wes is groen, Jor is blauw</b> (en Juul, als die meedoet, is oranje). Overschilderen mag! Pas op voor het <b>Schoonmaak-Slijm</b> dat alle verf wegpoetst, pak de <b>Gouden Verfemmer</b> in het midden en jaag op de <b>regenboog-tegels</b> (tellen dubbel). Wie na 60 seconden de meeste punten heeft, wint!',
+  controls: ['{move} lopen = tegels verven', '{a} verfbom (3x3 rondom jou)', '{b} sprint met breed verfspoor (duwt de anderen weg)'],
+  tip: 'Botst je tegen het Schoonmaak-Slijm? Dan stuiter je hem weg: stuur hem naar het gebied van de leider! In de laatste 10 seconden zijn verfbommen veel groter.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pvp = ctx.pvp;
-    const names = players.map((p) => p.name);
+    const names = players.map((p) => p.name), NP = players.length;   // aantal spelers (2 of 3)
+    const pcol = (i) => players[i].color, lite = (i) => LITE_ID[players[i].id];
+    const TC = [NEUTRAL, ...players.map((pp) => TILE_ID[pp.id])];   // tegelkleuren per eigenaar (0 = leeg, 1.. = slot+1)
     const L = ctx.lights('indoor', { shadow: 16, center: [0, 0, 0], fogNear: 60, fogFar: 150 });
     L.hemi.intensity = 1.55; L.hemi.color.set(0xfff0ff); L.hemi.groundColor.set(0x8a7aa0);
     L.sun.intensity = 1.7; L.sun.color.set(0xfff2dc); L.sun.position.set(-9, 30, 16);
@@ -50,9 +58,9 @@ export default {
     tiles.receiveShadow = true; tiles.castShadow = false; tiles.frustumCulled = false;
     scene.add(tiles);
     const owner = new Uint8Array(NN), bonus = new Uint8Array(NN), pop = new Float32Array(NN);
-    const cur = Array.from({ length: NN }, (_, i) => TILE_COL[0][((i % N) + ((i / N) | 0)) & 1].clone());
+    const cur = Array.from({ length: NN }, (_, i) => NEUTRAL[((i % N) + ((i / N) | 0)) & 1].clone());
     const tmpC = new THREE.Color(), tmpM = new THREE.Matrix4(), tmpP = new THREE.Vector3(), tmpS = new THREE.Vector3(), qI = new THREE.Quaternion();
-    const baseColor = (i) => TILE_COL[owner[i]][((i % N) + ((i / N) | 0)) & 1];
+    const baseColor = (i) => TC[owner[i]][((i % N) + ((i / N) | 0)) & 1];
     function setMatrix(i) {
       const u = 1 - pop[i], s = Math.sin(u * Math.PI);
       tmpP.set(cellC(i % N), -0.21 + s * 0.34, cellC((i / N) | 0)); tmpS.set(1 + s * 0.05, 1, 1 + s * 0.05);
@@ -61,17 +69,17 @@ export default {
     for (let i = 0; i < NN; i++) { setMatrix(i); tiles.setColorAt(i, cur[i]); }
     tiles.instanceMatrix.needsUpdate = true; tiles.instanceColor.needsUpdate = true;
 
-    const sc = [0, 0, 0];            // gewogen score per eigenaar-id (1,2)
-    const cnt = [0, 0, 0];           // aantal tegels per eigenaar-id
+    const sc = new Array(NP + 1).fill(0);    // gewogen score per eigenaar-id (1..NP)
+    const cnt = new Array(NP + 1).fill(0);   // aantal tegels per eigenaar-id (0 = leeg)
     let dirtyScore = true;
     function recount() {
-      sc[1] = sc[2] = 0; cnt[0] = cnt[1] = cnt[2] = 0;
+      sc.fill(0); cnt.fill(0);
       for (let i = 0; i < NN; i++) { const o = owner[i]; cnt[o]++; if (o) sc[o] += bonus[i] ? 2 : 1; }
       dirtyScore = false;
     }
 
     // ------------------------------------------------------------------ toestand
-    const stats = { painted: [0, 0], bombs: [0, 0], bumps: [0, 0], bucket: [0, 0], wiped: [0, 0], dashHits: [0, 0], slimed: [0, 0] };
+    const z0 = () => new Array(NP).fill(0), stats = { painted: z0(), bombs: z0(), bumps: z0(), bucket: z0(), wiped: z0(), dashHits: z0(), slimed: z0() };
     let T = 0, done = false, introT = 0, over = false, overT = 0, winnerIdx = -1, resultT = 0, finalMode = false, endT = 0;
     let freeze = 0;
     const pq = [];           // vertraagde verfplekken {idx, who, t}
@@ -83,7 +91,7 @@ export default {
       owner[idx] = who; pop[idx] = 1; dirtyScore = true;
       if (who && prev !== who) stats.painted[who - 1]++;
       if (!quiet && Math.random() < 0.55) {
-        const c = who === 1 ? PLAYER_COLORS[0] : who === 2 ? PLAYER_COLORS[1] : 0xffffff;
+        const c = who ? pcol(who - 1) : 0xffffff;
         fx.particles.burst(cellC(idx % N), 0.3, cellC((idx / N) | 0), { count: 3, speed: 2.4, up: 1.2, life: 0.55, size: 0.3, color: c, gravity: 9 });
       }
       return true;
@@ -115,22 +123,24 @@ export default {
     }
 
     // ------------------------------------------------------------------ spelers
-    const START = [[-3.75, 3.75], [3.75, 3.75]];
+    // startplekken: 2 spelers gespiegeld onderaan; 3 spelers een gelijkzijdige driehoek rond het midden
+    const START = NP === 2 ? [[-3.75, 3.75], [3.75, 3.75]] : [[-4.2, 2.45], [4.2, 2.45], [0, -4.85]];
+    const faceTo = (i) => (NP === 2 ? (i ? -2.4 : 2.4) : Math.atan2(-START[i][0], -START[i][1]));   // kijkrichting bij de start
     const pl = players.map((pp, i) => {
       const c = makeBrother(i); const holder = new THREE.Group(); holder.add(c.group); scene.add(holder);
       // verfkwast in de hand
       const brush = new THREE.Group();
       brush.add(mesh(new THREE.CylinderGeometry(0.035, 0.045, 0.55, 5), mat(0x9b6a2e), { cast: false, pos: [0, 0.2, 0] }));
       brush.add(mesh(new THREE.CylinderGeometry(0.06, 0.05, 0.16, 6), mat(0xd0d0e0, { metalness: 0.7 }), { cast: false, pos: [0, 0.5, 0] }));
-      brush.add(mesh(new THREE.ConeGeometry(0.1, 0.3, 7), new THREE.MeshStandardMaterial({ color: PLAYER_COLORS[i], emissive: PLAYER_COLORS[i], emissiveIntensity: 0.4 }), { cast: false, pos: [0, 0.73, 0] }));
+      brush.add(mesh(new THREE.ConeGeometry(0.1, 0.3, 7), new THREE.MeshStandardMaterial({ color: pcol(i), emissive: pcol(i), emissiveIntensity: 0.4 }), { cast: false, pos: [0, 0.73, 0] }));
       brush.rotation.x = Math.PI / 2; brush.position.set(0, 0, 0.1); c.hold(brush, 'r');
-      const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.0, 32), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.0, 32), new THREE.MeshBasicMaterial({ color: pcol(i), transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false }));
       ring.rotation.x = -Math.PI / 2; ring.renderOrder = 4; scene.add(ring);
       const blob = P.shadowBlob(1.0); scene.add(blob);
       const tagTex = canvasTex(256, 96, (g, w, hh) => { g.font = 'bold 56px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(10,10,30,.9)'; g.lineJoin = 'round'; g.strokeText(pp.name, w / 2, hh / 2); g.fillStyle = pp.css; g.fillText(pp.name, w / 2, hh / 2); });
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false })); tag.scale.set(2.0, 0.75, 1); tag.renderOrder = 15; scene.add(tag);
-      const pips = [0, 1, 2].map((k) => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, depthTest: false })); m.renderOrder = 16; scene.add(m); return m; });
-      return { i, id: i + 1, c, holder, ring, blob, tag, pips, x: START[i][0], z: START[i][1], vx: 0, vz: 0, face: i ? -2.4 : 2.4, sz: 1, dashT: 0, dashCd: 0, dashDx: 0, dashDz: 0, charges: 2, bombCd: 0, stun: 0, slow: 0, hop: 0, hitCd: 0, paintT: 0, pose: 'idle', infoKey: '' };
+      const pips = [0, 1, 2].map((k) => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), new THREE.MeshBasicMaterial({ color: pcol(i), transparent: true, depthTest: false })); m.renderOrder = 16; scene.add(m); return m; });
+      return { i, id: i + 1, c, holder, ring, blob, tag, pips, x: START[i][0], z: START[i][1], vx: 0, vz: 0, face: faceTo(i), sz: 1, dashT: 0, dashCd: 0, dashDx: 0, dashDz: 0, charges: 2, bombCd: 0, stun: 0, slow: 0, hop: 0, hitCd: 0, paintT: 0, pose: 'idle', infoKey: '' };
     });
 
     // ------------------------------------------------------------------ Schoonmaak-slijm
@@ -149,12 +159,15 @@ export default {
       const lab = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex, transparent: true, depthTest: false })); lab.scale.set(3.8, 0.72, 1); lab.position.set(0, 3.2, 0); lab.renderOrder = 15; spongeG.add(lab);
     }
     const spongeBlob = P.shadowBlob(1.9); scene.add(spongeBlob);
-    const sp = { on: false, x: 0, z: -4.5, vx: 0, vz: 0, tx: 0, tz: 0, retarget: 0, spawnT: 3.2, grow: 0, last: -1, bumpCd: [0, 0], faceA: 0, hop: 0, bubT: 0 };
+    const sp = { on: false, x: 0, z: -4.5, vx: 0, vz: 0, tx: 0, tz: 0, retarget: 0, spawnT: 3.2, grow: 0, last: -1, bumpCd: z0(), faceA: 0, hop: 0, bubT: 0 };
     spongeG.visible = false; spongeBlob.visible = false;
     const SP_R = 1.35;
 
     function spongeTarget() {
-      const lead = sc[1] > sc[2] + 3 ? 1 : sc[2] > sc[1] + 3 ? 2 : 0;
+      // leider (eigenaar-id 1..NP) = duidelijk voorop; het slijm mikt op zijn tegels
+      let lead = 0, best = -1, second = -1;
+      for (let o = 1; o <= NP; o++) { if (sc[o] > best) { second = best; best = sc[o]; lead = o; } else if (sc[o] > second) second = sc[o]; }
+      if (best <= second + 3) lead = 0;
       if (lead && Math.random() < 0.7) {
         const mine = []; for (let i = 0; i < NN; i++) if (owner[i] === lead) mine.push(i);
         if (mine.length) { const k = pick(mine); sp.tx = cellC(k % N); sp.tz = cellC((k / N) | 0); return; }
@@ -165,7 +178,7 @@ export default {
       if (!sp.on) {
         sp.spawnT -= dt;
         if (sp.spawnT <= 0) {
-          sp.on = true; sp.x = 0; sp.z = -HALF + 2.2; sp.vx = 0; sp.vz = 0; sp.grow = 0; spongeG.visible = true; spongeBlob.visible = true; spongeTarget(); sp.retarget = 3;
+          sp.on = true; sp.x = 0; sp.z = NP === 2 ? -HALF + 2.2 : HALF - 2.2; sp.vx = 0; sp.vz = 0; sp.grow = 0; spongeG.visible = true; spongeBlob.visible = true; spongeTarget(); sp.retarget = 3;
           hud.showBig('SCHOONMAAK-SLIJM!', 800, '#fff06a'); audio.sfx('boing', { vol: 0.8 }); audio.sfx('sparkle', { vol: 0.5 }); ctx.shake(0.3);
           fx.particles.burst(sp.x, 0.5, sp.z, { count: 40, speed: 5, up: 1.4, life: 1.0, size: 0.5, colors: [0xffffff, 0xcfeaff, 0xfff6a0], gravity: 3 });
         }
@@ -190,7 +203,7 @@ export default {
         if (o) { if (paintTile(idx, 0, true)) { stats.wiped[o - 1]++; if (Math.random() < 0.5) fx.particles.burst(cellC(gx), 0.4, cellC(gz), { count: 4, speed: 2.2, up: 1.5, life: 0.7, size: 0.35, colors: [0xffffff, 0xcfeaff], gravity: 2 }); } }
       }
       // botsen met spelers
-      sp.bumpCd[0] -= dt; sp.bumpCd[1] -= dt;
+      for (let q = 0; q < NP; q++) sp.bumpCd[q] -= dt;
       for (const p of pl) {
         const dxp = sp.x - p.x, dzp = sp.z - p.z, d = Math.hypot(dxp, dzp) || 0.01; const minD = SP_R + 0.5 * p.sz;
         if (d >= minD) continue;
@@ -201,7 +214,7 @@ export default {
           sp.vx = nx * power; sp.vz = nz * power; sp.last = p.i; sp.bumpCd[p.i] = 0.6; sp.hop = 1; stats.bumps[p.i]++;
           p.vx -= nx * (p.dashT > 0 ? 0 : 3.0); p.vz -= nz * (p.dashT > 0 ? 0 : 3.0);
           fx.particles.burst(p.x + nx * 0.9, 1.0, p.z + nz * 0.9, { count: 22, speed: 5, up: 1.1, life: 0.7, size: 0.42, colors: [0xffffff, 0xcfeaff, 0xfff06a], gravity: 4 });
-          fx.texts.add(p.dashT > 0 ? 'SPLOEF!' : 'PLOF!', sp.x, 3.6, sp.z, p.i ? '#8fb8ff' : '#7dffa8', 1.0); audio.sfx('boing', { vol: 0.7, rate: 1.1 }); audio.sfx('hit', { vol: 0.4 }); ctx.shake(0.22);
+          fx.texts.add(p.dashT > 0 ? 'SPLOEF!' : 'PLOF!', sp.x, 3.6, sp.z, lite(p.i), 1.0); audio.sfx('boing', { vol: 0.7, rate: 1.1 }); audio.sfx('hit', { vol: 0.4 }); ctx.shake(0.22);
         }
         // overlap oplossen (spons is zwaar)
         const over2 = minD - d; p.x -= nx * over2 * 0.7; p.z -= nz * over2 * 0.7; sp.x += nx * over2 * 0.3; sp.z += nz * over2 * 0.3;
@@ -260,17 +273,17 @@ export default {
       bucketG.userData.halo.rotation.z += dt; bucketG.userData.beam.material.opacity = 0.14 + 0.08 * Math.sin(bk.t * 5);
       bucketG.visible = bk.life > 2 || Math.sin(bk.life * 22) > -0.2;
       if (Math.random() < dt * 25) fx.particles.emit(rand(-1, 1), 1 + rand(0, 2.2), rand(-1, 1), 0, 1.2, 0, { life: 0.8, size: 0.3, color: pick([0xffe36a, 0xffffff, 0xffb02a]), gravity: -0.5 });
-      const order = Math.random() < 0.5 ? [pl[0], pl[1]] : [pl[1], pl[0]];
+      const order = pl.slice().sort(() => Math.random() - 0.5);
       for (const p of order) {
         if (Math.hypot(p.x - bk.x, p.z - bk.z) < 1.45 + 0.4 * p.sz) {
           bk.on = false; bucketG.visible = false; bk.next = T + rand(14, 17); stats.bucket[p.i]++;
           const gx = cellOf(bk.x), gz = cellOf(bk.z);
           paintCells(gx, gz, p.id, 4, 'disc', 0);
-          shock(bk.x, bk.z, 8, PLAYER_COLORS[p.i], 0.8); shock(bk.x, bk.z, 4, 0xffe36a, 0.5);
-          const cols = [PLAYER_COLORS[p.i], 0xffe36a, 0xffffff];
+          shock(bk.x, bk.z, 8, pcol(p.i), 0.8); shock(bk.x, bk.z, 4, 0xffe36a, 0.5);
+          const cols = [pcol(p.i), 0xffe36a, 0xffffff];
           fx.particles.burst(bk.x, 1.2, bk.z, { count: 120, speed: 11, up: 1.5, life: 1.3, size: 0.55, colors: cols, gravity: 9 });
           fx.particles.ring(bk.x, 0.6, bk.z, { count: 44, speed: 9, color: 0xffe36a, size: 0.45, life: 0.8 });
-          fx.texts.add('BOEM! GOUD!', bk.x, 4.2, bk.z, '#ffe45a', 1.5); hud.showBig('VERF-EXPLOSIE!', 750, p.i ? '#8fb8ff' : '#7dffa8');
+          fx.texts.add('BOEM! GOUD!', bk.x, 4.2, bk.z, '#ffe45a', 1.5); hud.showBig('VERF-EXPLOSIE!', 750, lite(p.i));
           audio.sfx('explode', { vol: 0.7 }); audio.sfx('powerup', { vol: 0.8 }); audio.sfx('splash', { vol: 0.8 }); ctx.shake(0.9); p.hop = 1; p.c.swing();
           break;
         }
@@ -306,10 +319,10 @@ export default {
       p.charges -= 1; p.bombCd = 0.4; p.hop = 1; p.c.swing(); stats.bombs[p.i]++;
       const R = finalMode ? 2 : 1;
       paintCells(cellOf(p.x), cellOf(p.z), p.id, R, 'square', 0.02);
-      const col = PLAYER_COLORS[p.i];
+      const col = pcol(p.i);
       shock(p.x, p.z, (R + 0.7) * TS, col, 0.45);
       fx.particles.burst(p.x, 0.9, p.z, { count: finalMode ? 90 : 50, speed: finalMode ? 9 : 7, up: 1.4, life: 0.9, size: 0.5, colors: [col, col, 0xffffff, 0xffe14a], gravity: 10 });
-      fx.texts.add(finalMode ? 'MEGA-BOM!' : 'SPLAT!', p.x, 3.6 * p.sz, p.z, p.i ? '#8fb8ff' : '#7dffa8', 1.0);
+      fx.texts.add(finalMode ? 'MEGA-BOM!' : 'SPLAT!', p.x, 3.6 * p.sz, p.z, lite(p.i), 1.0);
       audio.sfx('splash', { vol: 0.7 }); audio.sfx('pop', { vol: 0.6, rate: 0.8 }); ctx.shake(finalMode ? 0.4 : 0.22);
     }
     function startDash(p, inp) {
@@ -317,7 +330,7 @@ export default {
       if (m < 0.25) { dx = Math.sin(p.face); dz = Math.cos(p.face); } else { dx /= m; dz /= m; }
       p.dashT = 0.32; p.dashCd = 1.6; p.dashDx = dx; p.dashDz = dz; p.face = Math.atan2(dx, dz);
       audio.sfx('whoosh', { vol: 0.6, rate: 1.2 }); p.c.swing();
-      fx.particles.burst(p.x, 0.4, p.z, { count: 10, speed: 3, up: 0.6, life: 0.5, size: 0.4, color: PLAYER_COLORS[p.i], gravity: 4 });
+      fx.particles.burst(p.x, 0.4, p.z, { count: 10, speed: 3, up: 0.6, life: 0.5, size: 0.4, color: pcol(p.i), gravity: 4 });
     }
 
     function playerStep(p, dt, active) {
@@ -358,7 +371,7 @@ export default {
         }
         if (n && p.dashT > 0) audio.sfx('pop', { vol: 0.2, rate: 1.4 + Math.random() * 0.3 });
         else if (n && (p.paintT -= dt) <= 0) { p.paintT = 0.18; audio.sfx('step', { vol: 0.25, rate: 1.3 + Math.random() * 0.4 }); }
-        if (p.dashT > 0) fx.particles.emit(p.x + rand(-0.4, 0.4), 0.35, p.z + rand(-0.4, 0.4), -p.vx * 0.08, 0.6, -p.vz * 0.08, { life: 0.5, size: 0.5, color: PLAYER_COLORS[p.i], gravity: 2 });
+        if (p.dashT > 0) fx.particles.emit(p.x + rand(-0.4, 0.4), 0.35, p.z + rand(-0.4, 0.4), -p.vx * 0.08, 0.6, -p.vz * 0.08, { life: 0.5, size: 0.5, color: pcol(p.i), gravity: 2 });
       }
     }
 
@@ -371,7 +384,7 @@ export default {
         if (x.dashT > 0 && y.dashT <= 0 && x.hitCd <= 0) {
           y.vx = kx * 12; y.vz = kz * 12; y.stun = 0.45; y.hitCd = 0.5; x.hitCd = 0.5; x.dashT = Math.min(x.dashT, 0.08); y.c.pose = 'scared'; stats.dashHits[x.i]++;
           fx.texts.add('BONK!', y.x, 3.4 * y.sz, y.z, '#ffd24a', 1.1); audio.sfx('hit', { vol: 0.8 }); ctx.shake(0.4);
-          fx.particles.burst((x.x + y.x) / 2, 1.0, (x.z + y.z) / 2, { count: 20, speed: 5, up: 1, life: 0.6, size: 0.4, colors: [PLAYER_COLORS[x.i], 0xffffff, 0xffe14a], gravity: 8 });
+          fx.particles.burst((x.x + y.x) / 2, 1.0, (x.z + y.z) / 2, { count: 20, speed: 5, up: 1, life: 0.6, size: 0.4, colors: [pcol(x.i), 0xffffff, 0xffe14a], gravity: 8 });
         }
       }
       const over2 = minD - d; a.x -= nx * over2 * 0.5; a.z -= nz * over2 * 0.5; b.x += nx * over2 * 0.5; b.z += nz * over2 * 0.5;
@@ -412,7 +425,7 @@ export default {
         for (let k = 0; k < 3; k++) {
           const m = p.pips[k]; const f = clamp(p.charges - k, 0, 1);
           m.position.set(p.x + (k - 1) * 0.5, head + 0.5, p.z); m.scale.setScalar(0.35 + f * 0.65); m.material.opacity = 0.25 + f * 0.75;
-          m.material.color.set(f >= 1 ? (finalMode ? 0xffe14a : PLAYER_COLORS[i]) : 0x777788);
+          m.material.color.set(f >= 1 ? (finalMode ? 0xffe14a : pcol(i)) : 0x777788);
         }
         if (p.slow > 0 && Math.random() < dt * 14) fx.particles.emit(p.x + rand(-0.4, 0.4), 0.5 + rand(0, 1.6), p.z + rand(-0.4, 0.4), 0, 1, 0, { life: 0.6, size: 0.3, color: 0xfff06a, gravity: -0.5 });
         // HUD-info
@@ -422,18 +435,32 @@ export default {
     }
 
     // ------------------------------------------------------------------ live scorebalk (DOM)
+    // 2 spelers: links/rechts naar het midden. 3 spelers: één gestapelde balk (Wes | Jor | Juul | leeg) met gekleurde namen eronder.
     const bar = document.createElement('div');
-    bar.style.cssText = 'width:min(520px,44vw);height:30px;border-radius:16px;overflow:hidden;background:#4a4058;border:3px solid #ffd24a;box-shadow:0 3px 0 rgba(0,0,0,.5);display:flex;position:relative;pointer-events:none;font:700 17px Fredoka,Arial,sans-serif;color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.7)';
-    const f0 = document.createElement('div'), fm = document.createElement('div'), f1 = document.createElement('div');
-    f0.style.cssText = 'background:linear-gradient(#4ee08a,#27b862);width:0%;transition:width .25s'; f1.style.cssText = 'background:linear-gradient(#6aa0ff,#3373e6);width:0%;transition:width .25s'; fm.style.cssText = 'flex:1;background:repeating-linear-gradient(45deg,#6a5f7a,#6a5f7a 8px,#5d5270 8px,#5d5270 16px)';
-    const t0 = document.createElement('div'), t1 = document.createElement('div'), tm = document.createElement('div');
-    t0.style.cssText = 'position:absolute;left:12px;top:2px'; t1.style.cssText = 'position:absolute;right:12px;top:2px'; tm.style.cssText = 'position:absolute;left:50%;top:-1px;bottom:-1px;width:3px;background:rgba(255,255,255,.7);transform:translateX(-50%)';
-    bar.append(f0, fm, f1, tm, t0, t1);
+    const fillCss = (i) => `background:${BAR_ID[players[i].id]};width:0%;transition:width .25s`;
+    const mk = (css) => { const d = document.createElement('div'); d.style.cssText = css; return d; };
+    const track = mk('width:min(520px,44vw);height:30px;border-radius:16px;overflow:hidden;background:#4a4058;border:3px solid #ffd24a;box-shadow:0 3px 0 rgba(0,0,0,.5);display:flex;position:relative;pointer-events:none;font:700 17px Fredoka,Arial,sans-serif;color:#fff;text-shadow:0 2px 0 rgba(0,0,0,.7)');
+    const fm = mk('flex:1;background:repeating-linear-gradient(45deg,#6a5f7a,#6a5f7a 8px,#5d5270 8px,#5d5270 16px)');
+    const fill = players.map((_, i) => mk(fillCss(i)));
+    const txt = players.map(() => mk(''));
+    if (NP === 2) {
+      const tm = mk('position:absolute;left:50%;top:-1px;bottom:-1px;width:3px;background:rgba(255,255,255,.7);transform:translateX(-50%)');
+      txt[0].style.cssText = 'position:absolute;left:12px;top:2px'; txt[1].style.cssText = 'position:absolute;right:12px;top:2px';
+      track.append(fill[0], fm, fill[1], tm, txt[0], txt[1]); bar.append(track);
+    } else {
+      track.append(...fill, fm);
+      const row = mk('display:flex;justify-content:space-between;gap:10px;width:min(520px,44vw);margin-top:3px;pointer-events:none;font:700 15px Fredoka,Arial,sans-serif;text-shadow:0 2px 0 rgba(0,0,0,.8)');
+      txt.forEach((t, i) => { t.style.color = players[i].css; row.append(t); });
+      bar.append(track, row);
+    }
     let barDirty = true;
     function ensureBar() { const mid = hud.scoreEl && hud.scoreEl.parentNode; if (mid && bar.parentNode !== mid) { mid.append(bar); hud.setScore(null); } }
     function updateBar() {
-      const total = NN + bonusList.length; f0.style.width = (sc[1] / total * 100).toFixed(1) + '%'; f1.style.width = (sc[2] / total * 100).toFixed(1) + '%';
-      t0.textContent = `${names[0]} ${sc[1]}`; t1.textContent = `${sc[2]} ${names[1]}`; barDirty = false;
+      const total = NN + bonusList.length;
+      for (let i = 0; i < NP; i++) fill[i].style.width = (sc[i + 1] / total * 100).toFixed(1) + '%';
+      if (NP === 2) { txt[0].textContent = `${names[0]} ${sc[1]}`; txt[1].textContent = `${sc[2]} ${names[1]}`; }
+      else for (let i = 0; i < NP; i++) txt[i].textContent = `${names[i]} ${sc[i + 1]}`;
+      barDirty = false;
     }
 
     // ------------------------------------------------------------------ camera
@@ -441,25 +468,34 @@ export default {
     function cam(t) { camera.position.set(camBase.x + Math.sin(t * 0.3) * 0.5, camBase.y + Math.sin(t * 0.4) * 0.15, camBase.z); camera.lookAt(camLook); }
 
     // ------------------------------------------------------------------ einde
+    // winnaar-slot uit de scores (-1 = gelijkspel); bij 3 spelers beslist na een gedeelde kop het aantal tegels
+    const topTied = () => { const S2 = sc.slice(1), m = Math.max(...S2); return S2.filter((v) => v === m).length > 1; };
+    function pickWinner() {
+      const S2 = sc.slice(1), m = Math.max(...S2); let cand = S2.map((v, i) => (v === m ? i : -1)).filter((i) => i >= 0);
+      if (cand.length > 1 && NP === 3) { const mt = Math.max(...cand.map((i) => cnt[i + 1])); cand = cand.filter((i) => cnt[i + 1] === mt); }
+      return cand.length === 1 ? cand[0] : -1;
+    }
     function finishGame() {
       if (done) return; done = true;
       recount(); updateBar();
-      const a = sc[1], b = sc[2]; winnerIdx = a > b ? 0 : b > a ? 1 : -1;
+      const S2 = sc.slice(1); winnerIdx = pickWinner();
       pl.forEach((p) => { p.dashT = 0; });
-      const w = winnerIdx;
-      const diff = Math.abs(a - b);
+      const w = winnerIdx, order = S2.map((v, i) => i).sort((x, y) => S2[y] - S2[x] || cnt[y + 1] - cnt[x + 1]);
+      const last = order[NP - 1], second = order[1];
+      const diff = w < 0 ? 0 : S2[w] - S2[second];
       let line;
       if (w < 0) line = 'Precies gelijk! Zelfs de verf kan er niet tussen.';
       else {
-        const win = names[w], lose = names[1 - w];
-        if (diff <= 4) line = pick([`Fotofinish! ${win} wint met maar ${diff} puntje${diff === 1 ? '' : 's'} voorsprong.`, `Wat een spanning! ${lose} miste het net.`]);
-        else if (diff >= 45) line = pick([`${lose} is helemaal ondergesneeuwd in ${win}'s verf!`, `Een verfbad voor ${lose}. ${win} is de Meester-Schilder!`]);
+        const win = names[w], lose = NP === 2 ? names[1 - w] : names[last];
+        if (diff <= 4) line = pick([`Fotofinish! ${win} wint met maar ${diff} puntje${diff === 1 ? '' : 's'} voorsprong.`, `Wat een spanning! ${NP === 2 ? lose : names[second]} miste het net.`]);
+        else if (diff >= 45 || (NP === 3 && S2[w] - S2[last] >= 70)) line = pick([`${lose} is helemaal ondergesneeuwd in ${win}'s verf!`, `Een verfbad voor ${lose}. ${win} is de Meester-Schilder!`]);
         else line = pick([`${win} is de beste schilder van het kasteel!`, `${lose} moet nog even oefenen met de kwast.`, `Mooi werk, ${win}! ${lose} krijgt een emmertje troost.`]);
       }
-      const extra = [];
-      if (stats.wiped[0] + stats.wiped[1] >= 10) extra.push(`Het Schoonmaak-Slijm poetste ${stats.wiped[0]} tegels van ${names[0]} en ${stats.wiped[1]} van ${names[1]} weg.`);
-      if (stats.bucket[0] + stats.bucket[1] > 0) extra.push(`Gouden emmers: ${names[0]} ${stats.bucket[0]}, ${names[1]} ${stats.bucket[1]}.`);
-      ctx.finishPvp({ winner: w < 0 ? null : w, score: [a, b], delay: 1300, summary: `<b>${a} – ${b}</b> punten (${cnt[1]} tegels tegen ${cnt[2]} tegels)<br>${line}${extra.length ? '<br><small>' + extra.join(' ') + '</small>' : ''}` });
+      const extra = [], sum = (a) => a.reduce((x, y) => x + y, 0);
+      if (sum(stats.wiped) >= 10) extra.push(NP === 2 ? `Het Schoonmaak-Slijm poetste ${stats.wiped[0]} tegels van ${names[0]} en ${stats.wiped[1]} van ${names[1]} weg.` : `Het Schoonmaak-Slijm poetste ${sum(stats.wiped)} tegels weg (${names.map((nm, i) => `${nm} ${stats.wiped[i]}`).join(', ')}).`);
+      if (sum(stats.bucket) > 0) extra.push(`Gouden emmers: ${names.map((nm, i) => `${nm} ${stats.bucket[i]}`).join(', ')}.`);
+      const head = NP === 2 ? `<b>${S2[0]} – ${S2[1]}</b> punten (${cnt[1]} tegels tegen ${cnt[2]} tegels)` : `<b>${S2.join(' – ')}</b> punten (${cnt.slice(1).join(' / ')} tegels)`;
+      ctx.finishPvp({ winner: w < 0 ? null : w, score: S2, delay: 1300, summary: `${head}<br>${line}${extra.length ? '<br><small>' + extra.join(' ') + '</small>' : ''}` });
       hud.setTimer(0);
       pl.forEach((p, i) => { p.c.pose = w < 0 ? 'idle' : w === i ? 'cheer' : 'sad'; });
     }
@@ -480,7 +516,7 @@ export default {
       const timeLeft = TIME - T;
       if (!over && timeLeft <= 0) {
         recount();
-        if (sc[1] === sc[2]) { over = true; overT = OVERTIME; hud.showBig('VERLENGING!', 1300, '#ff7a5a'); hud.setTimer(overT, 99); audio.sfx('bell', { vol: 0.6 }); }
+        if (topTied()) { over = true; overT = OVERTIME; hud.showBig('VERLENGING!', 1300, '#ff7a5a'); hud.setTimer(overT, 99); audio.sfx('bell', { vol: 0.6 }); }
         else { finishGame(); return; }
       }
       if (over) { overT -= dt; hud.setTimer(Math.max(0, overT), 99); if (overT <= 0) { finishGame(); return; } } else hud.setTimer(timeLeft, 10);
@@ -493,7 +529,7 @@ export default {
       const n = Math.ceil(dt / 0.02), h = dt / n;
       for (let s = 0; s < n; s++) {
         for (const p of pl) playerStep(p, h, active);
-        collide(pl[0], pl[1]);
+        for (let a = 0; a < NP; a++) for (let b = a + 1; b < NP; b++) collide(pl[a], pl[b]);
       }
       updateSponge(dt); updateBucket(dt);
       bonusT -= dt; if (bonusT <= 0) { addBonus(); bonusT = rand(4.5, 6.5); }
@@ -505,11 +541,11 @@ export default {
       resultT += dt; ensureBar();
       for (const p of pl) { p.vx = damp(p.vx, 0, 6, dt); p.vz = damp(p.vz, 0, 6, dt); p.x += p.vx * dt; p.z += p.vz * dt; }
       updateSponge(dt * 0.4); visuals(dt, T + introT + resultT, true); worldUpdate(dt, T + introT + resultT); cam(T + introT + resultT);
-      if (winnerIdx >= 0 && Math.random() < dt * 5) { const w = pl[winnerIdx]; fx.particles.burst(w.x + rand(-2, 2), 3 + rand(0, 2), w.z + rand(-2, 2), { count: 18, speed: 5, up: 1, life: 1.1, size: 0.4, colors: [PLAYER_COLORS[winnerIdx], 0xffe14a, 0xffffff, 0xff6fa5], gravity: 4 }); }
+      if (winnerIdx >= 0 && Math.random() < dt * 5) { const w = pl[winnerIdx]; fx.particles.burst(w.x + rand(-2, 2), 3 + rand(0, 2), w.z + rand(-2, 2), { count: 18, speed: 5, up: 1, life: 1.1, size: 0.4, colors: [pcol(winnerIdx), 0xffe14a, 0xffffff, 0xff6fa5], gravity: 4 }); }
     }
     function introUpdate(dt) {
       introT += dt; ensureBar();
-      pl.forEach((p, i) => { p.c.pose = Math.sin(introT * 2 + i) > 0.6 ? 'wave' : 'idle'; p.face = lerp(p.face, i ? -2.6 : 2.6, 0.1); });
+      pl.forEach((p, i) => { p.c.pose = Math.sin(introT * 2 + i) > 0.6 ? 'wave' : 'idle'; p.face = lerp(p.face, NP === 2 ? (i ? -2.6 : 2.6) : faceTo(i), 0.1); });
       visuals(dt, introT, true); worldUpdate(dt, introT); cam(introT);
     }
 
@@ -537,6 +573,7 @@ export default {
       dbg: {
         state: () => ({ T, done, over, sc: sc.slice(1), cnt: cnt.slice(), winnerIdx, finalMode, sponge: { on: sp.on, x: sp.x, z: sp.z, vx: sp.vx, vz: sp.vz }, bucket: { on: bk.on, n: bk.n }, bonus: bonusList.length, stats, p: pl.map((p) => ({ x: p.x, z: p.z, vx: p.vx, vz: p.vz, charges: p.charges, dashCd: p.dashCd, dashT: p.dashT, stun: p.stun, slow: p.slow, sz: p.sz })) }),
         owner, pl, sp, bk,
+        noBonus: () => { bonus.fill(0); bonusList.length = 0; bonusT = 1e9; dirtyScore = true; },   // test: geen regenboogtegels meer
         tp: (i, x, z) => { pl[i].x = x; pl[i].z = z; },
         setSponge: (x, z, vx, vz) => { sp.on = true; sp.spawnT = 0; sp.x = x; sp.z = z; sp.vx = vx; sp.vz = vz; },
       },

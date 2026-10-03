@@ -1,4 +1,5 @@
 // Gebruik: node tools/test_tag.mjs [scenario...]   scenario: bots | twists | idle | timeout | rules | shots
+//   Achtervoegsel 3 (bots3, twists3, idle3, timeout3, rules3, shots3) = 3 spelers (?players=3, Juul = slot 2, vrij voor allen met uitschakeling); all3 = alle 3-speler-scenario's.
 //   TW=<twist-id> kiest een twist (anders "none"). Bots spelen versneld (zonder renderen) hele potjes; rapporteert ontploffingen, winnaar, finishPvp-aantal, fouten.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
@@ -13,29 +14,30 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
-const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
+let scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
+if (scen.includes('all3')) scen = ['bots3', 'idle3', 'timeout3', 'rules3', 'twists3'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 let failed = 0; const check = (ok, msg) => { console.log(`${ok ? 'OK  ' : 'FAIL'} ${msg}`); if (!ok) failed++; };
 
-async function open(twist, size = [1100, 650]) {
+async function open(twist, np = 2, size = [1100, 650]) {
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: size[0], height: size[1] } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=tag&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=tag&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${np === 3 ? '&players=3' : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode && window.__app.mode.instance, null, { timeout: 60000 });
   await page.waitForTimeout(800);
-  await page.evaluate(async () => {
+  await page.evaluate(async (np) => {
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (let i = 0; i < np; i++) inp.virtual[i].a = true; inp.update(); mode.update(0.016);
+    for (let i = 0; i < np; i++) inp.virtual[i].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
     window.__fin = []; const orig = mode.ctx.finishPvp; mode.ctx.finishPvp = (r) => { window.__fin.push(r); return orig(r); };
-  });
+  }, np);
   return { browser, page, errors };
 }
 
@@ -44,15 +46,18 @@ async function installBots(page, cfg) {
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input, d = inst.dbg;
     let s = 777; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    const B = [0, 1].map(() => ({ dir: [1, 0], keep: 0, a: 0 }));
+    const NPL = cfg.length, B = cfg.map(() => ({ dir: [1, 0], keep: 0, a: 0 }));
     window.__cfg = cfg;
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = d.state(); if (stop && stop(st)) { m.paused = true; return true; }
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i], b = B[i], c = window.__cfg[i], me = st.pl[i], op = st.pl[1 - i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
-          if (c.style === 'idle' || st.rstate !== 'play') continue;
+        for (let i = 0; i < NPL; i++) {
+          const v = inp.virtual[i], b = B[i], c = window.__cfg[i], me = st.pl[i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
+          if (c.style === 'idle' || st.rstate !== 'play' || (st.out && st.out[i])) continue;
+          // tegenstander: wie de bom heeft jaagt op de dichtstbijzijnde, de rest vlucht voor de bomhouder (bij 2 spelers: altijd de ander)
+          const oth = st.pl.map((q, j) => j).filter((j) => j !== i && !(st.out && st.out[j])).sort((x, y) => Math.hypot(st.pl[x].x - me.x, st.pl[x].z - me.z) - Math.hypot(st.pl[y].x - me.x, st.pl[y].z - me.z));
+          const op = st.pl[me.bomb || st.holder < 0 || st.holder === i || NPL === 2 ? oth[0] : st.holder];
           const hold = me.bomb, ox = op.x - me.x, oz = op.z - me.z, od = Math.hypot(ox, oz) || 1;
           b.keep -= dt;
           if (b.keep <= 0) {
@@ -95,16 +100,23 @@ async function playMatch(page, maxFrames = 60 * 300) {
   }, maxFrames);
 }
 
-for (const name of scen) {
+for (const raw of scen) {
+  const np = raw.endsWith('3') ? 3 : 2, name = raw.replace(/3$/, '');
   if (['bots', 'twists', 'idle', 'timeout'].includes(name)) {
     const P = (skill, style = 'play') => ({ skill, style });
-    const list = name === 'twists' ? TWISTS.map((t) => [t, [P(0.9), P(0.7)]])
-      : name === 'idle' ? [['none', [P(0, 'idle'), P(0, 'idle')]], ['none', [P(1), P(0, 'idle')]], ['none', [P(0, 'idle'), P(1)]]]
-        : name === 'timeout' ? [['none', [P(1), P(1)]]]
-          : [[process.env.TW || 'none', [P(0.95), P(0.5)]], [process.env.TW || 'none', [P(0.5), P(0.95)]], [process.env.TW || 'none', [P(0.85), P(0.85)]], [process.env.TW || 'none', [P(0.7), P(0.9)]]];
-    const wins = [0, 0];
+    const TWN = process.env.TW || 'none';
+    const list = np === 3
+      ? (name === 'twists' ? TWISTS.map((t) => [t, [P(0.9), P(0.7), P(0.8)]])
+        : name === 'idle' ? [['none', [P(0, 'idle'), P(0, 'idle'), P(0, 'idle')]], ['none', [P(1), P(0, 'idle'), P(0, 'idle')]], ['none', [P(0, 'idle'), P(0, 'idle'), P(1)]]]
+          : name === 'timeout' ? [['none', [P(1), P(1), P(1)]]]
+            : [[TWN, [P(0.95), P(0.5), P(0.5)]], [TWN, [P(0.5), P(0.95), P(0.5)]], [TWN, [P(0.5), P(0.5), P(0.95)]], [TWN, [P(0.8), P(0.8), P(0.8)]], [TWN, [P(0.7), P(0.9), P(0.8)]], [TWN, [P(0.6), P(0.7), P(0.95)]]])
+      : name === 'twists' ? TWISTS.map((t) => [t, [P(0.9), P(0.7)]])
+        : name === 'idle' ? [['none', [P(0, 'idle'), P(0, 'idle')]], ['none', [P(1), P(0, 'idle')]], ['none', [P(0, 'idle'), P(1)]]]
+          : name === 'timeout' ? [['none', [P(1), P(1)]]]
+            : [[TWN, [P(0.95), P(0.5)]], [TWN, [P(0.5), P(0.95)]], [TWN, [P(0.85), P(0.85)]], [TWN, [P(0.7), P(0.9)]]];
+    const wins = [0, 0, 0];
     for (const [tw, cfg] of list) {
-      const { browser, page, errors } = await open(tw);
+      const { browser, page, errors } = await open(tw, np);
       await installBots(page, cfg);
       if (name === 'timeout') await page.evaluate(() => { window.__app.mode.instance.dbg.setMatchT(4); });
       const res = await playMatch(page);
@@ -114,14 +126,46 @@ for (const name of scen) {
       console.log(`end T=${st.T.toFixed(1)} lives=${st.lives} stats=${JSON.stringify(st.stats)} pl=${st.pl.map((p) => `tags${p.tags}/peels${p.peels}/slips${p.slips}/dives${p.dives}/it${p.items}/boom${p.booms}`)}`);
       console.log(`RESULT winner=${res.result?.winner} score=${res.result?.scoreArr} fin=${res.fin?.length} ::`, (res.result?.summary || '').replace(/<[^>]+>/g, ' '));
       check(res.fin.length === 1 && res.finished, `finishPvp precies één keer (${res.fin.length}) twist=${res.twist}`);
-      check(res.result && (res.result.winner === 0 || res.result.winner === 1), 'er is een winnaar');
+      check(res.result && res.result.winner != null && res.result.winner >= 0 && res.result.winner < np || (np === 3 && res.result && res.result.winner == null), 'er is een winnaar' + (np === 3 ? ' (of bij 3 spelers een gelijkspel)' : ''));
       check(st.T < 130, `potje niet te lang (${st.T.toFixed(0)} s)`);
       check(!errors.length, errors.length ? 'console-errors: ' + errors.slice(0, 5).join(' | ') : 'geen console-errors');
       if (name === 'timeout') check(res.log.some((l) => l.includes('SD')), 'noodbom (sudden death) werd gebruikt');
       if (res.result && res.result.winner != null) wins[res.result.winner]++;
+      if (np === 3 && name === 'bots') console.log('   uitgeschakeld:', JSON.stringify(res.st.out), 'levens', JSON.stringify(res.st.lives));
       await browser.close();
     }
-    if (name === 'bots') check(wins[0] > 0 && wins[1] > 0, `beide spelers kunnen winnen (${wins})`);
+    if (name === 'bots') check(np === 3 ? wins.every((x) => x > 0) : wins[0] > 0 && wins[1] > 0, `alle spelers kunnen winnen (${wins.slice(0, np)})`);
+    continue;
+  }
+  if (name === 'rules' && np === 3) {
+    const allErr = [], out = {};
+    const run = async (fn) => { const { browser, page, errors } = await open('none', 3); await installBots(page, [{ skill: 1, style: 'idle' }, { skill: 1, style: 'idle' }, { skill: 1, style: 'idle' }]); const r = await page.evaluate(fn); allErr.push(...errors); await browser.close(); return r; };
+    const step = `const m = window.__app.mode, d = m.instance.dbg, inp = window.__app.input; const step = (n) => { m.paused = false; for (let k = 0; k < n; k++) { inp.update(); m.update(1 / 60); } m.paused = true; }; const noChick = () => d.chickens.forEach((c) => { c.cd = 999; });`;
+    const mk = (body) => new Function(`${step} ${body}`);
+    // tikken: dichtstbijzijnde van de twee anderen krijgt de bom, de derde blijft buiten schot
+    out.tag = await run(mk(`step(120); noChick(); d.setFuse(60); d.giveBomb(0); d.place(0, -9, 5); d.place(1, -7.6, 5); d.place(2, 9, -5); step(3); const s = d.state(); return { holder: s.holder, passes: s.stats.passes };`));
+    // uitschakeling: een ontploffing met 1 leven = uit; de andere twee spelen door
+    out.elim = await run(mk(`step(120); noChick(); d.setLives(1, 3, 3); d.giveBomb(0); d.setFuse(0.5); step(60 * 4.2); const s = d.state(); return { out: s.out, lives: s.lives, rstate: s.rstate, finished: s.finished, holder: s.holder };`));
+    // tot de laatste: twee uitgeschakeld -> derde wint, finishPvp 1x
+    out.last = await run(mk(`step(120); noChick(); d.setLives(1, 1, 3); d.giveBomb(0); d.setFuse(0.5); step(60 * 4.2); noChick(); const mid = d.state(); const h = mid.out[1] ? 2 : 1; d.giveBomb(1); d.setFuse(0.5); step(60 * 9); const s = d.state(); return { mid: mid.out, out: s.out, finished: s.finished, w: m.result && m.result.winner, fin: window.__fin.length, score: m.result && m.result.scoreArr };`));
+    // noodbom: levens beslissen (slot 2 heeft de meeste), de ontploffer is slot 1
+    out.sd = await run(mk(`step(120); noChick(); d.setLives(2, 3, 3); d.setMatchT(0.05); step(30); const sd = d.state().sd; d.giveBomb(1); d.setFuse(0.4); step(60 * 5); return { sd, finished: m.finished, w: m.result && m.result.winner, fin: window.__fin.length, score: m.result && m.result.scoreArr };`));
+    // noodbom met 3x gelijk -> geen tikken -> gelijkspel
+    out.sdTie = await run(mk(`step(120); noChick(); d.setMatchT(0.05); step(30); d.giveBomb(1); d.setFuse(0.4); step(60 * 5); return { finished: m.finished, w: m.result && m.result.winner, fin: window.__fin.length };`));
+    // kip: steelt van de bomhouder (slot 1) en brengt de bom naar de leider (slot 0 heeft de meeste levens), niet naar slot 2
+    out.chick = await run(mk(`step(120); d.setFuse(60); d.setLives(3, 2, 1); d.giveBomb(1); d.place(1, -12, 6.2); d.place(0, -7.6, 6.2); d.place(2, 8, -6); d.chickens[1].cd = 999; d.stealNow(0); const to = d.chickens[0].to; step(60 * 2); const s = d.state(); return { to, holder: s.holder, chick: s.stats.chicken };`));
+    out.deur = await run(mk(`step(120); const i = m.instance; i.onDeurman([true, false, true]); step(30); return { ok: true, state: d.state().rstate };`));
+    out.gifts = await run(mk(`step(120); noChick(); d.setFuse(60); d.giveBomb(2); d.place(0, -8, 6); d.place(1, 8, -6); d.place(2, 0, 3); d.giveGift(2, 'swap'); step(5); const s = d.state(); return { holder: s.holder, passes: s.stats.passes };`));
+    console.log(JSON.stringify(out));
+    check(out.tag.holder === 1 && out.tag.passes === 1, 'tikken: de dichtstbijzijnde krijgt de bom');
+    check(out.elim.out[0] && !out.elim.out[1] && !out.elim.out[2] && !out.elim.finished && out.elim.lives[0] === 0 && out.elim.holder !== 0, 'laatste leven kwijt = uit, de andere twee spelen door');
+    check(out.last.finished && out.last.fin === 1 && out.last.w === 2, `laatste speler wint (w=${out.last.w}, fin=${out.last.fin})`);
+    check(out.sd.sd && out.sd.finished && out.sd.fin === 1 && out.sd.w === 2, `noodbom: meeste levens wint (w=${out.sd.w})`);
+    check(out.sdTie.finished && out.sdTie.fin === 1 && out.sdTie.w == null, `noodbom bij gelijke stand: gelijkspel (w=${out.sdTie.w})`);
+    check(out.chick.to === 0 && out.chick.holder === 0 && out.chick.chick === 1, `kip brengt de bom naar de leider (to=${out.chick.to}, holder=${out.chick.holder})`);
+    check(out.deur.ok, 'onDeurman met 3 booleans');
+    check(out.gifts.holder !== 2 && out.gifts.passes === 1, 'bommen-wissel geeft de bom door');
+    check(!allErr.length, allErr.length ? allErr.join('|') : 'geen console-errors');
     continue;
   }
   if (name === 'rules') {
@@ -152,9 +196,9 @@ for (const name of scen) {
     continue;
   }
   if (name === 'shots') {
-    const { browser, page, errors } = await open(process.env.TW || 'none');
-    await installBots(page, [{ skill: 0.9, style: 'play' }, { skill: 0.8, style: 'play' }]);
-    const snap = async (tag) => { await page.waitForTimeout(800); await page.screenshot({ path: `/tmp/tag_${tag}.png` }); console.log('shot', tag, JSON.stringify(await page.evaluate(() => { const s = window.__app.mode.instance.dbg.state(); return { st: s.rstate, fuse: s.fuse, lives: s.lives, holder: s.holder, gifts: s.gifts, ufo: s.ufo }; }))); };
+    const { browser, page, errors } = await open(process.env.TW || 'none', np);
+    await installBots(page, [{ skill: 0.9, style: 'play' }, { skill: 0.8, style: 'play' }, { skill: 0.7, style: 'play' }].slice(0, np));
+    const snap = async (tag) => { await page.waitForTimeout(800); await page.screenshot({ path: `/tmp/tag${np === 3 ? '3' : ''}_${tag}.png` }); console.log('shot', tag, JSON.stringify(await page.evaluate(() => { const s = window.__app.mode.instance.dbg.state(); return { st: s.rstate, fuse: s.fuse, lives: s.lives, holder: s.holder, gifts: s.gifts, ufo: s.ufo }; }))); };
     const go = (cond, max = 60 * 120) => page.evaluate(([c, mx]) => window.__bot(mx, new Function('s', 'return ' + c)), [cond, max]);
     const dbg = (code) => page.evaluate(new Function(`const d = window.__app.mode.instance.dbg; ${code}`));
     await page.evaluate(() => window.__bot(60 * 3)); await snap('play');

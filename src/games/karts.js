@@ -5,7 +5,7 @@ import * as P from '../engine/props.js';
 import { buildCourse, locate, pointAt, HALF_W, WALL_M } from './karts_track.js';
 import { buildWorld, makeKartModel, questionTex, emojiTex } from './karts_world.js';
 
-// Kasteel-Kartrace — Mario Kart-lite voor 2 op één scherm. Gas is automatisch.
+// Kasteel-Kartrace — Mario Kart-lite voor 2 (of 3, met Juul) op één scherm. Gas is automatisch.
 //   links/rechts = sturen · A = voorwerp gebruiken · B = remmen (rechtdoor) of driften (met sturen, loslaten = turbo)
 
 const LAPS = 3;
@@ -32,9 +32,10 @@ export default {
   giver: 'Koning Klopper',
   icon: '🏎️',
   mode: 'pvp',
+  players: [2, 3],
   time: 75,
   music: 'game_fast',
-  blurb: 'Race 3 rondes om het <b>kasteel</b>! Gas geven gaat vanzelf. Pak <b>vraagtekenblokken</b> voor bananen, vuurballen, turbo\'s en een <b>ketchup-kanon</b>. Pas op voor de <b>draak</b> die vuur laat vallen en voor de <b>koeien</b> op de weg!',
+  blurb: 'Race 3 rondes om het <b>kasteel</b>! Gas geven gaat vanzelf. Pak <b>vraagtekenblokken</b> voor bananen, vuurballen, turbo\'s en een <b>ketchup-kanon</b>. Pas op voor de <b>draak</b> die vuur laat vallen en voor de <b>koeien</b> op de weg! Met drie spelers mikt alles op de koploper: wie als eerste over de finish komt, wint.',
   controls: ['{move} sturen', '{a} voorwerp gebruiken', '{b} remmen · of driften (met sturen, loslaten = turbo)'],
   tip: 'Wie ver achterligt krijgt sneller een <b>gouden paddenstoel</b> en een inhaalboost. Drift door de bochten voor mini-turbo\'s!',
 
@@ -53,7 +54,7 @@ export default {
     const iconSprites = [];
     const karts = players.map((pp, i) => {
       const model = makeKartModel(PLAYER_COLORS[i]); scene.add(model.root);
-      const ch = makeBrother(i); ch.pose = 'sit'; const hs = 0.62 * (i ? 1.19 : 1);
+      const ch = makeBrother(i); ch.pose = 'sit'; const hs = 0.62 * [1, 1.19, 1.06][pp.id];   // bestuurder even groot, ook al hebben Wes/Jor/Juul een andere schaal
       ch.group.scale.setScalar(hs); ch.group.position.set(0, 0.72, -0.28); model.tilt.add(ch.group);
       const size = ctx.pvp.size(i), spd = ctx.pvp.speed(i);
       model.root.scale.setScalar(size);
@@ -82,9 +83,12 @@ export default {
       });
     }
 
+    // startgrid: 2 karts gespiegeld naast elkaar; 3 karts op één rij (3 banen), de volgorde van de banen wordt geloot (eerlijk)
+    const lanes = karts.length === 2 ? [-1.75, 1.75] : (() => { const l = [-2.45, 0, 2.45]; for (let q = 2; q > 0; q--) { const j = Math.floor(ctx.rng() * (q + 1)); [l[q], l[j]] = [l[j], l[q]]; } return l; })();
+    const NK = karts.length;
     const placeStart = () => {
       karts.forEach((k, i) => {
-        const p = pointAt(C, N - 5, (i ? 1 : -1) * 1.75);
+        const p = pointAt(C, N - 5, lanes[i]);
         k.x = p.x; k.z = p.z; k.th = Math.atan2(p.tx, p.tz); k.vx = k.vz = 0; k.prog = -5; k.loc.idx = N - 5; k.fwd = 0;
         locate(C, k.x, k.z, N - 5, k.loc);
       });
@@ -97,6 +101,9 @@ export default {
     const timeLeftFn = () => Math.max(0, TIME_LIMIT - T);
     const tmp = { idx: 0, lat: 0, px: 0, pz: 0, tx: 1, tz: 0, dist: 0 };
     const textUp = (t, x, y, z, c = '#ffe14a', s = 1) => fx.texts.add(t, x, y, z, c, s);
+    // koploper (hoogste voortgang; bij gelijk de laagste index) en rang van een kart (1 = voorop)
+    const leader = (excl = null) => { let b = null; for (const q of karts) if (q !== excl && (!b || q.prog > b.prog)) b = q; return b; };
+    const rankOf = (k) => 1 + karts.filter((q) => q.prog > k.prog || (q.prog === k.prog && q.i < k.i)).length;
 
     // ---------------- vraagtekenblokken ----------------
     const boxes = [];
@@ -149,7 +156,7 @@ export default {
       return true;
     }
     function giveItem(k, forced) {
-      const other = karts[1 - k.i], gap = other.prog - k.prog;       // >0: k ligt achter
+      const other = leader(k), gap = other.prog - k.prog;       // >0: k ligt achter (ten opzichte van de beste van de rest)
       let w;
       if (gap > 14) w = { gold: 30, fire: 26, shroom: 24, ketchup: 12, banana: 8 };
       else if (gap < -14) w = { banana: 42, shroom: 24, ketchup: 16, fire: 18 };
@@ -180,6 +187,10 @@ export default {
       const a = cw.a;
       if (cw.state === 'wait') {
         a.group.visible = false; cw.warn.visible = false; cw.t -= dt;
+        if (NK > 2 && cw.t < 2.0 && cw.t + dt >= 2.0 && T > 4) {   // 3 karts: de koe steekt over vlak voor de koploper (niet op de brug/schans)
+          const ld = leader(), at = Math.round(ld.loc.idx + 24 + rand(0, 10) + N) % N, bz = C.zones.bridge, rp = C.zones.ramp;
+          if (!(at > bz[0] - 6 && at < bz[1] + 6) && !(at > rp[0] - 6 && at < rp[1] + 6)) cw.idx = at;
+        }
         if (cw.t < 1.8 && T > 4) { cw.warn.visible = Math.sin(T * 14) > -0.3; const p = pointAt(C, cw.idx, -cw.side * COW_L); cw.warn.position.set(p.x, 3.4, p.z); }
         if (cw.t <= 0 && T > 4) { cw.state = 'cross'; cw.lat = -cw.side * COW_L; a.group.visible = true; cw.warn.visible = false; audio.sfx('boing', { vol: 0.4, rate: 0.6 }); }
       } else if (cw.state === 'cross') {
@@ -224,7 +235,7 @@ export default {
       if (Math.random() < dt * 5) fx.particles.emit(x, y + 1.5, z, rand(-1, 1), 1, rand(-1, 1), { life: 0.8, size: 0.6, color: 0xff8a2a, gravity: -1 });
       if (D.bombs < 2 && D.u > D.nextBomb && Math.abs(x) < 45) {
         D.bombs++; D.nextBomb += 0.28;
-        const victim = Math.random() < 0.65 ? (karts[0].prog > karts[1].prog ? karts[0] : karts[1]) : pick(karts);
+        const victim = Math.random() < 0.65 ? leader() : pick(karts);
         const tp = pointAt(C, victim.loc.idx + 12 + rand(0, 8), rand(-2.2, 2.2));
         const mb = new THREE.Mesh(new THREE.SphereGeometry(0.9, 10, 8), fireMat); const core = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 6), fireCore); mb.add(core); scene.add(mb);
         const ring = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.55, 28), new THREE.MeshBasicMaterial({ color: 0xff4a1a, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(tp.x, 0.2, tp.z); scene.add(ring);
@@ -370,8 +381,13 @@ export default {
       // projectielen
       for (let n = shots.length - 1; n >= 0; n--) {
         const s = shots[n]; s.age += dt; s.life -= dt;
-        const tgt = karts[1 - s.owner];
-        // lichte zelfzoeker
+        // lichte zelfzoeker: mikt op de koploper onder de anderen die in het zoekbereik liggen (bij 2 karts: gewoon de ander)
+        const own = karts[s.owner]; let tgt = NK === 2 ? karts[1 - s.owner] : null;
+        if (NK > 2) {
+          const sp0 = Math.hypot(s.vx, s.vz), cur0 = Math.atan2(s.vx, s.vz); let best = null;
+          for (const q of karts) { if (q === own || q.done) continue; const ad0 = angDiff(cur0, Math.atan2(q.x - s.x, q.z - s.z)); if (Math.abs(ad0) < 0.6 && Math.hypot(q.x - s.x, q.z - s.z) < 28 && (!best || q.prog > best.prog)) best = q; }
+          tgt = best || leader(own); void sp0;
+        }
         if (s.age > 0.12) {
           const dx = tgt.x - s.x, dz = tgt.z - s.z, dl = Math.hypot(dx, dz) || 1, sp = Math.hypot(s.vx, s.vz), cur = Math.atan2(s.vx, s.vz), want = Math.atan2(dx, dz), ad = angDiff(cur, want);
           if (Math.abs(ad) < 0.6 && dl < 28) { const na = cur + clamp(ad, -1, 1) * Math.min(1, dt * 3.2); s.vx = Math.sin(na) * sp; s.vz = Math.cos(na) * sp; }
@@ -417,9 +433,8 @@ export default {
       }
       dragonStep(dt); bombStep(dt);
       // rubber band + positie
-      const [a, b2] = karts;
       for (const k of karts) {
-        const o = karts[1 - k.i], gap = o.prog - k.prog;
+        const o = leader(k), gap = o.prog - k.prog;
         k.rubber = gap > 15 ? 1 + Math.min(0.2, (gap - 15) * 0.011) : gap < -32 ? 0.965 : 1;
         k.invT = Math.max(0, k.invT - dt); k.blindT = Math.max(0, k.blindT - dt); k.driftCd = Math.max(0, k.driftCd - dt);
         if (k.spinT > 0) { k.spinT -= dt; if (k.spinT <= 0) k.ch.pose = 'sit'; }
@@ -440,12 +455,11 @@ export default {
       const hintNow = T < 4.5 ? 1 : T < 9 ? 2 : 0;
       if (hintNow !== hintState) { hintState = hintNow; hud.setHint(hintNow === 1 ? `<b>Gas gaat vanzelf</b> · links/rechts sturen · <b>A</b> = voorwerp · <b>B</b> = rem / drift` : hintNow === 2 ? `Rij door de <b>vraagtekens</b> voor voorwerpen · drift met <b>B</b> + sturen, laat los voor een turbo` : null); }
       // HUD
-      const rank0 = a.prog >= b2.prog;
       for (const k of karts) {
-        const rk = (k.i === 0) === rank0 ? 1 : 2; const lapN = clamp(k.lap + 1, 1, LAPS);
+        const rk = rankOf(k); const lapN = clamp(k.lap + 1, 1, LAPS);
         hud.setPlayerInfo(k.i, `${rk}e plek · ronde ${lapN}/${LAPS}${k.item ? ' · ' + ITEMS[k.item].e + ' ' + ITEMS[k.item].n : k.rollT > 0 ? ' · 🎲' : ''}`);
       }
-      hud.setScore(`🏁 ${names[0]}: ${clamp(a.lap + 1, 1, LAPS)}/${LAPS}   –   ${names[1]}: ${clamp(b2.lap + 1, 1, LAPS)}/${LAPS}`);
+      hud.setScore(`🏁 ` + karts.map((k) => `${names[k.i]}: ${clamp(k.lap + 1, 1, LAPS)}/${LAPS}`).join('   –   '));
       hud.setTimer(timeLeftFn(), 15);
     }
 
@@ -507,10 +521,12 @@ export default {
     const camP = new THREE.Vector3(0, 30, 20), camT = new THREE.Vector3(), wantP = new THREE.Vector3(), wantT = new THREE.Vector3();
     let camInit = false, camCine = 0;
     function cam(dt) {
-      const a = karts[0], b = karts[1];
-      const cx = (a.x + b.x) / 2 + (a.vx + b.vx) * 0.08, cz = (a.z + b.z) / 2 + (a.vz + b.vz) * 0.08;
-      const d = Math.hypot(a.x - b.x, a.z - b.z), k = smoothstep(6, 40, d);
-      const H = lerp(23, 44, k), Dz = lerp(15, 26, k);
+      // camera omvat alle karts: midden van de groep (+ een beetje vooruitkijken) en afstand = grootste onderlinge afstand
+      let mx = 0, mz = 0, mvx = 0, mvz = 0, d = 0; for (const q of karts) { mx += q.x; mz += q.z; mvx += q.vx; mvz += q.vz; }
+      mx /= NK; mz /= NK; mvx /= NK; mvz /= NK;
+      for (let i = 0; i < NK; i++) for (let j = i + 1; j < NK; j++) d = Math.max(d, Math.hypot(karts[i].x - karts[j].x, karts[i].z - karts[j].z));
+      const cx = mx + mvx * 0.16, cz = mz + mvz * 0.16, k = smoothstep(6, NK > 2 ? 46 : 40, d);
+      const H = lerp(23, NK > 2 ? 50 : 44, k), Dz = lerp(15, NK > 2 ? 29 : 26, k);
       wantP.set(cx, H, cz + Dz); wantT.set(cx, 0, cz - 1.5);
       if (state === 'finish' && winnerK) {   // winnaarsfoto: dichtbij en schuin
         const w = winnerK; const u = smoothstep(0.2, 1.2, finishT);
@@ -525,13 +541,16 @@ export default {
     let photoEl = null, confettiT = 0;
     function finishRace(winner, why) {
       if (state !== 'race') return;
-      state = 'finish'; winnerK = winner; finishT = 0; const loser = karts[1 - winner.i];
+      state = 'finish'; winnerK = winner; finishT = 0;
+      const order = [winner, ...karts.filter((q) => q !== winner).sort((x, y) => y.prog - x.prog || x.i - y.i)];   // einduitslag: winnaar eerst, rest op voortgang
+      const loser = order[NK - 1];
       karts.forEach((k) => { k.done = true; k.drift.on = false; });
       hud.showBig('FINISH!', 1300, winner.css); audio.sfx('bell', { vol: 0.8 }); audio.sfx('win', { vol: 0.6 }); hud.setHint(null);
-      const sc = karts.map((k) => clamp(Math.floor(k.prog / N), 0, LAPS));
-      const lead = Math.round(Math.abs(winner.prog - loser.prog));
+      // 2 karts: score = gereden rondes; 3 karts: positiepunten (1e 10, 2e 6, 3e 3)
+      const sc = NK === 2 ? karts.map((k) => clamp(Math.floor(k.prog / N), 0, LAPS)) : karts.map((k) => [10, 6, 3][order.indexOf(k)]);
+      const lead = Math.round(Math.abs(winner.prog - order[1].prog));
       const jokes = [`${winner.name} snelt als een kasteelspook over de finish!`, `${loser.name} stond nog te praten met een koe...`, `Een volle ronde ketchup voor ${loser.name}? Volgende keer beter!`, `${winner.name} is de snelste van het kasteel!`];
-      ctx.finishPvp({ winner: winner.i, score: sc, delay: 4200, summary: `${why === 'tijd' ? 'Tijd is om: ' : ''}<b>${winner.name}</b> wint met ${lead} meter voorsprong!<br>${pick(jokes)}` });
+      ctx.finishPvp({ winner: winner.i, score: sc, delay: 4200, summary: `${why === 'tijd' ? 'Tijd is om: ' : ''}<b>${winner.name}</b> wint met ${lead} meter voorsprong!<br>${NK > 2 ? `Uitslag: ${order.map((k, n) => `${n + 1}e ${k.name} (${sc[k.i]} p)`).join(' · ')}<br>` : ''}${pick(jokes)}` });
     }
     function makePhoto() {
       try {
@@ -580,9 +599,9 @@ export default {
       T += dt;
       for (const k of karts) driftEvents(k, dt);
       const n = Math.max(1, Math.ceil(dt / 0.02)), h = dt / n;
-      for (let s = 0; s < n; s++) { for (const k of karts) stepKart(k, h, true); bump(karts[0], karts[1]); }
+      for (let s = 0; s < n; s++) { for (const k of karts) stepKart(k, h, true); for (let a = 0; a < NK; a++) for (let b = a + 1; b < NK; b++) bump(karts[a], karts[b]); }
       perFrame(dt);
-      if (T >= TIME_LIMIT && state === 'race') { const w = karts[0].prog >= karts[1].prog ? karts[0] : karts[1]; hud.toast('Tijd is om!', 1500); finishRace(w, 'tijd'); }
+      if (T >= TIME_LIMIT && state === 'race') { const w = leader(); hud.toast('Tijd is om!', 1500); finishRace(w, 'tijd'); }
       visuals(dt); world.update(T, dt); cam(dt);
     }
     let introT = 0;
@@ -596,7 +615,7 @@ export default {
       camera.position.set(lerp(Math.sin(ang) * 40, sp.x + 4, a * a * 0.6), lerp(34, 26, a), lerp(Math.cos(ang) * 30 + 8, sp.z + 20, a * a * 0.6));
       camera.lookAt(lerp(0, sp.x + 8, a * a * 0.6), 0, lerp(0, sp.z - 2, a * a * 0.6));
       camP.copy(camera.position); camT.set(lerp(0, sp.x + 8, a * a * 0.6), 0, lerp(0, sp.z - 2, a * a * 0.6)); camInit = true;
-      hud.setTimer(TIME_LIMIT); hud.setScore(`🏁 ${LAPS} rondes · ${names[0]} tegen ${names[1]}`);
+      hud.setTimer(TIME_LIMIT); hud.setScore(`🏁 ${LAPS} rondes · ${names.join(NK > 2 ? ' tegen ' : ' tegen ')}`);
     }
     function resultUpdate(dt) { postUpdate(dt); }
 
@@ -605,7 +624,7 @@ export default {
     return {
       update, introUpdate, resultUpdate,
       onStart() { started = true; hud.setHint(null); },
-      celebrate(w) { karts[w].ch.pose = 'cheer'; karts[1 - w].ch.pose = 'sad'; world.cheerCrowd(); },
+      celebrate(w) { karts.forEach((k) => { k.ch.pose = k.i === w ? 'cheer' : 'sad'; }); world.cheerCrowd(); },
       onDeurman(movers) { movers.forEach((m, i) => { if (m && !karts[i].done) { karts[i].freezeT = 1.6; karts[i].vx = karts[i].vz = 0; karts[i].fwd = 0; textUp('BEWOOOGD!', karts[i].x, 3.6, karts[i].z, '#ff5a5a', 1.2); audio.sfx('hurt'); } }); },
       onSwap() { karts.forEach((k) => { fx.particles.ring(k.x, 1, k.z, { count: 20, speed: 5, color: 0xffe14a, size: 0.4, life: 0.5 }); textUp('WISSEL!', k.x, 3.8, k.z, '#ffe14a', 1.2); }); },
       dispose() { try { photoEl && photoEl.remove(); } catch (e) { /* weg */ } },
