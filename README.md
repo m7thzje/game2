@@ -1,6 +1,6 @@
 # Wes & Jor: De Speelhal
 
-Een **3D-partygame voor twee spelers** op één toetsenbord (of online met 2 apparaten). Wes en Jor worden uitgenodigd voor de grote heropening van
+Een **3D-partygame voor twee of drie spelers** (Wes, Jor en optioneel Juul) op één toetsenbord (of online met 2-3 apparaten). Wes en Jor worden uitgenodigd voor de grote heropening van
 **de Speelhal** van Koning Klopper: een kasteel in de berg vol 1-tegen-1-spellen, een Mario Party-bordspel, een winkel voor hoedjes en... **de Deurman**,
 de lieve meme-mascotte die steeds uit een deur komt kijken. Bouw de Speelhal uit, word Speelhal-Legende en geef het Grote Slotfeest.
 

@@ -38,8 +38,10 @@ await page.screenshot({ path: '/tmp/arcade_hall.png' });
 let fails = 0;
 for (const id of ids) {
   cur = id; const t0 = Date.now();
+  const pl = await page.evaluate((id) => (window.__app.games[id] && window.__app.games[id].players) || [2], id);
+  if (PLAYERS === 2 && !pl.includes(2)) { console.log('SKIP', id.padEnd(10), `(alleen voor ${pl.join('/')} spelers)`); continue; }
   try {
-    const pair = PLAYERS === 3 ? PAIRS[ids.indexOf(id) % 3] : null;   // 3 spelers: wisselend paar
+    const only3 = !pl.includes(2); const pair = (PLAYERS === 3 && !only3) ? PAIRS[ids.indexOf(id) % 3] : null;   // 3 spelers: wisselend paar
     const before = await page.evaluate(async () => { const { S } = await import('/src/save.js'); return { plays: S.arcade.plays, wins: S.arcade.wins.slice() }; });
     await page.evaluate(([id, tw, pair]) => { window.__app.mode.leaving = true; return window.__app.playGame(id, { back: 'arcade', twist: tw || null, extra: pair ? { players: pair } : null }); }, [id, process.env.TWIST || null, pair]);
     await page.waitForFunction(() => window.__app.mode && window.__app.mode.ctx, null, { timeout: 60000 });
@@ -61,7 +63,7 @@ for (const id of ids) {
     await page.waitForTimeout(1200);
     const after = await page.evaluate(async (id) => { const { S } = await import('/src/save.js'); return { plays: S.arcade.plays, wins: S.arcade.wins.slice(), g: S.arcade.byGame[id] }; }, id);
     const exp = before.wins.slice(); exp[info.winnerId]++;
-    const ok = after.plays === before.plays + 1 && after.g && after.g.plays >= 1 && after.wins.join() === exp.join() && info.ids.join() === (pair || [0, 1]).join();   // winst op het juiste spelers-id
+    const ok = after.plays === before.plays + 1 && after.g && after.g.plays >= 1 && after.wins.join() === exp.join() && (only3 ? info.ids.slice().sort().join() === '0,1,2' : info.ids.join() === (pair || [0, 1]).join());   // winst op het juiste spelers-id
     console.log(`${ok ? 'OK  ' : 'FOUT'} ${id.padEnd(10)} twist=${info.tw} paar=${info.ids} winnaar-id=${info.winnerId} plays ${before.plays}->${after.plays} ${((Date.now() - t0) / 1000).toFixed(0)}s`);
     if (!ok) fails++;
   } catch (e) { fails++; console.log('FOUT', id, e.message.split('\n')[0]); try { await page.screenshot({ path: `/tmp/arcade_fail_${id}.png` }); } catch {} }

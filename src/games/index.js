@@ -10,6 +10,7 @@ export const ARCADE_HALLS = [
     'dodgeball', 'cakefight', 'tugwar', 'airhockey', 'quickdraw', 'memory',
     'paint', 'duckshoot', 'karts', 'climb', 'tanks', 'chairs',
     'ticktock', 'minecart', 'buttons', 'vines', 'screws', 'chop',
+    'koningsberg', 'driehoek', 'buzz3', 'sneeuwgevecht',   // 3-speler-spellen (alleen met Juul)
   ] },
   { id: 1, name: 'Neonkelder', ids: [
     'bomber', 'tron', 'hexagone', 'tag', 'brawl', 'spacewar', 'volley',

@@ -120,7 +120,7 @@ export class MinigameMode {
   }
   showIntro() {
     const d = this.def;
-    const modeTxt = { coop: 'Samenwerken', versus: 'Broer tegen broer', pvp: 'Duel: 1 tegen 1', puzzle: 'Puzzel' }[d.mode] || 'Samenwerken';
+    const modeTxt = { coop: 'Samenwerken', versus: 'Broer tegen broer', pvp: (d.players && d.players.length === 1 && d.players[0] === 3) ? 'Voor 3 spelers' : 'Duel: 1 tegen 1', puzzle: 'Puzzel' }[d.mode] || 'Samenwerken';
     const card = h('div', { class: 'card' },
       h('h2', {}, `${d.icon || ''} ${d.name}`),
       h('div', { class: 'giver' }, d.giver ? `Klus van ${d.giver}` : ''),

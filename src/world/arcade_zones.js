@@ -25,6 +25,8 @@ export const ZONES = [
       ids: ['karts', 'minecart', 'ticktock', 'climb', 'vines'], at: row(5, 4.5, -4.6), tableIds: [] },
     { id: 'gek', name: 'Gekke Hoek', icon: '🤪', sub: 'alles mag, niks klopt', color: 0xb05aff, color2: 0xffe14a, cx: 17.5, cz: 11, R: 8.6, rug: 'dots', prop: 'gek', style: 'upright',
       ids: ['paint', 'duckshoot', 'buttons', 'chop'], at: [{ x: -5.5, z: -2.8, yaw: 0.45 }, { x: -1.2, z: -5.2, yaw: 0.05 }, { x: 3.4, z: -4.2, yaw: -0.35 }, { x: 6.8, z: -0.4, yaw: -0.8 }], tableIds: [] },
+    { id: 'drie', name: 'Drietjes', icon: '3️⃣', sub: 'voor Wes, Jor én Juul', color: 0xff9a3c, color2: 0xffe14a, cx: 0, cz: 12.5, R: 6.2, rug: 'dots', prop: 'gek', style: 'upright',
+      ids: ['koningsberg', 'driehoek', 'buzz3', 'sneeuwgevecht'], at: arc(4, 4.4, 150, 90), tableIds: [] },
   ],
   [   // 1 Neonkelder
     { id: 'dans', name: 'Dansvloer', icon: '🪩', sub: 'swingen met je duim', color: 0xff2bd6, color2: 0x00e5ff, cx: -19, cz: -4, R: 8, rug: 'led', prop: 'dans', style: 'upright',
