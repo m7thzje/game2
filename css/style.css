@@ -145,3 +145,5 @@ kbd{display:inline-block;min-width:24px;padding:0 6px;text-align:center;border-r
 .shop-bottom{display:flex;justify-content:center;margin-top:6px}
 .shop-bottom .btn.small{width:auto;font-size:18px;padding:4px 22px}
 @media (max-width:760px){.shop-cols,.shop-caps{grid-template-columns:1fr}.shop-list{height:150px}}
+
+.pick.blank{visibility:hidden}

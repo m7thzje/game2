@@ -1,3 +1,4 @@
+import { S } from '../save.js';
 // Grappige "twists" voor duels (Mario Party-stijl). De harness kiest er per potje één en past de invoer aan.
 export const TWISTS = [
   { id: 'none', name: 'Geen twist', icon: '🎯', desc: 'Gewoon een eerlijk potje. Of toch...?', weight: 2 },
@@ -16,7 +17,8 @@ export const TWIST_BY_ID = Object.fromEntries(TWISTS.map((t) => [t.id, t]));
 
 export function pickTwist(allowed, rng = Math.random, force = null) {
   if (force && TWIST_BY_ID[force]) return TWIST_BY_ID[force];
-  const pool = TWISTS.filter((t) => !allowed || allowed.includes(t.id) || t.id === 'none');
+  const off = (S.arcade && S.arcade.offTwists) || [];   // twists die de spelers hebben uitgezet
+  const pool = TWISTS.filter((t) => t.id === 'none' || ((!allowed || allowed.includes(t.id)) && !off.includes(t.id)));
   const total = pool.reduce((a, t) => a + (t.weight || 1), 0);
   let r = rng() * total;
   for (const t of pool) { r -= t.weight || 1; if (r <= 0) return t; }

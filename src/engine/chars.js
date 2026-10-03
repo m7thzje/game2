@@ -10,7 +10,7 @@ import { applyCosmetics, lookSig } from './cosmetics.js';
 // ============================================================================
 const BAKED = {};
 // Kleureffecten voor de winkel: 'gold' = glimmend metaal, 'rainbow' = regenboog (vertexkleuren bij bake(), of een gradiënt-textuur)
-const fxMat = (c, fx, o = {}) => (fx === 'gold' ? mat(0xf2c230, { metalness: 0.7, roughness: 0.35, ...o }) : mat(fx === 'rainbow' ? 0xffffff : c, o));
+const fxMat = (c, fx, o = {}) => (fx === 'gold' ? mat(0xf2c230, { metalness: 0.6, roughness: 0.35, emissive: 0x6a4800, ...o }) : mat(fx === 'rainbow' ? 0xffffff : c, o));
 const fxTag = (m, fx) => { if (fx === 'rainbow') m.userData.fx = 'rainbow'; return m; };
 let _rbTex = null;
 function rainbowMat() {
@@ -158,7 +158,7 @@ export class Character {
         if (!c.isMesh || skip.has(c)) continue;
         const m = c.material; if (!m || Array.isArray(m) || m.isMeshBasicMaterial || m.transparent) continue;
         c.updateMatrix();
-        const key = (m.flatShading ? 'f' : 's') + ((m.metalness || 0) > 0.3 ? 'm' : '') + (m.side === THREE.DoubleSide ? 'd' : '');
+        const key = (m.flatShading ? 'f' : 's') + ((m.metalness || 0) > 0.3 ? 'm' : '') + (m.side === THREE.DoubleSide ? 'd' : '') + (m.emissive && m.emissive.getHex() ? 'g' : '');
         (buckets.get(key) || buckets.set(key, []).get(key)).push(c);
       }
       for (const [key, list] of buckets) {
@@ -168,7 +168,7 @@ export class Character {
         const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3); let o = 0;
         for (const [gg, color, rb] of geos) { const k = gg.attributes.position.count; const pa = gg.attributes.position; pos.set(pa.array, o * 3); nor.set(gg.attributes.normal.array, o * 3); for (let i = 0; i < k; i++) { let cc = color; if (rb) { const hh = (pa.getY(i) * 1.7 + pa.getX(i) * 1.1 + pa.getZ(i) * 0.6) % 1; cc = _tc.setHSL(hh < 0 ? hh + 1 : hh, 0.9, 0.55); } col[(o + i) * 3] = cc.r; col[(o + i) * 3 + 1] = cc.g; col[(o + i) * 3 + 2] = cc.b; } o += k; gg.dispose(); }
         const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); mg.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); mg.setAttribute('color', new THREE.BufferAttribute(col, 3));
-        let bm = BAKED[key]; if (!bm) bm = BAKED[key] = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: key.includes('f'), metalness: key.includes('m') ? 0.6 : 0, roughness: key.includes('m') ? 0.4 : 0.85, side: key.includes('d') ? THREE.DoubleSide : THREE.FrontSide });
+        let bm = BAKED[key]; if (!bm) bm = BAKED[key] = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: key.includes('f'), metalness: key.includes('m') ? 0.6 : 0, roughness: key.includes('m') ? 0.4 : 0.85, emissive: key.includes('g') ? 0x6a4800 : 0x000000, side: key.includes('d') ? THREE.DoubleSide : THREE.FrontSide });
         const merged = new THREE.Mesh(mg, bm); merged.castShadow = true; merged.receiveShadow = false; g.add(merged);
         list.forEach((c) => { g.remove(c); c.geometry.dispose(); });
       }
@@ -199,7 +199,7 @@ export class Character {
       case 'pirate': { const k = 0x1a1820; add(M(new THREE.SphereGeometry(1, 12, 8), k), 0, top - 0.04 * s, 0, 0, 0, 0).scale.set(hr * 1.75, 0.2 * s, hr * 1.15); add(M(new THREE.SphereGeometry(hr * 1.0, 12, 8, 0, TAU, 0, 1.4), k), 0, top - 0.1 * s, 0); add(M(new THREE.TorusGeometry(hr * 0.98, 0.025 * s, 4, 14), 0xe8c24a, { metalness: 0.6 }), 0, top - 0.02 * s, 0, Math.PI / 2); add(M(new THREE.SphereGeometry(0.06 * s, 8, 6), 0xf4f1e6), 0, top + 0.14 * s, hr * 0.78); for (const sd of [1, -1]) add(M(new THREE.BoxGeometry(0.13 * s, 0.025 * s, 0.02 * s), 0xf4f1e6), 0, top + 0.06 * s, hr * 0.85, 0, 0, sd * 0.5); break; }
       case 'tophat': add(M(new THREE.CylinderGeometry(hr * 1.3, hr * 1.3, 0.04 * s, 16), c), 0, top - 0.08 * s, 0); add(M(new THREE.CylinderGeometry(hr * 0.72, hr * 0.74, 0.5 * s, 14), c), 0, top + 0.17 * s, 0); add(M(new THREE.CylinderGeometry(hr * 0.76, hr * 0.76, 0.1 * s, 14), c2), 0, top - 0.01 * s, 0); break;
       case 'chickenhat': { const w = 0xf8f4ea; add(M(new THREE.SphereGeometry(0.25 * s, 10, 8), w), 0, top + 0.14 * s, 0, 0, 0, 0).scale.set(1, 0.85, 1.25); add(M(new THREE.SphereGeometry(0.13 * s, 8, 6), w), 0, top + 0.34 * s, 0.2 * s); add(M(new THREE.ConeGeometry(0.045 * s, 0.14 * s, 4), 0xf2a33a), 0, top + 0.32 * s, 0.34 * s, Math.PI / 2); add(M(new THREE.BoxGeometry(0.04 * s, 0.1 * s, 0.14 * s), 0xd83a2a), 0, top + 0.46 * s, 0.2 * s); for (const sd of [1, -1]) add(M(new THREE.SphereGeometry(0.02 * s, 5, 4), 0x111111), sd * 0.07 * s, top + 0.37 * s, 0.3 * s); add(M(new THREE.ConeGeometry(0.12 * s, 0.3 * s, 4), 0xe8e0d0), 0, top + 0.22 * s, -0.3 * s, -1.0); break; }
-      case 'goldcrown': { const G = { metalness: 0.75, roughness: 0.28 }; add(M(new THREE.CylinderGeometry(hr * 0.78, hr * 0.72, 0.2 * s, 12, 1, true), 0xf2c230, { ...G, side: THREE.DoubleSide }), 0, top + 0.04 * s, 0); for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; add(M(new THREE.ConeGeometry(0.05 * s, 0.24 * s, 4), 0xf2c230, G), Math.cos(a) * hr * 0.77, top + 0.26 * s, Math.sin(a) * hr * 0.77); add(M(new THREE.SphereGeometry(0.035 * s, 6, 5), i % 2 ? 0xd8372c : 0x3a78e0), Math.cos(a) * hr * 0.77, top + 0.4 * s, Math.sin(a) * hr * 0.77); } add(M(new THREE.SphereGeometry(0.07 * s, 8, 6), 0xd8372c), 0, top + 0.04 * s, hr * 0.78); add(M(new THREE.TorusGeometry(hr * 0.75, 0.03 * s, 4, 14), 0xffe680, G), 0, top - 0.06 * s, 0, Math.PI / 2); break; }
+      case 'goldcrown': { const G = { metalness: 0.75, roughness: 0.28, emissive: 0x6a4800 }; add(M(new THREE.CylinderGeometry(hr * 0.78, hr * 0.72, 0.2 * s, 12, 1, true), 0xf2c230, { ...G, side: THREE.DoubleSide }), 0, top + 0.04 * s, 0); for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; add(M(new THREE.ConeGeometry(0.05 * s, 0.24 * s, 4), 0xf2c230, G), Math.cos(a) * hr * 0.77, top + 0.26 * s, Math.sin(a) * hr * 0.77); add(M(new THREE.SphereGeometry(0.035 * s, 6, 5), i % 2 ? 0xd8372c : 0x3a78e0), Math.cos(a) * hr * 0.77, top + 0.4 * s, Math.sin(a) * hr * 0.77); } add(M(new THREE.SphereGeometry(0.07 * s, 8, 6), 0xd8372c), 0, top + 0.04 * s, hr * 0.78); add(M(new THREE.TorusGeometry(hr * 0.75, 0.03 * s, 4, 14), 0xffe680, G), 0, top - 0.06 * s, 0, Math.PI / 2); break; }
       case 'rainbowhat': { const rb = [0xff3b3b, 0xff9a2a, 0xffe53b, 0x4ad84a, 0x3ab4ff, 0x7a4aff, 0xe04aff]; add(M(new THREE.CylinderGeometry(hr * 1.35, hr * 1.35, 0.04 * s, 16), 0xff6fb5), 0, top - 0.08 * s, 0); rb.forEach((k, i) => add(M(new THREE.CylinderGeometry(hr * (0.7 - i * 0.04), hr * (0.72 - i * 0.04), 0.075 * s, 14), k), 0, top + (0.0 + i * 0.07) * s, 0)); add(M(new THREE.SphereGeometry(0.06 * s, 8, 6), 0xffffff), 0, top + 0.54 * s, 0); break; }
       default: break;
     }

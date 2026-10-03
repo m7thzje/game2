@@ -23,7 +23,8 @@ export function dailyInfo(games) {
   if (!ids.length) return null;
   const rnd = mulberry32(hash(date));
   const id = ids[Math.floor(rnd() * ids.length)];
-  const allowed = (games[id].twists || TWISTS.map((t) => t.id)).filter((t) => t !== 'none' && (t !== 'deurman' || S.settings.scare > 0));
+  const offT = (S.arcade && S.arcade.offTwists) || [];
+  const allowed = (games[id].twists || TWISTS.map((t) => t.id)).filter((t) => t !== 'none' && !offT.includes(t) && (t !== 'deurman' || S.settings.scare > 0));
   const twist = allowed.length ? allowed[Math.floor(rnd() * allowed.length)] : 'none';
   return { date, id, twist };
 }

@@ -354,7 +354,7 @@ export class ArcadeMode {
     const done = dailyDone(); const keys = []; const labels = [];
     if (TOURNEY) { keys.push('go', 'stop'); labels.push('Toernooi voortzetten', 'Toernooi stoppen'); } else { keys.push('start'); labels.push(`🏆 Toernooi starten (${A.tlen} duels)`); }
     keys.push('daily'); labels.push(done ? '🌟 Uitdaging van de dag (gedaan ✔)' : '🌟 Uitdaging van de dag (+bonus!)');
-    keys.push('shop', 'pick', 'how', 'none'); labels.push('👒 Hoeden & kleuren', '⚙️ Spellen kiezen & lengte', 'Hoe werkt het?', 'Niets');
+    keys.push('shop', 'pick', 'how', 'none'); labels.push('👒 Hoeden & kleuren', '⚙️ Spellen & twists kiezen', 'Hoe werkt het?', 'Niets');
     const c = await this.choose(H, labels); const key = keys[c];
     if (key === 'start') { await this.startTourney(); return; }
     if (key === 'go') { await this.nextTourney(); return; }
@@ -384,25 +384,32 @@ export class ArcadeMode {
       const ids = this.allLoaded(); const total = ids.length;
       const entries = [{ k: 'len' }, { k: 'all' }, { k: 'none' }, { k: 'done' }];
       for (const hl of ARCADE_HALLS) for (const id of hl.ids) if (ids.includes(id)) entries.push({ k: 'game', id, hall: hl.name });
+      A.offTwists ||= []; const TW = TWISTS.filter((t) => t.id !== 'none');
+      entries.push({ k: 'twall' }, { k: 'twnone' }, { k: 'golf' }, { k: 'blank' }); for (const t of TW) entries.push({ k: 'tw', id: t.id, t });
       let sel = 0; const head = h('p', { style: { textAlign: 'center', margin: '4px 0' } }); const grid = h('div', { class: 'pickgrid' });
-      const card = h('div', { class: 'card', style: { width: 'min(900px,96vw)', maxHeight: '90vh', overflow: 'auto' } }, h('h2', {}, 'Spellen kiezen'), head, grid, h('div', { class: 'small-note' }, 'Pijltjes = kiezen · actieknop = aan/uit · Esc = klaar'));
+      const card = h('div', { class: 'card', style: { width: 'min(900px,96vw)', maxHeight: '90vh', overflow: 'auto' } }, h('h2', {}, 'Spellen & twists kiezen'), head, grid, h('div', { class: 'small-note' }, 'Pijltjes = kiezen · actieknop = aan/uit · Esc = klaar'));
       const on = (id) => !A.excluded.includes(id);
       const tiles = [];
       const act = (e) => {
+        if (e.k === 'blank') return;
         if (e.k === 'len') { A.tlen = LENS[(LENS.indexOf(A.tlen) + 1) % LENS.length]; }
         else if (e.k === 'all') A.excluded = [];
         else if (e.k === 'none') A.excluded = ids.slice();
         else if (e.k === 'game') { A.excluded = on(e.id) ? [...A.excluded, e.id] : A.excluded.filter((x) => x !== e.id); }
+        else if (e.k === 'twall') A.offTwists = [];
+        else if (e.k === 'twnone') A.offTwists = TW.map((t) => t.id);
+        else if (e.k === 'tw') { A.offTwists = A.offTwists.includes(e.id) ? A.offTwists.filter((x) => x !== e.id) : [...A.offTwists, e.id]; }
+        else if (e.k === 'golf') { const L = [3, 6, 9, 12]; A.golfHoles = L[(L.indexOf(A.golfHoles || 6) + 1) % L.length]; }
         else if (e.k === 'done') { close(); return; }
         audio.sfx('select'); draw();
       };
       const draw = () => {
-        const n = ids.filter(on).length; head.innerHTML = `Doen mee: <b>${n}</b> van ${total} spellen · Toernooi: <b>${Math.min(A.tlen, Math.max(n, 0))}</b> duels`;
-        tiles.forEach((t, i) => { const e = entries[i]; t.className = 'pick' + (i === sel ? ' sel' : '') + (e.k === 'game' && !on(e.id) ? ' off' : '') + (e.k === 'game' ? '' : ' ctl'); });
+        const n = ids.filter(on).length; head.innerHTML = `Doen mee: <b>${n}</b> van ${total} spellen · Toernooi: <b>${Math.min(A.tlen, Math.max(n, 0))}</b> duels · Twists aan: <b>${TW.length - A.offTwists.length}</b> van ${TW.length}`;
+        tiles.forEach((t, i) => { const e = entries[i]; t.className = 'pick' + (i === sel ? ' sel' : '') + ((e.k === 'game' && !on(e.id)) || (e.k === 'tw' && A.offTwists.includes(e.id)) ? ' off' : '') + (e.k === 'game' || e.k === 'tw' ? '' : e.k === 'blank' ? ' blank' : ' ctl'); });
         if (tiles[sel]) tiles[sel].scrollIntoView({ block: 'nearest' });
       };
       entries.forEach((e, i) => {
-        const label = e.k === 'len' ? () => `🎯 Lengte: ${A.tlen}` : e.k === 'all' ? () => '✅ Alles aan' : e.k === 'none' ? () => '⛔ Alles uit' : e.k === 'done' ? () => '👍 Klaar' : () => `${on(e.id) ? '✔' : '✖'} ${this.defOf(e.id).icon || PIC[e.id] || ''} ${this.defOf(e.id).name || NAME[e.id]}`;
+        const label = e.k === 'len' ? () => `🎯 Lengte: ${A.tlen}` : e.k === 'all' ? () => '✅ Alles aan' : e.k === 'none' ? () => '⛔ Alles uit' : e.k === 'done' ? () => '👍 Klaar' : e.k === 'twall' ? () => '🎲 Twists: alles aan' : e.k === 'twnone' ? () => '🚫 Twists: allemaal uit' : e.k === 'golf' ? () => `⛳ Minigolf: ${A.golfHoles || 6} holes` : e.k === 'blank' ? () => '' : e.k === 'tw' ? () => `${A.offTwists.includes(e.id) ? '✖' : '✔'} ${e.t.icon || ''} ${e.t.name}` : () => `${on(e.id) ? '✔' : '✖'} ${this.defOf(e.id).icon || PIC[e.id] || ''} ${this.defOf(e.id).name || NAME[e.id]}`;
         const t = h('div', { onClick: () => { sel = i; act(e); } }); tiles.push(t); grid.append(t); t._label = label;
       });
       const origDraw = draw; const draw2 = () => { origDraw(); tiles.forEach((t) => { t.textContent = t._label(); }); };
