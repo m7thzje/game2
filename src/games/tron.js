@@ -2,26 +2,29 @@ import * as THREE from 'three';
 import { mat, mesh, clamp, lerp, damp, dampAngle, rand, pick, TAU, mulberry32, smoothstep, canvasTex } from '../engine/util.js';
 import { makeBrother, PLAYER_COLORS, Dragon } from '../engine/chars.js';
 import * as P from '../engine/props.js';
-import { T as TW, cellX, cellZ, setI, buildWorld, itemTexture, NEON, NEON_CSS } from './tron_world.js';
+import { T as TW, setArena, cellX, cellZ, setI, buildWorld, itemTexture, NEON, NEON_CSS } from './tron_world.js';
 
 // Lichtspoor-Duel — duel: twee lichtbordjes laten een muur van licht achter zich. Botsen = af. Beste van 3 rondes.
 //  * richtingen = sturen (90 graden bochten, vloeiend in beeld), A = turbo (laadt op door vlak langs muren te scheren: "grazen"), B = sprong (gat in je spoor, je vliegt over sporen heen)
 //  * power-ups (in gespiegelde paren): wisser (veegt sporen weg), dubbel gat (extra lange sprong), turbo-vol
 //  * lava-muren komen steeds dichterbij; de draak brandt af en toe een baan door de arena en veegt daarbij alle sporen weg
 //  * comeback: wie achterstaat begint de ronde met volle turbo en een dubbele sprong. Gelijkspel? De draak kiest.
-const { W, H } = TW;
-const N = W * H;
+//  * 3 spelers (Juul): arena 46 x 34, driehoeksstart (links onder en rechts onder kijken omhoog, boven in het midden kijkt omlaag: niemand begint kop-aan-kop), laatste in leven wint de ronde;
+//    obstakels en kristallen links-rechts gespiegeld; de draak mikt op de leider; bij gelijkspel eet de draak alle gelijke leiders op behalve één.
+let W = TW.W, H = TW.H, N = W * H;                          // afmetingen worden in create() gezet (setArena)
 const idx = (c, r) => r * W + c;
 const DX = [1, 0, -1, 0], DZ = [0, 1, 0, -1];             // 0 = +x (rechts), 1 = +z (omlaag), 2 = -x, 3 = -z
-const START = [[6, 15, 0], [W - 7, H - 16, 2]];            // gespiegeld: (c,r) -> (39-c, 29-r)
+const startsFor = (n) => (n === 3 ? [[8, 28, 3], [W - 9, 28, 3], [W / 2 - 1, 10, 1]] : [[6, 15, 0], [W - 7, H - 16, 2]]);   // 2: punt-gespiegeld (c,r) -> (39-c, 29-r)
 const BASE_CPS = 8.5, BOOST = 1.7, JUMP_LEN = 5, JUMP_CD = 3.2, METER_DRAIN = 0.45;
-const SHRINK_START = 17, SHRINK_START_FINAL = 11, SHRINK_V = 0.85, MIN_W = 14, MIN_H = 8, ROUND_CAP = 55;
+let SHRINK_START = 17, SHRINK_START_FINAL = 11, MIN_W = 14, MIN_H = 8;
+const SHRINK_V = 0.85, ROUND_CAP = 55;
+const TRK = [3, 4, 6];                                     // occ-code van het spoor per slot (5 = vuur)
+const trailOwner = (o) => (o === 3 ? 0 : o === 4 ? 1 : o === 6 ? 2 : -1), isTrail = (o) => o === 3 || o === 4 || o === 6;
 const NEED_WINS = 2, MAX_ROUNDS = 3;
 const ITEM_TYPES = ['eraser', 'gap', 'charge'];
 const ITEM_NAME = { eraser: 'WISSER!', gap: 'DUBBEL GAT!', charge: 'TURBO-VOL!' };
 const ITEM_COL = { eraser: '#ff7ad8', gap: '#ffe14a', charge: '#4af0ff' };
 const GRAZE_TXT = ['NIPT!', 'SCHRAMP!', 'KNAP!', 'ZZZIP!'];
-const mirC = (c) => W - 1 - c, mirR = (r) => H - 1 - r;
 
 export default {
   id: 'tron',
@@ -29,9 +32,10 @@ export default {
   giver: 'Neon-Nico',
   icon: '🏍️',
   mode: 'pvp',
+  players: [2, 3],                       // 2 spelers (duel) of 3 spelers (vrij voor allen, Juul doet mee)
   time: 80,
   music: 'game_fast',
-  blurb: 'Twee <b>lichtbordjes</b> laten een muur van licht achter zich. Botsen = af! Pak <b>turbo</b> door vlak langs muren te scheren en <b>spring</b> over sporen heen. Beste van <b>3 rondes</b>. De lava-muren komen dichterbij en de <b>draak</b> brandt banen vrij!',
+  blurb: 'Twee <b>lichtbordjes</b> laten een muur van licht achter zich. Botsen = af! Pak <b>turbo</b> door vlak langs muren te scheren en <b>spring</b> over sporen heen. Beste van <b>3 rondes</b>. De lava-muren komen dichterbij en de <b>draak</b> brandt banen vrij! Met drie spelers wint wie als laatste nog rijdt.',
   controls: ['{move} sturen (omhoog, omlaag, links, rechts)', '{a} turbo (ingedrukt houden)', '{b} sprong over sporen'],
   tip: 'Scheer vlak langs een muur of spoor: dat laadt je turbo op. Spring over het spoor van je broer en laat hem crashen!',
 
@@ -39,6 +43,11 @@ export default {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
+    const n = players.length;                                 // 2 of 3 deelnemers (slots)
+    setArena(n); W = TW.W; H = TW.H; N = W * H;
+    if (n === 3) { SHRINK_START = 20; SHRINK_START_FINAL = 13; MIN_W = 16; MIN_H = 10; } else { SHRINK_START = 17; SHRINK_START_FINAL = 11; MIN_W = 14; MIN_H = 8; }
+    const START = startsFor(n), mirC = (c) => W - 1 - c, mirR = (r) => H - 1 - r;
+    const COL = players.map((p) => NEON[p.id]), CSS = players.map((p) => NEON_CSS[p.id]), IDS = players.map((p) => p.id), PCSS = players.map((p) => ['#7dffb0', '#8fb8ff', '#ffc58a'][p.id]);   // kleur per slot (volgt de speler)
     const tw = ctx.twist.id;
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const TEMPO = tw === 'turbo' || tw === 'slowmo' ? ctx.twist.speed : 1;
@@ -49,22 +58,22 @@ export default {
 
     const L = ctx.lights('night', { shadow: 24, center: [0, 0, 0], fogNear: 70, fogFar: 190 });
     camera.fov = 44; camera.updateProjectionMatrix();
-    const Wd = buildWorld(ctx, L);
+    const Wd = buildWorld(ctx, L, START, IDS);
 
     // ---------------- toestand ----------------
-    const occ = new Uint8Array(N);                 // 0 vrij, 2 obstakel, 3 spoor Wes, 4 spoor Jor, 5 vuur
+    const occ = new Uint8Array(N);                 // 0 vrij, 2 obstakel, 3/4/6 spoor van slot 0/1/2, 5 vuur
     const tA = new Int16Array(N).fill(-1), tB = new Int16Array(N).fill(-1);
     const obstIds = [];
-    const G = { state: 'init', t: 0, roundT: 0, round: 0, ending: false, slow: 1, slowT: 0, wins: [0, 0], winner: null, final: false, sx: 0, sz: 0, hintOn: false, shrinkOn: false, camPunch: 0, lastW: null };
+    const G = { state: 'init', t: 0, roundT: 0, round: 0, ending: false, slow: 1, slowT: 0, wins: new Array(n).fill(0), winner: null, final: false, sx: 0, sz: 0, hintOn: false, shrinkOn: false, camPunch: 0, lastW: null };
     const stats = { grazes: 0, jumps: 0, items: 0, erased: 0, crashes: 0, dragons: 0, burned: 0, boostT: 0 };
     let T = 0, introT = 0, finished = false, started = false, baseSeed = (rnd() * 1e6) | 0;
-    const free = [[], []]; const nextId = [0, 0]; let dirty = false;
+    const free = players.map(() => []); const nextId = players.map(() => 0); let dirty = false;
 
     // ---------------- lichtbordjes ----------------
     const tagTex = (pp) => canvasTex(256, 96, (c, w, hh) => { c.font = 'bold 58px Fredoka, Arial Black, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 12; c.strokeStyle = 'rgba(8,2,20,.9)'; c.lineJoin = 'round'; c.strokeText(pp.name, w / 2, hh / 2); c.fillStyle = pp.css; c.fillText(pp.name, w / 2, hh / 2); });
     const glowTex = canvasTex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 1, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.4)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
     const bikes = players.map((pp, i) => {
-      const col = NEON[i]; const grp = new THREE.Group(); scene.add(grp); const sz = pv.size(i); const bs = 1.45 * lerp(1, sz, 0.75); grp.scale.setScalar(bs);
+      const col = COL[i]; const grp = new THREE.Group(); scene.add(grp); const sz = pv.size(i); const bs = 1.45 * lerp(1, sz, 0.75); grp.scale.setScalar(bs);
       const dark = new THREE.MeshStandardMaterial({ color: 0x5a4c9a, metalness: 0.5, roughness: 0.35 }), glow = new THREE.MeshBasicMaterial({ color: col });
       grp.add(mesh(new THREE.BoxGeometry(0.78, 0.16, 1.7), dark, { pos: [0, 0.3, 0] }));
       grp.add(mesh(new THREE.ConeGeometry(0.46, 0.8, 4), dark, { pos: [0, 0.3, 1.2], rot: [Math.PI / 2, Math.PI / 4, 0], scale: [1, 1, 0.45] }));
@@ -79,7 +88,7 @@ export default {
       // meters boven het bordje: turbo (cyaan) en sprong (geel)
       const mk = (color) => { const bg = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.2), new THREE.MeshBasicMaterial({ color: 0x080414, transparent: true, opacity: 0.7, depthTest: false })); const fl = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 0.2), new THREE.MeshBasicMaterial({ color, depthTest: false })); bg.renderOrder = 16; fl.renderOrder = 17; scene.add(bg, fl); return { bg, fl }; };
       return { i, grp, c, ks, bs, sz, shadow, tag, under, thr, head, mTurbo: mk(0x4af0ff), mJump: mk(0xffe14a), col,
-        alive: true, c0: 0, r0: 0, pc: 0, pr: 0, dir: 0, lastDir: 0, acc: 0, q: [], prevAct: [false, false, false, false], meter: 0.25, jumpLeft: 0, jumpTotal: 0, jumpCd: 0, dbl: false, boosting: false, grazeT: 0, yaw: 0, lean: 0, y: 0, rider: { on: true, vx: 0, vy: 0, vz: 0, spin: 0, deadT: 0 }, trail: 0, lastTxt: '' };
+        alive: true, crashT: 0, c0: 0, r0: 0, pc: 0, pr: 0, dir: 0, lastDir: 0, acc: 0, q: [], prevAct: [false, false, false, false], meter: 0.25, jumpLeft: 0, jumpTotal: 0, jumpCd: 0, dbl: false, boosting: false, grazeT: 0, yaw: 0, lean: 0, y: 0, rider: { on: true, vx: 0, vy: 0, vz: 0, spin: 0, deadT: 0 }, trail: 0, lastTxt: '' };
     });
     // eerste c/r zijn "huidige cel"
     const bs = bikes;
@@ -107,25 +116,28 @@ export default {
       const cell = idx(c, r); if (occ[cell] === 2) return;
       const a = allocId(b.i); trailSeg(b.i, a, c, r, inAxis); tA[cell] = a; tB[cell] = -1;
       if (outAxis !== inAxis) { const b2 = allocId(b.i); trailSeg(b.i, b2, c, r, outAxis); tB[cell] = b2; }
-      occ[cell] = 3 + b.i; b.trail++;
+      occ[cell] = TRK[b.i]; b.trail++;
     }
     function eraseCell(cell) {
-      const o = occ[cell] - 3; if (o !== 0 && o !== 1) return false; const t = Wd.trail[o];
+      const o = trailOwner(occ[cell]); if (o < 0) return false; const t = Wd.trail[o];
       for (const arr of [tA, tB]) { const id = arr[cell]; if (id >= 0) { setI(t.wall, id, 0, -50, 0, 0); setI(t.top, id, 0, -50, 0, 0); setI(t.glow, id, 0, -50, 0, 0); free[o].push(id); arr[cell] = -1; } }
       occ[cell] = 0; dirty = true; return true;
     }
-    function clearTrails() { for (let i = 0; i < N; i++) if (occ[i] === 3 || occ[i] === 4) eraseCell(i); }
+    function clearTrails() { for (let i = 0; i < N; i++) if (isTrail(occ[i])) eraseCell(i); }
 
     // ---------------- ronde ----------------
     function genObstacles(seed) {
       const lr = mulberry32(seed); for (let i = 0; i < N; i++) if (occ[i] === 2 || occ[i] === 5) occ[i] = 0;
       const rects = [];
-      const okCell = (c, r) => c >= 2 && c <= W - 3 && r >= 2 && r <= H - 3 && !((c <= 11 || c >= W - 12) && Math.abs(r - 14.5) <= 3.5);
+      // vrije baan voor de startrijders: 2 spelers de middenrij links/rechts, 3 spelers 4 achter en 12 voor elke start (3 breed aan elke kant)
+      const lane = (c, r) => START.some(([sc, sr, sd]) => { const fc = c - sc, fr = r - sr, along = DX[sd] * fc + DZ[sd] * fr, side = Math.abs(DX[sd] * fr - DZ[sd] * fc); return along >= -4 && along <= 12 && side <= 3; });
+      const okCell = (c, r) => c >= 2 && c <= W - 3 && r >= 2 && r <= H - 3 && (n === 3 ? !lane(c, r) : !((c <= 11 || c >= W - 12) && Math.abs(r - 14.5) <= 3.5));
+      const mC = (c) => mirC(c), mR = (r) => (n === 3 ? r : mirR(r));       // 2 spelers: puntspiegeling, 3 spelers: links-rechts gespiegeld
       let tries = 0;
-      while (rects.length < 7 && tries++ < 300) {
+      while (rects.length < (n === 3 ? 9 : 7) && tries++ < 300) {
         const w = 1 + ((lr() * 3) | 0), h = 1 + ((lr() * (w === 1 ? 4 : 3)) | 0), c0 = 3 + ((lr() * (W - 6 - w)) | 0), r0 = 3 + ((lr() * (H - 6 - h)) | 0);
         let ok = true; const cells = [], mir = [];
-        for (let dr = 0; dr < h && ok; dr++) for (let dc = 0; dc < w; dc++) { const c = c0 + dc, r = r0 + dr; if (!okCell(c, r) || !okCell(mirC(c), mirR(r))) { ok = false; break; } cells.push([c, r]); mir.push([mirC(c), mirR(r)]); }
+        for (let dr = 0; dr < h && ok; dr++) for (let dc = 0; dc < w; dc++) { const c = c0 + dc, r = r0 + dr; if (!okCell(c, r) || !okCell(mC(c), mR(r))) { ok = false; break; } cells.push([c, r]); mir.push([mC(c), mR(r)]); }
         if (!ok) continue;
         // geen overlap (met 1 cel ruimte) met eerdere stukken en zichzelf
         const all = [...cells, ...mir]; const key = (c, r) => c + ',' + r; const mine = new Set(all.map(([c, r]) => key(c, r)));
@@ -142,11 +154,11 @@ export default {
     function resetBike(b) {
       const [c, r, d] = START[b.i]; b.c0 = c; b.r0 = r; b.pc = c; b.pr = r; b.dir = d; b.lastDir = d; b.acc = 0; b.q.length = 0; b.prevAct = [false, false, false, false]; b.alive = true; b.meter = 0.25; b.jumpLeft = 0; b.jumpCd = 1.0; b.dbl = false; b.boosting = false; b.grazeT = 0; b.trail = 0;
       b.yaw = Math.atan2(DX[d], DZ[d]); b.lean = 0; b.y = 0; b.grp.visible = true; b.grp.add(b.c.group); b.c.group.position.set(0, 0.36, -0.2); b.c.group.rotation.set(0, 0, 0); b.c.group.scale.setScalar(b.ks); b.c.pose = 'carry'; b.c.faceDir(0, 1); b.c.yaw = 0; b.rider.on = true; b.rider.deadT = 0; b.tag.visible = true;
-      if (G.round > 1 && G.wins[b.i] < G.wins[1 - b.i]) { b.meter = 1; b.dbl = true; fx.texts.add('TROOSTPRIJS!', cellX(c), 3, cellZ(r), '#4af0ff', 1.4); }
+      if (G.round > 1 && G.wins[b.i] < Math.max(...G.wins)) { b.meter = 1; b.dbl = true; fx.texts.add('TROOSTPRIJS!', cellX(c), 3, cellZ(r), '#4af0ff', 1.4); }
     }
     function startRound(n) {
       G.round = n; G.roundT = 0; G.ending = false; G.slow = 1; G.slowT = 0; G.final = n >= MAX_ROUNDS; G.state = n === 1 ? 'play' : 'intro'; G.t = 0; G.sx = 0; G.sz = 0; G.shrinkOn = false; G.hintOn = false;
-      clearTrails(); for (const i of [0, 1]) { free[i].length = 0; nextId[i] = 0; }
+      clearTrails(); for (let i = 0; i < bikes.length; i++) { free[i].length = 0; nextId[i] = 0; }
       for (const t of Wd.trail) for (const m of [t.wall, t.top, t.glow]) { for (let k = 0; k < TW.CAP; k++) setI(m, k, 0, -50, 0, 0); m.instanceMatrix.needsUpdate = true; }
       tA.fill(-1); tB.fill(-1); for (let i = 0; i < N; i++) if (occ[i] !== 2) occ[i] = 0;
       fireList.length = 0; genObstacles(baseSeed + n * 6151);
@@ -157,7 +169,7 @@ export default {
       refreshHud();
       if (n > 1) { hud.showBig(G.final ? 'LAATSTE RONDE!' : `RONDE ${n}!`, 1300, '#ffe14a'); audio.sfx('bell', { vol: 0.5 }); }
     }
-    function refreshHud() { hud.setScore(`${names[0]} ${G.wins[0]} – ${G.wins[1]} ${names[1]}   (ronde ${G.round}/${MAX_ROUNDS})`); }
+    function refreshHud() { hud.setScore(n === 3 ? `${names[0]} ${G.wins[0]} – ${G.wins[1]} ${names[1]} – ${G.wins[2]} ${names[2]}   (ronde ${G.round}/${MAX_ROUNDS})` : `${names[0]} ${G.wins[0]} – ${G.wins[1]} ${names[1]}   (ronde ${G.round}/${MAX_ROUNDS})`); }
     const infoText = (b) => { const m = Math.round(b.meter * 5); return `⚡${'▮'.repeat(m)}${'▯'.repeat(5 - m)}  🦘${b.jumpCd > 0 && b.jumpLeft === 0 ? b.jumpCd.toFixed(1) + 's' : b.jumpLeft > 0 ? '...' : (b.dbl ? 'x2!' : 'klaar')}  ·  ${G.wins[b.i]} gewonnen`; };
 
     // ---------------- invoer -> bochten ----------------
@@ -194,7 +206,7 @@ export default {
       if (solid(nc, nr)) return 'muur';
       const o = occ[idx(nc, nr)];
       if (o === 2) return 'blok'; if (o === 5) return 'vuur';
-      if ((o === 3 || o === 4) && !flying) return o === 3 + b.i ? 'eigen' : 'spoor';
+      if (isTrail(o) && !flying) return trailOwner(o) === b.i ? 'eigen' : 'spoor';
       return 0;
     }
     function stepAll(dt) {
@@ -206,8 +218,8 @@ export default {
         for (const m of moves) {
           const why = hitWhat(m);
           let hit = why;
-          const o = bikes[1 - m.b.i];
-          if (!hit && o.alive && !m.flying) {
+          for (const o of bikes) {
+            if (hit || o === m.b || !o.alive || m.flying) continue;
             const om = moves.find((x) => x.b === o);
             if (om && om.nc === m.nc && om.nr === m.nr && !om.flying) hit = 'kop';                      // beide op dezelfde cel
             else if (!om && o.c0 === m.nc && o.r0 === m.nr) hit = 'kop';                                 // recht in de ander
@@ -222,7 +234,7 @@ export default {
           if (crash) { b.pc = b.c0; b.pr = b.r0; b.acc = 0; continue; }
           b.pc = b.c0; b.pr = b.r0; b.c0 = m.nc; b.r0 = m.nr; b.lastDir = b.dir; arrive(b, m);
         }
-        if (crashed.length) { for (const [b, why] of crashed) crashBike(b, why); const alive = bikes.filter((x) => x.alive); endRoundSoon(alive.length === 1 ? alive[0].i : null); break; }
+        if (crashed.length) { for (const [b, why] of crashed) crashBike(b, why); checkEnd(); break; }
       }
     }
     function arrive(b, m) {
@@ -231,9 +243,9 @@ export default {
       if (!m.flying && !m.wasAir) for (const it of items) if (it.on && it.c === b.c0 && it.r === b.r0) takeItem(b, it);
       // grazen: naast je ligt een muur / spoor / blok
       if (!m.wasAir) {
-        let g = 0; for (const s of [1, 3]) { const d = (b.dir + s) % 4, c = b.c0 + DX[d], r = b.r0 + DZ[d]; if (solid(c, r)) g += 0.05; else { const o = occ[idx(c, r)]; if (o === 2) g += 0.1; else if (o === 3 || o === 4) g += o === 3 + b.i ? 0.1 : 0.16; } }
-        const o = bikes[1 - b.i]; if (o.alive && Math.abs(o.c0 - b.c0) + Math.abs(o.r0 - b.r0) <= 2 && !(o.c0 === b.c0 && o.r0 === b.r0)) g += 0.12;
-        if (g > 0) { b.meter = Math.min(1, b.meter + g * 0.55); stats.grazes++; if (rnd() < 0.55) fx.particles.emit(cellX(b.c0) + rand(-0.4, 0.4), 0.35, cellZ(b.r0) + rand(-0.4, 0.4), rand(-1, 1), rand(1, 3), rand(-1, 1), { life: 0.35, size: 0.28, color: 0xffffff, gravity: 6 }); if (b.grazeT <= 0 && g >= 0.1) { b.grazeT = 0.9; fx.texts.add(pick(GRAZE_TXT), cellX(b.c0), 2.2, cellZ(b.r0), NEON_CSS[b.i], 0.9); audio.sfx('tick', { vol: 0.2, rate: 1 + b.meter * 1.2 }); } }
+        let g = 0; for (const s of [1, 3]) { const d = (b.dir + s) % 4, c = b.c0 + DX[d], r = b.r0 + DZ[d]; if (solid(c, r)) g += 0.05; else { const o = occ[idx(c, r)]; if (o === 2) g += 0.1; else if (isTrail(o)) g += trailOwner(o) === b.i ? 0.1 : 0.16; } }
+        if (bikes.some((o) => o !== b && o.alive && Math.abs(o.c0 - b.c0) + Math.abs(o.r0 - b.r0) <= 2 && !(o.c0 === b.c0 && o.r0 === b.r0))) g += 0.12;
+        if (g > 0) { b.meter = Math.min(1, b.meter + g * 0.55); stats.grazes++; if (rnd() < 0.55) fx.particles.emit(cellX(b.c0) + rand(-0.4, 0.4), 0.35, cellZ(b.r0) + rand(-0.4, 0.4), rand(-1, 1), rand(1, 3), rand(-1, 1), { life: 0.35, size: 0.28, color: 0xffffff, gravity: 6 }); if (b.grazeT <= 0 && g >= 0.1) { b.grazeT = 0.9; fx.texts.add(pick(GRAZE_TXT), cellX(b.c0), 2.2, cellZ(b.r0), CSS[b.i], 0.9); audio.sfx('tick', { vol: 0.2, rate: 1 + b.meter * 1.2 }); } }
       }
       // landen na een sprong
       if (m.landing) { audio.sfx('land', { vol: 0.35 }); fx.particles.burst(cellX(b.c0), 0.2, cellZ(b.r0), { count: 10, speed: 3, up: 1, life: 0.4, size: 0.3, colors: [b.col, 0xffffff], gravity: 6 }); }
@@ -245,12 +257,12 @@ export default {
       if (it.type === 'charge') b.meter = 1;
       else if (it.type === 'gap') { b.dbl = true; b.jumpCd = 0; }
       else { // wisser: veegt alle sporen in een cirkel weg
-        let n = 0; for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) { if (Math.hypot(c - it.c, r - it.r) > 7.5) continue; const cell = idx(c, r); if ((occ[cell] === 3 || occ[cell] === 4) && eraseCell(cell)) { n++; if (n % 3 === 0) fx.particles.burst(cellX(c), 0.5, cellZ(r), { count: 3, speed: 2.5, up: 1.4, life: 0.6, size: 0.3, color: occ[cell] === 4 ? NEON[1] : NEON[0], gravity: 4 }); } }
-        stats.erased += n; fx.particles.ring(cellX(it.c), 0.3, cellZ(it.r), { count: 40, speed: 10, color: 0xff7ad8, size: 0.4, life: 0.7 }); audio.sfx('whoosh', { vol: 0.5 });
+        let nErased = 0; for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) { if (Math.hypot(c - it.c, r - it.r) > 7.5) continue; const cell = idx(c, r); const ow = trailOwner(occ[cell]); if (ow >= 0 && eraseCell(cell)) { nErased++; if (nErased % 3 === 0) fx.particles.burst(cellX(c), 0.5, cellZ(r), { count: 3, speed: 2.5, up: 1.4, life: 0.6, size: 0.3, color: COL[ow], gravity: 4 }); } }
+        stats.erased += nErased; fx.particles.ring(cellX(it.c), 0.3, cellZ(it.r), { count: 40, speed: 10, color: 0xff7ad8, size: 0.4, life: 0.7 }); audio.sfx('whoosh', { vol: 0.5 });
       }
     }
     function crashBike(b, why) {
-      if (!b.alive) return; b.alive = false; stats.crashes++; b.boosting = false;
+      if (!b.alive) return; b.alive = false; b.crashT = G.roundT; stats.crashes++; b.boosting = false;
       const x = cellX(b.c0), z = cellZ(b.r0);
       audio.sfx('explode', { vol: 0.7 }); audio.sfx('hurt', { vol: 0.4 }); ctx.shake(0.7); G.camPunch = 0.6;
       fx.particles.burst(x, 0.6, z, { count: 60, speed: 8, up: 1.4, life: 1.0, size: 0.5, colors: [b.col, 0xffffff, 0xff7a1a, 0xffd23f], gravity: 6 });
@@ -268,24 +280,31 @@ export default {
         if (!G.shrinkOn) { G.shrinkOn = true; hud.setTimer(null); hud.toast('🌋 De lava komt eraan! De arena krimpt!', 2200); audio.sfx('creak', { vol: 0.5 }); ctx.shake(0.4); }
         const k = (G.roundT - st) * SHRINK_V; G.sx = Math.min((W - MIN_W) / 2, k); G.sz = Math.min((H - MIN_H) / 2, k);
         Wd.setBounds(-W / 2 + G.sx, W / 2 - G.sx, -H / 2 + G.sz, H / 2 - G.sz);
-        for (const b of bikes) if (b.alive && blockedShrink(b.c0, b.r0)) { crashBike(b, 'lava'); endRoundSoon(bikes.every((x) => !x.alive) ? null : bikes.find((x) => x.alive).i); }
+        let lavaHit = false; for (const b of bikes) if (b.alive && blockedShrink(b.c0, b.r0)) { crashBike(b, 'lava'); lavaHit = true; } if (lavaHit) checkEnd();
       }
-      if (G.roundT > ROUND_CAP && !G.ending) { for (const b of bikes) if (b.alive) crashBike(b, 'lava'); endRoundSoon(null); }
+      if (G.roundT > ROUND_CAP && !G.ending) { for (const b of bikes) if (b.alive) crashBike(b, 'lava'); checkEnd(); }
     }
+    // kristallen in eerlijke sets van dezelfde soort: 2 spelers puntgespiegeld; 3 spelers een links-rechts-paar onderin + een bij de bovenste speler
     function spawnItemPair() {
       if (items.filter((q) => q.on).length >= 6) return;
       for (let tries = 0; tries < 40; tries++) {
-        const c = 4 + ((rnd() * (W - 8)) | 0), r = 4 + ((rnd() * (H - 8)) | 0), m = [mirC(c), mirR(r)]; const ok = (cc, rr) => !solid(cc, rr) && occ[idx(cc, rr)] === 0 && bikes.every((b) => Math.abs(b.c0 - cc) + Math.abs(b.r0 - rr) > 6) && !items.some((q) => q.on && q.c === cc && q.r === rr);
-        if (!ok(c, r) || !ok(m[0], m[1]) || (c === m[0] && r === m[1])) continue;
+        const c = 4 + ((rnd() * (W - 8)) | 0);
+        let spots;
+        if (n === 3) { const r = Math.round(H * 0.5) + ((rnd() * (H * 0.5 - 5)) | 0), ar = 4 + ((rnd() * (H * 0.35)) | 0); spots = [[c, r], [mirC(c), r], [W / 2 - (rnd() < 0.5 ? 1 : 0), ar]]; }
+        else { const r = 4 + ((rnd() * (H - 8)) | 0); spots = [[c, r], [mirC(c), mirR(r)]]; }
+        const ok = (cc, rr) => !solid(cc, rr) && occ[idx(cc, rr)] === 0 && bikes.every((b) => Math.abs(b.c0 - cc) + Math.abs(b.r0 - rr) > 6) && !items.some((q) => q.on && q.c === cc && q.r === rr);
+        if (!spots.every(([cc, rr]) => ok(cc, rr)) || spots.some(([cc, rr], i) => spots.some(([c2, r2], j) => j > i && c2 === cc && r2 === rr))) continue;
         const type = pick(ITEM_TYPES);
-        for (const [cc, rr] of [[c, r], m]) { const it = items.find((q) => !q.on); if (!it) return; it.on = true; it.c = cc; it.r = rr; it.type = type; it.t = 0; it.life = 14; it.s.material.map = itemTex[type]; it.s.visible = true; it.sh.visible = true; it.sh.material.color.set(ITEM_COL[type]); }
+        for (const [cc, rr] of spots) { const it = items.find((q) => !q.on); if (!it) return; it.on = true; it.c = cc; it.r = rr; it.type = type; it.t = 0; it.life = 14; it.s.material.map = itemTex[type]; it.s.visible = true; it.sh.visible = true; it.sh.material.color.set(ITEM_COL[type]); }
         audio.sfx('sparkle', { vol: 0.3 }); return;
       }
     }
     function updateDragon(dt) {
       D.t -= dt;
       if (D.state === 'idle' && D.t <= 0 && !G.ending) {
-        D.axis = rnd() < 0.5 ? 0 : 1; D.dir = rnd() < 0.5 ? -1 : 1; const lim = D.axis === 0 ? H : W; D.k0 = 5 + ((rnd() * (lim - 10)) | 0); D.state = 'warn'; D.ft = 0; D.burned = 0; stats.dragons++;
+        D.axis = rnd() < 0.5 ? 0 : 1; D.dir = rnd() < 0.5 ? -1 : 1; const lim = D.axis === 0 ? H : W; D.k0 = 5 + ((rnd() * (lim - 10)) | 0); D.state = 'warn';
+        if (n === 3) { const al = bikes.filter((b) => b.alive); if (al.length) { const mw = Math.max(...al.map((b) => G.wins[b.i])), ld = al.filter((b) => G.wins[b.i] === mw), lead = ld[(rnd() * ld.length) | 0]; D.k0 = clamp(D.axis === 0 ? lead.r0 : lead.c0, 5, lim - 6); } }   // 3 spelers: de baan loopt door de leider
+        D.ft = 0; D.burned = 0; stats.dragons++;
         Wd.lane.visible = true; dragon.group.visible = true;
         const cw = D.axis === 0 ? W : 3, ch = D.axis === 0 ? 3 : H; Wd.lane.scale.set(D.axis === 0 ? W : 3, D.axis === 0 ? 3 : H, 1);
         Wd.lane.position.set(D.axis === 0 ? 0 : cellX(D.k0), 0.06, D.axis === 0 ? cellZ(D.k0) : 0);
@@ -298,6 +317,7 @@ export default {
         const u2 = clamp(D.ft / 2.7, 0, 1.2); const al = (D.dir > 0 ? -1 : 1) * (len / 2 + 8) + (D.dir > 0 ? 1 : -1) * u2 * (len + 16);
         dragon.group.position.set(D.axis === 0 ? al : cellX(D.k0), 4.5 + Math.sin(D.ft * 4) * 0.4, D.axis === 0 ? cellZ(D.k0) : al);
         dragon.group.rotation.y = D.axis === 0 ? (D.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (D.dir > 0 ? 0 : Math.PI); dragon.update(dt);
+        let fireHit = false;
         if (D.ft > 1.4) { // vuur achter de draak: alle cellen in de baan tot de draak
           const frontCell = (D.axis === 0 ? (al + len / 2) : (al + len / 2)); // in cellen langs de baan
           for (let k = 0; k < len; k++) {
@@ -307,45 +327,63 @@ export default {
               if (occ[cell] === 3 || occ[cell] === 4) { eraseCell(cell); stats.burned++; }
               occ[cell] = 5; fireList.push({ cell, t: 1.3 + rnd() * 0.3 }); D.burned++;
               if (rnd() < 0.4) fx.particles.burst(cellX(c), 0.7, cellZ(r), { count: 3, speed: 2.5, up: 2, life: 0.6, size: 0.5, colors: [0xff7a1a, 0xffd23f, 0xff3a0a], gravity: -2 });
-              for (const b of bikes) if (b.alive && b.c0 === c && b.r0 === r && b.jumpLeft === 0) { crashBike(b, 'vuur'); endRoundSoon(bikes.every((x) => !x.alive) ? null : bikes.find((x) => x.alive).i); }
+              for (const b of bikes) if (b.alive && b.c0 === c && b.r0 === r && b.jumpLeft === 0) { crashBike(b, 'vuur'); fireHit = true; }
             }
           }
         }
+        if (fireHit) checkEnd();
         if (D.ft > 2.9) { D.state = 'idle'; D.t = rand(10, 14); dragon.group.visible = false; Wd.lane.visible = false; }
       }
       for (let i = fireList.length - 1; i >= 0; i--) { const f = fireList[i]; f.t -= dt; if (f.t <= 0) { if (occ[f.cell] === 5) occ[f.cell] = 0; fireList.splice(i, 1); } }
     }
     // ---------------- ronde-einde ----------------
-    function endRoundSoon(w) { if (G.ending) return; G.ending = true; G.t = 0; G.slow = 0.4; G.slowT = 0; G.pendingW = w; }
+    function endRoundSoon(w, set = null) { if (G.ending) return; G.ending = true; G.t = 0; G.slow = 0.4; G.slowT = 0; G.pendingW = w; G.pendingSet = set; }
+    // na een crash: de ronde is voorbij als er nog maar één rijder over is (die wint) of niemand (gelijkspel tussen de laatst gecrashten)
+    function checkEnd() {
+      if (G.ending) return;
+      const alive = bikes.filter((b) => b.alive);
+      if (alive.length > 1) return;
+      if (alive.length === 1) { endRoundSoon(alive[0].i); return; }
+      const lastT = Math.max(...bikes.map((b) => b.crashT));
+      endRoundSoon(null, bikes.filter((b) => b.crashT >= lastT - 1e-6).map((b) => b.i));
+    }
     function endRound(w) {
       G.state = 'roundEnd'; G.t = 0; G.slow = 1; G.ending = false; hud.setTimer(null);
-      if (w == null) { G.wins[0]++; G.wins[1]++; hud.showBig('TWEE KEER BOEM!', 1800, '#ffd23f'); }
-      else { G.wins[w]++; hud.showBig(`${names[w]} wint ronde ${G.round}!`, 1800, w ? '#8fb8ff' : '#7dffb0'); bikes[w].c.pose = 'cheer'; bikes[w].c.jump(); audio.sfx('win', { vol: 0.5 }); }
+      if (w == null) {
+        const set = G.pendingSet || bikes.map((b) => b.i); for (const i of set) G.wins[i]++;
+        hud.showBig(set.length > 2 ? 'ALLEMAAL BOEM!' : 'TWEE KEER BOEM!', 1800, '#ffd23f');
+      }
+      else { G.wins[w]++; hud.showBig(`${names[w]} wint ronde ${G.round}!`, 1800, PCSS[w]); bikes[w].c.pose = 'cheer'; bikes[w].c.jump(); audio.sfx('win', { vol: 0.5 }); }
       G.lastW = w; refreshHud(); audio.sfx('bell', { vol: 0.5 });
     }
     function nextStep() {
-      const [a, b2] = G.wins; const over = ((a >= NEED_WINS || b2 >= NEED_WINS) && a !== b2) || G.round >= MAX_ROUNDS;
+      const mx = Math.max(...G.wins), lead = bikes.filter((b) => G.wins[b.i] === mx).map((b) => b.i);
+      const over = (mx >= NEED_WINS && lead.length === 1) || G.round >= MAX_ROUNDS;
       if (!over) { startRound(G.round + 1); return; }
-      if (a !== b2) { G.state = 'end'; G.t = 0; G.winner = a > b2 ? 0 : 1; celebrate(G.winner); return; }
-      G.state = 'dragon'; G.t = 0; G.victim = rnd() < 0.5 ? 0 : 1; dragonPick.group.visible = true; hud.showBig('DE DRAAK KIEST!', 1600, '#ff7ad8'); audio.sfx('creak', { vol: 0.5 });
+      if (lead.length === 1) { G.state = 'end'; G.t = 0; G.winner = lead[0]; celebrate(G.winner); return; }
+      // gelijkspel: de draak kiest één winnaar uit de gelijke leiders en eet de rest op
+      const keep = lead[(rnd() * lead.length) | 0]; G.victims = lead.filter((i) => i !== keep); G.keep = keep; G.bit = []; G.victim = G.victims[0];
+      G.state = 'dragon'; G.t = 0; dragonPick.group.visible = true; hud.showBig('DE DRAAK KIEST!', 1600, '#ff7ad8'); audio.sfx('creak', { vol: 0.5 });
     }
     function dragonScene(dt) {
-      const v = bikes[G.victim]; const k = Math.min(1, G.t / 1.6); const px = cellX(v.c0), pz = cellZ(v.r0);
+      const per = 2.6, vi = Math.min(G.victims.length - 1, Math.floor(G.t / per)), lt = G.t - vi * per;
+      const v = bikes[G.victims[vi]]; const k = Math.min(1, lt / 1.6); const px = cellX(v.c0), pz = cellZ(v.r0);
       dragonPick.group.position.set(lerp(px + 30, px + 2, smoothstep(0, 1, k)), lerp(14, 3.2, k) + Math.sin(G.t * 6) * 0.2, lerp(pz - 10, pz, k)); dragonPick.group.rotation.y = Math.atan2(-30 * (1 - k) - 2 * k, 10 * (1 - k)) + Math.PI; dragonPick.update(dt);
-      if (!G.bit && G.t > 1.6) { G.bit = true; fx.particles.burst(px, 1, pz, { count: 80, speed: 9, up: 1.2, life: 1.2, size: 0.6, colors: [0xff7a1a, 0xffd23f, 0xff3a0a], gravity: -1 }); ctx.shake(0.8); audio.sfx('explode', { vol: 0.7 }); crashBike2(v); }
-      if (G.t > 2.6) { G.state = 'end'; G.t = 0; G.winner = 1 - G.victim; G.byDragon = true; dragonPick.group.visible = false; celebrate(G.winner); }
+      if (!G.bit[vi] && lt > 1.6) { G.bit[vi] = true; fx.particles.burst(px, 1, pz, { count: 80, speed: 9, up: 1.2, life: 1.2, size: 0.6, colors: [0xff7a1a, 0xffd23f, 0xff3a0a], gravity: -1 }); ctx.shake(0.8); audio.sfx('explode', { vol: 0.7 }); crashBike2(v); }
+      if (G.t > G.victims.length * per) { G.state = 'end'; G.t = 0; G.winner = G.keep; G.byDragon = true; dragonPick.group.visible = false; celebrate(G.winner); }
     }
     function crashBike2(b) { b.grp.visible = false; const rd = b.rider; scene.attach(b.c.group); rd.on = false; rd.vx = 6; rd.vz = -3; rd.vy = 11; rd.spin = 9; rd.deadT = 0; b.c.pose = 'scared'; fx.texts.add('GEBRAND!', cellX(b.c0), 3, cellZ(b.r0), '#ff9a5a', 1.6); }
     function celebrate(w) {
-      bikes[w].c.pose = 'cheer'; bikes[1 - w].c.pose = 'sad'; hud.showBig(`${names[w]} WINT!`, 1600, w ? '#8fb8ff' : '#7dffb0'); audio.sfx('win', { vol: 0.6 });
+      bikes.forEach((b) => { b.c.pose = b.i === w ? 'cheer' : 'sad'; }); hud.showBig(`${names[w]} WINT!`, 1600, PCSS[w]); audio.sfx('win', { vol: 0.6 });
       fx.particles.burst(cellX(bikes[w].c0), 2, cellZ(bikes[w].r0), { count: 60, speed: 8, up: 1.3, life: 1.3, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 });
     }
     function finishMatch(w) {
       if (finished) return; finished = true;
-      const Wn = names[w], Ln = names[1 - w];
+      const lw = bikes.filter((b) => b.i !== w).sort((p, q) => G.wins[p.i] - G.wins[q.i])[0].i;   // de grootste verliezer (minste rondes)
+      const Wn = names[w], Ln = names[lw];
       const jokes = [`${Wn} is de Lichtkoning! ${Ln} zit nog vast in zijn eigen spoor.`, `${Ln} reed met zijn neus in de neon. ${Wn} lacht zich suf.`, `${Wn} danste door de lichtmuren. ${Ln} danste er dwars tegenaan.`, `De draak is onder de indruk van ${Wn}. ${Ln} krijgt een ijsje als troost.`];
       const bits = [`${stats.grazes} keer langs een muur geschampt`, stats.jumps ? `${stats.jumps} sprongen` : null, stats.erased ? `${stats.erased} stukjes spoor weggeveegd` : null].filter(Boolean);
-      ctx.finishPvp({ winner: w, score: [G.wins[0], G.wins[1]], delay: 600, summary: `${pick(jokes)}${G.byDragon ? ' De draak besliste het gelijkspel met een vuurstoot.' : ''} Samen: ${bits.join(', ')}.` });
+      ctx.finishPvp({ winner: w, score: G.wins.slice(), delay: 600, summary: `${pick(jokes)}${G.byDragon ? ' De draak besliste het gelijkspel met een vuurstoot.' : ''} Samen: ${bits.join(', ')}.` });
     }
 
     // ---------------- hoofdlus ----------------
@@ -376,7 +414,7 @@ export default {
     const camP = new THREE.Vector3(), camL = new THREE.Vector3(); let camX = 0, camZ = 0;
     function updateCamera(dt) {
       const asp = camera.aspect || 1.7, tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), tanH = tanV * asp;
-      const dist = clamp(Math.max(21.5 / tanH, 15.6 / tanV) * 1.04, 30, 90);
+      const dist = clamp(Math.max((W / 2 + 1.5) / tanH, (H / 2 + 0.6) / tanV) * 1.04, 30, 90);   // hele arena in beeld
       G.camPunch = Math.max(0, G.camPunch - dt * 1.5);
       const sMid = G.sx + G.sz > 0 ? 0 : 0; camX = damp(camX, 0, 2, dt);
       const el = 1.1, d = dist * (1 - G.camPunch * 0.03);
@@ -443,13 +481,13 @@ export default {
           fx.texts.add('KORTSLUITING!', cellX(b.c0), 3, cellZ(b.r0), '#d9a8ff', 1.4); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4);
         });
       },
-      celebrate(w) { bikes[w].c.pose = 'cheer'; bikes[1 - w].c.pose = 'sad'; },
+      celebrate(w) { bikes.forEach((b) => { b.c.pose = b.i === w ? 'cheer' : 'sad'; }); },
       dispose() {},
       dbg: {
         state: () => ({ T, gstate: G.state, round: G.round, roundT: G.roundT, wins: [...G.wins], finished, winner: G.winner, byDragon: !!G.byDragon, stats: { ...stats }, ending: G.ending, sx: G.sx, sz: G.sz, dragon: D.state,
           occ: Array.from(occ), items: items.filter((q) => q.on).map((q) => ({ c: q.c, r: q.r, type: q.type })),
           bikes: bikes.map((b) => ({ c: b.c0, r: b.r0, dir: b.dir, alive: b.alive, meter: b.meter, jumpLeft: b.jumpLeft, jumpCd: b.jumpCd, dbl: b.dbl, boosting: b.boosting, trail: b.trail, q: b.q.length })) }),
-        bikes, occ, G, solid, idx, startRound, takeItem, items, spawnItemPair, forceDragon: () => { D.t = 0; }, setRoundT: (t) => { G.roundT = t; }, crash: (i) => { crashBike(bikes[i], 'muur'); endRoundSoon(1 - i); },
+        bikes, occ, G, solid, idx, startRound, takeItem, items, spawnItemPair, forceDragon: () => { D.t = 0; }, setRoundT: (t) => { G.roundT = t; }, crash: (i) => { crashBike(bikes[i], 'muur'); checkEnd(); }, crashMany: (ids) => { ids.forEach((i) => crashBike(bikes[i], 'muur')); checkEnd(); }, D,
         give: (i, type) => takeItem(bikes[i], { c: bikes[i].c0, r: bikes[i].r0, type, on: true, s: { visible: false }, sh: { visible: false } }),
         W, H, intro0,
       },

@@ -43,9 +43,10 @@ export default {
   giver: 'Lavameester Lowie',
   icon: '🌋',
   mode: 'pvp',
+  players: [2, 3],                       // 2 spelers (duel) of 3 spelers (vrij voor allen, Juul doet mee)
   time: 90,
   music: 'game_fast',
-  blurb: 'De vloer van <b>zeshoekige tegels</b> stort in zodra je erop staat! Blijf rennen, spring over gaten en <b>duw</b> je broer van de tegels. Wie in de <b>lava</b> valt, verliest de ronde. Eerste met <b>2 rondes</b> wint!',
+  blurb: 'De vloer van <b>zeshoekige tegels</b> stort in zodra je erop staat! Blijf rennen, spring over gaten en <b>duw</b> je broer van de tegels. Wie in de <b>lava</b> valt, verliest de ronde. Eerste met <b>2 rondes</b> wint! Met drie spelers wint wie als laatste nog staat.',
   controls: ['{move} rennen', '{a} springen', '{b} duwen!'],
   tip: 'Sta nooit stil! Pak kristallen voor een dubbele sprong (klimt een laag omhoog), superduw, schild of herstel. Pas op voor de draak!',
 
@@ -60,7 +61,9 @@ export default {
     L.hemi.intensity = 1.2; L.hemi.color.set(0xe6ecff); L.hemi.groundColor.set(0xff7a3a);
     L.sun.color.set(0xfff0dc); L.sun.intensity = 2.1; L.sun.position.set(-8, 30, 14);
     camera.fov = 46; camera.updateProjectionMatrix();
-    const colorsHex = [0x35c46f, 0x4a8cff];
+    const n = players.length;                                          // 2 of 3 deelnemers (slots)
+    const HEXC = [0x35c46f, 0x4a8cff, 0xff9a3c], CSS = ['#7dffb0', '#8fb8ff', '#ffc58a'], DASHC = [0x7dffb0, 0x8fb8ff, 0xffc58a];
+    const colorsHex = players.map((p) => HEXC[p.id]), pcss = players.map((p) => CSS[p.id]), dashc = players.map((p) => DASHC[p.id]);   // kleur per slot (volgt de speler)
     const world = buildWorld(ctx, colorsHex);
     const tiles = new TileField(scene, !!quality);
 
@@ -82,7 +85,7 @@ export default {
       const shadow = P.shadowBlob(0.9); scene.add(shadow);
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTex(pp), transparent: true, depthTest: false })); tag.scale.set(2.2, 0.82, 1); tag.renderOrder = 15; scene.add(tag);
       const bubble = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 12), new THREE.MeshBasicMaterial({ color: 0xbff4ff, transparent: true, opacity: 0.3, depthWrite: false, blending: THREE.AdditiveBlending })); bubble.visible = false; scene.add(bubble);
-      return { i, c, holder, k, size, R: PR * size, ring, shadow, tag, bubble, wins: 0, dir: i ? -1 : 1,
+      return { i, c, holder, k, size, R: PR * size, ring, shadow, tag, bubble, wins: 0, dir: i ? -1 : 1, surv: 0, deadAt: 0,
         x: 0, y: 0, z: 0, vx: 0, vz: 0, vy: 0, fx: i ? -1 : 1, fz: 0, grounded: true, coyote: 0, extra: 0, extraLeft: 0, djT: 0, power: 0, shield: 0, cd: 0, dashT: 0, dvx: 0, dvz: 0, hitDone: true, stun: 0, inv: 0,
         dead: false, floatY: 0, lastL: 0, gy: 0, sq: 0, pushes: 0, stats: { pushes: 0, hits: 0, items: 0 } };
     });
@@ -98,13 +101,19 @@ export default {
     const icons = {}; for (const k of Object.keys(ITEMS)) icons[k] = iconTex(k);
 
     // ---------------- toestand ----------------
-    const R = { n: 0, state: 'ready', t: 0, tp: 0, sd: false, melt: false, loser: -1, meltN: 0, meltT: 0, itemT: 4 };
+    const R = { n: 0, state: 'ready', t: 0, tp: 0, sd: false, melt: false, loser: -1, winner: -1, meltN: 0, meltT: 0, itemT: 4 };
+    // startposities: 2 spelers links/rechts (gespiegeld); 3 spelers een gelijkzijdige driehoek (zijde ±10,4) rond het midden, kijkend naar het midden
+    const START3 = [[-5.196, 4.5], [5.196, 4.5], [0, -4.5]];
+    const startOf = (i) => (n === 3 ? START3[i] : [(i ? 1 : -1) * START_X, START_Z]);
+    const maxItems = n === 3 ? 3 : 2;
+    const others = (p) => pl.filter((q) => q !== p);
+    const bestWins = (p) => Math.max(...others(p).map((q) => q.wins));
     let T = 0, introT = 0, finished = false, started = false, slow = 1, slowT = 0, lastShakeSfx = 0, lastFallSfx = 0, lastLavaFx = 0, camPunch = 0, over2 = 0;
     const stats = { tiles: 0, pushes: 0, items: 0, fires: 0 };
     const delayNow = () => DELAY[Math.min(R.n - 1, 2)] * TILE_T * lerp(1, 0.5, clamp((R.tp - SD_AT) / 14, 0, 1));
-    const dots = (i) => '●'.repeat(pl[i].wins) + '○'.repeat(WIN_ROUNDS - pl[i].wins);
+    const dots = (i) => '●'.repeat(Math.min(pl[i].wins, WIN_ROUNDS)) + '○'.repeat(Math.max(0, WIN_ROUNDS - pl[i].wins));
     function refreshHud() {
-      hud.setScore(`${names[0]} ${dots(0)}  –  ${dots(1)} ${names[1]}`);
+      hud.setScore(n === 3 ? `${names[0]} ${dots(0)}  ·  ${names[1]} ${dots(1)}  ·  ${names[2]} ${dots(2)}` : `${names[0]} ${dots(0)}  –  ${dots(1)} ${names[1]}`);
       for (const p of pl) {
         const bits = [R.n ? `Ronde ${R.n}` : ''];
         if (p.djT > 0) bits.push('2x sprong'); if (p.power) bits.push('SUPERDUW'); if (p.shield > 0) bits.push('schild');
@@ -130,8 +139,10 @@ export default {
 
     // ---------------- ronde-flow ----------------
     function resetPlayer(p) {
-      p.x = (p.i ? 1 : -1) * START_X; p.z = START_Z; p.y = 0; p.vx = p.vz = p.vy = 0; p.grounded = true; p.dead = false; p.extra = p.djT = p.power = p.shield = 0; p.extraLeft = 0;
-      p.cd = 0; p.dashT = 0; p.stun = 0; p.inv = 0; p.fx = p.dir; p.fz = 0; p.holder.visible = true; p.holder.rotation.set(0, 0, 0); p.c.pose = 'idle'; p.c.faceDir(p.i ? -1 : 1, 0);
+      const [sx, sz] = startOf(p.i); p.x = sx; p.z = sz; p.y = 0; p.vx = p.vz = p.vy = 0; p.grounded = true; p.dead = false; p.extra = p.djT = p.power = p.shield = 0; p.extraLeft = 0;
+      p.cd = 0; p.dashT = 0; p.stun = 0; p.inv = 0; p.deadAt = 0; p.holder.visible = true; p.holder.rotation.set(0, 0, 0); p.c.pose = 'idle';
+      if (n === 3) { const dl = Math.hypot(sx, sz) || 1; p.fx = -sx / dl; p.fz = -sz / dl; } else { p.fx = p.dir; p.fz = 0; }   // 3 spelers: kijk naar het midden
+      p.c.faceDir(p.fx, p.fz);
     }
     function clearItems() { for (const it of items) { it.on = false; it.g.visible = false; it.ring.visible = false; } }
     function startRound() {
@@ -151,33 +162,44 @@ export default {
       fx.texts.add('PLOP!', p.x, HX.LAVA + 3, p.z, '#ff9a3a', 2.0);
       audio.sfx('splash', { vol: 0.8 }); audio.sfx('sizzle', { vol: 0.8 }); audio.sfx('boing', { vol: 0.4, rate: 0.5 }); ctx.shake(0.5);
     }
-    function endRound(loser) {
-      R.state = 'over'; R.t = 0; R.loser = loser; const w = pl[1 - loser]; w.wins++; slow = 0.4; slowT = 1.1; camPunch = 1;
+    // winnaar = slot van de ronde-winnaar (de laatste die nog staat)
+    function endRound(winner) {
+      const w = pl[winner]; R.state = 'over'; R.t = 0; R.winner = winner; R.loser = n === 2 ? 1 - winner : -1; w.wins++; slow = 0.4; slowT = 1.1; camPunch = 1;
+      for (const q of pl) q.surv += q.dead ? q.deadAt : R.tp;          // overlevingstijd (tiebreak bij 3 spelers)
       w.c.pose = 'cheer'; w.floatY = w.y + 1.3; w.vx = w.vz = 0; w.vy = 0; w.bubble.visible = true; w.shield = 0;
       hud.setTimer(null); refreshHud();
       const done = w.wins >= WIN_ROUNDS || R.n >= MAX_ROUNDS;
-      hud.showBig(done ? `${names[w.i]} WINT!` : `${names[w.i]} wint ronde ${R.n}!`, 1700, w.i ? '#8fb8ff' : '#7dffb0');
+      hud.showBig(done ? `${names[w.i]} WINT!` : `${names[w.i]} wint ronde ${R.n}!`, 1700, pcss[w.i]);
       audio.sfx('bell', { vol: 0.8 }); audio.sfx('win', { vol: 0.5 });
       fx.particles.burst(w.x, w.y + 1.5, w.z, { count: 70, speed: 8, up: 1.6, life: 1.4, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 6 });
     }
+    // bij 3 spelers: de meeste rondes, dan de meeste duwen, dan de langste overlevingstijd, dan loting
+    function matchWinner() {
+      if (n === 2) return pl[0].wins === pl[1].wins ? (pl[0].stats.pushes >= pl[1].stats.pushes ? 0 : 1) : (pl[0].wins > pl[1].wins ? 0 : 1);
+      let c = pl.slice();
+      for (const key of [(p) => p.wins, (p) => p.stats.pushes, (p) => Math.round(p.surv * 10)]) { const m = Math.max(...c.map(key)); c = c.filter((p) => key(p) === m); if (c.length === 1) break; }
+      return c[Math.floor(Math.random() * c.length)].i;
+    }
     function finishMatch() {
       if (finished) return; finished = true;
-      const w = pl[0].wins === pl[1].wins ? (pl[0].stats.pushes >= pl[1].stats.pushes ? 0 : 1) : (pl[0].wins > pl[1].wins ? 0 : 1);
-      const jokes = [`${names[w]} danst over de lava en laat ${names[1 - w]} als gesmolten kaas achter.`, `${names[w]} is de Koning van de Kokende Vloer! ${names[1 - w]} ruikt een beetje naar gebakken ui.`, `${names[1 - w]} nam een warm bad in de lava. ${names[w]} wint met droge voeten.`, `De draak vond ${names[w]} de aardigste. ${names[1 - w]} is te heet gebakken.`];
-      ctx.finishPvp({ winner: w, score: [pl[0].wins, pl[1].wins], delay: 700, summary: `${pick(jokes)} Er stortten ${stats.tiles} tegels in${stats.fires ? `, de draak spuwde ${stats.fires}x vuur` : ''} en er werd ${stats.pushes}x geduwd.` });
+      const w = matchWinner(), l = n === 2 ? 1 - w : pl.filter((p) => p.i !== w).sort((a, b) => a.wins - b.wins || a.surv - b.surv)[0].i;   // l = de grootste verliezer
+      const jokes = [`${names[w]} danst over de lava en laat ${names[l]} als gesmolten kaas achter.`, `${names[w]} is de Koning van de Kokende Vloer! ${names[l]} ruikt een beetje naar gebakken ui.`, `${names[l]} nam een warm bad in de lava. ${names[w]} wint met droge voeten.`, `De draak vond ${names[w]} de aardigste. ${names[l]} is te heet gebakken.`];
+      ctx.finishPvp({ winner: w, score: pl.map((p) => p.wins), delay: 700, summary: `${pick(jokes)} Er stortten ${stats.tiles} tegels in${stats.fires ? `, de draak spuwde ${stats.fires}x vuur` : ''} en er werd ${stats.pushes}x geduwd.` });
     }
 
     // ---------------- items ----------------
     function pickType() { const tot = Object.values(ITEMS).reduce((a, t) => a + t.w, 0); let r = Math.random() * tot; for (const k in ITEMS) { r -= ITEMS[k].w; if (r <= 0) return k; } return 'djump'; }
     function spawnItem() {
       const it = items.find((q) => !q.on); if (!it) return;
-      const ls = pl.map((p) => clamp(Math.round(-p.y / 3.2), 0, 2)), low = pl[0].y < pl[1].y ? 0 : 1;
-      const layer = Math.random() < 0.55 ? ls[low] : Math.random() < 0.6 ? Math.min(ls[0], ls[1]) : ls[1 - low];
+      const ls = pl.map((p) => clamp(Math.round(-p.y / 3.2), 0, 2)), live = pl.filter((p) => !p.dead).length ? pl.filter((p) => !p.dead) : pl;
+      const low = live.reduce((b, p) => (p.y <= b.y ? p : b), live[0]).i;      // laagste speler = comeback
+      let high = live.reduce((b, p) => (p.y > b.y ? p : b), live[0]).i; if (high === low && live.length > 1) high = live.find((p) => p.i !== low).i;
+      const layer = Math.random() < 0.55 ? ls[low] : Math.random() < 0.6 ? Math.min(...ls) : ls[high];
       for (let tries = 0; tries < 20; tries++) {
         const s = tiles.randomSolid(layer); if (!s) continue; const [l, k] = s, t = tiles.list[k];
         if (pl.some((p) => Math.hypot(p.x - t.x, p.z - t.z) < 3.2 && Math.abs(p.y - HX.Y[l]) < 2)) continue;
         if (items.some((o) => o.on && o.l === l && o.k === k)) continue;
-        let type = pickType(); if (pl[low].y < pl[1 - low].y - 2.5 && Math.random() < 0.45) type = Math.random() < 0.6 ? 'djump' : 'repair';   // comeback voor wie onderaan zit
+        let type = pickType(); if (pl[low].y < pl[high].y - 2.5 && Math.random() < 0.45) type = Math.random() < 0.6 ? 'djump' : 'repair';   // comeback voor wie onderaan zit
         it.on = true; it.type = type; it.l = l; it.k = k; it.x = t.x; it.z = t.z; it.y = HX.Y[l] + 1.1; it.t = 0; it.life = 14; it.fall = 0;
         it.sp.material.map = icons[type]; it.sp.material.needsUpdate = true; it.gl.material.color.setHex(ITEMS[type].hex); it.ring.material.color.setHex(ITEMS[type].hex);
         it.g.visible = it.ring.visible = true; it.g.position.set(t.x, it.y, t.z); it.ring.position.set(t.x, HX.Y[l] + 0.06, t.z);
@@ -217,9 +239,13 @@ export default {
         D.t -= dt;
         if (D.t <= 0) {
           // mik op wie het hoogst staat (gelijk: willekeurig), met een kleine voorsprong
-          const a = pl[0], b = pl[1]; const tgt = Math.abs(a.y - b.y) > 1 ? (a.y > b.y ? a : b) : (Math.random() < 0.5 ? a : b);
-          const n = R.sd ? 2 : 1; D.n = n; D.state = 'aim'; D.t = 1.5 * Math.min(1, f + 0.25);
-          [tgt, tgt === a ? b : a].slice(0, n).forEach((p, wi) => {
+          // mik op wie het hoogst staat (3 spelers: bij gelijke hoogte op de leider in rondes, dan loting); tweede doelwit = de volgende
+          const al = pl.filter((p) => !p.dead), ord = (al.length ? al : pl).slice().sort((p, q) => q.y - p.y);
+          let tgt = ord[0], a = ord[0], b = ord[1] || ord[0];
+          if (n === 2) tgt = Math.abs(a.y - b.y) > 1 ? a : (Math.random() < 0.5 ? pl[0] : pl[1]);
+          else { const top = ord.filter((p) => p.y > ord[0].y - 1); const mw = Math.max(...top.map((p) => p.wins)); const lead = top.filter((p) => p.wins === mw); tgt = lead[Math.floor(Math.random() * lead.length)]; }
+          const nT = R.sd ? 2 : 1; D.n = nT; D.state = 'aim'; D.t = 1.5 * Math.min(1, f + 0.25);
+          [tgt, n === 2 ? (tgt === pl[0] ? pl[1] : pl[0]) : (ord.find((p) => p !== tgt) || tgt)].slice(0, nT).forEach((p, wi) => {
             const w = warn[wi]; w.on = true; w.g.visible = true; w.x = p.x + p.vx * 0.35 + (wi ? rand(-2, 2) : 0); w.z = p.z + p.vz * 0.35 + (wi ? rand(-2, 2) : 0); const l = tiles.support(w.x, w.z, p.y, 1.5); w.l = l >= 0 ? l : clamp(Math.round(-p.y / 3.2), 0, 2);
           });
           D.ax = warn[0].x + (warn[0].x > 0 ? -5.5 : 5.5); D.az = warn[0].z - 6; D.ay = 5.0; hud.toast('🐉 De draak mikt: ren weg van de rode cirkel!', 1700); audio.tone(110, 0.9, { type: 'sawtooth', vol: 0.2, slide: 70 }); audio.sfx('creak', { vol: 0.5 });
@@ -264,7 +290,9 @@ export default {
       const k = tiles.kAt(o.x, o.z); if (k >= 0 && R.state === 'play') { const l = clamp(Math.round(-o.y / 3.2), 0, 2); tiles.shake(l, k, 0.4); }
     }
     function stepPlayer(p, dt, live) {
-      const inp = pv.input(p.i), o = pl[1 - p.i];
+      const inp = pv.input(p.i), opp = others(p);
+      let o = opp[0];                                                        // dichtstbijzijnde levende tegenstander (bij 2 spelers: de ander)
+      if (n === 3) { let bd = 1e9; for (const q of opp) { const d2 = (q.x - p.x) ** 2 + (q.z - p.z) ** 2 + (q.dead ? 1e6 : 0); if (d2 < bd) { bd = d2; o = q; } } }
       p.cd = Math.max(0, p.cd - dt); p.stun = Math.max(0, p.stun - dt); p.inv = Math.max(0, p.inv - dt); p.coyote = Math.max(0, p.coyote - dt);
       if (p.djT > 0) { p.djT -= dt; if (p.djT <= 0) { p.extra = 0; p.extraLeft = 0; } }
       if (p.power > 0) p.power = Math.max(0, p.power - dt); if (p.shield > 0) p.shield = Math.max(0, p.shield - dt);
@@ -276,15 +304,15 @@ export default {
         let dx = p.fx, dz = p.fz, dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
         const ox = o.x - p.x, oz = o.z - p.z, od = Math.hypot(ox, oz);
         if (!o.dead && od < 5 && od > 0.01 && (dx * ox + dz * oz) / od > 0.5) { dx = dx * 0.4 + ox / od * 0.6; dz = dz * 0.4 + oz / od * 0.6; dl = Math.hypot(dx, dz); dx /= dl; dz /= dl; }   // hulp bij richten
-        const trailing = p.wins < o.wins;
+        const trailing = p.wins < bestWins(p);
         p.dashT = DASH_T; p.dvx = dx; p.dvz = dz; p.fx = dx; p.fz = dz; p.hitDone = false; p.cd = trailing ? 1.05 : 1.5; p.c.swing(); audio.sfx('swing', { vol: 0.5 });
         fx.particles.burst(p.x, p.y + 0.5, p.z, { count: 6, speed: 3, up: 0.5, life: 0.4, size: 0.3, colors: [0xffffff, 0xffd060], gravity: 4 });
       }
       const spd = RUN * pv.speed(p.i), g = G0 * GRAV;
       if (p.dashT > 0) {
         p.dashT -= dt; p.vx = p.dvx * DASH_V * (0.7 + 0.3 * pv.speed(p.i)); p.vz = p.dvz * DASH_V * (0.7 + 0.3 * pv.speed(p.i));
-        if (!p.hitDone && !o.dead && o.inv <= 0 && Math.hypot(o.x - p.x, o.z - p.z) < p.R + o.R + 0.55 && Math.abs(o.y - p.y) < 1.6) pushHit(p, o);
-        if (Math.random() < dt * 60) fx.particles.emit(p.x - p.dvx * 0.4, p.y + 0.5, p.z - p.dvz * 0.4, 0, 0.3, 0, { life: 0.3, size: 0.5, color: p.i ? 0x8fb8ff : 0x7dffb0, gravity: 0 });
+        if (!p.hitDone) for (const q of opp) if (!q.dead && q.inv <= 0 && Math.hypot(q.x - p.x, q.z - p.z) < p.R + q.R + 0.55 && Math.abs(q.y - p.y) < 1.6) { pushHit(p, q); break; }
+        if (Math.random() < dt * 60) fx.particles.emit(p.x - p.dvx * 0.4, p.y + 0.5, p.z - p.dvz * 0.4, 0, 0.3, 0, { life: 0.3, size: 0.5, color: dashc[p.i], gravity: 0 });
       } else if (p.stun > 0) {
         const f = Math.exp(-lerp(1.4, 0.35, SLIP) * dt); p.vx *= f; p.vz *= f;
       } else {
@@ -328,26 +356,29 @@ export default {
           R.melt = true; hud.showBig('VLOER SMELT!', 1300, '#ff3a2a'); audio.sfx('explode', { vol: 0.7 }); ctx.shake(0.7);
           for (let l = 0; l < tiles.L; l++) for (let k = 0; k < tiles.K; k++) tiles.shake(l, k, 0.5 + Math.random() * 3.4);
         }
-        if (R.tp > 12) { R.itemT -= dt; if (R.itemT <= 0 && items.filter((q) => q.on).length < 2 && !R.melt) { spawnItem(); R.itemT = rand(6, 9); } else if (R.itemT <= 0) R.itemT = 3; }
-        else if (R.tp > 3.5) { R.itemT -= dt; if (R.itemT <= 0 && items.filter((q) => q.on).length < 2) { spawnItem(); R.itemT = rand(7, 10); } }
+        if (R.tp > 12) { R.itemT -= dt; if (R.itemT <= 0 && items.filter((q) => q.on).length < maxItems && !R.melt) { spawnItem(); R.itemT = rand(6, 9); } else if (R.itemT <= 0) R.itemT = 3; }
+        else if (R.tp > 3.5) { R.itemT -= dt; if (R.itemT <= 0 && items.filter((q) => q.on).length < maxItems) { spawnItem(); R.itemT = rand(7, 10); } }
         // soft botsing tussen de spelers
-        const a = pl[0], b = pl[1];
-        if (!a.dead && !b.dead && Math.abs(a.y - b.y) < 1.4) {
-          const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz), m = a.R + b.R;
-          if (d < m && d > 1e-4) { const pen = (m - d), wa = b.size / (a.size + b.size); a.x -= dx / d * pen * wa; a.z -= dz / d * pen * wa; b.x += dx / d * pen * (1 - wa); b.z += dz / d * pen * (1 - wa); }
+        for (let ai = 0; ai < n; ai++) for (let bi = ai + 1; bi < n; bi++) {
+          const a = pl[ai], b = pl[bi];
+          if (!a.dead && !b.dead && Math.abs(a.y - b.y) < 1.4) {
+            const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz), m = a.R + b.R;
+            if (d < m && d > 1e-4) { const pen = (m - d), wa = b.size / (a.size + b.size); a.x -= dx / d * pen * wa; a.z -= dz / d * pen * wa; b.x += dx / d * pen * (1 - wa); b.z += dz / d * pen * (1 - wa); }
+          }
         }
-        // einde van de ronde
-        const dead = pl.filter((p) => p.dead);
-        if (dead.length) endRound(dead.length === 2 ? (Math.random() < 0.5 ? 0 : 1) : dead[0].i);
-        else if (R.tp > HARD_AT) endRound(pl[0].y === pl[1].y ? (Math.random() < 0.5 ? 0 : 1) : (pl[0].y < pl[1].y ? 0 : 1));
+        // einde van de ronde: de laatste die nog staat wint (allemaal tegelijk erin: de laatste die viel, anders loting)
+        const alive = pl.filter((p) => !p.dead);
+        if (alive.length <= 1) {
+          if (alive.length === 1) endRound(alive[0].i);
+          else { const lastT = Math.max(...pl.map((p) => p.deadAt)); const last = pl.filter((p) => p.deadAt >= lastT - 0.0011); endRound(last[Math.floor(Math.random() * last.length)].i); }
+        } else if (R.tp > HARD_AT) { const top = Math.max(...alive.map((p) => p.y)), hi = alive.filter((p) => p.y >= top - 1e-6); endRound(hi[Math.floor(Math.random() * hi.length)].i); }
       } else if (R.state === 'over') {
         for (const p of pl) {
-          if (p.i === R.loser) stepPlayer(p, dt, false);
+          if (p.i !== R.winner) stepPlayer(p, dt, false);
           else { p.y = damp(p.y, p.floatY, 3, dt); p.vx = p.vz = 0; p.grounded = false; }
         }
         if (R.t > 2.3) {
-          const w = pl[1 - R.loser];
-          if (w.wins >= WIN_ROUNDS || R.n >= MAX_ROUNDS) finishMatch(); else startRound();
+          if (pl.some((p) => p.wins >= WIN_ROUNDS) || R.n >= MAX_ROUNDS) finishMatch(); else startRound();
         }
       }
       dragonStep(dt);
@@ -382,7 +413,8 @@ export default {
       // zoom naar de actie: tussen de levende spelers, nooit verder dan de hele arena
       const al = pl.filter((p) => !p.dead); if (!al.length) al.push(pl[0]);
       let mx = 0, my = 0, mz = 0; for (const p of al) { mx += p.x / al.length; my += p.y / al.length; mz += p.z / al.length; }
-      const sx = al.length > 1 ? Math.abs(al[0].x - al[1].x) : 0, sz = al.length > 1 ? Math.abs(al[0].z - al[1].z) : 0, sy = al.length > 1 ? Math.abs(al[0].y - al[1].y) : 0;
+      const span = (key) => (al.length > 1 ? Math.max(...al.map((p) => p[key])) - Math.min(...al.map((p) => p[key])) : 0);
+      const sx = span('x'), sz = span('z'), sy = span('y');
       const half = Math.max(9, sx / 2 + 6.5, (sz / 2 + 5) * (camera.aspect || 1.7), sy * 1.6 + 6);
       const k = clamp(half / 12.8, 0.62, 1), lim = 12.8 * (1 - k);
       const tx = clamp(mx, -lim, lim), tz = 0.8 + clamp(mz * 0.7, -4, 4), ty = lerp(-2.2, my - 0.8, 0.55);
@@ -403,7 +435,7 @@ export default {
         const falling = !p.grounded && p.vy < -9 && tiles.support(p.x, p.z, p.y, 0.3) < 0;
         p.c.speed = p.grounded && p.stun <= 0 ? clamp(hv / RUN, 0, 1) : 0; p.c.air = !p.grounded;
         if (hv > 1 && p.dashT <= 0 && p.stun <= 0) p.c.faceDir(p.vx, p.vz); else if (p.dashT > 0) p.c.faceDir(p.dvx, p.dvz); else if (Math.abs(p.fx) + Math.abs(p.fz) > 0.1 && R.state === 'ready') p.c.faceDir(p.fx, p.fz);
-        if (R.state !== 'over' || p.i === R.loser) p.c.pose = p.dashT > 0 ? 'push' : p.stun > 0 || falling ? 'scared' : 'idle';
+        if (R.state !== 'over' || p.i !== R.winner) p.c.pose = p.dashT > 0 ? 'push' : p.stun > 0 || falling ? 'scared' : 'idle';
         p.c.squash = Math.max(p.c.squash, p.sq);
         p.holder.rotation.z = falling ? Math.sin(tt * 14 + p.i) * 0.35 : p.stun > 0 ? Math.sin(tt * 30) * 0.08 : 0;
         p.c.update(dt);
@@ -412,7 +444,7 @@ export default {
         p.ring.position.set(p.x, gy + 0.07, p.z); p.ring.scale.setScalar(p.size * (1 + Math.sin(tt * 6 + p.i) * 0.04)); p.ring.visible = Ls >= 0;
         p.shadow.position.set(p.x, gy + 0.05, p.z); p.shadow.scale.setScalar(p.size * (1 - clamp((p.y - gy) * 0.12, 0, 0.5))); p.shadow.visible = Ls >= 0;
         p.tag.position.set(p.x, p.y + 2.5 * p.size + 0.5, p.z + 0.3); p.tag.visible = true;
-        const sh = p.shield > 0 || (R.state === 'over' && p.i !== R.loser);
+        const sh = p.shield > 0 || (R.state === 'over' && p.i === R.winner);
         p.bubble.visible = sh && (p.shield > 3 || p.shield <= 0 || Math.sin(tt * 18) > 0); p.bubble.position.set(p.x, p.y + 0.9 * p.size, p.z); p.bubble.scale.setScalar(1.15 * p.size + Math.sin(tt * 5) * 0.04);
         if (p.power > 0 && Math.random() < dt * 25) fx.particles.emit(p.x + (Math.random() - 0.5) * 0.8, p.y + 0.4 + Math.random() * 1.2, p.z + (Math.random() - 0.5) * 0.8, 0, 1.5, 0, { life: 0.5, size: 0.3, color: 0xff6a4a, gravity: -1 });
         if (p.djT > 0 && Math.random() < dt * 8) fx.particles.emit(p.x + (Math.random() - 0.5) * 0.6, p.y + 0.1, p.z + (Math.random() - 0.5) * 0.6, 0, 0.8, 0, { life: 0.5, size: 0.25, color: 0x7dff7a, gravity: -0.5 });

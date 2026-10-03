@@ -22,7 +22,8 @@ function inst(geo, material, n, { cast = true, receive = true, dyn = false } = {
 }
 
 // vloer: tegels van 64px per cel, startvelden in spelerskleur, gouden ster in het midden
-function floorTexture() {
+const PAD_COL = ['rgba(60,220,120,.38)', 'rgba(80,150,255,.38)', 'rgba(255,150,60,.42)'];   // startvelden per spelers-id: Wes groen, Jor blauw, Juul oranje
+function floorTexture(ids) {
   const S = 64;
   return canvasTex(B.COLS * S, B.ROWS * S, (g, w, h) => {
     const r = mulberry32(31);
@@ -36,8 +37,8 @@ function floorTexture() {
     }
     // startvelden
     const pad = (c, rr, col) => { const x = c * S, y = rr * S; g.fillStyle = col; g.fillRect(x, y, S, S); g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 4; g.strokeRect(x + 8, y + 8, S - 16, S - 16); };
-    for (const [c, rr] of [[0, 0], [1, 0], [0, 1]]) pad(c, rr, 'rgba(60,220,120,.38)');
-    for (const [c, rr] of [[12, 10], [11, 10], [12, 9]]) pad(c, rr, 'rgba(80,150,255,.38)');
+    const PADS = ids.length === 3 ? [[[0, 4], [0, 3], [0, 5], [1, 4]], [[12, 4], [12, 3], [12, 5], [11, 4]], [[6, 10], [5, 10], [7, 10], [6, 9]]] : [[[0, 0], [1, 0], [0, 1]], [[12, 10], [11, 10], [12, 9]]];
+    PADS.forEach((cells, slot) => { for (const [c, rr] of cells) pad(c, rr, PAD_COL[ids[slot]]); });
     // ster in het midden (gouden krat staat erop)
     g.translate(6.5 * S, 5.5 * S); g.fillStyle = 'rgba(255,215,80,.35)'; g.beginPath();
     for (let i = 0; i < 10; i++) { const a = i / 10 * TAU - Math.PI / 2, rad = i % 2 ? 14 : 34; g.lineTo(Math.cos(a) * rad, Math.sin(a) * rad); } g.fill();
@@ -84,7 +85,7 @@ export function itemTexture(type) {
   });
 }
 
-export function buildWorld(ctx, L) {
+export function buildWorld(ctx, L, ids = [0, 1]) {
   const { scene } = ctx;
   const rng = mulberry32(4242);
   const W = { t: 0, cheerT: 0, emberT: 0, spect: [], bats: [], flames: [] };
@@ -108,7 +109,7 @@ export function buildWorld(ctx, L) {
   scene.add(stal);
 
   // ---------------- platform ----------------
-  const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture(), roughness: 0.85 });
+  const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture(ids), roughness: 0.85 });
   const floor = mesh(new THREE.PlaneGeometry(AX, AZ), floorMat, { cast: false, pos: [0, 0, 0], rot: [-Math.PI / 2, 0, 0] }); scene.add(floor);
   const baseM = new THREE.MeshStandardMaterial({ map: tex.stone(8, 2), color: 0x9a8aa8, roughness: 0.95, flatShading: true });
   scene.add(mesh(new THREE.BoxGeometry(AX + 3, 3.4, AZ + 3), baseM, { cast: false, pos: [0, -1.72, 0] }));

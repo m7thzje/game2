@@ -275,6 +275,17 @@ export function buildWorld(ctx, colors) {
       scene.add(g); W.banners.push(g);
     }
   });
+  // derde speler (Juul): een extra baniere in haar kleur achter de vloer
+  if (colors.length > 2) {
+    for (const xx of [-4.2, 4.2]) {
+      const g = new THREE.Group(); g.position.set(xx, -1.2, -10.4);
+      g.add(mesh(new THREE.CylinderGeometry(0.1, 0.12, 5, 6), mat(0x4a3322), { cast: false, pos: [0, 2.5, 0] }));
+      g.add(mesh(new THREE.SphereGeometry(0.22, 8, 6), mat(0xe8c24a, { metalness: 0.6 }), { cast: false, pos: [0, 5.1, 0] }));
+      const cl = mesh(new THREE.PlaneGeometry(1.7, 2.7, 4, 6), new THREE.MeshStandardMaterial({ color: colors[2], side: THREE.DoubleSide, roughness: 0.8 }), { cast: false, pos: [0.9, 3.5, 0] });
+      g.add(cl); g.userData.cloth = cl; g.userData.base = cl.geometry.attributes.position.array.slice(); g.userData.dir = 1;
+      scene.add(g); W.banners.push(g);
+    }
+  }
   // glimmende vonken boven de lava
   W.update = (t, dt) => {
     W.t = t;

@@ -10,13 +10,16 @@ import { B, cx, cz, setI, buildWorld, itemTexture, ITEM_COL } from './bomber_wor
 //  * kratten bevatten power-ups (bereik, extra bom, snelheid, schild, mega-bom), gouden krat in het midden
 //  * gimmicks: kippen (laten een cadeautje vallen), slijmerds (plakken je vast), de draak die een bom dropt op de sterkste
 //  * sudden death: na 20 s vallen er stenen van het plafond (altijd in gespiegelde paren, dus eerlijk). Gelijk? Dan kiest Kip Kiki.
+//  * 3 spelers (Juul): drie startpunten (links, rechts, midden onder; onderling even ver), links-rechts gespiegelde kratten/stenen/slijm, de laatste die overleeft wint
+//    de ronde (eerste tot 2 ronde-winsten); de draak mikt op de sterkste; gelijke leiders na 3 rondes: Kip Kiki kiest een van hen.
 const { COLS, ROWS, CELL } = B;
 const N = COLS * ROWS;
 const idx = (c, r) => r * COLS + c;
-const mir = (i) => N - 1 - i;                           // punt-gespiegelde cel
 const toC = (x) => Math.round(x / CELL) + 6, toR = (z) => Math.round(z / CELL) + 5;
 const inb = (c, r) => c >= 0 && r >= 0 && c < COLS && r < ROWS;
-const SPAWN = [[0, 0], [COLS - 1, ROWS - 1]];
+const SPAWN2 = [[0, 0], [COLS - 1, ROWS - 1]], SPAWN3 = [[0, 4], [COLS - 1, 4], [6, ROWS - 1]];   // 2: tegenover elkaar in de hoeken; 3: links, rechts en onder (paarsgewijs 12 stappen uit elkaar: eerlijk)
+const FACE2 = [[1, 0], [-1, 0]], FACE3 = [[1, 0], [-1, 0], [0, -1]];       // kijkrichting bij de start
+const PCSS_ALL = ['#7dffb0', '#8fb8ff', '#ffc58a'];
 const BASE_SPEED = 5.2, FUSE = 2.5, FLAME_T = 0.62, SLIDE_V = 11;
 const NEED_WINS = 2, MAX_ROUNDS = 3, SUDDEN_T = 20, SUDDEN_T_FINAL = 13;
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
@@ -33,9 +36,10 @@ export default {
   giver: 'Meester Lont',
   icon: '💣',
   mode: 'pvp',
+  players: [2, 3],                       // 2 spelers (duel) of 3 spelers (vrij voor allen, Juul doet mee)
   time: 90,
   music: 'game_fast',
-  blurb: 'Leg <b>bommen</b>, sloop kratten, pak <b>power-ups</b> en blaas je broer op! Wie geraakt wordt is af. Eerste met <b>2 rondes</b> wint. Na 20 seconden vallen er <b>stenen van het plafond</b>. Pas op voor de <b>draak</b> en de <b>slijmerds</b>!',
+  blurb: 'Leg <b>bommen</b>, sloop kratten, pak <b>power-ups</b> en blaas je broer op! Wie geraakt wordt is af. Eerste met <b>2 rondes</b> wint. Na 20 seconden vallen er <b>stenen van het plafond</b>. Pas op voor de <b>draak</b> en de <b>slijmerds</b>! Met drie spelers wint wie als laatste overeind blijft.',
   controls: ['{move} lopen', '{a} bom leggen', '{b} schoppen (bom of broer)'],
   tip: 'Schop een bom naar je broer toe en ren om een hoek! Kippen laten cadeautjes vallen.',
 
@@ -43,6 +47,9 @@ export default {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
+    const NP = players.length;                                          // 2 of 3 deelnemers (slots)
+    const SPAWN = NP === 3 ? SPAWN3 : SPAWN2, FACE = NP === 3 ? FACE3 : FACE2, PCSS = players.map((p) => PCSS_ALL[p.id]);
+    const mir = NP === 3 ? (i) => i - (i % COLS) + (COLS - 1 - (i % COLS)) : (i) => N - 1 - i;   // gespiegelde cel: 2 spelers puntspiegeling, 3 spelers links-rechts
     const tw = ctx.twist.id;
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const TEMPO = tw === 'turbo' || tw === 'slowmo' ? ctx.twist.speed : 1;
@@ -52,14 +59,14 @@ export default {
 
     const L = ctx.lights('cave', { shadow: 22, center: [0, 0, 0], fogNear: 50, fogFar: 120 });
     camera.fov = 46; camera.updateProjectionMatrix();
-    const W = buildWorld(ctx, L);
+    const W = buildWorld(ctx, L, players.map((p) => p.id));
 
     // ---------------- toestand ----------------
     const g = new Uint8Array(N);                  // 0 vrij, 1 pilaar, 2 krat, 3 gouden krat, 4 steen
     const hid = new Array(N).fill(null);          // power-up in een krat
     const flameT = new Float32Array(N), flameOwner = new Int8Array(N).fill(-1);
     const bombAt = new Int16Array(N).fill(-1);
-    const G = { state: 'init', t: 0, roundT: 0, round: 0, sudden: false, ending: false, slow: 1, slowT: 0, wins: [0, 0], winner: null, final: false, hudT: 0, hintOn: false, camPunch: 0 };
+    const G = { state: 'init', t: 0, roundT: 0, round: 0, sudden: false, ending: false, slow: 1, slowT: 0, wins: new Array(NP).fill(0), winner: null, final: false, hudT: 0, tick: 0, endSet: [], hintOn: false, camPunch: 0 };
     const stats = { bombs: 0, crates: 0, chickens: 0, kicks: 0, items: 0, dragons: 0, slimes: 0, crush: 0, shoves: 0 };
     let T = 0, introT = 0, finished = false, baseSeed = (rnd() * 1e6) | 0;
     for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (c % 2 === 1 && r % 2 === 1) g[idx(c, r)] = 1;
@@ -73,7 +80,7 @@ export default {
       const shadow = P.shadowBlob(0.8); scene.add(shadow);
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex(pp), transparent: true, depthTest: false })); tag.scale.set(2.3, 0.86, 1); tag.renderOrder = 15; scene.add(tag);
       const bubble = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), new THREE.MeshBasicMaterial({ color: 0x6adcff, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false })); bubble.visible = false; scene.add(bubble);
-      return { i, c, k, sz, ring, shadow, tag, bubble, r: 0.62 * lerp(1, sz, 0.5), x: 0, z: 0, vx: 0, vz: 0, fx: i ? -1 : 1, fz: 0, alive: true, bombsMax: 1, range: 2, speedLv: 0, shield: false, inv: 0, mega: false, kickCd: 0, stun: 0, slow: 0, y: 0, dvy: 0, spin: 0, deadT: 0, bombsOut: 0, dirty: 0, hopT: 0, lastTxt: '' };
+      return { i, c, k, sz, ring, shadow, tag, bubble, r: 0.62 * lerp(1, sz, 0.5), x: 0, z: 0, vx: 0, vz: 0, fx: FACE[i][0], fz: FACE[i][1], alive: true, deadTick: -1, bombsMax: 1, range: 2, speedLv: 0, shield: false, inv: 0, mega: false, kickCd: 0, stun: 0, slow: 0, y: 0, dvy: 0, spin: 0, deadT: 0, bombsOut: 0, dirty: 0, hopT: 0, lastTxt: '' };
     });
 
     // ---------------- bommen-pool ----------------
@@ -87,7 +94,7 @@ export default {
       const capm = mesh(capGeo, mat(0x777788, { metalness: 0.6 }), { cast: false, pos: [0, 1.5, 0] }); const fuse = mesh(fuseGeo, mat(0xb08a50), { cast: false, pos: [0, 1.72, 0] });
       const spark = new THREE.Sprite(new THREE.SpriteMaterial({ map: sparkTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); spark.scale.set(0.9, 0.9, 1); spark.position.set(0, 1.98, 0);
       grp.add(body, band, capm, fuse, spark); grp.visible = false; scene.add(grp);
-      return { on: false, grp, body, bm, band, spark, c: 0, r: 0, x: 0, z: 0, t: 0, owner: 0, range: 2, slide: null, prog: 0, pass: [false, false], fy: 0, fvy: 0, wob: rnd() * 6, ghost: false };
+      return { on: false, grp, body, bm, band, spark, c: 0, r: 0, x: 0, z: 0, t: 0, owner: 0, range: 2, slide: null, prog: 0, pass: new Array(NP).fill(false), fy: 0, fvy: 0, wob: rnd() * 6, ghost: false };
     });
     const shadows = Array.from({ length: 18 }, () => { const s = P.shadowBlob(0.9); s.visible = false; scene.add(s); return s; });
 
@@ -104,8 +111,8 @@ export default {
 
     // ---------------- stenen (sudden death) ----------------
     const stoneGeo = new THREE.BoxGeometry(1.98, 1.7, 1.98), stoneMat = new THREE.MeshStandardMaterial({ map: tex.stone(1, 1), color: 0xb07058, emissive: 0x401408, emissiveIntensity: 0.6, roughness: 0.95, flatShading: true });
-    const fall = Array.from({ length: 10 }, () => { const m = mesh(stoneGeo, stoneMat); m.visible = false; scene.add(m); return { on: false, m, i: 0, t: 0, y: 0, vy: 0 }; });
-    let stoneQ = [], stoneQi = 0, stoneT = 0;
+    const fall = Array.from({ length: NP === 3 ? 18 : 10 }, () => { const m = mesh(stoneGeo, stoneMat); m.visible = false; scene.add(m); return { on: false, m, i: 0, t: 0, y: 0, vy: 0 }; });
+    let stoneQ = [], stoneQi = 0, stoneT = 0, stoneBack = [];     // stoneBack: stenen die wachten op een vrij plekje in de pool (nooit een cel overslaan)
 
     const power = (p) => p.bombsMax + p.range + p.speedLv + (p.shield ? 1 : 0);
     const solidG = (i) => g[i] !== 0;
@@ -116,11 +123,15 @@ export default {
     function genLevel(seed) {
       const lr = mulberry32(seed); g.fill(0); hid.fill(null); flameT.fill(0); flameOwner.fill(-1); bombAt.fill(-1);
       for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (c % 2 === 1 && r % 2 === 1) g[idx(c, r)] = 1;
-      const safe = new Set(); for (const [c, r] of [[0, 0], [1, 0], [0, 1], [0, 4], [0, 5], [0, 6]]) { safe.add(idx(c, r)); safe.add(mir(idx(c, r))); }
+      const safeCells = NP === 3 ? [[0, 3], [0, 4], [0, 5], [1, 4], [0, 6], [0, 7], [0, 8], [6, 10], [5, 10], [6, 9], [6, 6], [6, 7], [6, 8]] : [[0, 0], [1, 0], [0, 1], [0, 4], [0, 5], [0, 6]];   // startvelden + ruimte voor de kippen
+      const safe = new Set(); for (const [c, r] of safeCells) { safe.add(idx(c, r)); safe.add(mir(idx(c, r))); }
       const totW = ITEM_W.reduce((a, [, w]) => a + w, 0);
       for (let i = 0; i < N; i++) {
         const j = mir(i); if (j < i || g[i] === 1 || safe.has(i)) continue;
-        if (i === j) { g[i] = 3; continue; }              // midden: gouden krat
+        if (i === j) {                                    // midden: gouden krat (3 spelers: de rest van de middenkolom zijn gewone losse kratten)
+          if (i === idx(6, 5)) g[i] = 3; else if (lr() < 0.74) { g[i] = 2; if (lr() < ITEM_FRAC) { let q = lr() * totW, t = 'range'; for (const [k, w] of ITEM_W) { q -= w; if (q <= 0) { t = k; break; } } hid[i] = t; } }
+          continue;
+        }
         if (lr() < 0.74) {
           g[i] = g[j] = 2;
           if (lr() < ITEM_FRAC) { let q = lr() * totW, t = 'range'; for (const [k, w] of ITEM_W) { q -= w; if (q <= 0) { t = k; break; } } hid[i] = hid[j] = t; }
@@ -132,18 +143,26 @@ export default {
     }
     function buildStoneQueue() {
       const cells = []; for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (!(c % 2 === 1 && r % 2 === 1)) cells.push({ i: idx(c, r), ring: Math.min(c, r, COLS - 1 - c, ROWS - 1 - r), a: Math.atan2(r - 5, c - 6) });
-      cells.sort((p, q) => p.ring - q.ring || p.a - q.a);
-      const seen = new Set(); stoneQ = [];
-      for (const { i } of cells) { if (seen.has(i)) continue; seen.add(i); seen.add(mir(i)); stoneQ.push(i === mir(i) ? [i] : [i, mir(i)]); }
-      stoneQi = 0; stoneT = 0;
+      stoneQ = [];
+      if (NP === 3) {   // 3 spelers: buitenste ring eerst, daarbinnen eerst de cellen vlakbij een startpunt (alle drie tegelijk), in groepjes van max 6
+        const kd = (i) => Math.min(...SPAWN.map(([c, r]) => Math.abs(c - (i % COLS)) + Math.abs(r - ((i / COLS) | 0))));
+        for (const q of cells) q.k = kd(q.i);
+        cells.sort((p, q) => p.ring - q.ring || p.k - q.k || p.a - q.a);
+        let cur = null; for (const q of cells) { if (!cur || cur.ring !== q.ring || cur.k !== q.k || cur.list.length >= 6) { cur = { ring: q.ring, k: q.k, list: [] }; stoneQ.push(cur.list); } cur.list.push(q.i); }
+      } else {
+        cells.sort((p, q) => p.ring - q.ring || p.a - q.a);
+        const seen = new Set();
+        for (const { i } of cells) { if (seen.has(i)) continue; seen.add(i); seen.add(mir(i)); stoneQ.push(i === mir(i) ? [i] : [i, mir(i)]); }
+      }
+      stoneQi = 0; stoneT = 0; stoneBack.length = 0;
     }
 
     // ---------------- ronde ----------------
     function resetPlayer(p) {
       const [c, r] = SPAWN[p.i]; p.x = cx(c); p.z = cz(r); p.vx = p.vz = 0; p.alive = true; p.bombsMax = 1; p.range = 2; p.speedLv = 0; p.shield = false; p.inv = 0; p.mega = false; p.kickCd = 0; p.stun = 0; p.slow = 0; p.y = 0; p.dvy = 0; p.spin = 0; p.deadT = 0; p.bombsOut = 0; p.hopT = 0;
-      p.fx = p.i ? -1 : 1; p.fz = 0; p.c.pose = 'idle'; p.c.group.rotation.set(0, 0, 0); p.c.group.visible = true; p.c.faceDir(p.fx, 0); p.c.yaw = p.c.targetYaw; p.ring.visible = true; p.tag.visible = true;
+      p.fx = FACE[p.i][0]; p.fz = FACE[p.i][1]; p.deadTick = -1; p.c.pose = 'idle'; p.c.group.rotation.set(0, 0, 0); p.c.group.visible = true; p.c.faceDir(p.fx, p.fz); p.c.yaw = p.c.targetYaw; p.ring.visible = true; p.tag.visible = true;
       // troostschild: wie achterstaat begint met een schild
-      if (G.round > 1 && G.wins[p.i] < G.wins[1 - p.i]) { p.shield = true; fx.texts.add('TROOSTSCHILD!', p.x, 3.4, p.z, '#6adcff', 1.4); }
+      if (G.round > 1 && G.wins[p.i] < Math.max(...G.wins)) { p.shield = true; fx.texts.add('TROOSTSCHILD!', p.x, 3.4, p.z, '#6adcff', 1.4); }
     }
     function startRound(n) {
       G.round = n; G.roundT = 0; G.sudden = false; G.ending = false; G.slow = 1; G.final = n >= MAX_ROUNDS; G.state = n === 1 ? 'play' : 'intro'; G.t = 0; G.hintOn = false;
@@ -155,7 +174,7 @@ export default {
       // kippen en slijm
       for (const a of chickens) scene.remove(a.a.group); chickens.length = 0;
       for (const s of slimes) scene.remove(s.a.group); slimes.length = 0;
-      for (const [c, r] of [[0, 5], [COLS - 1, 5]]) { const a = new Animal('chicken'); a.group.scale.setScalar(1.35); scene.add(a.group); chickens.push({ a, x: cx(c), z: cz(r), tc: c, tr: r, c, r, wait: rand(0.3, 1.2), moving: false, dead: false, prog: 0 }); }
+      for (const [c, r] of (NP === 3 ? [[0, 7], [COLS - 1, 7], [6, 7]] : [[0, 5], [COLS - 1, 5]])) { const a = new Animal('chicken'); a.group.scale.setScalar(1.35); scene.add(a.group); chickens.push({ a, x: cx(c), z: cz(r), tc: c, tr: r, c, r, wait: rand(0.3, 1.2), moving: false, dead: false, prog: 0 }); }
       D.state = 'idle'; D.t = rand(8, 11); dragon.group.visible = false; dMark.visible = false; slimeT = rand(9, 12);
       buildStoneQueue();
       G.slowT = 0;
@@ -165,7 +184,7 @@ export default {
     let slimeT = 10;
 
     function refreshHud() {
-      hud.setScore(`${names[0]} ${G.wins[0]} – ${G.wins[1]} ${names[1]}   (ronde ${G.round}/${MAX_ROUNDS})`);
+      hud.setScore(NP === 3 ? `${names[0]} ${G.wins[0]} – ${G.wins[1]} ${names[1]} – ${G.wins[2]} ${names[2]}   (ronde ${G.round}/${MAX_ROUNDS})` : `${names[0]} ${G.wins[0]} – ${G.wins[1]} ${names[1]}   (ronde ${G.round}/${MAX_ROUNDS})`);
     }
     function infoText(p) { return `💣${p.bombsMax} 🔥${p.range} 👟${p.speedLv}${p.shield ? ' 🛡' : ''}${p.mega ? ' ☄' : ''}${p.alive ? '' : ' 💀'}  ·  ${G.wins[p.i]} gewonnen`; }
 
@@ -173,7 +192,7 @@ export default {
     function spawnBomb(c, r, owner, { range = 2, fuse = FUSE_T, ghost = false, fall: fy = 0, mega = false } = {}) {
       const b = bombs.find((q) => !q.on); if (!b) return null;
       b.on = true; b.c = c; b.r = r; b.x = cx(c); b.z = cz(r); b.t = fuse; b.owner = owner; b.range = range; b.slide = null; b.prog = 0; b.fy = fy; b.fvy = 0; b.ghost = ghost; b.mega = mega;
-      b.pass[0] = b.pass[1] = false; for (const p of pl) if (p.alive && circleHitsCell(p.x, p.z, p.r, c, r)) b.pass[p.i] = true;
+      b.pass.fill(false); for (const p of pl) if (p.alive && circleHitsCell(p.x, p.z, p.r, c, r)) b.pass[p.i] = true;
       b.band.material.color.set(owner >= 0 ? PLAYER_COLORS[owner] : 0xaa44ff); b.band.material.emissive.set(owner >= 0 ? PLAYER_COLORS[owner] : 0xaa44ff);
       b.bm.color.set(mega ? 0x401040 : ghost ? 0x6a2a8a : 0x20202c);
       bombAt[idx(c, r)] = bombs.indexOf(b); b.grp.visible = true; b.grp.position.set(b.x, fy, b.z); return b;
@@ -213,7 +232,7 @@ export default {
       const nc = b.c + dx, nr = b.r + dz; if (!inb(nc, nr)) return false; const ni = idx(nc, nr);
       if (g[ni] !== 0 || bombAt[ni] >= 0) return false;
       for (const p of pl) if (p.alive && circleHitsCell(p.x, p.z, p.r + 0.05, nc, nr)) return false;
-      b.slide = { dx, dz }; b.prog = 0; b.sx = b.x; b.sz = b.z; bombAt[idx(b.c, b.r)] = -1; b.c = nc; b.r = nr; bombAt[ni] = bombs.indexOf(b); b.pass[0] = b.pass[1] = false; return true;
+      b.slide = { dx, dz }; b.prog = 0; b.sx = b.x; b.sz = b.z; bombAt[idx(b.c, b.r)] = -1; b.c = nc; b.r = nr; bombAt[ni] = bombs.indexOf(b); b.pass.fill(false); return true;
     }
     function stepSlide(b, dt) {
       const s = b.slide; b.prog += dt * SLIDE_V / CELL;
@@ -253,11 +272,12 @@ export default {
       if (!p.alive || G.state === 'roundEnd' || G.state === 'end' || G.state === 'chicken') return;
       if (!crush && p.inv > 0) return;
       if (!crush && p.shield) { p.shield = false; p.inv = 1.6; fx.texts.add('SCHILD WEG!', p.x, 3.4, p.z, '#6adcff', 1.3); audio.sfx('hit', { vol: 0.6 }); ctx.shake(0.3); fx.particles.burst(p.x, 1, p.z, { count: 30, speed: 6, up: 1, life: 0.6, size: 0.35, colors: [0x6adcff, 0xffffff], gravity: 2 }); return; }
-      p.alive = false; p.dvy = 9; p.spin = (rnd() < 0.5 ? -1 : 1) * 7; p.deadT = 0; p.c.pose = 'scared'; p.y = 0.1;
+      p.alive = false; p.deadTick = G.tick; p.dvy = 9; p.spin = (rnd() < 0.5 ? -1 : 1) * 7; p.deadT = 0; p.c.pose = 'scared'; p.y = 0.1;
       audio.sfx('hurt', { vol: 0.7 }); audio.sfx('lose', { vol: 0.25 }); ctx.shake(0.6);
       fx.particles.burst(p.x, 1.2, p.z, { count: 40, speed: 7, up: 1.3, life: 0.9, size: 0.45, colors: [0xffd23f, 0xff7a1a, 0xffffff, PLAYER_COLORS[p.i]], gravity: 6 });
       fx.texts.add(crush ? 'PLETS!' : 'AUW!', p.x, 3.5, p.z, '#ff6a5a', 1.6);
-      if (!G.ending) { G.ending = true; G.t = 0; G.slow = 0.35; }
+      // de ronde is voorbij zodra er nog maar één speler over is; eindset (voor gelijkspel) = overlevenden + wie in dit tijdstip viel
+      if (!G.ending && pl.filter((q) => q.alive).length <= 1) { G.ending = true; G.t = 0; G.slow = 0.35; G.endSet = pl.filter((q) => q.alive || q.deadTick === G.tick).map((q) => q.i); }
     }
 
     // ---------------- spelers bewegen ----------------
@@ -306,8 +326,9 @@ export default {
         else { audio.sfx('thud', { vol: 0.3 }); }
         return;
       }
-      const o = pl[1 - p.i];
-      if (o.alive) { const dx = o.x - p.x, dz = o.z - p.z, d = Math.hypot(dx, dz); if (d < 2.3 && (dx * p.fx + dz * p.fz) > d * 0.35) { o.vx += p.fx * 14; o.vz += p.fz * 14; o.stun = 0.3; stats.shoves++; audio.sfx('hit', { vol: 0.5 }); fx.texts.add('DUW!', o.x, 3.2, o.z, '#ffe14a', 1.1); fx.particles.burst(o.x, 1, o.z, { count: 10, speed: 4, up: 1, life: 0.4, size: 0.3, color: 0xffffff, gravity: 4 }); ctx.shake(0.2); p.kickCd = 1.0; return; } }
+      let o = null, bd = 1e9;                                       // dichtstbijzijnde levende tegenstander vlak voor je
+      for (const q of pl) { if (q === p || !q.alive) continue; const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz); if (d < 2.3 && (dx * p.fx + dz * p.fz) > d * 0.35 && d < bd) { bd = d; o = q; } }
+      if (o) { o.vx += p.fx * 14; o.vz += p.fz * 14; o.stun = 0.3; stats.shoves++; audio.sfx('hit', { vol: 0.5 }); fx.texts.add('DUW!', o.x, 3.2, o.z, '#ffe14a', 1.1); fx.particles.burst(o.x, 1, o.z, { count: 10, speed: 4, up: 1, life: 0.4, size: 0.3, color: 0xffffff, gravity: 4 }); ctx.shake(0.2); p.kickCd = 1.0; return; }
       audio.sfx('swing', { vol: 0.25 });
     }
 
@@ -337,9 +358,12 @@ export default {
       else { stats.chickens++; fx.texts.add('BOK BOK!', o.x, 2.6, o.z, '#fff', 1.2); audio.sfx('boing', { vol: 0.5 }); audio.sfx('pop', { vol: 0.4 }); if (!byStone) { const t = pick(['range', 'bomb', 'speed', 'shield', 'mega', 'bomb', 'range']); spawnItem(o.c, o.r, t, 0.9); } }
     }
     function spawnSlimes() {
-      const free = []; for (let i = 0; i < N; i++) if (g[i] === 0 && mir(i) > i && walkable(i % COLS, (i / COLS) | 0)) { const c = i % COLS, r = (i / COLS) | 0; if (pl.every((p) => Math.hypot(p.x - cx(c), p.z - cz(r)) > 7) && pl.every((p) => Math.hypot(p.x - cx(COLS - 1 - c), p.z - cz(ROWS - 1 - r)) > 7)) free.push(i); }
+      const far = (j) => pl.every((p) => Math.hypot(p.x - cx(j % COLS), p.z - cz((j / COLS) | 0)) > 7);
+      const free = []; for (let i = 0; i < N; i++) if (g[i] === 0 && mir(i) > i && walkable(i % COLS, (i / COLS) | 0) && far(i) && far(mir(i))) free.push(i);
       if (!free.length) return; const i = pick(free);
-      for (const j of [i, mir(i)]) { const c = j % COLS, r = (j / COLS) | 0; const a = new Slime(0x58d86b, 1.3); scene.add(a.group); a.group.position.set(cx(c), 0, cz(r)); slimes.push({ a, x: cx(c), z: cz(r), c, r, tc: c, tr: r, wait: 0.3, moving: false, dead: false, prog: 0, sx: 0, sz: 0, hit: [0, 0] }); fx.particles.burst(cx(c), 0.5, cz(r), { count: 14, speed: 3, up: 1.3, life: 0.6, size: 0.4, colors: [0x58d86b, 0xb8ffa0], gravity: 4 }); }
+      const spots = [i, mir(i)];
+      if (NP === 3) { const ax = []; for (let r = 0; r < ROWS; r++) { const j = idx(6, r); if (g[j] === 0 && walkable(6, r) && far(j)) ax.push(j); } if (ax.length) spots.push(pick(ax)); }   // 3 spelers: ook een slijmerd op de middenlijn
+      for (const j of spots) { const c = j % COLS, r = (j / COLS) | 0; const a = new Slime(0x58d86b, 1.3); scene.add(a.group); a.group.position.set(cx(c), 0, cz(r)); slimes.push({ a, x: cx(c), z: cz(r), c, r, tc: c, tr: r, wait: 0.3, moving: false, dead: false, prog: 0, sx: 0, sz: 0, hit: new Array(NP).fill(0) }); fx.particles.burst(cx(c), 0.5, cz(r), { count: 14, speed: 3, up: 1.3, life: 0.6, size: 0.4, colors: [0x58d86b, 0xb8ffa0], gravity: 4 }); }
       fx.texts.add('SLIJMERDS!', cx(6), 3, cz(5), '#8dff6a', 1.4); audio.sfx('splash', { vol: 0.4 }); hud.toast('🟢 Er kruipen slijmerds uit de put! Niet aanraken!', 2000);
     }
 
@@ -350,7 +374,9 @@ export default {
         // doelwit: de sterkste speler (Robin Hood), anders een willekeurige vrije cel
         const free = []; for (let i = 0; i < N; i++) if (g[i] === 0 && bombAt[i] < 0) free.push(i);
         if (!free.length) { D.t = 4; return; }
-        const aim = power(pl[0]) === power(pl[1]) || !pl[0].alive || !pl[1].alive ? null : (power(pl[0]) > power(pl[1]) ? pl[0] : pl[1]);
+        let aim = null;
+        if (NP === 2) aim = power(pl[0]) === power(pl[1]) || !pl[0].alive || !pl[1].alive ? null : (power(pl[0]) > power(pl[1]) ? pl[0] : pl[1]);
+        else { const al = pl.filter((q) => q.alive); if (al.length >= 2) { const mp = Math.max(...al.map(power)), top = al.filter((q) => power(q) === mp); if (top.length === 1) aim = top[0]; } }   // 3 spelers: de sterkste van de levenden
         let best = pick(free); if (aim) { let bd = 1e9; for (const i of free) { const d = Math.hypot(cx(i % COLS) - aim.x, cz(((i / COLS) | 0)) - aim.z) + rnd() * 3; if (d < bd) { bd = d; best = i; } } }
         D.tc = best % COLS; D.tr = (best / COLS) | 0; D.state = 'warn'; D.ft = 0; D.dir = rnd() < 0.5 ? -1 : 1; D.dropped = false; D.vx = 20;
         dMark.visible = true; dMark.position.set(cx(D.tc), 0.07, cz(D.tr)); dragon.group.visible = true; stats.dragons++;
@@ -376,8 +402,9 @@ export default {
       if (!G.sudden && G.roundT >= (G.final ? SUDDEN_T_FINAL : SUDDEN_T)) { G.sudden = true; hud.setTimer(null); hud.toast('⚠️ DOODGEWOON! Stenen vallen van het plafond!', 2400); audio.sfx('creak', { vol: 0.5 }); ctx.shake(0.4); }
       if (G.sudden && !G.ending && stoneQi < stoneQ.length) {
         stoneT -= dt;
-        if (stoneT <= 0) { stoneT = Math.max(0.12, 0.42 - stoneQi * 0.006); for (const i of stoneQ[stoneQi]) { const f = fall.find((q) => !q.on); if (f) { f.on = true; f.i = i; f.t = 0; f.y = 16; f.vy = 0; f.m.visible = false; } } stoneQi++; }
+        if (stoneT <= 0) { stoneT = NP === 3 ? Math.max(0.16, 0.6 - stoneQi * 0.014) : Math.max(0.12, 0.42 - stoneQi * 0.006); stoneBack.push(...stoneQ[stoneQi]); stoneQi++; }
       }
+      while (G.sudden && !G.ending && stoneBack.length) { const f = fall.find((q) => !q.on); if (!f) break; f.on = true; f.i = stoneBack.shift(); f.t = 0; f.y = 16; f.vy = 0; f.m.visible = false; }
       let wk = 0;
       for (const f of fall) {
         if (!f.on) continue; f.t += dt; const c = f.i % COLS, r = (f.i / COLS) | 0;
@@ -403,6 +430,7 @@ export default {
 
     // ---------------- hoofdlus ----------------
     function updateSim(dt, canAct) {
+      G.tick++;
       // spelers
       for (const p of pl) { if (p.alive) movePlayer(p, dt, canAct); }
       // bommen
@@ -442,8 +470,9 @@ export default {
         if (!G.sudden) hud.setTimer(Math.max(0, (G.final ? SUDDEN_T_FINAL : SUDDEN_T) - G.roundT), 5);
         if (G.ending) {
           G.slowT += dtRaw; G.slow = G.slowT < 0.5 ? 0.35 : 1;
-          if (!pl[0].alive && !pl[1].alive) endRound(null);
-          else if (G.slowT > 0.8) endRound(pl[0].alive ? 0 : 1);
+          const alive = pl.filter((p) => p.alive);
+          if (!alive.length) endRound(null);
+          else if (G.slowT > 0.8) endRound(alive[0].i);
         }
       }
       if (G.state === 'play' || G.state === 'ending') updateSim(dt, true);
@@ -459,16 +488,17 @@ export default {
 
     function endRound(w) {
       G.state = 'roundEnd'; G.t = 0; G.slow = 1; G.ending = false; hud.setTimer(null);
-      if (w == null) { G.wins[0]++; G.wins[1]++; hud.showBig('ALLEMAAL BOEM!', 1800, '#ffd23f'); }
-      else { G.wins[w]++; hud.showBig(`${names[w]} wint ronde ${G.round}!`, 1800, w ? '#8fb8ff' : '#7dffb0'); pl[w].c.pose = 'cheer'; pl[w].c.jump(); audio.sfx('win', { vol: 0.5 }); W.cheer(3); }
+      if (w == null) { for (const i of G.endSet.length ? G.endSet : pl.map((p) => p.i)) G.wins[i]++; hud.showBig('ALLEMAAL BOEM!', 1800, '#ffd23f'); }
+      else { G.wins[w]++; hud.showBig(`${names[w]} wint ronde ${G.round}!`, 1800, PCSS[w]); pl[w].c.pose = 'cheer'; pl[w].c.jump(); audio.sfx('win', { vol: 0.5 }); W.cheer(3); }
       G.lastRoundWinner = w; refreshHud(); audio.sfx('bell', { vol: 0.5 });
     }
     function nextStep() {
-      const [a, b2] = G.wins; const over = ((a >= NEED_WINS || b2 >= NEED_WINS) && a !== b2) || G.round >= MAX_ROUNDS;
+      const mx = Math.max(...G.wins), lead = pl.filter((p) => G.wins[p.i] === mx).map((p) => p.i);
+      const over = (mx >= NEED_WINS && lead.length === 1) || G.round >= MAX_ROUNDS;
       if (!over) { startRound(G.round + 1); return; }
-      if (a !== b2) { G.state = 'end'; G.t = 0; G.winner = a > b2 ? 0 : 1; celebrate(G.winner); return; }
-      // gelijkspel: Kip Kiki beslist
-      G.state = 'chicken'; G.t = 0; G.chickW = rnd() < 0.5 ? 0 : 1; bigChicken.group.visible = true; bigChicken.group.position.set(cx(6), 0, cz(5)); hud.showBig('KIP KIKI KIEST!', 1600, '#fff'); audio.sfx('boing', { vol: 0.6 });
+      if (lead.length === 1) { G.state = 'end'; G.t = 0; G.winner = lead[0]; celebrate(G.winner); return; }
+      // gelijkspel (2 of 3 gelijke leiders): Kip Kiki beslist
+      G.state = 'chicken'; G.t = 0; G.chickW = lead[(rnd() * lead.length) | 0]; bigChicken.group.visible = true; bigChicken.group.position.set(cx(6), 0, cz(5)); hud.showBig('KIP KIKI KIEST!', 1600, '#fff'); audio.sfx('boing', { vol: 0.6 });
     }
     function chickenScene(dt) {
       const p = pl[G.chickW]; const k = Math.min(1, G.t / 1.8); const tx = p.x, tz = p.z;
@@ -477,19 +507,20 @@ export default {
       if (G.t > 2.4) { G.state = 'end'; G.t = 0; G.winner = G.chickW; G.byChicken = true; bigChicken.group.visible = false; fx.texts.add('GOUDEN EI!', p.x, 3.8, p.z, '#ffd23f', 1.6); celebrate(G.winner); }
     }
     function celebrate(w) {
-      pl[w].c.pose = 'cheer'; pl[1 - w].c.pose = 'sad'; W.cheer(6); audio.sfx('win', { vol: 0.6 });
-      hud.showBig(`${names[w]} WINT!`, 1600, w ? '#8fb8ff' : '#7dffb0');
+      pl.forEach((p) => { p.c.pose = p.i === w ? 'cheer' : 'sad'; }); W.cheer(6); audio.sfx('win', { vol: 0.6 });
+      hud.showBig(`${names[w]} WINT!`, 1600, PCSS[w]);
       fx.particles.burst(pl[w].x, 2, pl[w].z, { count: 60, speed: 8, up: 1.3, life: 1.3, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 });
     }
     function finishMatch(w) {
       if (finished) return; finished = true;
-      const L2 = w == null ? '' : names[w], V = w == null ? '' : names[1 - w];
+      const lw = w == null ? 0 : pl.filter((p) => p.i !== w).sort((p, q) => G.wins[p.i] - G.wins[q.i])[0].i;   // de grootste verliezer (minste rondes)
+      const L2 = w == null ? '' : names[w], V = w == null ? '' : names[lw];
       const jokes = [`${L2} is de Boem-Koning! ${V} ruikt nog naar rook.`, `${V} liep recht in de explosie. ${L2} deed niets verkeerd.`, `${L2} bombardeert de concurrentie weg. De goblins joelen!`, `${V} heeft nog steeds kruit in de oren.`];
       const bits = [`${stats.crates} kratten gesloopt`];
       if (stats.chickens) bits.push(stats.chickens === 1 ? '1 kip de lucht in gestuurd' : `${stats.chickens} kippen de lucht in gestuurd`);
       if (stats.kicks) bits.push(stats.kicks === 1 ? '1 bom weggeschopt' : `${stats.kicks} bommen weggeschopt`);
       const tail = `${G.byChicken ? ' Kip Kiki besliste het gelijkspel met een gouden ei.' : ''} Samen ${bits.join(', ')}.`;
-      ctx.finishPvp({ winner: w, score: [G.wins[0], G.wins[1]], delay: 600, summary: pick(jokes) + tail });
+      ctx.finishPvp({ winner: w, score: G.wins.slice(), delay: 600, summary: pick(jokes) + tail });
     }
 
     // ---------------- beeld ----------------
@@ -498,7 +529,7 @@ export default {
       const asp = camera.aspect || 1.7, tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), tanH = tanV * asp;
       const dist = clamp(Math.max(16.2 / tanH, 11.6 / tanV) * 1.08, 22, 60);
       G.camPunch = Math.max(0, G.camPunch - dt * 1.5);
-      const mid = pl[0].alive && pl[1].alive ? (pl[0].x + pl[1].x) * 0.5 : 0; camShiftX = damp(camShiftX, mid * 0.05, 2, dt);
+      const mid = pl.every((p) => p.alive) ? pl.reduce((a, p) => a + p.x, 0) / NP : 0; camShiftX = damp(camShiftX, mid * 0.05, 2, dt);
       const el = 1.12, d = dist * (1 - G.camPunch * 0.03); const sway = 0;
       camP.set(camShiftX + sway, Math.sin(el) * d, 2.4 + Math.cos(el) * d); camL.set(camShiftX * 0.6, 0, -0.9);
       camera.position.copy(camP); camera.lookAt(camL);
@@ -577,7 +608,7 @@ export default {
           fx.texts.add('SPOOKBOM!', p.x, 3.6, p.z, '#d9a8ff', 1.4); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4);
         });
       },
-      celebrate(w) { pl[w].c.pose = 'cheer'; pl[1 - w].c.pose = 'sad'; W.cheer(6); },
+      celebrate(w) { pl.forEach((p) => { p.c.pose = p.i === w ? 'cheer' : 'sad'; }); W.cheer(6); },
       dispose() {},
       dbg: {
         state: () => ({ T, gstate: G.state, round: G.round, roundT: G.roundT, sudden: G.sudden, wins: [...G.wins], finished, winner: G.winner, byChicken: !!G.byChicken, stats: { ...stats }, ending: G.ending, grid: Array.from(g), flame: Array.from(flameT, (v) => (v > 0 ? v : 0)),

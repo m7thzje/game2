@@ -5,7 +5,8 @@ import { skyTexture } from '../engine/lights.js';
 // Omgeving van "Lichtspoor-Duel": een neon-arena (40 x 30 cellen) in een kasteel van licht. Vloer met gloeiend raster,
 // krimpende lava-muren, kasteeltorens aan de horizon, zwevende neonvormen. Sporen, obstakels en vuur zijn InstancedMeshes.
 
-export const T = { W: 40, H: 30, CAP: 1700 };
+export const T = { W: 40, H: 30, CAP: 1700 };   // arena-afmeting: 40 x 30 (2 spelers) of 46 x 34 (3 spelers, zie setArena)
+export function setArena(n) { T.W = n === 3 ? 46 : 40; T.H = n === 3 ? 34 : 30; }
 export const cellX = (c) => c - T.W / 2 + 0.5, cellZ = (r) => r - T.H / 2 + 0.5;
 const Y = new THREE.Vector3(0, 1, 0);
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
@@ -16,22 +17,30 @@ export function inst(geo, material, n, { cast = false, dyn = true } = {}) {
   for (let i = 0; i < n; i++) setI(m, i, 0, -50, 0, 0);
   return m;
 }
-export const NEON = [0x3dff8f, 0x3ab4ff];                // spoorkleuren: Wes groen, Jor blauw
-export const NEON_CSS = ['#3dff8f', '#3ab4ff'];
+export const NEON = [0x3dff8f, 0x3ab4ff, 0xff9a3c];      // spoorkleuren: Wes groen, Jor blauw, Juul oranje
+export const NEON_CSS = ['#3dff8f', '#3ab4ff', '#ff9a3c'];
+const NEON_RGB = ['61,255,143', '58,180,255', '255,154,60'];
 
-function floorTexture() {
+function floorTexture(starts, ids) {
   const S = 32;
   return canvasTex(T.W * S, T.H * S, (g, w, h) => {
     const bg = g.createRadialGradient(w / 2, h / 2, 40, w / 2, h / 2, w * 0.62); bg.addColorStop(0, '#1a1040'); bg.addColorStop(1, '#07031a'); g.fillStyle = bg; g.fillRect(0, 0, w, h);
     // startzones in spelerskleur
-    for (const [x0, col] of [[0, '61,255,143'], [w, '58,180,255']]) { const gr = g.createLinearGradient(x0, 0, x0 === 0 ? w * 0.3 : w * 0.7, 0); gr.addColorStop(0, `rgba(${col},.28)`); gr.addColorStop(1, `rgba(${col},0)`); g.fillStyle = gr; g.fillRect(x0 === 0 ? 0 : w * 0.7, 0, w * 0.3, h); }
+    if (starts && starts.length === 3) {
+      starts.forEach(([sc, sr, sd], i) => {
+        const x = (sc + 0.5) * S, y = (sr + 0.5) * S, col = NEON_RGB[ids[i]], gr = g.createRadialGradient(x, y, 10, x, y, 8 * S); gr.addColorStop(0, `rgba(${col},.34)`); gr.addColorStop(1, `rgba(${col},0)`); g.fillStyle = gr; g.fillRect(x - 8 * S, y - 8 * S, 16 * S, 16 * S);
+      });
+    } else for (const [x0, col] of [[0, NEON_RGB[ids[0]]], [w, NEON_RGB[ids[1]]]]) { const gr = g.createLinearGradient(x0, 0, x0 === 0 ? w * 0.3 : w * 0.7, 0); gr.addColorStop(0, `rgba(${col},.28)`); gr.addColorStop(1, `rgba(${col},0)`); g.fillStyle = gr; g.fillRect(x0 === 0 ? 0 : w * 0.7, 0, w * 0.3, h); }
     g.lineWidth = 1.5;
     for (let c = 0; c <= T.W; c++) { g.strokeStyle = c % 5 === 0 ? 'rgba(200,110,255,.8)' : 'rgba(150,80,240,.38)'; g.beginPath(); g.moveTo(c * S, 0); g.lineTo(c * S, h); g.stroke(); }
     for (let r = 0; r <= T.H; r++) { g.strokeStyle = r % 5 === 0 ? 'rgba(200,110,255,.8)' : 'rgba(150,80,240,.38)'; g.beginPath(); g.moveTo(0, r * S); g.lineTo(w, r * S); g.stroke(); }
     // middencirkel + chevrons
     g.strokeStyle = 'rgba(255,120,220,.65)'; g.lineWidth = 5; g.beginPath(); g.arc(w / 2, h / 2, 5 * S, 0, TAU); g.stroke(); g.lineWidth = 3; g.beginPath(); g.arc(w / 2, h / 2, 5.6 * S, 0, TAU); g.stroke();
     g.fillStyle = 'rgba(255,120,220,.5)'; for (let k = 0; k < 8; k++) { g.save(); g.translate(w / 2, h / 2); g.rotate(k / 8 * TAU); g.fillRect(5.9 * S, -4, 22, 8); g.restore(); }
-    for (const [x, dir, col] of [[3.5 * S, 1, 'rgba(61,255,143,.8)'], [w - 3.5 * S, -1, 'rgba(58,180,255,.8)']]) { g.strokeStyle = col; g.lineWidth = 6; for (let k = 0; k < 3; k++) { g.beginPath(); g.moveTo(x + dir * (k * 22), h / 2 - 30); g.lineTo(x + dir * (k * 22 + 18), h / 2); g.lineTo(x + dir * (k * 22), h / 2 + 30); g.stroke(); } }
+    if (starts && starts.length === 3) {     // pijlen in kijkrichting vanaf elk startveld
+      starts.forEach(([sc, sr, sd], i) => { g.save(); g.translate((sc + 0.5) * S, (sr + 0.5) * S); g.rotate(sd * Math.PI / 2); g.strokeStyle = `rgba(${NEON_RGB[ids[i]]},.85)`; g.lineWidth = 6; for (let k = 0; k < 3; k++) { const x = 2.2 * S + k * 22; g.beginPath(); g.moveTo(x, -30); g.lineTo(x + 18, 0); g.lineTo(x, 30); g.stroke(); } g.restore(); });
+    } else
+    for (const [x, dir, col] of [[3.5 * S, 1, `rgba(${NEON_RGB[ids[0]]},.8)`], [w - 3.5 * S, -1, `rgba(${NEON_RGB[ids[1]]},.8)`]]) { g.strokeStyle = col; g.lineWidth = 6; for (let k = 0; k < 3; k++) { g.beginPath(); g.moveTo(x + dir * (k * 22), h / 2 - 30); g.lineTo(x + dir * (k * 22 + 18), h / 2); g.lineTo(x + dir * (k * 22), h / 2 + 30); g.stroke(); } }
   });
 }
 function obstTexture() {
@@ -56,7 +65,8 @@ export function itemTexture(type) {
   });
 }
 
-export function buildWorld(ctx, L) {
+// starts = [[c, r, dir]...] per slot, ids = spelers-id per slot (kleur)
+export function buildWorld(ctx, L, starts, ids = starts.map((_, i) => i)) {
   const { scene } = ctx; const rng = mulberry32(2024);
   const W = { t: 0, cheerT: 0, shapes: [] };
   scene.background = skyTexture('#05010f', '#241046');
@@ -66,7 +76,7 @@ export function buildWorld(ctx, L) {
   const AX = T.W, AZ = T.H;
 
   // ---------------- vloer ----------------
-  const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture(), roughness: 0.35, metalness: 0.3 });
+  const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture(starts, ids), roughness: 0.35, metalness: 0.3 });
   scene.add(mesh(new THREE.PlaneGeometry(AX, AZ), floorMat, { cast: false, rot: [-Math.PI / 2, 0, 0] }));
   const gridT = canvasTex(128, 128, (g, w, h) => { g.fillStyle = '#0a0420'; g.fillRect(0, 0, w, h); g.strokeStyle = 'rgba(140,70,255,.5)'; g.lineWidth = 2; g.strokeRect(0, 0, w, h); }, { repeat: [60, 60] });
   const outer = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), new THREE.MeshBasicMaterial({ map: gridT, color: 0x9070ff, fog: true })); outer.rotation.x = -Math.PI / 2; outer.position.y = -0.4; scene.add(outer); W.outer = outer; W.gridT = gridT;
@@ -102,7 +112,7 @@ export function buildWorld(ctx, L) {
   // ---------------- obstakels, sporen, vuur ----------------
   W.obst = inst(new THREE.BoxGeometry(0.96, 1.5, 0.96), new THREE.MeshStandardMaterial({ map: obstTexture(), emissive: 0x2a1060, emissiveIntensity: 0.6, color: 0x7a5ab8, roughness: 0.5, metalness: 0.3 }), 480, { cast: true }); scene.add(W.obst);
   W.obstTop = inst(new THREE.BoxGeometry(0.98, 0.08, 0.98), new THREE.MeshBasicMaterial({ color: 0xffb040 }), 480); scene.add(W.obstTop);
-  W.trail = [0, 1].map((i) => {
+  W.trail = ids.map((id, slot) => { const i = id;
     const wall = inst(new THREE.BoxGeometry(1.0, 0.8, 0.22), new THREE.MeshBasicMaterial({ color: new THREE.Color(NEON[i]).multiplyScalar(0.55), transparent: true, opacity: 0.8 }), T.CAP);
     const top = inst(new THREE.BoxGeometry(1.0, 0.1, 0.34), new THREE.MeshBasicMaterial({ color: new THREE.Color(NEON[i]).lerp(new THREE.Color(0xffffff), 0.4) }), T.CAP);
     const glow = inst(new THREE.PlaneGeometry(1.0, 1.3), new THREE.MeshBasicMaterial({ color: NEON[i], transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false }), T.CAP);
@@ -132,8 +142,9 @@ export function buildWorld(ctx, L) {
   // grote glim-lampen op de hoeken van het veld
   W.lamps = [];
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    const lampCol = starts.length === 3 ? NEON[ids[sz > 0 ? (sx < 0 ? 0 : 1) : 2]] : NEON[ids[sx < 0 ? 0 : 1]];   // 3 spelers: onder links/rechts = slot 0/1, boven = slot 2
     const pole = mesh(new THREE.CylinderGeometry(0.2, 0.3, 4, 6), mat(0x2a1a4a, { metalness: 0.6 }), { cast: false, pos: [sx * (AX / 2 + 2.2), 2, sz * (AZ / 2 + 2.2)] }); scene.add(pole);
-    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: sx < 0 ? 0x3dff8f : 0x3ab4ff, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending })); s.position.set(sx * (AX / 2 + 2.2), 4.4, sz * (AZ / 2 + 2.2)); s.scale.set(6, 6, 1); scene.add(s); W.lamps.push(s);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: lampCol, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending })); s.position.set(sx * (AX / 2 + 2.2), 4.4, sz * (AZ / 2 + 2.2)); s.scale.set(6, 6, 1); scene.add(s); W.lamps.push(s);
   }
   W.update = (dt) => {
     W.t += dt; const t = W.t;
