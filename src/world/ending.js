@@ -12,6 +12,7 @@ import { h, mesh, mat, glow, rand, TAU, canvasTex, smoothstep, lerp } from '../e
 import { ARCADE_HALLS } from '../games/index.js';
 import { isUnlocked, rank, stickers } from '../engine/progress.js';
 import { partyHat } from './opening.js';
+import { nPlayers, activeIds, activeInputs, pname, standTxt, Menu3 } from './players3.js';
 
 const SKIP = Symbol('skip');
 
@@ -72,7 +73,7 @@ export class EndingMode {
     for (let i = 0; i < N; i++) { const x = rand(-27, 27), z = rand(-8, 19); if (Math.abs(x) < 5 && z > -2 && z < 9) { i--; continue; } this.crowd.push({ x, z, ph: rand(0, 6), a: rand(0.6, 1.4) }); col.setHSL(Math.random(), 0.65, 0.5); body.setColorAt(i, col); col.setHSL(0.07 + Math.random() * 0.06, 0.55, 0.65); head.setColorAt(i, col); }
     sc.add(body, head); this.body = body; this.head = head; this.D = new THREE.Object3D();
     // de broers en de Deurman (met feesthoedje) op de dansvloer
-    this.bros = [0, 1].map((i) => { const c = makeBrother(i); c.group.position.set(i ? 2.4 : -2.4, 0, 2); c.yaw = c.targetYaw = Math.PI; c.pose = 'cheer'; sc.add(c.group); return c; });
+    this.bros = activeIds().map((i) => { const c = makeBrother(i); c.group.position.set(nPlayers() === 3 ? [-3.4, 0, 3.4][i] : i ? 2.4 : -2.4, 0, nPlayers() === 3 && i === 2 ? 1.2 : 2); c.yaw = c.targetYaw = Math.PI; c.pose = 'cheer'; sc.add(c.group); return c; });
     this.deur = makeDeurman(0.92); this.deur.group.position.set(0, 0, 4); this.deur.yaw = this.deur.targetYaw = 0; sc.add(this.deur.group);
     const hat = partyHat(0.92); hat.position.set(0.02, 0.23, 0); hat.rotation.z = 0.18; this.deur.head.add(hat);
     sc.add(mesh(new THREE.RingGeometry(5.2, 5.6, 36), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.6, depthWrite: false }), { cast: false, receive: false, pos: [0, 0.06, 3], rot: [-Math.PI / 2, 0, 0] }));
@@ -100,12 +101,12 @@ export class EndingMode {
       this.cam([-16, 4, 14], [16, 4, 14], [0, 3, -2], [0, 3, -2], 9); this.firework(); await this.wait(2500); this.firework(); this.cheer(); await this.wait(2500);
       // 3. de Deurman danst op de beat
       this.deur.dance = true; this.cam([-5, 3.2, 9], [1, 2.6, 8], [0, 2, 3.5], [0, 2.2, 3.5], 10);
-      await this.say([{ who: 'Jor', text: 'Wes. De Deurman danst.' }, { who: 'Wes', text: 'Op de beat.' }, { who: 'Jor', text: 'Hij zwaait ook met zijn feesthoedje. Dat is... schattig?' }, { who: 'Wes', text: 'Hij is gewoon de grootste fan van onze Speelhal. Een hele lange fan.' }]);
+      await this.say([{ who: 'Jor', text: 'Wes. De Deurman danst.' }, { who: 'Wes', text: 'Op de beat.' }, { who: 'Jor', text: 'Hij zwaait ook met zijn feesthoedje. Dat is... schattig?' }, { who: 'Wes', text: 'Hij is gewoon de grootste fan van onze Speelhal. Een hele lange fan.' }, ...(nPlayers() === 3 ? [{ who: 'Juul', text: 'Ik heb hem net een hoedje gegeven. Hij had er al een. Nu heeft hij er twee.' }] : [])]);
       // 4. het diploma met handtekening
-      this.deur.dance = false; this.bros.forEach((b, i) => { b.group.position.set(i ? -1.5 : -2.7, 0, i ? 5.0 : 4.0); b.yaw = b.targetYaw = Math.PI / 2; b.pose = 'idle'; }); this.deur.group.position.set(0.7, 0, 4.5); this.deur.yaw = this.deur.targetYaw = -Math.PI / 2;
+      this.deur.dance = false; this.bros.forEach((b, i) => { b.group.position.set(i === 2 ? -2.1 : i ? -1.5 : -2.7, 0, i === 2 ? 6.2 : i ? 5.0 : 4.0); b.yaw = b.targetYaw = Math.PI / 2; b.pose = 'idle'; }); this.deur.group.position.set(0.7, 0, 4.5); this.deur.yaw = this.deur.targetYaw = -Math.PI / 2;
       this.cam([-2, 2.4, 11.5], [-0.8, 2.3, 9.5], [-0.8, 1.8, 4.5], [-0.8, 2.1, 4.5], 9);
       this.diploma = this.makeDiploma(); ui.screens.append(this.diploma); audio.sfx('sparkle');
-      await this.say([{ who: 'Wes', text: 'Deurman, dit is voor jou: het officiële DEURMAN-DIPLOMA. Door ons allebei getekend.' }, { who: 'Deurman', text: '...Handtekening?' }, { who: 'Jor', text: 'Twee zelfs. Eentje met een kronkel.' }]);
+      await this.say([{ who: 'Wes', text: 'Deurman, dit is voor jou: het officiële DEURMAN-DIPLOMA. Door ons ' + (nPlayers() === 3 ? 'alle drie' : 'allebei') + ' getekend.' }, { who: 'Deurman', text: '...Handtekening?' }, { who: 'Jor', text: nPlayers() === 3 ? 'Drie zelfs. Eentje met een kronkel.' : 'Twee zelfs. Eentje met een kronkel.' }]);
       this.love = 5; audio.sfx('star'); this.deur.dance = true;
       await this.say([{ who: 'Deurman', text: '...Dank u. Dit is de mooiste dag van mijn deurleven.' }, { who: 'Koning Klopper', text: 'Hij huilt! Iemand, een zakdoek!' }, { who: 'Deurman', text: '...Ik huil niet. Dat is deurolie.' }]);
       this.diploma.remove(); this.diploma = null;
@@ -121,7 +122,7 @@ export class EndingMode {
   makeDiploma() {
     return h('div', { style: { position: 'absolute', left: '50%', top: '6vh', transform: 'translateX(-50%) rotate(2deg)', width: 'min(520px,86vw)', padding: '16px 24px', background: 'linear-gradient(135deg,#fff8dc,#f3e2a8)', border: '6px double #b8860b', borderRadius: '10px', color: '#3a1f5a', textAlign: 'center', boxShadow: '0 8px 0 rgba(0,0,0,.45)', zIndex: 30, fontFamily: 'Fredoka, sans-serif' } },
       h('div', { style: { fontFamily: 'MedievalSharp, serif', fontSize: '30px', color: '#7a2fd4' } }, 'DEURMAN-DIPLOMA'), h('div', { style: { fontSize: '19px', margin: '6px 0' } }, 'Hierbij wordt de Deurman officieel benoemd tot'), h('div', { style: { fontSize: '26px', fontWeight: 700 } }, 'GROOTSTE FAN VAN DE SPEELHAL'),
-      h('div', { style: { fontFamily: 'MedievalSharp, serif', fontSize: '28px', marginTop: '8px', color: '#1d9a52' } }, `${S.names[0]}  &  `, h('span', { style: { color: '#2f6fe0' } }, S.names[1])), h('div', { style: { fontSize: '13px', opacity: 0.7 } }, '(met kronkel)'));
+      h('div', { style: { fontFamily: 'MedievalSharp, serif', fontSize: '28px', marginTop: '8px', color: '#1d9a52' } }, `${pname(0)}  &  `, h('span', { style: { color: '#2f6fe0' } }, pname(1)), ...(nPlayers() === 3 ? [`  &  `, h('span', { style: { color: '#e87a1e' } }, pname(2))] : [])), h('div', { style: { fontSize: '13px', opacity: 0.7 } }, '(met kronkel)'));
   }
   boom() { for (const x of [-12, 12]) this.fx.burst(x, 8, -14, { count: 80, colors: [0xff3d81, 0xffe14a, 0x3dc8ff], speed: 9, size: 0.45, life: 1.4, gravity: 4 }); this.shake = 0.4; audio.sfx('explode', { vol: 0.4 }); }
   cheer() { audio.sfx('win'); for (let i = 0; i < 6; i++) setTimeout(() => !this.dead && audio.sfx('pop', { rate: 0.7 + Math.random() * 0.6 }), i * 120); }
@@ -132,10 +133,10 @@ export class EndingMode {
   }
   // ---- credits met jullie statistieken ----
   stats() {
-    const A = S.arcade, n = S.names; const r = rank(); const hats = (S.cosmetics && S.cosmetics.owned || []).reduce((a, o) => a + Math.max(0, ((o && o.hat) || []).length - 1), 0);
+    const A = S.arcade, ids = activeIds(); const r = rank(); const hats = (S.cosmetics && S.cosmetics.owned || []).reduce((a, o) => a + Math.max(0, ((o && o.hat) || []).length - 1), 0);
     const built = ARCADE_HALLS.filter((x) => isUnlocked(x.id)).length;
     return { r, rows: [
-      ['Rang', `${r.icon} ${r.name}`], ['Duels gespeeld', A.plays], ['Winst', `${n[0]} ${A.wins[0]} – ${A.wins[1]} ${n[1]}`], ['Gelijkspel', A.draws], ['Toernooien gewonnen', `${n[0]} ${A.tourneys[0]} – ${A.tourneys[1]} ${n[1]}`],
+      ['Rang', `${r.icon} ${r.name}`], ['Duels gespeeld', A.plays], ['Winst', ids.length === 3 ? standTxt(A.wins, ids, ' · ') : `${pname(0)} ${A.wins[0] || 0} – ${A.wins[1] || 0} ${pname(1)}`], ['Gelijkspel', A.draws], ['Toernooien gewonnen', ids.length === 3 ? standTxt(A.tourneys, ids, ' · ') : `${pname(0)} ${A.tourneys[0] || 0} – ${A.tourneys[1] || 0} ${pname(1)}`],
       ['Dagduels', (S.daily && S.daily.total) || 0], ['Hallen gebouwd', `${built} van ${ARCADE_HALLS.length}`], ['Heitjes verdiend', S.totalEarned], ['Hoeden gekocht', hats], ['Deurman-stickers', stickers().length], ['Speeltijd', `${Math.max(1, Math.round(S.playTime / 60))} min`],
     ] };
   }
@@ -145,7 +146,7 @@ export class EndingMode {
     const T = (t, sz = 20, c = '#ffe14a') => h('div', { style: { fontSize: sz + 'px', color: c, fontFamily: sz > 24 ? 'MedievalSharp, serif' : 'Fredoka, sans-serif', fontWeight: 700 } }, t);
     this.creditEl = h('div', { style: { position: 'absolute', right: '3vw', top: 0, width: 'min(430px,92vw)', textAlign: 'center', fontSize: '18px', willChange: 'transform', zIndex: 20, pointerEvents: 'none' } },
       blk(T('Wes & Jor:', 40), T('De Speelhal', 44), T('Het Grote Slotfeest', 22, '#fff')),
-      blk(T('Met in de hoofdrollen', 17, '#fff'), T(`${S.names[0]} & ${S.names[1]}`, 30), T('Koning Klopper · DJ Dobber · Kermis-Kees', 18, '#fff'), T('en alle bezoekers van de Speelhal', 16, '#d8c8ff'), T('De Deurman als zichzelf (hij vroeg om een handtekening)', 16, '#d8c8ff')),
+      blk(T('Met in de hoofdrollen', 17, '#fff'), T(activeIds().map(pname).join(' & '), 30), T('Koning Klopper · DJ Dobber · Kermis-Kees', 18, '#fff'), T('en alle bezoekers van de Speelhal', 16, '#d8c8ff'), T('De Deurman als zichzelf (hij vroeg om een handtekening)', 16, '#d8c8ff')),
       blk(T('Jullie Speelhal in cijfers', 24), ...st.rows.map(([k, v]) => h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '18px', color: '#fff' } }, h('span', {}, k), h('b', { style: { color: '#ffe14a' } }, String(v))))),
       blk(T('Bedankt voor het spelen!', 28), T('De deuren blijven open. Dat zegt de Deurman.', 16, '#d8c8ff')));
     ui.screens.append(this.creditEl); this.cy = innerHeight; this.creditsOn = true;
@@ -154,19 +155,19 @@ export class EndingMode {
   endCard() {
     S.flags.ended = true; S.flags.slotfeest = true; persist(); this.creditsOn = false; if (this.creditEl) this.creditEl.remove(); if (this.diploma) this.diploma.remove();
     ui.say([]);
-    const menu = new Menu([
+    const menu = new Menu3([
       { label: 'Doorspelen in de Speelhal', onSelect: async () => { ui.activeMenus = []; await ui.fade(1, 600); await this.app.goArcade({}); } },
       { label: 'Naar het titelscherm', onSelect: async () => { ui.activeMenus = []; await ui.fade(1, 600); await this.app.goMenu(); ui.fade(0, 600); } },
     ]);
     const st = this.stats();
-    const card = h('div', { class: 'card', style: { width: 'min(560px,94vw)' } }, h('h1', { style: { fontSize: '48px' } }, 'FEEST!'), h('p', { style: { textAlign: 'center' }, html: `Wes en Jor zijn <b>${st.r.icon} ${st.r.name}</b> van de Speelhal!<br>🎮 ${S.arcade.plays} duels · 🪙 ${S.totalEarned} heitjes · 🚪 ${stickers().length} Deurman-stickers` }), menu.el, h('div', { class: 'small-note' }, 'Bedankt voor het spelen! Je kunt gewoon doorspelen.'));
+    const card = h('div', { class: 'card', style: { width: 'min(560px,94vw)' } }, h('h1', { style: { fontSize: '48px' } }, 'FEEST!'), h('p', { style: { textAlign: 'center' }, html: `${nPlayers() === 3 ? 'Wes, Jor en Juul' : 'Wes en Jor'} zijn <b>${st.r.icon} ${st.r.name}</b> van de Speelhal!<br>🎮 ${S.arcade.plays} duels · 🪙 ${S.totalEarned} heitjes · 🚪 ${stickers().length} Deurman-stickers` }), menu.el, h('div', { class: 'small-note' }, 'Bedankt voor het spelen! Je kunt gewoon doorspelen.'));
     ui.overlay(card); ui.activeMenus.push(menu); this.ended = true;
   }
 
   update(dt) {
     this.t += dt; const t = this.t;
     // overslaan naar de credits-einde: 1 s een actieknop vasthouden
-    let hl = false; for (const p of input.p) if (p.a || p.b) hl = true; if (!(hl && this.creditsOn)) this.holdT0 = 0; else if (!this.holdT0) this.holdT0 = performance.now(); this.skipHold = this.holdT0 ? (performance.now() - this.holdT0) / 1000 : 0; if (this.skipHold > 1 && this.creditsOn) { this.creditsOn = false; this._creditsDone && this._creditsDone(); }
+    let hl = false; for (const p of activeInputs()) if (p.a || p.b) hl = true; if (!(hl && this.creditsOn)) this.holdT0 = 0; else if (!this.holdT0) this.holdT0 = performance.now(); this.skipHold = this.holdT0 ? (performance.now() - this.holdT0) / 1000 : 0; if (this.skipHold > 1 && this.creditsOn) { this.creditsOn = false; this._creditsDone && this._creditsDone(); }
     if (this.shot) {
       const s = this.shot; s.t += dt; const k = smoothstep(0, 1, Math.min(1, s.t / s.dur));
       const p = s.from.map((v, i) => lerp(v, s.to[i], k)), l = s.look0.map((v, i) => lerp(v, s.look1[i], k));

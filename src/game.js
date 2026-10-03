@@ -89,6 +89,7 @@ setInterval(() => persist(), 15000);
 async function boot() {
   const q = new URLSearchParams(location.search);
   if (q.has('scare')) S.settings.scare = +q.get('scare');
+  if (q.has('players')) S.settings.players = +q.get('players') === 3 ? 3 : 2;   // ?players=3 / ?players=2 (tests)
   if (q.has('unlock')) S.settings.unlockAll = q.get('unlock') !== '0';   // ?unlock=1: alle hallen open (handig voor tests)
   if (q.has('quality')) { S.settings.quality = q.get('quality'); renderer.shadowMap.enabled = S.settings.quality !== 'low'; resize(); }
   app.games = await loadAllGames();

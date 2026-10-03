@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { makeDeurman } from '../engine/chars.js';
 import { audio } from '../engine/audio.js';
 import { ui } from '../engine/ui.js';
-import { input } from '../engine/input.js';
+import { inp, nPlayers } from './players3.js';
 import { scare } from '../engine/scare.js';
 import { giveSticker } from '../engine/cameo.js';
 import { S, persist } from '../save.js';
@@ -36,8 +36,8 @@ export class ArcadeDeurman {
     for (let i = 0; i < 9; i++) g.add(mesh(new THREE.SphereGeometry(0.22, 6, 5), mat(CONFETTI[i % 6]), { cast: false, pos: [-2 + i * 0.5, 8.8 - Math.sin(i / 8 * Math.PI) * 0.5 * -1, 0.35] }));   // slinger boven de deur
     g.position.set(0, 0, DZ); g.visible = false; sc.add(g); this.doorG = g;
     // selfie-lichten (vooraf aangemaakt: geen shader-hercompilatie midden in het spel)
-    this.lamps = [0, 1].map(() => { const l = new THREE.PointLight(0xfff0d8, 0, 16, 1.4); sc.add(l); return l; });
-    this.cones = [0, 1].map(() => { const c = mesh(new THREE.ConeGeometry(3.2, 9, 14, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe0f4, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }), { cast: false, receive: false }); c.visible = false; sc.add(c); return c; });
+    this.lamps = Array.from({ length: nPlayers() }, () => { const l = new THREE.PointLight(0xfff0d8, 0, 16, 1.4); sc.add(l); return l; });
+    this.cones = Array.from({ length: nPlayers() }, () => { const c = mesh(new THREE.ConeGeometry(3.2, 9, 14, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe0f4, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }), { cast: false, receive: false }); c.visible = false; sc.add(c); return c; });
     this.bar = h('div', { class: 'hud-deur', style: { display: 'none' } }, h('div', { class: 'lbl' }, '🤳 Selfie-licht: laat hem blozen'), h('div', { class: 'bar' }, h('i')));
     ui.hudEl.append(this.bar);
     // ballonnen + serpentines (alleen zichtbaar tijdens het feestje; langs de randen, buiten beeld van het spel)
@@ -121,14 +121,14 @@ export class ArcadeDeurman {
   lit() {
     let n = 0; const gp = this.m.group.position;
     for (const p of this.a.players) {
-      if (!input.p[p.i].b) continue; const dx = gp.x - p.x, dz = gp.z - p.z; const d = Math.hypot(dx, dz); if (d > 22) continue;
+      if (!inp(p.i).b) continue; const dx = gp.x - p.x, dz = gp.z - p.z; const d = Math.hypot(dx, dz); if (d > 22) continue;
       const dot = (dx * Math.sin(p.yaw) + dz * Math.cos(p.yaw)) / (d || 1); if (dot > 0.7) n++;
     }
     return n;
   }
   lanterns(dt) {
     for (const p of this.a.players) {
-      const on = (this.state === 'stalk' || this.state === 'door') && input.p[p.i].b; const l = this.lamps[p.i]; const c = this.cones[p.i];
+      const on = (this.state === 'stalk' || this.state === 'door') && inp(p.i).b; const l = this.lamps[p.i]; const c = this.cones[p.i];
       l.intensity = damp(l.intensity, on ? 220 : 0, 14, dt); const fx = Math.sin(p.yaw), fz = Math.cos(p.yaw);
       l.position.set(p.x + fx * 3, 2.2, p.z + fz * 3);
       c.visible = on; if (on) { c.material.opacity = 0.16; c.position.set(p.x + fx * 4.5, 1.6, p.z + fz * 4.5); c.rotation.set(Math.PI / 2, 0, 0); c.lookAt(p.x + fx * 20, 1.6, p.z + fz * 20); c.rotateX(-Math.PI / 2); }

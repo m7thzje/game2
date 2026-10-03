@@ -23,12 +23,23 @@ import { openSettings, openOnline } from './menu.js';
 import { mergeStatic } from './merge.js';
 import { openShop } from './shop.js';
 import { villageCameoTick } from '../engine/cameo.js';
+import { nPlayers, activeIds, inp, anyP, pcol, pcss, pname, klabel, LABEL_CSS, standTxt, allPairs, pairLabel, wantsAll, Menu3 } from './players3.js';
 
 const ICONS = { catch: '🥖', kitchen: '🍲', rhythm: '🎸', hotbomb: '💣', sokoban: '📦', whack: '🔨', mudcart: '🛒', goblins: '🐑', fishing: '🎣', potion: '🧪', plates: '🐉', sweeper: '🏰', breakout: '🧱', sumo: '🤼' };
 const NAMES = { catch: 'Broodjes Vangen', kitchen: 'Taverne-keuken', rhythm: 'Straatmuzikant', hotbomb: 'Hete Aardappel', sokoban: 'Kratten Schuiven', whack: 'Mollen Meppen', mudcart: 'Karretje uit de Modder', goblins: 'Goblin-jacht', fishing: 'Samen Vissen', potion: 'Toverdrank', plates: 'Drakengrot', sweeper: 'Zwaaibalk', breakout: 'Muur Slopen', sumo: 'IJs-Sumo' };
 
 let WS = null; // wereld-cache (wordt maar één keer gebouwd)
 
+// Eén speler in het dorp: poppetje, naamlabel, lantaarn (spot + kegel) en ring
+function makePlayer(scene, i) {
+  const c = makeBrother(i); scene.add(c.group);
+  const label = floatLabel(pname(i), '', LABEL_CSS[i]); label.scale.set(2.6, 0.8, 1); label.position.y = c.height + 0.95; c.group.add(label); label.material.depthTest = false;
+  const spot = new THREE.SpotLight(0xfff0c0, 260, 32, 0.46, 0.6, 1.1); spot.visible = false; spot.position.set(0, 1.5, 0.3); const tg = new THREE.Object3D(); tg.position.set(0, 0.6, 12); c.group.add(spot); c.group.add(tg); spot.target = tg;
+  const cg = new THREE.CylinderGeometry(5.2, 0.12, 15, 18, 1, true); cg.rotateX(Math.PI / 2); cg.translate(0, 0, 7.5);
+  const cone = new THREE.Mesh(cg, new THREE.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0.1, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); cone.position.set(0, 1.4, 0.3); cone.visible = false; c.group.add(cone);
+  const ring = mesh(new THREE.RingGeometry(0.75, 0.95, 24), new THREE.MeshBasicMaterial({ color: pcol(i), transparent: true, opacity: 0.6, depthWrite: false }), { cast: false, receive: false, rot: [-Math.PI / 2, 0, 0] }); scene.add(ring);
+  return { i, c, x: 0, z: 0, y: 0, vx: 0, vz: 0, vy: 0, yaw: Math.PI, lantern: false, spot, cone, ring, grounded: true, stepT: 0, speed: 0 };
+}
 function buildWorld(app) {
   const quality = S.settings.quality;
   const scene = new THREE.Scene();
@@ -47,16 +58,9 @@ function buildWorld(app) {
   kill.forEach((l) => l.parent && l.parent.remove(l));
   const mres = mergeStatic(scene, idx0); console.log('merge', mres);
   const life = new Life(W, scene, fx);
-  // spelers
-  const players = [0, 1].map((i) => {
-    const c = makeBrother(i); scene.add(c.group);
-    const label = floatLabel(i ? 'Jor' : 'Wes', '', i ? '#7fb2ff' : '#6bf09a'); label.scale.set(2.6, 0.8, 1); label.position.y = c.height + 0.95; c.group.add(label); label.material.depthTest = false;
-    const spot = new THREE.SpotLight(0xfff0c0, 260, 32, 0.46, 0.6, 1.1); spot.visible = false; spot.position.set(0, 1.5, 0.3); const tg = new THREE.Object3D(); tg.position.set(0, 0.6, 12); c.group.add(spot); c.group.add(tg); spot.target = tg;
-    const cg = new THREE.CylinderGeometry(5.2, 0.12, 15, 18, 1, true); cg.rotateX(Math.PI / 2); cg.translate(0, 0, 7.5);
-    const cone = new THREE.Mesh(cg, new THREE.MeshBasicMaterial({ color: 0xfff2b0, transparent: true, opacity: 0.1, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); cone.position.set(0, 1.4, 0.3); cone.visible = false; c.group.add(cone);
-    const ring = mesh(new THREE.RingGeometry(0.75, 0.95, 24), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.6, depthWrite: false }), { cast: false, receive: false, rot: [-Math.PI / 2, 0, 0] }); scene.add(ring);
-    return { i, c, x: 0, z: 0, y: 0, vx: 0, vz: 0, vy: 0, yaw: Math.PI, lantern: false, spot, cone, ring, grounded: true, stepT: 0, speed: 0 };
-  });
+  // spelers (Wes en Jor altijd; Juul alleen als de derde speler aan staat, ook later nog aan te maken)
+  const players = [0, 1].map((i) => makePlayer(scene, i));
+  if (nPlayers() === 3) players.push(makePlayer(scene, 2));
   // botsing-raster
   const grid = new Map(); const CS = 10;
   const keyOf = (ix, iz) => ix * 4096 + iz;
@@ -100,9 +104,15 @@ export class HubMode {
     return new HubMode(app, opts);
   }
   constructor(app, opts) {
-    this.app = app; this.opts = opts; Object.assign(this, { scene: WS.scene, camera: WS.camera, sky: WS.sky, W: WS.W, life: WS.life, players: WS.players, fx: WS.fx });
+    if (nPlayers() === 3 && !WS.players[2]) {   // Juul pas aanmaken als ze aan gaat; lantaarn meteen voorcompileren
+      const jp = makePlayer(WS.scene, 2); WS.players.push(jp);
+      try { WS.players.forEach((p) => (p.spot.visible = true)); app.renderer.compile(WS.scene, WS.camera); } catch (e) { console.warn(e); } WS.players.forEach((p) => (p.spot.visible = false));
+    }
+    const np = nPlayers();   // alleen de actieve spelers lopen mee; de rest is verborgen
+    WS.players.forEach((p, i) => { const on = i < np; p.c.group.visible = on; p.ring.visible = on; if (!on) { p.spot.visible = false; p.cone.visible = false; } });
+    this.app = app; this.opts = opts; Object.assign(this, { scene: WS.scene, camera: WS.camera, sky: WS.sky, W: WS.W, life: WS.life, players: WS.players.slice(0, np), fx: WS.fx });
     this.W.camera = this.camera; this.mid = new THREE.Vector3(); this.focus = new THREE.Vector3(); this.busy = false; this.cinematic = false; this.t = 0; this.hudT = 0; this.modal = null; this.chaseLight = false;
-    this.camPos = new THREE.Vector3(); this.camLook = new THREE.Vector3(); this.promptItems = [null, null]; this.floatT = 0; this.hintT = 18; this.remindT = 110;
+    this.camPos = new THREE.Vector3(); this.camLook = new THREE.Vector3(); this.promptItems = [null, null, null]; this.floatT = 0; this.hintT = 18; this.remindT = 110;
     if (WS.pickups) { WS.pickups.onCollect = (...a) => this.onCollect(...a); } else { WS.pickups = new Pickups(this.scene, this.fx, (...a) => this.onCollect(...a)); }
     this.pickups = WS.pickups; this.pickups.fx = this.fx;
     this.deur = new HubDeurman(this);
@@ -138,7 +148,7 @@ export class HubMode {
     if (o.from) { const j = JOB_BY_ID[o.from]; if (j) { sx = j.x + Math.sin(j.yaw) * 3; sz = j.z + Math.cos(j.yaw) * 3; } }
     if (o.fromArcade) { sx = ARCADE.x + Math.sin(ARCADE.yaw) * 9; sz = ARCADE.z + Math.cos(ARCADE.yaw) * 9; }
     if (o.newGame) { sx = SPAWN.x; sz = SPAWN.z; }
-    this.players.forEach((p, i) => { [p.x, p.z] = this.safeSpot(sx + (i ? 1.2 : -1.2), sz); p.lastSafe = [p.x, p.z]; p.y = groundY(p.x, p.z); p.vx = p.vz = 0; p.vy = 0; p.yaw = Math.PI; p.c.targetYaw = p.c.yaw = Math.PI; p.lantern = false; p.c.group.visible = true; });
+    this.players.forEach((p, i) => { [p.x, p.z] = this.safeSpot(sx + (this.players.length === 3 ? (i - 1) * 1.7 : (i ? 1.2 : -1.2)), sz); p.lastSafe = [p.x, p.z]; p.y = groundY(p.x, p.z); p.vx = p.vz = 0; p.vy = 0; p.yaw = Math.PI; p.c.targetYaw = p.c.yaw = Math.PI; p.lantern = false; p.c.group.visible = true; });
     this.updateMid(); this.camPos.set(this.mid.x, this.mid.y + 16, this.mid.z + 20); this.camLook.copy(this.mid);
     this.camera.position.copy(this.camPos); this.camera.lookAt(this.camLook);
     audio.music(this.musicName());
@@ -221,7 +231,7 @@ export class HubMode {
         g.font = '18px sans-serif'; g.fillStyle = '#000';
       } else g.fillText('🎮', ax, ay + 6);
     }
-    this.players.forEach((p, i) => { const [x, y] = toS(p.x, p.z); g.fillStyle = PLAYER_CSS[i]; g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 8, 0, TAU); g.fill(); g.stroke(); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(x + Math.sin(p.yaw) * 14, y + Math.cos(p.yaw) * 14); g.lineTo(x + Math.sin(p.yaw + 2.6) * 8, y + Math.cos(p.yaw + 2.6) * 8); g.lineTo(x + Math.sin(p.yaw - 2.6) * 8, y + Math.cos(p.yaw - 2.6) * 8); g.fill(); });
+    this.players.forEach((p, i) => { const [x, y] = toS(p.x, p.z); g.fillStyle = pcss(p.i); g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 8, 0, TAU); g.fill(); g.stroke(); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(x + Math.sin(p.yaw) * 14, y + Math.cos(p.yaw) * 14); g.lineTo(x + Math.sin(p.yaw + 2.6) * 8, y + Math.cos(p.yaw + 2.6) * 8); g.lineTo(x + Math.sin(p.yaw - 2.6) * 8, y + Math.cos(p.yaw - 2.6) * 8); g.fill(); });
     if (this.deur.state === 'chase' || this.deur.state === 'door') { const [x, y] = toS(this.deur.m.group.position.x, this.deur.m.group.position.z); g.fillStyle = '#ffb02a'; g.beginPath(); g.arc(x, y, 7, 0, TAU); g.fill(); }
     g.restore();
   }
@@ -239,11 +249,11 @@ export class HubMode {
       const [sx, sz] = this.safeSpot(p.lastSafe ? p.lastSafe[0] : SPAWN.x, p.lastSafe ? p.lastSafe[1] : SPAWN.z);
       this.fx.burst(p.x, p.y + 0.5, p.z, { count: 20, color: 0xa8e0ff, speed: 3, life: 0.7, size: 0.3 }); audio.sfx('splash', { vol: 0.5 });
       p.x = sx; p.z = sz; p.y = groundY(sx, sz); p.vx = p.vz = p.vy = 0; p.grounded = true; p.c.air = false;
-      ui.hud.toast(`${S.names[p.i]} is uit het water gehaald!`, 2000);
+      ui.hud.toast(`${pname(p.i)} is uit het water gehaald!`, 2000);
     } else if (p.grounded && p.speed < 20) { if (!p.lastSafe || Math.hypot(p.lastSafe[0] - p.x, p.lastSafe[1] - p.z) > 1.5) p.lastSafe = [p.x, p.z]; }
   }
   updateMid() {
-    const [a, b] = this.players; this.mid.set((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2);
+    const n = this.players.length; this.mid.set(this.players.reduce((q, p) => q + p.x, 0) / n, this.players.reduce((q, p) => q + p.y, 0) / n, this.players.reduce((q, p) => q + p.z, 0) / n);
   }
   collide(p, nx, nz) {
     const r = 0.5; const { grid, CS, keyOf } = WS;
@@ -270,7 +280,7 @@ export class HubMode {
     return [nx, nz];
   }
   movePlayer(p, dt, frozen) {
-    const ip = input.p[p.i];
+    const ip = inp(p.i);
     const sp = 8.2; let tx = 0, tz = 0;
     if (!frozen) { const k = p.lantern ? 0.6 : 1; tx = ip.x * sp * k; tz = ip.y * sp * k; }
     p.vx = damp(p.vx, tx, 12, dt); p.vz = damp(p.vz, tz, 12, dt);
@@ -282,9 +292,9 @@ export class HubMode {
     if (stepd > 1e-4 && p.grounded && !onBridge(nx, nz) && !onBridge(p.x, p.z) && (gy1 - gy0) / stepd > 1.05 && gy1 - gy0 > 0.04) { const gx = groundY(nx, p.z), gz = groundY(p.x, nz); if ((gx - gy0) / Math.abs(nx - p.x + 1e-5) < 1.0) nz = p.z; else if ((gz - gy0) / Math.abs(nz - p.z + 1e-5) < 1.0) nx = p.x; else { nx = p.x; nz = p.z; } }
     [nx, nz] = this.collide(p, nx, nz);
     // spelers onderling
-    const o = this.players[1 - p.i]; const dx = nx - o.x, dz = nz - o.z, d = Math.hypot(dx, dz); if (d < 1.1 && d > 1e-3) { const push = (1.1 - d) * 0.5; nx += dx / d * push; nz += dz / d * push; }
-    // koppel: maximale afstand
-    const mdx = nx - o.x, mdz = nz - o.z, md = Math.hypot(mdx, mdz); const MAXSEP = 34; if (md > MAXSEP) { const tx2 = o.x + mdx / md * MAXSEP, tz2 = o.z + mdz / md * MAXSEP; if (!isWater(tx2, tz2)) { nx = tx2; nz = tz2; } }
+    for (const o of this.players) { if (o === p) continue; const dx = nx - o.x, dz = nz - o.z, d = Math.hypot(dx, dz); if (d < 1.1 && d > 1e-3) { const push = (1.1 - d) * 0.5; nx += dx / d * push; nz += dz / d * push; } }
+    // koppel: maximale afstand tot elke andere speler (bij 3 spelers blijft iedereen dus binnen beeld)
+    for (const o of this.players) { if (o === p) continue; const mdx = nx - o.x, mdz = nz - o.z, md = Math.hypot(mdx, mdz); const MAXSEP = 34; if (md > MAXSEP) { const tx2 = o.x + mdx / md * MAXSEP, tz2 = o.z + mdz / md * MAXSEP; if (!isWater(tx2, tz2)) { nx = tx2; nz = tz2; } } }
     p.x = nx; p.z = nz;
     // springen
     const gy = groundY(p.x, p.z);
@@ -313,7 +323,7 @@ export class HubMode {
   async choose(title, labels, sub) {
     return new Promise((resolve) => {
       const items = labels.map((l, i) => ({ label: l, onSelect: () => { this.menu = null; el.remove(); resolve(i); } }));
-      const menu = new Menu(items); this.menu = menu;
+      const menu = new Menu3(items); this.menu = menu;
       const card = h('div', { class: 'card', style: { width: 'min(520px,92vw)' } }, h('h2', { style: { fontSize: '28px' } }, title), sub ? h('p', { style: { textAlign: 'center' } }, sub) : null, menu.el);
       const el = ui.overlay(card, 'clear'); el.style.alignItems = 'flex-end'; el.style.paddingBottom = '220px'; el.style.background = 'none'; el.style.backdropFilter = 'none';
     });
@@ -344,9 +354,16 @@ export class HubMode {
     const best = S.jobs[it.id];
     const c = await this.choose(`${def.icon || ''} ${def.name}`, ['Ja, doen we!', 'Nu even niet'], best ? `Beste: ${'★'.repeat(best.bestStars)}${'☆'.repeat(3 - best.bestStars)} · ${def.mode === 'puzzle' ? 'Puzzel' : def.mode === 'versus' ? 'Broer tegen broer' : 'Samenwerken'}` : (def.mode === 'puzzle' ? 'Puzzel' : def.mode === 'versus' ? 'Broer tegen broer' : 'Samenwerken'));
     if (c !== 0) return;
+    let extra = null;
+    if (this.players.length === 3) {   // met drie spelers: wie doen mee? (2 van de 3, of alle drie bij een 3-speler-karweitje)
+      let pl;
+      if (wantsAll(def)) pl = [0, 1, 2];
+      else { const prs = allPairs(activeIds()); const k = await this.choose('Wie doen mee?', [...prs.map(pairLabel), 'Nu even niet'], 'Twee van de drie doen dit karweitje. De derde kijkt toe!'); pl = k < prs.length ? prs[k] : null; }
+      if (!pl) return; extra = { players: pl };
+    }
     S.hubPos = { x: this.mid.x, z: this.mid.z };
     audio.sfx('powerup'); await ui.fade(1, 450); persist();
-    this.busy = false; this.app.playGame(it.id, { back: 'hub' });
+    this.busy = false; this.app.playGame(it.id, { back: 'hub', extra });
     await new Promise(() => {}); // modus wordt vervangen
   }
   async afterJob(id, r) {
@@ -390,14 +407,14 @@ export class HubMode {
     const hallen = [0, 1, 2, 3, 4].filter((i) => isUnlocked(i)).map((i) => HALL_NAMES[i]).join(', ');
     const lore = STORY.ELDER_LORE.filter((l) => done >= l.need).map((l) => h('p', { style: { fontStyle: 'italic', fontSize: '16px' } }, '“' + l.text + '”'));
     const knobHints = DOORKNOBS.filter((k) => !S.collected[k.id] && done >= 4).slice(0, 3).map((k) => h('li', {}, '✨ ' + k.hint));
-    await this.cardModal('Dagboek van Wes & Jor', h('div', {},
-      h('p', { html: `🪙 <b>${S.coins}</b> heitjes (totaal verdiend: ${S.totalEarned})<br>🔨 Klussen gedaan: <b>${done}/${JOBS.length}</b> · ⭐ ${stars}/${JOBS.length * 3} sterren<br>${r.icon} Rang: <b>${r.name}</b> (${r.points} punten${r.next ? `, volgende rang: ${r.next.name} bij ${r.next.at}` : ''})<br>🏗️ Hallen: ${hallen}<br>🎮 Duelstand: ${S.names[0]} ${A.wins[0]} – ${A.wins[1]} ${S.names[1]}<br>✨ Gouden Deurknoppen — de Deurman is er gek op: <b>${knobs}/${DOORKNOBS.length}</b><br>🏷️ Deurman-stickers: <b>${st}/${DEUR_HALL_STICKERS}</b> voor de geheime Deurenhal<br>👋 Deurman gezien: ${S.sightings}×<br>⏱️ speeltijd ${mins} min` }),
+    await this.cardModal(this.players.length === 3 ? 'Dagboek van Wes, Jor & Juul' : 'Dagboek van Wes & Jor', h('div', {},
+      h('p', { html: `🪙 <b>${S.coins}</b> heitjes (totaal verdiend: ${S.totalEarned})<br>🔨 Klussen gedaan: <b>${done}/${JOBS.length}</b> · ⭐ ${stars}/${JOBS.length * 3} sterren<br>${r.icon} Rang: <b>${r.name}</b> (${r.points} punten${r.next ? `, volgende rang: ${r.next.name} bij ${r.next.at}` : ''})<br>🏗️ Hallen: ${hallen}<br>🎮 Duelstand: ${this.players.length === 3 ? standTxt(A.wins, activeIds(), ' · ') : `${pname(0)} ${A.wins[0] || 0} – ${A.wins[1] || 0} ${pname(1)}`}<br>✨ Gouden Deurknoppen — de Deurman is er gek op: <b>${knobs}/${DOORKNOBS.length}</b><br>🏷️ Deurman-stickers: <b>${st}/${DEUR_HALL_STICKERS}</b> voor de geheime Deurenhal<br>👋 Deurman gezien: ${S.sightings}×<br>⏱️ speeltijd ${mins} min` }),
       lore.length ? h('div', {}, h('h4', {}, 'Wat het dorp over de Deurman vertelt:'), ...lore) : null,
       knobHints.length ? h('div', {}, h('h4', {}, 'Hints voor Gouden Deurknoppen:'), h('ul', { style: { paddingLeft: '20px' } }, ...knobHints)) : null), '');
   }
   cardModal(title, body, note) {
     return new Promise((resolve) => {
-      const card = h('div', { class: 'card' }, h('h2', {}, title), body, h('div', { class: 'small-note' }, (note ? note + ' · ' : '') + `Sluiten: ${KEY_LABELS[0].a} of ${KEY_LABELS[1].a}`));
+      const card = h('div', { class: 'card' }, h('h2', {}, title), body, h('div', { class: 'small-note' }, (note ? note + ' · ' : '') + `Sluiten: ${activeIds().map((i) => klabel(i).a).join(' of ')}`));
       const el = ui.overlay(card); this.modal = { el, resolve, t: 0.25 };
     });
   }
@@ -426,7 +443,7 @@ export class HubMode {
   async arcadeGate() {
     const first = !S.flags.met_arcade; S.flags.met_arcade = true;
     if (first) await this.say([{ text: 'Een enorme poort in de berg, vol neon en lampionnen. Boven de ingang staat: SPEELHAL — Koning Klopper.' }, { who: 'Wes', text: 'Terug naar de Speelhal!' }, { who: 'Jor', text: 'Duels tegen elkaar! Ik ga winnen.' }, { who: 'Wes', text: 'In je dromen.' }]);
-    const A = S.arcade; const c = await this.choose('🎮 Naar de Speelhal', ['Naar binnen!', 'Nog niet'], `Stand: ${S.names[0]} ${A.wins[0]} – ${A.wins[1]} ${S.names[1]}`);
+    const A = S.arcade; const c = await this.choose('🎮 Naar de Speelhal', ['Naar binnen!', 'Nog niet'], `Stand: ${this.players.length === 3 ? standTxt(A.wins, activeIds(), ' · ') : `${pname(0)} ${A.wins[0] || 0} – ${A.wins[1] || 0} ${pname(1)}`}`);
     if (c === 0) await this.naarSpeelhal();
   }
   // Heraut Hans: nodigt uit om terug te gaan naar de Speelhal
@@ -462,7 +479,7 @@ export class HubMode {
     else if (c === 2) await this.journal();
     else if (c === 3) await this.openShop();
     else if (c === 4) { const { openAlbum } = await import('../engine/cameo.js'); await new Promise((r) => openAlbum(r)); }
-    else if (c === 5) await new Promise((r) => openSettings(r));
+    else if (c === 5) { const n0 = nPlayers(); await new Promise((r) => openSettings(r)); if (nPlayers() !== n0) { persist(); await ui.fade(1, 400); this.busy = false; await this.app.goHub({}); ui.fade(0, 500); await new Promise(() => {}); } }   // Juul aan/uit: dorp opnieuw
     else if (c === 6) await new Promise((r) => openOnline(this.app, r));
     else if (c === 7) { persist(); await ui.fade(1, 400); this.busy = false; await this.app.goMenu(); ui.fade(0, 500); await new Promise(() => {}); }
     this.busy = false; input.reset();
@@ -472,15 +489,14 @@ export class HubMode {
   update(dt) {
     this.t += dt; const t = this.t;
     if (this.modal) {
-      this.modal.t -= dt; if (this.modal.t <= 0 && (input.p[0].aP || input.p[1].aP || input.pressed('Escape'))) { this.modal.el.remove(); const r = this.modal.resolve; this.modal = null; r(); input.reset(); }
+      this.modal.t -= dt; if (this.modal.t <= 0 && (anyP('aP') || input.pressed('Escape'))) { this.modal.el.remove(); const r = this.modal.resolve; this.modal = null; r(); input.reset(); }
     }
     if (this.menu) this.menu.update();
     S.tod = ((S.tod ?? 0.1) + dt / 720) % 1; this.sky.setTime(S.tod);
     const frozen = this.busy || this.cinematic || scare.active;
-    const [A, B] = this.players;
     for (const p of this.players) {
       if (!frozen) {
-        const ip = input.p[p.i];
+        const ip = inp(p.i);
         p.lantern = ip.b && !this.busy;
         if (ip.aP) { const it = this.findInteract(p); if (it) this.interact(it, p); else this.tryJump(p); }
         if (ip.bP && !p.lantern) {}
@@ -516,7 +532,7 @@ export class HubMode {
     this.hudT -= dt; if (this.hudT <= 0) { this.hudT = 0.12; this.drawMini(); this.updateArcadeHint(); }
     if (!this.busy && !this.cinematic) { this.remindT -= dt; if (this.remindT <= 0) { this.remindT = 150 + Math.random() * 60; this.speelhalHerinnering(); } }
     this.hintEl.style.padding = innerWidth > 900 ? '0 190px 0 360px' : '';
-    this.hintT -= dt; this.hintEl.innerHTML = this.hintT > 0 && !this.busy ? `<span>Lopen: <kbd>WASD</kbd>/<kbd>Pijltjes</kbd> · <kbd>F</kbd>/<kbd>Enter</kbd> praten of springen · <kbd>G</kbd>/<kbd>Shift</kbd> selfie-licht · <kbd>Esc</kbd> menu · <kbd>Tab</kbd> dagboek</span>` : '';
+    this.hintT -= dt; this.hintEl.innerHTML = this.hintT > 0 && !this.busy ? `<span>Lopen: <kbd>WASD</kbd>/<kbd>Pijltjes</kbd>${this.players.length === 3 ? '/<kbd>IJKL</kbd>' : ''} · <kbd>F</kbd>/<kbd>Enter</kbd>${this.players.length === 3 ? '/<kbd>U</kbd>' : ''} praten of springen · <kbd>G</kbd>/<kbd>Shift</kbd>${this.players.length === 3 ? '/<kbd>O</kbd>' : ''} selfie-licht · <kbd>Esc</kbd> menu · <kbd>Tab</kbd> dagboek</span>` : '';
     if (!this._lastPh || this._lastPh !== this.sky.phase()) { this._lastPh = this.sky.phase(); if (this.deur.state === 'idle') audio.music(this.musicName()); this.onCoinsChanged(); }
     this.updateCamera(dt);
   }
@@ -559,12 +575,12 @@ export class HubMode {
     const lines = [];
     for (const p of this.players) {
       const it = this.findInteract(p); this.promptItems[p.i] = it;
-      if (it) { let lab = it.label; if (it.type === 'job') { const j = JOB_BY_ID[it.id]; lab = `${j.who} aanspreken`; } lines.push(`<span style="color:${PLAYER_CSS[p.i]}">${S.names[p.i]}</span> <b>${KEY_LABELS[p.i].a}</b> ${lab}`); }
+      if (it) { let lab = it.label; if (it.type === 'job') { const j = JOB_BY_ID[it.id]; lab = `${j.who} aanspreken`; } lines.push(`<span style="color:${pcss(p.i)}">${pname(p.i)}</span> <b>${klabel(p.i).a}</b> ${lab}`); }
     }
     ui.hud.setPrompt(lines.length ? lines.join('<br>') : null);
   }
   updateCamera(dt) {
-    const [a, b] = this.players; const sep = Math.hypot(a.x - b.x, a.z - b.z);
+    let sep = 0; for (const a of this.players) for (const b of this.players) sep = Math.max(sep, Math.hypot(a.x - b.x, a.z - b.z));   // grootste afstand: de camera omvat iedereen
     const k = clamp((sep - 6) / 28, 0, 1);
     const hgt = lerp(17, 33, k), back = lerp(14.5, 32, k);
     let tx = this.mid.x, ty = Math.max(this.mid.y, groundY(this.mid.x, this.mid.z)) + hgt, tz = this.mid.z + back, lx = this.mid.x, ly = this.mid.y + 1.5, lz = this.mid.z - 1;

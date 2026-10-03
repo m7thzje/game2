@@ -10,6 +10,7 @@ import { tex } from '../engine/textures.js';
 import * as P from '../engine/props.js';
 import { h, mesh, mat, glow, canvasTex, rand, TAU, damp, lerp, smoothstep } from '../engine/util.js';
 import { mergeStatic } from './merge.js';
+import { nPlayers, activeIds, activeInputs } from './players3.js';
 
 // ============================================================================
 // Opening (±40 s): knop-knop-knop -> de Deurman bezorgt een uitnodiging -> reis naar de berg -> poort SPEELHAL gaat aan.
@@ -113,13 +114,13 @@ export class OpeningMode {
     this.buildRoom(this.roomG);
     this.gate = buildGate(this.outG);
     // personages: Wes, Jor (met hun hoedjes) en de Deurman (feesthoedje, envelop, bloemetje)
-    this.bros = [0, 1].map((i) => { const c = makeBrother(i); this.scene.add(c.group); return c; });
+    this.bros = activeIds().map((i) => { const c = makeBrother(i); this.scene.add(c.group); return c; });   // Wes, Jor (en Juul)
     this.deur = makeDeurman(0.82); this.scene.add(this.deur.group);
     this.hat = partyHat(0.82); this.hat.position.set(0.02, 0.2, 0); this.hat.rotation.z = 0.18; this.deur.head.add(this.hat);
     this.env = envelope(0.82); this.env.position.set(0, -1.42, 0.1); this.env.rotation.set(0, 0, 0.3); this.deur.arms[0].add(this.env);
     this.flw = flower(0.82); this.flw.position.set(0, -1.42, 0.06); this.deur.arms[1].add(this.flw);
     this.deurShown = false; this.deurMode = 'hold'; this.walk = 0; this.doorOpen = 0; this.doorTarget = 0;
-    this.skipEl = h('div', { style: { position: 'absolute', right: '14px', top: '12px', padding: '5px 12px', borderRadius: '12px', background: 'rgba(20,12,30,.7)', border: '2px solid rgba(255,255,255,.25)', fontSize: '14px', zIndex: 40 } }, h('div', { html: 'Overslaan: houd <b>F</b> / <b>Enter</b> ingedrukt (of Esc)' }), h('div', { style: { height: '6px', borderRadius: '4px', background: '#2a1a3a', marginTop: '3px', overflow: 'hidden' } }, this.skipBar = h('i', { style: { display: 'block', height: '100%', width: '0%', background: '#ffe14a' } })));
+    this.skipEl = h('div', { style: { position: 'absolute', right: '14px', top: '12px', padding: '5px 12px', borderRadius: '12px', background: 'rgba(20,12,30,.7)', border: '2px solid rgba(255,255,255,.25)', fontSize: '14px', zIndex: 40 } }, h('div', { html: 'Overslaan: houd <b>F</b> / <b>Enter</b>' + (nPlayers() === 3 ? ' / <b>U</b>' : '') + ' ingedrukt (of Esc)' }), h('div', { style: { height: '6px', borderRadius: '4px', background: '#2a1a3a', marginTop: '3px', overflow: 'hidden' } }, this.skipBar = h('i', { style: { display: 'block', height: '100%', width: '0%', background: '#ffe14a' } })));
     this.setScene('room');
     this.camera.position.set(0, 2.6, 7); this.camera.lookAt(0, 1, 0);
   }
@@ -189,32 +190,34 @@ export class OpeningMode {
   async sceneA() {
     this.stage = 'a';
     audio.music('menu');
-    const [w, j] = this.bros; w.group.position.set(-1.35, 0, 0.8); j.group.position.set(1.35, 0, 0.8); w.yaw = w.targetYaw = Math.PI / 2; j.yaw = j.targetYaw = -Math.PI / 2; w.pose = j.pose = 'sit';
+    const [w, j, ju] = this.bros; w.group.position.set(-1.35, 0, 0.8); j.group.position.set(1.35, 0, 0.8); w.yaw = w.targetYaw = Math.PI / 2; j.yaw = j.targetYaw = -Math.PI / 2; w.pose = j.pose = 'sit';
+    if (ju) { ju.group.position.set(0, 0, -0.55); ju.yaw = ju.targetYaw = 0; ju.pose = 'sit'; }   // Juul zit aan de achterkant van het kleed
     this.cam([0.5, 2.9, 7.2], [-0.3, 2.3, 5.2], [0, 0.9, 0], [0, 0.9, 0], 9);
     await this.fade(0, 900);
-    await this.say([{ text: 'Een gewone avond in Heitjesveen. Buiten is het donker. Binnen is het gezellig.' }, { who: 'Jor', text: 'Ik heb gewonnen!' }, { who: 'Wes', text: 'Dit is Memory. Jij hebt gewoon alle kaartjes omgedraaid.' }, { who: 'Jor', text: 'Dat noem ik een strategie.' }]);
+    await this.say([{ text: 'Een gewone avond in Heitjesveen. Buiten is het donker. Binnen is het gezellig.' }, { who: 'Jor', text: 'Ik heb gewonnen!' }, { who: 'Wes', text: 'Dit is Memory. Jij hebt gewoon alle kaartjes omgedraaid.' }, { who: 'Jor', text: 'Dat noem ik een strategie.' }, ...(ju ? [{ who: 'Juul', text: 'Ik kijk wel toe. En ik tel mee wie er valsspeelt.' }] : [])]);
     await this.wait(500);
-    audio.sfx('knock'); this.shake = 0.25; w.pose = j.pose = 'scared';
+    audio.sfx('knock'); this.shake = 0.25; w.pose = j.pose = 'scared'; if (ju) ju.pose = 'scared';
     await this.wait(1300);
-    await this.say([{ text: 'KLOP. KLOP. KLOP.' }, { who: 'Jor', text: '...Wes. Dat was de deur.' }, { who: 'Wes', text: 'Tocht.' }, { who: 'Jor', text: 'Tocht klopt niet.' }, { who: 'Wes', text: 'Deze wel.' }]);
+    await this.say([{ text: 'KLOP. KLOP. KLOP.' }, { who: 'Jor', text: '...Wes. Dat was de deur.' }, { who: 'Wes', text: 'Tocht.' }, { who: 'Jor', text: 'Tocht klopt niet.' }, { who: 'Wes', text: 'Deze wel.' }, ...(ju ? [{ who: 'Juul', text: 'Ik doe de deur niet open. Doe jij het maar, Jor.' }] : [])]);
   }
   // b: de Deurman staat in de deur met een envelop en een bloemetje
   async sceneB() {
     this.stage = 'b';
-    const [w, j] = this.bros;
-    w.group.position.set(-1.5, 0, 0.2); j.group.position.set(1.5, 0, 0.2); w.yaw = w.targetYaw = Math.PI - 0.25; j.yaw = j.targetYaw = Math.PI + 0.25; w.pose = j.pose = 'scared';
+    const [w, j, ju] = this.bros;
+    w.group.position.set(ju ? -2.6 : -1.5, 0, 0.2); j.group.position.set(ju ? 1.6 : 1.5, 0, 0.2); w.yaw = w.targetYaw = Math.PI - 0.25; j.yaw = j.targetYaw = Math.PI + 0.25; w.pose = j.pose = 'scared';
+    if (ju) { ju.group.position.set(-1.2, 0, 0.9); ju.yaw = ju.targetYaw = Math.PI - 0.15; ju.pose = 'scared'; }
     this.cam([0, 2.0, 5.0], [0, 1.9, 2.8], [0, 1.9, -5], [0, 1.9, -5], 12);
     audio.sfx('knock', { vol: 0.9 }); this.shake = 0.3; await this.wait(900);
     audio.sfx('creak'); this.doorTarget = 1; await this.wait(1700);
     this.deur.group.position.set(0, 0, -5.55); this.deur.yaw = this.deur.targetYaw = 0; this.deurShown = true; this.deurMode = 'hold'; audio.sfx('sparkle');
     await this.wait(1100);
-    await this.say([{ who: 'Deurman', text: '...Bezorging.' }, { who: 'Deurman', text: 'Voor Wes en Jor. Ik wil een handtekening terug.' }, { who: 'Wes', text: 'Een handtekening? Waarvoor precies?' }, { who: 'Deurman', text: '...Ontvangstbewijs. Ik heb een stempelkaart. Nog twee bezorgingen en ik krijg een gratis deur.' }]);
-    w.pose = j.pose = 'idle'; this.env.visible = false; this.deurMode = 'wave'; audio.sfx('pop');
+    await this.say([{ who: 'Deurman', text: '...Bezorging.' }, { who: 'Deurman', text: ju ? 'Voor Wes, Jor en Juul. Ik wil een handtekening terug.' : 'Voor Wes en Jor. Ik wil een handtekening terug.' }, { who: 'Wes', text: 'Een handtekening? Waarvoor precies?' }, { who: 'Deurman', text: '...Ontvangstbewijs. Ik heb een stempelkaart. Nog twee bezorgingen en ik krijg een gratis deur.' }]);
+    w.pose = j.pose = 'idle'; if (ju) ju.pose = 'idle'; this.env.visible = false; this.deurMode = 'wave'; audio.sfx('pop');
     this.invite = h('div', { style: { position: 'absolute', left: '50%', top: '7vh', transform: 'translateX(-50%) rotate(-2deg)', width: 'min(560px,88vw)', padding: '18px 26px', background: 'linear-gradient(135deg,#fff8dc,#f3e2a8)', border: '6px double #b8860b', borderRadius: '10px', color: '#3a1f5a', textAlign: 'center', boxShadow: '0 8px 0 rgba(0,0,0,.45)', zIndex: 30, fontFamily: 'Fredoka, sans-serif' } },
       h('div', { style: { fontFamily: 'MedievalSharp, serif', fontSize: '30px', color: '#7a2fd4' } }, 'UITNODIGING'), h('div', { style: { fontSize: '24px', fontWeight: 700, margin: '8px 0' } }, 'Koning Klopper nodigt jullie uit voor de GROTE HEROPENING van de Speelhal!'), h('div', { style: { fontSize: '17px' } }, 'Er zijn duels. Er is taart. Er is geen bedtijd.'), h('div', { style: { fontSize: '14px', marginTop: '8px', opacity: 0.7 } }, 'P.S. Graag handtekening terug. De Deurman wacht.'));
     ui.screens.append(this.invite);
-    await this.say([{ who: 'Jor', text: 'Koning Klopper nodigt ons uit voor de GROTE HEROPENING van de Speelhal!' }, { who: 'Wes', text: 'De Speelhal? Die is toch al jaren dicht?' }, { who: 'Jor', text: 'Er staat: "Nieuwe duels. Nieuwe hallen. Taart."' }, { who: 'Wes', text: 'Taart?!' }, { who: 'Jor', text: 'WE GAAN!' }]);
-    w.pose = 'cheer'; j.pose = 'cheer'; audio.sfx('win'); this.deurMode = 'dance';
+    await this.say([{ who: 'Jor', text: 'Koning Klopper nodigt ons uit voor de GROTE HEROPENING van de Speelhal!' }, { who: 'Wes', text: 'De Speelhal? Die is toch al jaren dicht?' }, { who: 'Jor', text: 'Er staat: "Nieuwe duels. Nieuwe hallen. Taart."' }, { who: 'Wes', text: 'Taart?!' }, { who: 'Jor', text: 'WE GAAN!' }, ...(ju ? [{ who: 'Juul', text: 'Ik pak mijn mooiste hoed. Elke hoed. Allemaal tegelijk.' }] : [])]);
+    w.pose = 'cheer'; j.pose = 'cheer'; if (ju) ju.pose = 'cheer'; audio.sfx('win'); this.deurMode = 'dance';
     await this.say([{ who: 'Wes', text: '(krabbelt een handtekening) ...Alsjeblieft, Deurman.' }, { who: 'Deurman', text: '...Dank u. Ik loop mee. Ik moet toch die kant op.' }, { who: 'Jor', text: 'Hoe weet je welke kant wij op gaan?' }, { who: 'Deurman', text: '...Ik ben altijd al die kant op.' }]);
     if (this.invite) { this.invite.remove(); this.invite = null; }
   }
@@ -223,8 +226,8 @@ export class OpeningMode {
     this.stage = 'c';
     await this.fade(1, 500);
     this.setScene('out'); this.deurShown = true; this.deurMode = 'walk'; this.hat.visible = true;
-    const [w, j] = this.bros; this.walkZ = 40; this.walk = 0.9;
-    this.placeTrio(); w.pose = j.pose = 'idle';
+    this.walkZ = 40; this.walk = 0.9;
+    this.placeTrio(); this.bros.forEach((b) => (b.pose = 'idle'));
     this.cam([3.2, 2.4, 45], [-3.2, 3.0, 27], [0, 1.6, 36], [0, 2.2, 14], 6.2); audio.music('concert');
     ui.hud.toast('Over het pad, langs de lantaarns, de berg op...', 3200);
     await this.fade(0, 600); await this.wait(5000);
@@ -246,15 +249,16 @@ export class OpeningMode {
   // d: naar de hoofdhal
   async sceneD() { this.stage = 'd'; await this.fade(1, 700); }
   placeTrio() {
-    const z = this.walkZ, [w, j] = this.bros;
-    w.group.position.set(-1.3, 0, z); j.group.position.set(1.3, 0, z + 0.3); this.deur.group.position.set(0, 0, z + 2.2);
-    for (const c of [w, j, this.deur]) c.yaw = c.targetYaw = Math.PI;
+    const z = this.walkZ, [w, j, ju] = this.bros;
+    w.group.position.set(ju ? -2.3 : -1.3, 0, z); j.group.position.set(ju ? 2.3 : 1.3, 0, z + 0.3); this.deur.group.position.set(0, 0, z + (ju ? 2.7 : 2.2));
+    if (ju) ju.group.position.set(0, 0, z - 0.2);
+    for (const c of [...this.bros, this.deur]) c.yaw = c.targetYaw = Math.PI;
   }
 
   update(dt) {
     this.t += dt; const t = this.t;
     // overslaan: 1 s ingedrukt houden (A of B), dubbel-tik op B, of Esc
-    let hl = false; for (const p of input.p) { if (p.a || p.b) hl = true; if (p.bP) { if (t - this.lastB < 0.45) this.skip(); this.lastB = t; } }
+    let hl = false; for (const p of activeInputs()) { if (p.a || p.b) hl = true; if (p.bP) { if (t - this.lastB < 0.45) this.skip(); this.lastB = t; } }
     if (!hl) this.holdT0 = 0; else if (!this.holdT0) this.holdT0 = performance.now(); this.hold = this.holdT0 ? (performance.now() - this.holdT0) / 1000 : 0;   // echte tijd: ook bij lage fps 1 s
     this.skipBar.style.width = Math.min(100, this.hold * 100) + '%'; if (this.hold >= 1) this.skip(); if (input.pressed('Escape')) this.skip();
     // camera

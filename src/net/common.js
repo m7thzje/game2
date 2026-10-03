@@ -32,3 +32,18 @@ export function extraParams() {   // geef eigen signaalserver-parameters door in
   for (const k of ['peerhost', 'peerport', 'peerpath', 'peersecure', 'turn']) if (q.get(k)) keep.set(k, q.get(k));
   return keep.toString();
 }
+
+// Spelers: host = Wes (0), gast 1 = Jor (1), gast 2 = Juul (2)
+export const NAMES = ['Wes', 'Jor', 'Juul'];
+export const SLUG = ['wes', 'jor', 'juul'];
+export const CSS = ['#35c46f', '#4a8cff', '#ff8a3c'];
+// 'jor' | 'juul' | 1 | 2 -> spelers-id (1 of 2), anders 0
+export function slotOf(v) {
+  if (v === 1 || v === 2) return v;
+  const s = String(v || '').toLowerCase();
+  return s === 'jor' ? 1 : s === 'juul' ? 2 : 0;
+}
+// Vast per tabblad (blijft bij herladen): zo herkent de host dezelfde gast en vervangt hij zijn oude verbinding
+export function guestToken() {
+  try { let t = sessionStorage.getItem('hvk-token'); if (!t) { t = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('hvk-token', t); } return t; } catch (e) { return Math.random().toString(36).slice(2, 12); }
+}

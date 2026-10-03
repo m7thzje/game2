@@ -9,6 +9,7 @@ import { setupLights } from '../engine/lights.js';
 import * as P from '../engine/props.js';
 import { h, rand, damp } from '../engine/util.js';
 import { buildGate, partyHat } from './opening.js';
+import { nPlayers, activeIds, anyP, pcss, pname, klabel, Menu3 } from './players3.js';
 
 // Deurman-gedrag (S.settings.scare 0-3): hoe vaak de grapjas langskomt
 const HY = -0.36;   // draairichting van het schuurtje (kijkt naar de camera)
@@ -25,7 +26,8 @@ export function openSettings(onClose) {
   let el;
   const close = () => { ui.activeMenus = ui.activeMenus.filter((m) => m !== menu); el.remove(); persist(); onClose && onClose(); };
   const note = h('div', { class: 'small-note' }, '');
-  const menu = new Menu([
+  const menu = new Menu3([
+    { label: () => `Derde speler Juul: ${S.settings.players === 3 ? 'AAN (IJKL + U/O)' : 'uit'}`, cycle: true, onSelect: () => { S.settings.players = S.settings.players === 3 ? 2 : 3; persist(); } },
     { label: () => { note.textContent = SCARE_TXT[S.settings.scare] || ''; return `Deurman-gedrag: ${SCARE_LABELS[S.settings.scare]}`; }, cycle: true, onSelect: (d) => { S.settings.scare = (S.settings.scare + (d || 1) + 4) % 4; } },
     { label: () => `Flitsvrij: ${S.settings.flashFree ? 'AAN (geen felle flitsen)' : 'uit'}`, cycle: true, onSelect: () => { S.settings.flashFree = !S.settings.flashFree; } },
     { label: () => `Alles ontgrendeld: ${S.settings.unlockAll ? 'AAN (alle hallen open)' : 'uit'}`, cycle: true, onSelect: () => { S.settings.unlockAll = !S.settings.unlockAll; } },
@@ -62,8 +64,9 @@ export function openOnline(app, onClose) {
 }
 function howToPlay(onClose) {
   const card = h('div', { class: 'card', style: { maxHeight: '92vh', overflow: 'auto' } }, h('h2', {}, 'Hoe werkt het?'),
-    h('p', { html: 'Wes en Jor runnen de <b>Speelhal</b> van Koning Klopper! Loop naar een kast en druk op je actieknop voor een <b>duel</b>: 1 tegen 1 op hetzelfde scherm. Wie wint? Dat bepaal jij.' }),
-    h('div', { class: 'ctrl' }, ...[0, 1].map((i) => h('div', { style: { '--c': i ? '#4a8cff' : '#35c46f' } }, h('h4', {}, i ? 'Jor (speler 2)' : 'Wes (speler 1)'), h('ul', {}, h('li', { html: `<kbd>${KEY_LABELS[i].move}</kbd> lopen` }), h('li', { html: `<kbd>${KEY_LABELS[i].a}</kbd> praten / springen / actie` }), h('li', { html: `<kbd>${KEY_LABELS[i].b}</kbd> tweede actie` }))))),
+    h('p', { html: '' + (nPlayers() === 3 ? 'Wes, Jor en Juul' : 'Wes en Jor') + ' runnen de <b>Speelhal</b> van Koning Klopper! Loop naar een kast en druk op je actieknop voor een <b>duel</b>: 1 tegen 1 op hetzelfde scherm. Wie wint? Dat bepaal jij.' }),
+    h('div', { class: 'ctrl' }, ...activeIds().map((i) => h('div', { style: { '--c': pcss(i) } }, h('h4', {}, `${pname(i)} (speler ${i + 1})`), h('ul', {}, h('li', { html: `<kbd>${klabel(i).move}</kbd> lopen` }), h('li', { html: `<kbd>${klabel(i).a}</kbd> praten / springen / actie` }), h('li', { html: `<kbd>${klabel(i).b}</kbd> tweede actie` }))))),
+    nPlayers() === 3 ? h('p', { html: '🧑‍🤝‍🧑 <b>Met Juul erbij</b> speel je duels met z\'n tweeën: de derde kijkt toe. Kies <b>Winnaar blijft</b> (wie wint, blijft staan) of kies zelf wie er speelt. In het dorp doen er 2 van de 3 mee aan een karweitje.' }) : null,
     h('p', { html: '🌀 Elk duel krijgt een <b>twist</b>: omgekeerde besturing, lichaamswissel, zeepvloer... Het wordt vanzelf grappig.' }),
     h('p', { html: '🏗️ Duels leveren <b>heitjes</b> op. Daarmee laat je nieuwe <b>hallen bouwen</b> (dichtgetimmerde deuren in de hoofdhal). Hoe meer je speelt, hoe hoger je <b>rang</b>!' }),
     h('p', { html: '🏆 Het <b>Wiel van Gekte</b> kiest een duel, een <b>toernooi</b> mixt er meerdere en de <b>Uitdaging van de dag</b> geeft bonus. Het <b>Feestbord</b> houdt de stand bij.' }),
@@ -72,7 +75,7 @@ function howToPlay(onClose) {
     h('p', { html: '<kbd>Esc</kbd> = pauze · <kbd>M</kbd> = geluid uit · gamepads werken ook.' }),
     h('div', { class: 'small-note' }, 'Druk op een actieknop om te sluiten'));
   const el = ui.overlay(card); let t = 0.3;
-  const drv = { update() { t -= 0.016; if (t < 0 && (input.p[0].aP || input.p[1].aP || input.pressed('Escape'))) { ui.activeMenus = ui.activeMenus.filter((m) => m !== drv); el.remove(); onClose && onClose(); } } };
+  const drv = { update() { t -= 0.016; if (t < 0 && (anyP('aP') || input.pressed('Escape'))) { ui.activeMenus = ui.activeMenus.filter((m) => m !== drv); el.remove(); onClose && onClose(); } } };
   ui.activeMenus.push(drv);
 }
 
@@ -91,9 +94,18 @@ export class MenuMode {
     this.doorGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.0), new THREE.MeshBasicMaterial({ color: 0xffe0a0 })); this.doorGlow.position.set(0, 1.05, 0.026); this.doorGlow.visible = false; this.doorG.add(this.doorGlow);   // warme gloed achter de Deurman
     this.deur = makeDeurman(0.78); this.deur.group.visible = false; this.scene.add(this.deur.group);
     this.hat = partyHat(0.78); this.hat.position.set(0.02, 0.2, 0); this.hat.rotation.z = 0.18; this.deur.head.add(this.hat);
-    this.bros = [0, 1].map((i) => { const c = makeBrother(i); c.group.position.set(i ? 3.0 : 1.4, 0, i ? -3 : -2); c.targetYaw = c.yaw = Math.PI + (i ? -0.3 : 0.3); this.scene.add(c.group); return c; });
+    this.bros = [0, 1].map((i) => this.mkBro(i));
+    this.syncJuul();
     this.doorT = 3.5; this.doorState = 0; this.open = 0; this.flickT = 9;
     this.camera.position.set(0, 4, 12); this.camera.lookAt(-9, 7, -30);
+  }
+  // een poppetje bij het schuurtje (Wes, Jor, Juul)
+  mkBro(i) { const c = makeBrother(i); const P = [[1.4, -2, 0.3], [3.0, -3, -0.3], [4.5, -2.1, -0.6]][i]; c.group.position.set(P[0], 0, P[1]); c.targetYaw = c.yaw = Math.PI + P[2]; c.pose = this.doorState ? 'wave' : 'idle'; this.scene.add(c.group); return c; }
+  // Juul erbij of eraf (na het sluiten van de instellingen)
+  syncJuul() {
+    const want = nPlayers() === 3;
+    if (want && this.bros.length < 3) this.bros.push(this.mkBro(2));
+    else if (!want && this.bros.length > 2) { const c = this.bros.pop(); this.scene.remove(c.group); }
   }
   enter() {
     ui.hudEl.innerHTML = '';
@@ -108,21 +120,21 @@ export class MenuMode {
     items.push({ label: '🌐 Online spelen', sub: 'Twee apparaten, één spel (jij bent de host)', onSelect: () => { this.hide(); openOnline(this.app, () => this.show()); } });
     items.push({ label: '🌐 Meedoen met een code', onSelect: () => { location.search = '?join'; } });
     items.push({ label: 'Hoe werkt het?', onSelect: () => { this.hide(); howToPlay(() => this.show()); } });
-    items.push({ label: 'Instellingen', onSelect: () => { this.hide(); openSettings(() => this.show()); } });
-    this.menu = new Menu(items);
+    items.push({ label: 'Instellingen', onSelect: () => { this.hide(); openSettings(() => { this.syncJuul(); this.build(); this.show(); }); } });
+    this.menu = new Menu3(items);
     const wrap = h('div', { class: 'menu-wrap mm', style: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 'min(500px,100vw)', justifyContent: 'flex-start', paddingTop: '2.5vh', pointerEvents: 'none', background: 'linear-gradient(90deg,rgba(8,4,24,.72),rgba(8,4,24,.45) 70%,rgba(8,4,24,0))' } },
       h('style', {}, '.mm .btn{font-size:21px;padding:7px 14px}.mm .btnrow{gap:7px;margin-top:6px}.mm .title{font-size:min(7.5vw,66px)!important}.mm .subtitle{font-size:20px!important;margin:4px 0 8px!important}'),
       h('div', { class: 'title' }, 'Wes & Jor:', h('br'), 'De Speelhal'),
       h('div', { class: 'subtitle' }, 'Duels, feestjes en één Deurman'),
       h('div', { style: { pointerEvents: 'auto', width: 'min(380px,92vw)', marginTop: '1vh' } }, this.menu.el),
-      h('div', { class: 'small-note', style: { color: '#fff', textShadow: '0 2px 0 #000', marginTop: '10px', fontSize: '13px' } }, `Wes: WASD + F/G   ·   Jor: pijltjes + Enter/Shift   ·   M = geluid`));
+      h('div', { class: 'small-note', style: { color: '#fff', textShadow: '0 2px 0 #000', marginTop: '10px', fontSize: '13px' } }, `Wes: WASD + F/G   ·   Jor: pijltjes + Enter/Shift${nPlayers() === 3 ? '   ·   Juul: IJKL + U/O' : ''}   ·   M = geluid`));
     this.wrap = wrap; ui.screens.append(wrap); ui.activeMenus.push(this.menu);
   }
   // Nieuw spel wist alles: even vragen
   confirmNew() {
     this.hide(); let el;
     const done = (yes) => { ui.activeMenus = ui.activeMenus.filter((m) => m !== cm); el.remove(); if (yes) this.go(true); else this.show(); };
-    const cm = new Menu([{ label: 'Nee, terug', onSelect: () => done(false) }, { label: 'Ja, begin helemaal opnieuw', onSelect: () => done(true) }]);
+    const cm = new Menu3([{ label: 'Nee, terug', onSelect: () => done(false) }, { label: 'Ja, begin helemaal opnieuw', onSelect: () => done(true) }]);
     el = ui.overlay(h('div', { class: 'card', style: { width: 'min(520px,94vw)' } }, h('h2', {}, 'Nieuw spel?'), h('p', { style: { textAlign: 'center' } }, 'Je heitjes, hallen, rang en hoedjes worden gewist.'), cm.el)); ui.activeMenus.push(cm);
   }
   hide() { this.wrap.style.display = 'none'; }
@@ -130,7 +142,7 @@ export class MenuMode {
   async go(newGame) {
     if (this.going) return; this.going = true; ui.activeMenus = [];
     audio.sfx('powerup'); await ui.fade(1, 600);
-    if (newGame) { resetSave(); S.names = ['Wes', 'Jor']; }
+    if (newGame) { resetSave(); S.names = ['Wes', 'Jor', 'Juul']; }
     persist();
     if (newGame && !S.settings.quickStart) await this.app.goOpening({});
     else await this.app.goArcade({ intro: !!newGame });

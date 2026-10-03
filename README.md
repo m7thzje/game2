@@ -25,21 +25,26 @@ Een moderne browser met WebGL is genoeg (Chrome, Edge, Firefox). Het spel werkt 
 
 Gamepads werken ook (pad 1 = Wes, pad 2 = Jor). Online mag de gast zowel WASD als de pijltjes gebruiken. `Esc` = pauze/menu, `Tab` = dagboek, `M` = geluid uit/aan.
 
-## Online spelen met 2 apparaten (2 links)
+## Online spelen met 2 of 3 apparaten (eigen link per gast)
 
-Eén van jullie is de **host** (Wes) en draait het spel. De ander doet mee als **Jor** via een link. Het beeld en geluid van de host
-worden live doorgestuurd (WebRTC), Jor stuurt alleen zijn toetsen terug. Daardoor werken alle 14 minigames, de Speelhal met 54 duels, het Feestbord, het dorp en de Deurman
-meteen online. Niemand hoeft iets te installeren; een computer met Chrome of Edge is genoeg.
+Eén van jullie is de **host** (Wes) en draait het spel. **Jor** (en eventueel **Juul**) doen mee op een eigen apparaat via een eigen link. Het beeld en geluid van de host
+worden live doorgestuurd (WebRTC, elke gast een eigen verbinding), de gasten sturen alleen hun toetsen terug. Daardoor werken alle minigames, de Speelhal met zijn duels, het Feestbord, het dorp en de Deurman
+meteen online. Niemand hoeft iets te installeren; een computer met Chrome of Edge is genoeg. Maximaal **2 gasten**.
 
 1. **Zet het spel online** (eenmalig, voor een publieke link): GitHub-repo → *Settings* → *Pages* → *Source: Deploy from a branch* →
    branch `claude/epic-edison-p6qo95` (of `main` na een merge), map `/ (root)` → *Save*. Na een minuutje staat het spel op
    `https://m7thzje.github.io/game2/`.
-2. **Host:** open die link → kies **🌐 Online spelen (host)** → je krijgt een code en een link (`…/?join=123456`). Stuur de link naar je broer.
-3. **Gast:** opent de link, klikt **Meedoen!** en speelt mee als Jor (WASD of pijltjes, F/Enter en G/Shift). Of kies in het menu *Meedoen met een code*.
+2. **Host:** open die link → kies **🌐 Online spelen** → kies **Met z'n tweeën** (alleen Jor) of **Met z'n drieën** (Jor én Juul; dit zet het spel ook op 3 spelers).
+   Je ziet één code en per gast een eigen link (`…/?join=123456&as=jor` en `…&as=juul`) met een kopieerknop, plus per gast de status (✅ verbonden, ⏳ wachten, ⚠️ weggevallen).
+   Stuur elke gast zijn eigen link. Zodra iedereen er is: **Klaar — spelen maar!** (of **Toch beginnen** met degenen die er zijn).
+3. **Gast:** opent zijn link, klikt **Meedoen!** en ziet "Je speelt als Jor" (of Juul). Lopen kan met **WASD**, de **pijltjes** of **IJKL**; actieknoppen **F / Enter / U** en **G / Shift / O**.
+   Zonder `&as=…` in de link (of via het menu *Meedoen met een code*) krijgt de gast de eerstvolgende vrije plek; hij kan ook zelf Jor of Juul kiezen.
+   Is een plek al bezet (twee keer dezelfde link) of zit het spel vol, dan krijgt de gast een nette melding. Een gast die zijn tabblad herlaadt neemt zijn eigen plek gewoon weer in.
 
-Tips: de host moet het tabblad zichtbaar houden (anders pauzeert de browser het spel). Er zit ±0,1-0,2 s vertraging op de toetsen van de gast;
-het ritmespel is daardoor wat lastiger. Lukt de verbinding niet (strenge netwerken)? Dan kan een eigen TURN-server mee: `?turn=turn:server:3478|gebruiker|wachtwoord`
-(op host- én gast-link). Eigen signaalserver: `?peerhost=…&peerport=…` (zie `tools/nettest.mjs`). Lokaal testen: `node tools/nettest.mjs`.
+Tips: de host moet het tabblad zichtbaar houden (anders pauzeert de browser het spel). Er zit ±0,1-0,2 s vertraging op de toetsen van de gasten;
+het ritmespel is daardoor wat lastiger. Met twee gasten gaat er twee keer zoveel beeld uit de host: een goede upload helpt. Valt één gast weg, dan spelen de anderen gewoon door.
+Lukt de verbinding niet (strenge netwerken)? Dan kan een eigen TURN-server mee: `?turn=turn:server:3478|gebruiker|wachtwoord`
+(op host- én gast-link). Eigen signaalserver: `?peerhost=…&peerport=…` (zie `tools/nettest.mjs`). Lokaal testen: `node tools/nettest.mjs` (1 host + 1 gast en 1 host + 2 gasten, alles in één browser).
 
 ## Het spel
 

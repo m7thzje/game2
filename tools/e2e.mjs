@@ -1,6 +1,8 @@
 // Volledige flow-test v2: titelscherm -> Nieuw spel -> opening (overslaan, of OPENING_FULL=1 helemaal) -> Speelhal met uitleg ->
 // dichtgetimmerde deur + bouwanimatie -> rang-feestje -> Bouwplan -> pauzemenu. Screenshots in /tmp/e2e_*.png (Read ze om te kijken).
 // Gebruik: node tools/e2e.mjs   (OPENING_FULL=1 speelt de hele opening af met screenshots per scène)
+// PLAYERS=3 node tools/e2e.mjs: dezelfde flow met Juul (?players=3) + extra: Juul-instelling, 3 poppetjes op het titelscherm, dorp met 3 spelers,
+// karweitje met 2 van de 3 ('Wie doen mee?'), winkel met 3 kolommen. Screenshots /tmp/e2e_p3_*.png.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -9,6 +11,7 @@ const server = http.createServer((req, res) => { let p = decodeURIComponent(req.
 await new Promise((r) => server.listen(0, r)); const port = server.address().port;
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
+const P3 = process.env.PLAYERS === '3';
 const errors = [];
 page.on('console', (m) => { if (['error', 'warning'].includes(m.type()) && !/CERT|404|niet geladen/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
 page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '').split('\n').slice(0, 4).join('\n')));
@@ -28,7 +31,7 @@ const quiet = () => page.evaluate(() => { const m = window.__app.mode; m.players
 const isIdle = () => page.evaluate(() => { const m = window.__app.mode; return !!(m && m.interact && !m.busy && !m.menu); });
 const idle = async () => { const r = await clickUntil(isIdle, 60); await quiet(); return r; };
 
-await page.goto(`http://localhost:${port}/?quality=low`);
+await page.goto(`http://localhost:${port}/?quality=low${P3 ? '&players=3' : ''}`);
 await page.waitForFunction(() => window.__app && window.__app.mode && window.__app.mode.menu, null, { timeout: 120000 });
 await page.waitForTimeout(2000); await shot('1_titel');
 check((await modeName()) === 'MenuMode', 'titelscherm (MenuMode)');
@@ -36,7 +39,13 @@ check((await modeName()) === 'MenuMode', 'titelscherm (MenuMode)');
 await page.evaluate(async () => { const m = window.__app.mode; m.hide(); (await import('/src/world/menu.js')).openSettings(() => m.show()); });
 await page.waitForTimeout(500); await shot('2_instellingen');
 check(await page.evaluate(() => /Deurman-gedrag/.test(document.body.innerText) && /Alles ontgrendeld/.test(document.body.innerText) && /Sneller beginnen/.test(document.body.innerText) && !/Griezel/.test(document.body.innerText)), 'instellingen: Deurman-gedrag, Alles ontgrendeld, Sneller beginnen');
+if (P3) {
+  check(await page.evaluate(() => /Derde speler Juul: AAN/.test(document.body.innerText)), 'instellingen: Derde speler Juul: AAN (IJKL + U/O)');
+  const r = await page.evaluate(async () => { const { S } = await import('/src/save.js'); const m = window.__app.mode; const a = m.bros.length; S.settings.players = 2; m.syncJuul(); const b = m.bros.length; S.settings.players = 3; m.syncJuul(); return [a, b, m.bros.length]; });
+  check(r.join() === '3,2,3', 'titelscherm: Juul zwaait mee (3 poppetjes), uit = 2, weer aan = 3: ' + r.join());
+}
 await page.evaluate(() => { const m = window.__app.mode; window.__app.ui.clearScreens(); m.build(); });
+if (P3) { await page.waitForTimeout(500); await shot('p3_1_titel'); }
 // nieuw spel starten -> opening
 await press(0, 'a'); await page.waitForFunction(() => window.__app.mode && window.__app.mode.constructor.name === 'OpeningMode', null, { timeout: 30000 });
 check(true, 'Spel starten -> OpeningMode');
@@ -93,7 +102,7 @@ const pool = await page.evaluate(() => window.__app.mode.allLoaded().length + '/
 log('spelpool na bouwen Neonkelder:', pool);
 check(await page.evaluate(() => { const m = window.__app.mode; return m.allLoaded().includes('bomber') && !m.allLoaded().includes('bake'); }), 'spelpool: Neonkelder erbij, Kermis nog niet');
 // rang-stijging
-await page.evaluate(() => { const A = window.__app.S.arcade; A.plays = 12; A.wins = [6, 6]; });
+await page.evaluate(() => { const A = window.__app.S.arcade; A.plays = 12; A.wins = [6, 6, 0]; });
 await page.evaluate(() => { window.__app.mode.checkRankUp(); }); await page.waitForTimeout(1500); await shot('12_rangstijging');
 await idle();
 // Bouwplan
@@ -102,7 +111,7 @@ await page.waitForTimeout(800); await press(0, 'a', 300); await page.waitForTime
 check(await page.evaluate(() => /Bouwplan/.test(document.body.innerText) && /Gebouwd/.test(document.body.innerText) && /In aanbouw/.test(document.body.innerText)), 'Bouwplan toont gebouwd + in aanbouw');
 await press(0, 'a'); await idle();
 // pauzemenu
-await page.keyboard.down('Escape'); await page.waitForTimeout(250); await page.keyboard.up('Escape'); await waitMenu(); await page.waitForTimeout(300); await shot('14_pauze');
+await page.keyboard.down('Escape'); await page.waitForFunction(() => window.__app.mode.menu, null, { timeout: 10000 }).catch(() => {}); await page.keyboard.up('Escape'); await waitMenu(); await page.waitForTimeout(300); await shot('14_pauze');
 check(await page.evaluate(() => /Pauze/.test(document.body.innerText) && /Speler|Duelist|Nieuwkomer/.test(document.body.innerText)), 'pauzemenu met rang');
 await choose(0); await idle();
 // terug naar het titelscherm: nu mét opslag -> Verder spelen / Nieuw spel (met bevestiging)
@@ -114,5 +123,48 @@ check(await page.evaluate(() => /Nieuw spel\?/.test(document.body.innerText) && 
 await page.evaluate(() => { [...document.querySelectorAll('.btn')].find((b) => /Nee, terug/.test(b.textContent)).click(); }); await page.waitForTimeout(400);
 await choose(0); await page.waitForFunction(() => window.__app.mode && window.__app.mode.constructor.name === 'ArcadeMode', null, { timeout: 60000 }); await page.waitForTimeout(1500);
 check(await page.evaluate(() => !window.__app.mode.busy && !window.__app.mode.opts.intro && window.__app.S.coins === 50), 'Verder spelen -> Speelhal zonder intro, heitjes bewaard');
+if (P3) {
+  // ============ dorp met 3 spelers ============
+  const sleep = (ms) => page.waitForTimeout(ms);
+  await page.evaluate(async () => { const { S } = await import('/src/save.js'); S.settings.scare = 0; S.flags.intro = true; S.coins = 600; window.__app.goHub({}); });
+  await page.waitForFunction(() => window.__app.mode && window.__app.mode.constructor.name === 'HubMode' && window.__app.mode.players, null, { timeout: 120000 });
+  await sleep(2500); await shot('p3_2_dorp');
+  check(await page.evaluate(() => window.__app.mode.players.length === 3 && window.__app.mode.players.every((p) => p.c.group.visible)), 'dorp: 3 spelers (Wes, Jor, Juul) staan in beeld');
+  // koppel: Juul ver weg zetten -> blijft binnen 34 van de anderen
+  const tet = await page.evaluate(() => { const m = window.__app.mode; const [a, b, c] = m.players; c.x = a.x + 80; c.z = a.z; m.movePlayer(c, 0.016, false); return Math.max(...m.players.map((o) => Math.hypot(c.x - o.x, c.z - o.z))); });
+  check(tet <= 34.5, 'koppel: Juul blijft binnen 34 m van de anderen (' + tet.toFixed(1) + ')');
+  await page.evaluate(() => { const m = window.__app.mode; const [a, b, c] = m.players; c.x = a.x + 3; c.z = a.z + 2; c.vx = c.vz = 0; });
+  await sleep(1500);
+  // prompts voor 3 spelers bij een karweitje
+  const job = await page.evaluate(() => { const m = window.__app.mode; const it = m.W.interact.find((i) => i.type === 'job' && i.id === 'catch') || m.W.interact.find((i) => i.type === 'job'); m.players.forEach((p, i) => { p.x = it.x + (i - 1) * 1.2; p.z = it.z + 1.5; p.vx = p.vz = 0; p.y = 0; }); m.hintT = 0; return it.id; });
+  await sleep(1800); await shot('p3_3_dorp_prompts');
+  const pr = await page.evaluate(() => (document.querySelector('.hud-prompt') || {}).innerText || '');
+  check(/Wes/.test(pr) && /Jor/.test(pr) && /Juul/.test(pr), 'dorp: prompt voor alle 3 spelers: ' + pr.replace(/\n/g, ' | '));
+  // Juul spreekt de dorpeling aan -> intro-dialoog -> 'Ja, doen we!' -> 'Wie doen mee?'
+  await press(2, 'a');
+  let ok = false; for (let i = 0; i < 60 && !ok; i++) { ok = await page.evaluate(() => !!window.__app.mode.menu); if (!ok) { await press(0, 'a'); await sleep(150); } }
+  await choose(0); await sleep(700); await waitMenu(); await sleep(300); await shot('p3_4_wie_doen_mee');
+  const wd = await page.evaluate(() => (document.querySelector('.card') || {}).innerText || '');
+  check(/Wie doen mee\?/.test(wd) && /Wes – Jor/.test(wd) && /Wes – Juul/.test(wd) && /Jor – Juul/.test(wd), "karweitje: keuze 'Wie doen mee?' met 3 paren: " + wd.replace(/\n+/g, ' | '));
+  await choose(2);   // Jor – Juul
+  await page.waitForFunction(() => window.__app.mode && window.__app.mode.constructor.name === 'MinigameMode' && window.__app.mode.ids, null, { timeout: 60000 }); await sleep(1500); await shot('p3_5_karweitje_intro');
+  const ids = await page.evaluate(() => window.__app.mode.ids.join());
+  check(ids === '1,2', 'karweitje gestart met extra.players = Jor + Juul: ' + ids);
+  await page.evaluate(() => window.__app.mode.quit());
+  await page.waitForFunction(() => window.__app.mode && window.__app.mode.constructor.name === 'HubMode', null, { timeout: 60000 }); await sleep(1500);
+  check(await page.evaluate(() => window.__app.mode.players.length === 3), 'terug in het dorp: nog steeds 3 spelers');
+  // winkel met 3 kolommen
+  await page.evaluate(() => { window.__app.mode.busy = false; window.__shopP = window.__app.mode.openShop(); }); await sleep(1500); await shot('p3_6_winkel');
+  const sh = await page.evaluate(() => ({ cols: document.querySelectorAll('.shop-col').length, names: [...document.querySelectorAll('.shop-col h3')].map((e) => e.textContent).join() }));
+  check(sh.cols === 3 && sh.names === 'Wes,Jor,Juul', 'winkel: 3 kolommen: ' + sh.names);
+  // Juul koopt een hoedje met haar eigen toetsen: omlaag, omlaag, actie
+  const own0 = await page.evaluate(() => window.__app.S.cosmetics.owned[2].hat.length);
+  await press(2, 'down'); await press(2, 'down'); await press(2, 'a'); await sleep(500);
+  const own1 = await page.evaluate(() => ({ n: window.__app.S.cosmetics.owned[2].hat.length, eq: window.__app.S.cosmetics.equipped[2].hat, other: window.__app.S.cosmetics.equipped[0].hat }));
+  check(own1.n === own0 + 1 && own1.eq !== 'std' && own1.other === 'std', 'Juul koopt een hoedje (eigen toetsen), Wes ongemoeid: ' + JSON.stringify(own1));
+  await shot('p3_7_winkel_juul'); await page.keyboard.down('Escape'); await sleep(1500); await page.keyboard.up('Escape'); await page.waitForFunction(() => !document.querySelector('.shop-col'), null, { timeout: 15000 }).catch(() => {});
+  check(await page.evaluate(() => !document.querySelector('.shop-col')), 'winkel sluit');
+  await sleep(1200); await shot('p3_8_dorp_hoed');
+}
 console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 12).join('\n') : 'NO ERRORS', '| fouten:', fails);
 await browser.close(); server.close(); process.exit(fails || errors.length ? 1 : 0);

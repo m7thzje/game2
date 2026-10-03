@@ -12,6 +12,9 @@ import { GRAPH, TILES, TILE_ORDER } from './board_data.js';
 export const ISLE = { A: 25, B: 19.5 };   // halve assen van het eiland
 export const TOKEN_S = 1.3;               // formaat van de poppetjes op het bord
 export const TILE_TOP = 0.32;            // hoogte van de bovenkant van een vakje
+// per speler (0 Wes, 1 Jor, 2 Juul): pijl-, label- en ringkleur (met vaste terugval als de kern nog geen derde kleur heeft)
+const TOK = [{ arrow: 0x5aef90, label: '#8dffb5', ring: 0x2f9e5b }, { arrow: 0x6ab0ff, label: '#9cc8ff', ring: 0x3a78e0 }, { arrow: 0xffa05a, label: '#ffc09a', ring: 0xff8a3a }];
+const TOKEN_NAMES = ['Wes', 'Jor', 'Juul'];
 
 // ---------------------------------------------------------------- Merger: veel kleine stukjes -> één geometrie met vertexkleuren
 const GC = new Map();
@@ -89,8 +92,8 @@ function atlasTexture() {
 
 // ---------------------------------------------------------------- de wereld
 export class BoardWorld {
-  constructor(scene, { low = false, fx = null } = {}) {
-    this.scene = scene; this.low = low; this.fx = fx; this.t = 0; this.rng = mulberry32(2024); this.dyn = [];
+  constructor(scene, { low = false, fx = null, n = 2 } = {}) {
+    this.scene = scene; this.low = low; this.n = n; this.fx = fx; this.t = 0; this.rng = mulberry32(2024); this.dyn = [];
     const L = setupLights(scene, 'day', { shadow: 36, center: [0, 0, 0], fog: true, fogNear: 110, fogFar: 300, shadows: !low });
     this.sun = L.sun; this.hemi = L.hemi; L.sun.position.set(-26, 46, 30); L.sun.intensity = 2.3; L.hemi.intensity = 1.25;
     scene.background = skyTexture('#4aa6ff', '#ffe6f4'); scene.fog.color.set(0xdff0ff);
@@ -319,17 +322,23 @@ export class BoardWorld {
   }
   // ---- poppetjes
   buildTokens() {
-    this.tokens = [0, 1].map((i) => {
-      const c = makeBrother(i); c.group.scale.setScalar(TOKEN_S); this.scene.add(c.group);
-      const ring = mesh(new THREE.RingGeometry(0.62, 0.8, 24), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.85, depthWrite: false }), { cast: false, receive: false, rot: [-Math.PI / 2, 0, 0] }); this.scene.add(ring);
-      const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.65, 4).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: i ? 0x6ab0ff : 0x5aef90 })); arrow.visible = false; this.scene.add(arrow);
-      const label = floatLabel(['Wes', 'Jor'][i], '', i ? '#9cc8ff' : '#8dffb5'); label.scale.set(2.2, 0.68, 1); label.material.depthTest = false; this.scene.add(label);
+    this.tokens = Array.from({ length: this.n }, (_, i) => {
+      let c; try { c = makeBrother(i); } catch (e) { c = makeBrother(1); }   // terugval zolang de kern nog geen Juul kent
+      c.group.scale.setScalar(TOKEN_S); this.scene.add(c.group);
+      const ring = mesh(new THREE.RingGeometry(0.62, 0.8, 24), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i] ?? TOK[i].ring, transparent: true, opacity: 0.85, depthWrite: false }), { cast: false, receive: false, rot: [-Math.PI / 2, 0, 0] }); this.scene.add(ring);
+      const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.65, 4).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: TOK[i].arrow })); arrow.visible = false; this.scene.add(arrow);
+      const label = floatLabel(TOKEN_NAMES[i], '', TOK[i].label); label.scale.set(2.2, 0.68, 1); label.material.depthTest = false; this.scene.add(label);
       const cnt = numSprite('', '#ffe14a', 1.5); cnt.visible = false; this.scene.add(cnt);
       return { c, ring, arrow, label, cnt, pos: new THREE.Vector3(), y: 0, hat: null };
     });
   }
-  // plek van een poppetje op een vakje (twee poppetjes naast elkaar)
-  slot(id, i, shared) { const n = this.nodes[id]; const off = shared ? (i ? 0.55 : -0.55) : 0; return new THREE.Vector3(n.x + off, n.y + TILE_TOP, n.z + (shared ? 0.1 : 0)); }
+  // plek van een poppetje op een vakje (twee of drie poppetjes naast elkaar): idx = volgorde onder de aanwezigen, cnt = aantal
+  slotAt(id, idx, cnt) {
+    const n = this.nodes[id]; if (cnt <= 1) return new THREE.Vector3(n.x, n.y + TILE_TOP, n.z);
+    if (cnt === 2) return new THREE.Vector3(n.x + (idx ? 0.55 : -0.55), n.y + TILE_TOP, n.z + 0.1);
+    return new THREE.Vector3(n.x + (idx - 1) * 0.85, n.y + TILE_TOP, n.z + (idx === 1 ? -0.3 : 0.3));
+  }
+  slot(id, i, shared) { return this.slotAt(id, i ? 1 : 0, shared ? 2 : 1); }
   setHat(i, kind) {
     const t = this.tokens[i]; if (t.hat) { t.c.head.remove(t.hat); t.hat = null; }
     if (kind) { const h = makeHatMesh(kind, kind === 'crown' ? 0xffd23f : 0x1e1c24, 0xd8372c, 1.1); h.position.y = 0.04 + 0.3 * 0.9 * (t.c.spec.scale ?? 1); t.c.head.add(h); t.hat = h; }

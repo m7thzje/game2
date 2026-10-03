@@ -115,7 +115,7 @@ export const scare = {
       else if (phase === 1) {
         beep -= dt; if (beep <= 0) { audio.sfx('boop', { rate: 0.9 + 0.5 * (phaseT / hold), vol: 0.7 }); beep = 0.5; }
         open = 1; fill.style.width = Math.max(0, 100 * (1 - phaseT / hold)) + '%';
-        if (phaseT > 0.35 && (input.p[0].any || input.p[1].any)) { caught = true; movers = [input.p[0].any, input.p[1].any]; break; }
+        if (phaseT > 0.35 && input.p.some((q) => q.any)) { caught = true; movers = input.p.map((q) => q.any); break; }   // input.p = slot-view (2 of 3 deelnemers)
         if (phaseT > hold) break;
       }
       drawDoorScene(open, t, side, phase === 1 ? phaseT / hold : 0, t);

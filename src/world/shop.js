@@ -6,9 +6,10 @@ import { S, persist } from '../save.js';
 import { h } from '../engine/util.js';
 import { Character, brotherSpec, PLAYER_CSS, PLAYER_COLORS } from '../engine/chars.js';
 import { CATS, CAT_ICON, catLabel, itemsFor, owns, equippedId, equip, buy, cosm } from '../engine/cosmetics.js';
+import { nPlayers, inp, pcol, pcss, pname, klabel } from './players3.js';
 
 // ============================================================================
-// Hoedenmaker Hettie: winkel voor hoeden en kleuren, twee kolommen (Wes links, Jor rechts),
+// Hoedenmaker Hettie: winkel voor hoeden en kleuren, twee kolommen (Wes links, Jor rechts), met Juul erbij drie kolommen,
 // elk met de eigen toetsen. Aanroepen: `await openShop(app, { onClose })`.
 //   pijltjes omhoog/omlaag = kiezen · links/rechts = categorie · A = kopen/aantrekken · B = klaar · Esc = alles sluiten
 // ============================================================================
@@ -16,40 +17,40 @@ const swatchStyle = (it) => it.fx === 'gold' ? 'linear-gradient(135deg,#fff3a0,#
 
 export function openShop(app, { onClose } = {}) {
   return new Promise((resolve) => {
-    cosm();
-    const st = [0, 1].map((i) => ({ cat: 0, sel: CATS.map((c) => Math.max(0, itemsFor(i, c).findIndex((x) => x.id === equippedId(i, c)))), done: false, msg: '', msgT: 0, cheer: 0 }));
+    cosm(); const N = nPlayers(), IDS = Array.from({ length: N }, (_, i) => i);
+    const st = IDS.map((i) => ({ cat: 0, sel: CATS.map((c) => Math.max(0, itemsFor(i, c).findIndex((x) => x.id === equippedId(i, c)))), done: false, msg: '', msgT: 0, cheer: 0 }));
     const itemOf = (i) => { const cat = CATS[st[i].cat]; return itemsFor(i, cat)[st[i].sel[st[i].cat]]; };
 
     // ---------- DOM ----------
     const coinEl = h('div', { class: 'shop-coins' }), warn = h('div', { class: 'shop-warn' }, '💡 Heitjes zijn ook nodig om nieuwe hallen in de Speelhal te laten bouwen!');
     const view = h('canvas', { class: 'shop-view', width: 960, height: 210 });
-    const caps = [0, 1].map(() => h('div', { class: 'shop-cap' }));
-    const cols = [0, 1].map((i) => {
+    const caps = IDS.map(() => h('div', { class: 'shop-cap' }));
+    const cols = IDS.map((i) => {
       const tabs = h('div', { class: 'shop-tabs' }), list = h('div', { class: 'shop-list' }), msg = h('div', { class: 'shop-msg' }), done = h('div', { class: 'shop-done' }, '✔ Klaar!');
-      const k = KEY_LABELS[i];
+      const k = klabel(i);
       const foot = h('div', { class: 'shop-foot', html: `<kbd>${k.move}</kbd> kiezen · <kbd>${k.a}</kbd> kopen/aantrekken · <kbd>${k.b}</kbd> klaar` });
-      const el = h('div', { class: 'shop-col', style: { '--c': PLAYER_CSS[i] } }, h('h3', {}, S.names[i]), tabs, list, msg, foot, done);
+      const el = h('div', { class: 'shop-col', style: { '--c': pcss(i) } }, h('h3', {}, pname(i)), tabs, list, msg, foot, done);
       return { el, tabs, list, msg, done };
     });
-    const card = h('div', { class: 'card shop' }, h('h2', {}, '👒 Hoedenmaker Hettie'), h('div', { class: 'shop-top' }, coinEl, warn), view, h('div', { class: 'shop-caps' }, ...caps), h('div', { class: 'shop-cols' }, cols[0].el, cols[1].el),
+    const card = h('div', { class: 'card shop' + (N === 3 ? ' shop3' : '') }, N === 3 ? h('style', {}, '.shop3{width:min(1180px,98vw)!important}.shop3 .shop-cols,.shop3 .shop-caps{grid-template-columns:repeat(3,1fr)!important;gap:8px}.shop3 .shop-tab{font-size:12px;padding:3px 0}.shop3 .shop-row{font-size:14px;padding:3px 5px;gap:5px}.shop3 .shop-row .st{font-size:12px}.shop3 .shop-foot{font-size:11px}@media (max-width:900px){.shop3 .shop-cols,.shop3 .shop-caps{grid-template-columns:1fr!important}}') : null, h('h2', {}, '👒 Hoedenmaker Hettie'), h('div', { class: 'shop-top' }, coinEl, warn), view, h('div', { class: 'shop-caps' }, ...caps), h('div', { class: 'shop-cols' }, ...cols.map((c) => c.el)),
       h('div', { class: 'shop-bottom' }, h('div', { class: 'btn small', onClick: () => close() }, 'Klaar (Esc)')));
     const el = ui.overlay(card); el.style.overflow = 'auto';
 
     // ---------- 3D-voorbeeld (eigen kleine renderer, licht) ----------
-    let rend = null, scene = null, cam = null, chars = [null, null], prevKey = ['', ''], rt = 0;
+    let rend = null, scene = null, cam = null, chars = IDS.map(() => null), prevKey = IDS.map(() => ''), rt = 0;
     try {
       rend = new THREE.WebGLRenderer({ canvas: view, antialias: true, alpha: true, preserveDrawingBuffer: true });
       rend.outputColorSpace = THREE.SRGBColorSpace; rend.toneMapping = THREE.ACESFilmicToneMapping; rend.toneMappingExposure = 1.05; rend.setPixelRatio(1); rend.setSize(960, 210, false); rend.setClearColor(0x000000, 0);
       scene = new THREE.Scene(); cam = new THREE.PerspectiveCamera(24, 960 / 210, 0.1, 50); cam.position.set(0, 1.05, 6.8); cam.lookAt(0, 1.05, 0);
       scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7a9a, 1.7)); const dl = new THREE.DirectionalLight(0xffffff, 1.9); dl.position.set(2, 4, 5); scene.add(dl);
-      for (let i = 0; i < 2; i++) {
-        const x = i ? 2.9 : -2.9;
-        const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 28), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.7 })); ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.01, 0); scene.add(ring);
+      for (let i = 0; i < N; i++) {
+        const x = N === 3 ? (i - 1) * 3.9 : i ? 2.9 : -2.9;
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 28), new THREE.MeshBasicMaterial({ color: pcol(i), transparent: true, opacity: 0.7 })); ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.01, 0); scene.add(ring);
         chars[i] = new Character(brotherSpec(i)); chars[i].group.position.set(x, 0, 0); chars[i].targetYaw = chars[i].yaw = 0; scene.add(chars[i].group);
       }
     } catch (e) { console.warn('winkel-voorbeeld niet beschikbaar', e); rend = null; view.style.display = 'none'; }
     const syncPreview = () => {
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < N; i++) {
         const cat = CATS[st[i].cat], it = itemOf(i); const eq = { ...cosm().equipped[i], [cat]: it.id }; const key = JSON.stringify(eq);
         if (key !== prevKey[i]) { prevKey[i] = key; if (chars[i]) chars[i].restyle(brotherSpec(i, eq)); }
       }
@@ -71,7 +72,7 @@ export function openShop(app, { onClose } = {}) {
     };
     const draw = () => {
       coinEl.innerHTML = `🪙 <b>${S.coins}</b> heitjes`;
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < N; i++) {
         const s = st[i], col = cols[i], cat = CATS[s.cat], items = itemsFor(i, cat);
         col.tabs.innerHTML = '';
         CATS.forEach((c, ci) => col.tabs.append(h('div', { class: 'shop-tab' + (ci === s.cat ? ' sel' : ''), onClick: () => { s.cat = ci; s.done = false; audio.sfx('click'); draw(); } }, `${CAT_ICON[c]} ${catLabel(c, i)}`)));
@@ -87,7 +88,7 @@ export function openShop(app, { onClose } = {}) {
         if (selRow) { if (selRow.offsetTop < col.list.scrollTop) col.list.scrollTop = selRow.offsetTop; else if (selRow.offsetTop + selRow.offsetHeight > col.list.scrollTop + col.list.clientHeight) col.list.scrollTop = selRow.offsetTop + selRow.offsetHeight - col.list.clientHeight; }
         col.msg.textContent = s.msgT > 0 ? s.msg : ''; col.done.style.display = s.done ? 'block' : 'none';
         const it = itemOf(i), own = owns(i, cat, it.id);
-        caps[i].innerHTML = `<b style="color:${PLAYER_CSS[i]}">${S.names[i]}</b> ${own ? 'draagt' : 'past'}: ${it.icon || ''} ${it.name}${own ? '' : ` <span class="pr">(🪙 ${it.price})</span>`}`;
+        caps[i].innerHTML = `<b style="color:${pcss(i)}">${pname(i)}</b> ${own ? 'draagt' : 'past'}: ${it.icon || ''} ${it.name}${own ? '' : ` <span class="pr">(🪙 ${it.price})</span>`}`;
       }
       syncPreview();
     };
@@ -101,8 +102,8 @@ export function openShop(app, { onClose } = {}) {
       t0 -= dt;
       const esc = input.pressed('Escape'); const escEdge = esc && !escPrev; escPrev = esc;
       if (t0 <= 0) {
-        for (let i = 0; i < 2; i++) {
-          const p = input.p[i], s = st[i]; let ch = false;
+        for (let i = 0; i < N; i++) {
+          const p = inp(i), s = st[i]; let ch = false;
           const n = itemsFor(i, CATS[s.cat]).length;
           if (p.upP) { s.sel[s.cat] = (s.sel[s.cat] + n - 1) % n; ch = true; }
           if (p.downP) { s.sel[s.cat] = (s.sel[s.cat] + 1) % n; ch = true; }
@@ -112,9 +113,9 @@ export function openShop(app, { onClose } = {}) {
           if (p.aP) act(i);
           if (p.bP) { s.done = !s.done; audio.sfx(s.done ? 'select' : 'click'); draw(); }
         }
-        if (escEdge || (st[0].done && st[1].done)) { close(); return; }
+        if (escEdge || st.every((q) => q.done)) { close(); return; }
       }
-      for (let i = 0; i < 2; i++) { const s = st[i]; if (s.msgT > 0) { s.msgT -= dt; if (s.msgT <= 0) draw(); } if (s.cheer > 0) s.cheer -= dt; }
+      for (let i = 0; i < N; i++) { const s = st[i]; if (s.msgT > 0) { s.msgT -= dt; if (s.msgT <= 0) draw(); } if (s.cheer > 0) s.cheer -= dt; }
       if (rend) {
         chars.forEach((c, i) => { c.pose = st[i].cheer > 0 ? 'cheer' : 'idle'; c.targetYaw = Math.sin(rt * 0.9 + i * 1.7) * 0.55; c.update(dt); });
         rend.render(scene, cam);

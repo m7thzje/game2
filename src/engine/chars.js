@@ -306,11 +306,35 @@ export const BROTHER_SPECS = [
     hair: 0xe8b84a, hairStyle: 'short', hat: 'capback', hatColor: 0xffc93c, eyeScale: 1.2, headScale: 1.1, cape: 0xe5484d,
   },
 ];
-export const PLAYER_COLORS = [0x2f9e5b, 0x3a78e0];
-export const PLAYER_CSS = ['#35c46f', '#4a8cff'];
-// Uiterlijk van een broer = standaardspec + wat in de winkel is gekocht/aangetrokken (S.cosmetics.equipped[i])
+// Juul, de derde speler: oranje tuniek, donkere knot, ronde bril en roze sjaal (leest naast groene Wes en blauwe Jor)
+BROTHER_SPECS.push({
+  scale: 0.92, skin: 0xd9a07a, shirt: 0xf0862a, sleeve: 0xf0862a, tunic: 0xf0862a, pants: 0x4a3566, boots: 0x7a3b5e, belt: 0x6a2e4e,
+  hair: 0x2a1a30, hairStyle: 'bun', scarf: 0xff6fb5, glasses: 0x2a2a34, eyeScale: 1.1, hat: null,
+});
+// Kleuren per spelers-id (basis) en de ACTIEVE view. Buiten een spel is de view = per spelers-id [Wes, Jor, Juul].
+// Tijdens een spel zet de harness met setSlotPlayers(ids) de view om naar SLOTS: PLAYER_COLORS[slot] = kleur van de speler in dat slot
+// (zo werken duels die PLAYER_COLORS[i] met slot i gebruiken ongewijzigd). Bij dispose herstelt de harness de identiteit.
+export const BASE_COLORS = [0x2f9e5b, 0x3a78e0, 0xf08a2a];
+export const BASE_CSS = ['#35c46f', '#4a8cff', '#ff9a3c'];
+export const PLAYER_COLORS = BASE_COLORS.slice();
+export const PLAYER_CSS = BASE_CSS.slice();
+let slotPlayers = [0, 1, 2];
+export const getSlotPlayers = () => slotPlayers.slice();
+// ids = spelers-id per slot (2 of 3); de rest wordt aangevuld zodat slot 0..2 altijd een speler heeft
+export function setSlotPlayers(ids = [0, 1, 2]) {
+  const full = ids.slice(); for (const k of [0, 1, 2]) if (!full.includes(k)) full.push(k);
+  slotPlayers = full.slice(0, 3);
+  slotPlayers.forEach((id, slot) => { PLAYER_COLORS[slot] = BASE_COLORS[id]; PLAYER_CSS[slot] = BASE_CSS[id]; });
+}
+// Uiterlijk van een speler = standaardspec + wat in de winkel is gekocht/aangetrokken (S.cosmetics.equipped[id])
 export function brotherSpec(i, eq) { return applyCosmetics(BROTHER_SPECS[i], i, eq); }
-export function makeBrother(i, eq) { const c = new Character(brotherSpec(i, eq)); if (!eq) { c.brother = i; c.lookSig = lookSig(i); } return c; }
+// makeBrother(slot): het personage van de speler in dat slot (zonder setSlotPlayers = slot = spelers-id). Met expliciete `eq` (winkel-voorbeeld) is i een spelers-id.
+export function makeBrother(i, eq) {
+  const id = eq ? i : (slotPlayers[i] ?? i);
+  const c = new Character(brotherSpec(id, eq));
+  if (!eq) { c.brother = id; c.lookSig = lookSig(id); c.playerId = id; c.playerName = S.names[id]; }
+  return c;
+}
 // Losse hoed als 3D-object (voor kraampjes e.d.): hoed staat dan op y=0 met de rand op ~0
 export function makeHatMesh(kind, c = 0xcc3333, c2 = 0xffd24a, scale = 1) { const g = new THREE.Group(); const hr = 0.3; Character.prototype._hat(kind, c, c2, hr, 1, g); g.children.forEach((m) => { m.position.y -= 0.04 + hr * 0.9; }); g.scale.setScalar(scale); return g; }
 

@@ -7,7 +7,8 @@ export const HALL_COST = { 0: 0, 1: 150, 2: 300, 3: 450, 4: 0 };
 export const HALL_NAMES = ['Speelhal', 'Neonkelder', 'Kermis', 'Sporthal', 'Deurenhal'];
 export const DEUR_HALL_STICKERS = 6;   // aantal Deurman-stickers voor de geheime Deurenhal
 
-const A = () => (S.arcade ||= { wins: [0, 0], draws: 0, plays: 0, byGame: {}, tourneys: [0, 0] });
+const A = () => (S.arcade ||= { wins: [0, 0, 0], draws: 0, plays: 0, byGame: {}, tourneys: [0, 0, 0], pairs: {} });
+const sum = (a) => (a || []).reduce((x, y) => x + (y || 0), 0);   // som over alle spelers-id's
 export const unlockedHalls = () => (A().unlocked ||= [0]);
 export const stickers = () => ((S.deur ||= { stickers: [], cameos: 0 }).stickers ||= []);
 export function isUnlocked(id) {
@@ -28,7 +29,7 @@ export const RANKS = [
   { name: 'Meester', at: 120, icon: '🏆' }, { name: 'Speelhal-Legende', at: 220, icon: '👑' },
 ];
 export function points() {
-  const a = A(); return a.plays + (a.wins[0] + a.wins[1]) + (a.tourneys[0] + a.tourneys[1]) * 8 + ((S.daily && S.daily.total) || 0) * 3 + (S.banished || 0) * 3 + Object.keys(S.jobs || {}).length;
+  const a = A(); return a.plays + sum(a.wins) + sum(a.tourneys) * 8 + ((S.daily && S.daily.total) || 0) * 3 + (S.banished || 0) * 3 + Object.keys(S.jobs || {}).length;
 }
 export function rank() { const p = points(); let r = RANKS[0], i = 0; RANKS.forEach((x, k) => { if (p >= x.at) { r = x; i = k; } }); return { ...r, index: i, points: p, next: RANKS[i + 1] || null }; }
 

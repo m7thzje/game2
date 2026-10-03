@@ -6,7 +6,7 @@ import { ui } from '../engine/ui.js';
 import { S, persist } from '../save.js';
 import { stickers, isUnlocked, DEUR_HALL_STICKERS } from '../engine/progress.js';
 import { stickerCount, STICKERS } from '../engine/cameo.js';
-import { PLAYER_COLORS } from '../engine/chars.js';
+import { pcol, nPlayers } from './players3.js';
 import { canvasTex, TAU, mesh, mat, rand, damp } from '../engine/util.js';
 import { floatLabel } from './build.js';
 import { Deco } from './arcade_deco.js';
@@ -31,7 +31,7 @@ export function buildPartyTable(a, x, z) {
   });
   sc.add(mesh(new THREE.CircleGeometry(3.6, 40), new THREE.MeshBasicMaterial({ map: t }), { cast: false, receive: false, pos: [x, 1.64, z], rot: [-PI / 2, 0, 0] }));
   // pionnen van Wes en Jor, een gouden ster-trofee en confetti-vlag
-  [[0.6, 0], [3.4, 1]].forEach(([an0, i]) => { const px = x + Math.cos(an0) * 2.8, pz = z + Math.sin(an0) * 2.8; D.cyl(0.12, 0.28, 0.5, 10, px, 1.9, pz, PLAYER_COLORS[i]); D.sph(0.2, px, 2.3, pz, PLAYER_COLORS[i], null, 8); D.sph(0.06, px, 2.38, pz + 0.17, 0xffffff, null, 4); });
+  (nPlayers() === 3 ? [[0.6, 0], [2.5, 1], [4.4, 2]] : [[0.6, 0], [3.4, 1]]).forEach(([an0, i]) => { const px = x + Math.cos(an0) * 2.8, pz = z + Math.sin(an0) * 2.8; D.cyl(0.12, 0.28, 0.5, 10, px, 1.9, pz, pcol(i)); D.sph(0.2, px, 2.3, pz, pcol(i), null, 8); D.sph(0.06, px, 2.38, pz + 0.17, 0xffffff, null, 4); });
   D.sph(0.6, x, 2.7, z, gold, { kind: 'metal' }, 8); for (let i = 0; i < 8; i++) { const an = i / 8 * TAU; D.cone(0.2, 0.9, 4, x + Math.cos(an) * 0.8, 2.7 + Math.sin(an) * 0.8, z, gold, { kind: 'metal', rz: an - PI / 2 }); } D.cyl(0.3, 0.4, 0.8, 8, x, 1.95, z, gold, { kind: 'metal' });
   for (const sx of [-1, 1]) { D.cyl(0.08, 0.08, 7.4, 6, x + sx * 4.6, 3.7, z - 1.6, 0xcfa060); D.sph(0.24, x + sx * 4.6, 7.5, z - 1.6, 0xffd23f, { kind: 'glow' }, 6); D.tri(2.6, 1.4, x + sx * 4.6 + sx * 1.3, 7.2, z - 1.6, sx > 0 ? 0xd8372c : 0x2f6fe0, { kind: 'dbl', rz: PI / 2 }); D.tri(1.9, 1.0, x + sx * 4.6 + sx * 0.95, 5.9, z - 1.6, 0xffd23f, { kind: 'dbl', rz: PI / 2 }); }
   // dobbelstenen (dynamisch, dobberen en tollen)
@@ -39,7 +39,7 @@ export function buildPartyTable(a, x, z) {
     const pips = (face) => { const P = { 1: [[0, 0]], 2: [[-0.18, -0.18], [0.18, 0.18]], 3: [[-0.2, -0.2], [0, 0], [0.2, 0.2]], 4: [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]], 5: [[-0.2, -0.2], [0.2, -0.2], [0, 0], [-0.2, 0.2], [0.2, 0.2]], 6: [[-0.18, -0.22], [0.18, -0.22], [-0.18, 0], [0.18, 0], [-0.18, 0.22], [0.18, 0.22]] }[face]; return P; };
     for (const [n, fn] of [[1, (u, v) => [u, v, 0.36]], [6, (u, v) => [u, v, -0.36]], [2, (u, v) => [0.36, v, u]], [5, (u, v) => [-0.36, v, u]], [3, (u, v) => [u, 0.36, v]], [4, (u, v) => [u, -0.36, v]]]) for (const [u, v] of pips(n)) { const [px, py, pz] = fn(u, v); R.sph(0.065, px, py, pz, 0x14102a, null, 4); }
     R.build(g); g.scale.setScalar(1.35); g.position.set(x - 1.1 + i * 2.2, 2.2, z + 1.6 - i * 0.6); sc.add(g); return { g, ph: i * 2.1 }; });
-  const lb = floatLabel('🎲 Feestbord', 'Mario Party voor twee!', '#ff9aef'); lb.scale.set(4.4, 1.4, 1); lb.position.set(x, 9.0, z); sc.add(lb);
+  const lb = floatLabel('🎲 Feestbord', nPlayers() === 3 ? 'Mario Party voor drie!' : 'Mario Party voor twee!', '#ff9aef'); lb.scale.set(4.4, 1.4, 1); lb.position.set(x, 9.0, z); sc.add(lb);
   a.colliders.push({ x, z, r: 3.9 });
   a.interact.push({ type: 'party', x, z: z + 5.2, r: 3.4, label: '🎲 Feestbord (Mario Party)' });
   (a.extraUpd ||= []).push((dt, t) => a.dice.forEach((d, i) => { d.g.position.y = 2.25 + Math.abs(Math.sin(t * 1.6 + d.ph)) * 0.35; d.g.rotation.x = t * 1.1 + d.ph; d.g.rotation.y = t * 0.8 + d.ph * 2; d.g.rotation.z = Math.sin(t + d.ph) * 0.4; }));
