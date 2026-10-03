@@ -9,14 +9,20 @@ import { makeBrother, makeNPC, drawScareFace, PLAYER_CSS, PLAYER_COLORS } from '
 import { setupLights } from '../engine/lights.js';
 import { tex } from '../engine/textures.js';
 import * as P from '../engine/props.js';
-import { h, mesh, mat, glow, canvasTex, clamp, damp, dampAngle, rand, pick, shuffle, TAU, lerp, smoothstep } from '../engine/util.js';
+import { h, mesh, mat, glow, canvasTex, clamp, damp, dampAngle, rand, pick, shuffle, TAU, lerp, smoothstep, disposeObject } from '../engine/util.js';
 import { ARCADE_IDS, ARCADE_HALLS } from '../games/index.js';
 import { floatLabel } from './build.js';
 import { TWISTS } from '../engine/twist.js';
 import { ArcadeDeurman } from './arcade_deur.js';
+import { Deco } from './arcade_deco.js';
+import { HALL_SIZE, layoutHall } from './arcade_zones.js';
+import { cabUpright, cabSit, cabTable, STALLS } from './arcade_cabs.js';
+import { rugTexture, zoneSign, ZONE_PROPS, shell } from './arcade_decor.js';
+import { ArcadeLife } from './arcade_life.js';
+import { mergeStatic } from './merge.js';
 import { dailyInfo, dailyDone, dailyBonus, dailyStreak } from '../engine/daily.js';
 
-const HALL = { w: 72, d: 52 };       // x: -36..36, z: -26..26
+const HALL = HALL_SIZE;              // 56 x 40: x: -28..28, z: -20..20 (zones/decor: arcade_zones.js, arcade_decor.js, arcade_cabs.js, arcade_life.js)
 const PIC = { dodgeball: '🔥', cakefight: '🎂', tugwar: '🪢', airhockey: '🏒', quickdraw: '🤠', memory: '🃏', paint: '🎨', duckshoot: '🦆', karts: '🏎️', climb: '🧗', tanks: '💥', chairs: '🪑', ticktock: '🕰️', minecart: '🚃', buttons: '🧱', vines: '🌿', screws: '🔩', chop: '🪓', bomber: '💣', tron: '🏍️', hexagone: '⬡', tag: '🧨', brawl: '🥊', spacewar: '🚀', volley: '🏐', soccer: '⚽', pacduel: '👻', golf: '⛳', stack: '🏗️', blocks: '🧩', connect4: '🔴', dance: '💃', quiz: '🎤', code: '🔮', bake: '🥧', claw: '🧸', kalaha: '💎', bowling: '🎳', ducks: '🛁', flappy: '🐲', pinball: '🎱', hide: '🕵️', heist: '💰', catapult: '🏰' };
 const NAME = { dodgeball: 'Vuurbal-Duel', cakefight: 'Taartengevecht', tugwar: 'Touwtrekken', airhockey: 'IJshockey-Chaos', quickdraw: 'Snelle Vingers', memory: 'Geheugen-Duel', paint: 'Verfgevecht', duckshoot: 'Schiettent', karts: 'Kartrace', climb: 'Torenklim', tanks: 'Kanonnenduel', chairs: 'Stoelendans', ticktock: 'Klokkentoren-Sprong', minecart: 'Mijnkar-Race', buttons: 'Knoppen-Breker', vines: 'Lianen-Zwaaien', screws: 'Schroef-Duel', chop: 'Houthakkers-Duel', bomber: 'Boem-Man Arena', tron: 'Lichtspoor-Duel', hexagone: 'Zinkende Vloer', tag: 'Bommentikkertje', brawl: 'Smash-Arena', spacewar: 'Ruimtegevecht', volley: 'Slijm-Volleybal', soccer: 'Raket-Voetbal', pacduel: 'Spookjacht-Duel', golf: 'Minigolf-Race', stack: 'Torenbouw-Duel', blocks: 'Blokkenstrijd', connect4: 'Vier op een Rij', dance: 'Dansduel', quiz: 'Quizshow', code: 'Kristal-Code', bake: 'Taartenbakkers-Battle', claw: 'Grijpkraan-Gekte', kalaha: 'Edelsteen-Kalaha', bowling: 'Reuzen-Bowling', ducks: 'Eendenrace', flappy: 'Wolkenrace', pinball: 'Flipper-Duel', hide: 'Verkleed-Verstoppertje', heist: 'Dievenduel', catapult: 'Kasteelbelegering' };
 const KING_WINS = [
@@ -46,21 +52,27 @@ export class ArcadeMode {
     this.t = 0; this.busy = false; this.menu = null; this.modal = null; this.hudT = 0; this.spin = null; this.promptKey = '';
     this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.3, 300);
     this.fx = new Particles(1500); this.scene.add(this.fx.points); this.fx.setViewportHeight(innerHeight);
-    const L = setupLights(this.scene, 'indoor', { shadow: 36, center: [0, 0, 0], fog: true, fogNear: 50, fogFar: 140, shadows: S.settings.quality !== 'low' });
+    const L = setupLights(this.scene, 'indoor', { shadow: 32, center: [0, 0, 0], fog: true, fogNear: 50, fogFar: 140, shadows: S.settings.quality !== 'low' });
     this.sun = this.sunL = L.sun; this.hemi = L.hemi; L.sun.intensity = 1.0; L.sun.position.set(10, 30, 15); L.hemi.intensity = 1.35;
     this.scene.background = new THREE.Color(THEMES[this.hallId].bg); this.scene.fog.color.set(THEMES[this.hallId].bg);
-    this.colliders = []; this.interact = []; this.cabs = []; this.glows = [];
-    this.games = this.loadedIds();
+    this.W = HALL.w; this.Dp = HALL.d;
+    this.colliders = []; this.interact = []; this.cabs = []; this.glows = []; this.eggs = [];
+    this.games = this.loadedIds(); this.D = new Deco(); this.zones = layoutHall(this.hallId);
+    const first = this.scene.children.length;
     this.buildHall(); this.buildDoor(); this.buildCabinets(); this.buildCenter(); this.buildBack();
+    this.deco = this.D.build(this.scene, { shadow: S.settings.quality !== 'low' });
+    for (const e of this.eggs) this.interact.push({ ...e, type: 'egg', egg: e.id });
+    mergeStatic(this.scene, first, { cell: 120 });
     this.players = [0, 1].map((i) => {
       const c = makeBrother(i); this.scene.add(c.group);
       const ring = mesh(new THREE.RingGeometry(0.75, 0.95, 24), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.7, depthWrite: false }), { cast: false, receive: false, rot: [-Math.PI / 2, 0, 0] }); this.scene.add(ring);
       const label = floatLabel(S.names[i], '', i ? '#7fb2ff' : '#6bf09a'); label.scale.set(2.6, 0.8, 1); label.position.y = c.height + 0.95; label.material.depthTest = false; c.group.add(label);
-      const viaDoor = opts.via === 'door'; const dxs = (DOORS[this.hallId].find((d) => d.to === opts.fromHall) || DOORS[this.hallId][0]).x; return { i, c, ring, x: viaDoor ? dxs + (i ? 1.4 : -1.4) : (i ? 1 : -1) * 2, z: viaDoor ? -18.5 : 22, y: 0, vx: 0, vz: 0, vy: 0, grounded: true, yaw: Math.PI, stepT: 0 };
+      const viaDoor = opts.via === 'door'; const dxs = (DOORS[this.hallId].find((d) => d.to === opts.fromHall) || DOORS[this.hallId][0]).x; return { i, c, ring, x: viaDoor ? dxs + (i ? 1.4 : -1.4) : (i ? 1 : -1) * 2, z: viaDoor ? -HALL.d / 2 + 7.5 : HALL.d / 2 - 6, y: 0, vx: 0, vz: 0, vy: 0, grounded: true, yaw: Math.PI, stepT: 0 };
     });
-    this.mid = new THREE.Vector3(0, 0, 18); this.camPos = new THREE.Vector3(0, 16, 36); this.camLook = new THREE.Vector3(0, 0, 18);
+    this.mid = new THREE.Vector3(0, 0, 12); this.camPos = new THREE.Vector3(0, 40, 44); this.camLook = new THREE.Vector3(0, 0, 2); this.intro = 3.2;
     this.nextGlitch = rand(40, 80); this.camShake = 0; this.camOverride = null;
     this.deur = new ArcadeDeurman(this);
+    this.life = new ArcadeLife(this);
   }
   hasTourney() { return !!TOURNEY; }
   loadedIds() { return this.hall.ids.filter((id) => this.app.games[id]); }
@@ -70,56 +82,50 @@ export class ArcadeMode {
 
   // ------------------------------------------------------------------ gebouw
   buildHall() {
-    const T = this.theme; const neon = this.hallId === 1, fair = this.hallId === 2;
-    const sc = this.scene; const sm = neon ? new THREE.MeshStandardMaterial({ color: 0x2a3664, roughness: 0.8, flatShading: true, emissive: 0x0c1840, emissiveIntensity: 0.9 }) : fair ? new THREE.MeshStandardMaterial({ map: (() => { const t = canvasTex(256, 64, (g, w, hh) => { for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#f6f0e0' : '#d8372c'; g.fillRect(i * w / 8, 0, w / 8 + 1, hh); } g.fillStyle = 'rgba(0,0,0,.12)'; for (let i = 0; i < 8; i++) g.fillRect(i * w / 8, 0, 3, hh); }); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(10, 3); return t; })(), roughness: 0.9 }) : new THREE.MeshStandardMaterial({ map: tex.stone(10, 3), roughness: 0.95, flatShading: true });
+    const T = this.theme; const neon = this.hallId === 1, fair = this.hallId === 2; const D = this.D;
+    const sc = this.scene; const sm = neon ? new THREE.MeshStandardMaterial({ color: 0x2a3664, roughness: 0.8, flatShading: true, emissive: 0x0c1840, emissiveIntensity: 0.9 }) : fair ? new THREE.MeshStandardMaterial({ map: (() => { const t = canvasTex(256, 64, (g, w, hh) => { for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#f6f0e0' : '#d8372c'; g.fillRect(i * w / 8, 0, w / 8 + 1, hh); } g.fillStyle = 'rgba(0,0,0,.12)'; for (let i = 0; i < 8; i++) g.fillRect(i * w / 8, 0, 3, hh); }); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(8, 2); return t; })(), roughness: 0.9 }) : new THREE.MeshStandardMaterial({ map: tex.stone(8, 2), roughness: 0.95, flatShading: true });
     if (neon) {
       const gt = canvasTex(256, 256, (g, w, hh) => { g.fillStyle = '#0a1230'; g.fillRect(0, 0, w, hh); g.strokeStyle = '#00e5ff'; g.lineWidth = 3; g.strokeRect(1, 1, w - 2, hh - 2); g.strokeStyle = 'rgba(255,43,214,.55)'; g.lineWidth = 2; g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, hh); g.moveTo(0, hh / 2); g.lineTo(w, hh / 2); g.stroke(); g.fillStyle = 'rgba(0,229,255,.12)'; g.fillRect(0, 0, w / 2, hh / 2); g.fillRect(w / 2, hh / 2, w / 2, hh / 2); });
       gt.wrapS = gt.wrapT = THREE.RepeatWrapping; gt.repeat.set(HALL.w / 6, HALL.d / 6);
       sc.add(mesh(new THREE.PlaneGeometry(HALL.w, HALL.d), new THREE.MeshStandardMaterial({ map: gt, roughness: 0.25, metalness: 0.4, emissive: 0x0a2a4a, emissiveMap: gt, emissiveIntensity: 0.9 }), { cast: false, rot: [-Math.PI / 2, 0, 0] }));
-      // gloeiende looplijn naar het podium
-      sc.add(mesh(new THREE.PlaneGeometry(0.5, HALL.d - 4), new THREE.MeshBasicMaterial({ color: 0xff2bd6 }), { cast: false, pos: [-3.5, 0.04, 0], rot: [-Math.PI / 2, 0, 0] })); sc.add(mesh(new THREE.PlaneGeometry(0.5, HALL.d - 4), new THREE.MeshBasicMaterial({ color: 0x00e5ff }), { cast: false, pos: [3.5, 0.04, 0], rot: [-Math.PI / 2, 0, 0] }));
     } else {
       sc.add(mesh(new THREE.PlaneGeometry(HALL.w, HALL.d), new THREE.MeshStandardMaterial({ map: tex.checker(HALL.w / 5, HALL.d / 5, T.floorA, T.floorB), roughness: 0.35, metalness: 0.15 }), { cast: false, rot: [-Math.PI / 2, 0, 0] }));
-      // loper naar de troon
-      sc.add(mesh(new THREE.PlaneGeometry(7, HALL.d - 4), new THREE.MeshStandardMaterial({ map: tex.carpet(1, 8), roughness: 1 }), { cast: false, pos: [0, 0.03, 0], rot: [-Math.PI / 2, 0, 0] }));
+      if (this.hallId === 0) sc.add(mesh(new THREE.PlaneGeometry(5.2, 15), new THREE.MeshStandardMaterial({ map: tex.carpet(1, 3), roughness: 1 }), { cast: false, pos: [0, 0.03, -HALL.d / 2 + 8.4], rot: [-Math.PI / 2, 0, 0] }));   // loper naar de troon
     }
     const wallH = 15;
     const wall = (w, hh, x, y, z, ry = 0) => sc.add(mesh(new THREE.BoxGeometry(w, hh, 1.4), sm, { pos: [x, y, z], rot: [0, ry, 0] }));
     wall(HALL.w + 2, wallH, 0, wallH / 2, -HALL.d / 2 - 0.7); wall(HALL.d + 2, wallH, -HALL.w / 2 - 0.7, wallH / 2, 0, Math.PI / 2); wall(HALL.d + 2, wallH, HALL.w / 2 + 0.7, wallH / 2, 0, Math.PI / 2);
     // voorkant is open (poppenhuis-doorsnede) zodat de camera altijd naar binnen kijkt; de uitgang is een gloeiend portaal op de vloer
-    this.exitDoor = mesh(new THREE.CircleGeometry(3.2, 28), new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 0.55, depthWrite: false }), { cast: false, receive: false, pos: [0, 0.08, HALL.d / 2 - 2.5], rot: [-Math.PI / 2, 0, 0] }); sc.add(this.exitDoor);
-    sc.add(mesh(new THREE.TorusGeometry(3.2, 0.18, 6, 28), glow(0xffe14a, 1.2), { cast: false, pos: [0, 0.2, HALL.d / 2 - 2.5], rot: [Math.PI / 2, 0, 0] }));
-    const exl = floatLabel('🚪 Uitgang', 'terug naar het dorp', '#ffe14a'); exl.position.set(0, 4.0, HALL.d / 2 - 2.5); sc.add(exl);
-    this.interact.push({ type: 'exit', x: 0, z: HALL.d / 2 - 2.5, r: 4.2, label: 'Terug naar het dorp' });
-    // gekleurde ramen
-    const cols = T.trim;
-    for (let i = 0; i < 6; i++) for (const sx of [-1, 1]) {
-      const wnd = mesh(new THREE.PlaneGeometry(2.6, 6), new THREE.MeshBasicMaterial({ color: cols[(i + (sx > 0 ? 3 : 0)) % 6], transparent: true, opacity: 0.85, fog: false }), { cast: false, pos: [sx * (HALL.w / 2 - 0.1), 10, -21 + i * 8.4], rot: [0, -sx * Math.PI / 2, 0] }); sc.add(wnd);
-      sc.add(mesh(new THREE.TorusGeometry(1.3, 0.2, 5, 12, Math.PI), sm, { cast: false, pos: [sx * (HALL.w / 2 - 0.2), 13, -21 + i * 8.4], rot: [0, -sx * Math.PI / 2, 0] }));
-    }
-    // banieren en fakkels (vlam = alleen een mesh, geen licht)
-    for (let i = 0; i < 6; i++) for (const sx of [-1, 1]) {
-      const b = P.banner(T.banner[i % 3], 6.5, 1.8); b.position.set(sx * (HALL.w / 2 - 1.2), 5.5, -17 + i * 6.8 - 1.8); b.rotation.y = -sx * Math.PI / 2; sc.add(b); (this.banners ||= []).push(b);
-    }
-    for (let i = 0; i < 10; i++) for (const sx of [-1, 1]) {
-      const g = new THREE.Group(); g.add(mesh(new THREE.CylinderGeometry(0.07, 0.1, 1.1, 5), mat(0x5b3d24), { pos: [0, 0, 0] }));
-      const f = mesh(new THREE.ConeGeometry(0.17, 0.5, 5), new THREE.MeshBasicMaterial({ color: T.flame }), { cast: false, pos: [0, 0.75, 0] }); g.add(f); this.glows.push(f);
-      g.position.set(sx * (HALL.w / 2 - 0.8), 4.3, -23 + i * 5.1); sc.add(g);
+    const ez = HALL.d / 2 - 2.5;
+    this.exitDoor = mesh(new THREE.CircleGeometry(3.0, 28), new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 0.55, depthWrite: false }), { cast: false, receive: false, pos: [0, 0.08, ez], rot: [-Math.PI / 2, 0, 0] }); sc.add(this.exitDoor);
+    D.tor(3.0, 0.18, 0, 0.2, ez, 0xffe14a, { kind: 'p0', rx: Math.PI / 2 }, 28);
+    for (let i = 0; i < 3; i++) D.cone(0.5, 0.9, 3, (i - 1) * 1.6, 0.1, ez + 3.6, 0xffe14a, { kind: 'p' + i, rx: Math.PI / 2, ry: 0 });   // pijltjes naar buiten
+    const exl = floatLabel('🚪 Uitgang', 'terug naar het dorp', '#ffe14a'); exl.position.set(0, 3.8, ez); sc.add(exl);
+    this.interact.push({ type: 'exit', x: 0, z: ez, r: 3.4, label: 'Terug naar het dorp' });
+    shell(this, D);
+    // fakkels (vlam = instanced mesh, geen licht) + steunen
+    const fl = []; for (let i = 0; i < 5; i++) for (const sx of [-1, 1]) { const fx = sx * (HALL.w / 2 - 0.8), fz = -HALL.d / 2 + 4.5 + i * 8.2; D.cyl(0.07, 0.1, 1.1, 5, fx, 4.3, fz, 0x5b3d24); D.box(0.4, 0.1, 0.4, fx, 3.8, fz, 0x333338); fl.push([fx, 4.9, fz]); }
+    if (this.hallId === 0) for (const sx of [-1, 1]) { D.cyl(0.1, 0.14, 4.4, 6, sx * 8.6, 2.2, -HALL.d / 2 + 1.2, 0x333338); D.cyl(0.4, 0.2, 0.4, 8, sx * 8.6, 4.5, -HALL.d / 2 + 1.2, 0x333338, { kind: 'metal' }); fl.push([sx * 8.6, 5.1, -HALL.d / 2 + 1.2]); }
+    const flames = new THREE.InstancedMesh(new THREE.ConeGeometry(0.2, 0.55, 5), new THREE.MeshBasicMaterial({ color: T.flame }), fl.length); flames.frustumCulled = false; flames.userData.pos = fl; flames.castShadow = false; sc.add(flames); this.glows.push(flames); this.flames = flames;
+    // spandoeken langs de zijmuren (de doek beweegt, dus dynamisch)
+    for (let i = 0; i < 3; i++) for (const sx of [-1, 1]) {
+      const b = P.banner(T.banner[i % 3], 6.5, 1.8); b.position.set(sx * (HALL.w / 2 - 1.2), 5.5, -9 + i * 11 - 1.8); b.rotation.y = -sx * Math.PI / 2; b.children.forEach((c) => { if (c === b.userData.cloth) c.userData.dynamic = true; }); sc.add(b); (this.banners ||= []).push(b);
     }
     // discobal + kleurlichten
     this.disco = new THREE.Group();
     this.disco.add(mesh(new THREE.IcosahedronGeometry(0.7, 1), new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.95, roughness: 0.1, flatShading: true, emissive: 0x444466, emissiveIntensity: 0.6 }), { cast: false }));
-    this.disco.position.set(0, 13, -21); sc.add(this.disco);
-    this.lights = T.lights.map((c, i) => { const l = new THREE.PointLight(c, S.settings.quality === 'low' ? 0 : 420, 40, 1.6); l.position.set(0, 9, 2); sc.add(l); return l; });
-    if (fair) {   // lichtsnoeren langs de muren
-      const bulbs = []; for (const sx of [-1, 1]) for (let i = 0; i < 26; i++) bulbs.push([sx * (HALL.w / 2 - 1.0), 12.2 - Math.sin(i / 25 * Math.PI) * 0.0 - ((i % 4) === 0 ? 0 : 0.5 * Math.sin(i * 1.7)), -HALL.d / 2 + 2 + i * 1.9]);
-      for (let i = 0; i < 34; i++) bulbs.push([-HALL.w / 2 + 2 + i * 2.1, 12.4 - 0.5 * Math.abs(Math.sin(i * 0.6)), -HALL.d / 2 + 1.0]);
-      const im = new THREE.InstancedMesh(new THREE.SphereGeometry(0.22, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffffff }), bulbs.length); const cc = new THREE.Color();
-      bulbs.forEach((b, i) => { im.setMatrixAt(i, new THREE.Matrix4().makeTranslation(b[0], b[1], b[2])); im.setColorAt(i, cc.set([0xffd23f, 0xff7ab0, 0x7be0ff, 0xffa030][i % 4])); }); im.frustumCulled = false; sc.add(im); this.bulbs = im;
+    this.disco.position.set(0, 13, -HALL.d / 2 + 5); sc.add(this.disco);
+    this.lights = T.lights.map((c, i) => { const l = new THREE.PointLight(c, S.settings.quality === 'low' ? 0 : [110, 80, 110][this.hallId], 30, 1.6); l.position.set(0, 9, 2); sc.add(l); return l; });
+    if (neon) {   // neonbuizen langs de muren + speakers + gloeiend DJ-bord
+      for (const [y, c] of [[3, 0x00e5ff], [12, 0xff2bd6]]) { for (const sx of [-1, 1]) D.box(0.2, 0.25, HALL.d - 2, sx * (HALL.w / 2 - 0.15), y, 0, c, { kind: 'p' + (y > 5 ? 1 : 0) }); D.box(HALL.w - 2, 0.25, 0.2, 0, y, -HALL.d / 2 + 0.15, c, { kind: 'p' + (y > 5 ? 1 : 0) }); }
+      for (const sx of [-1, 1]) { const spx = sx * 23, spz = -HALL.d / 2 + 2; D.box(2.4, 4.4, 2.2, spx, 2.2, spz, 0x10162c); for (const yy of [1.3, 3.2]) D.cyl(0.75, 0.75, 0.1, 14, spx, yy, spz + 1.12, yy > 2 ? 0xff2bd6 : 0x00e5ff, { kind: yy > 2 ? 'p1' : 'p2', rx: Math.PI / 2 }); this.colliders.push({ x: spx, z: spz, r: 1.6 }); }
+      const nt = canvasTex(512, 128, (g, w, hh) => { g.fillStyle = '#05081a'; g.fillRect(0, 0, w, hh); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'bold 84px Fredoka, Arial Black, sans-serif'; g.shadowColor = '#ff2bd6'; g.shadowBlur = 24; g.fillStyle = '#ffd6f6'; g.fillText('NEONKELDER', w / 2, hh / 2 + 4, w - 30); g.strokeStyle = '#00e5ff'; g.lineWidth = 6; g.strokeRect(6, 6, w - 12, hh - 12); });
+      sc.add(mesh(new THREE.PlaneGeometry(10, 2.5), new THREE.MeshBasicMaterial({ map: nt }), { cast: false, receive: false, pos: [0, 10.2, -HALL.d / 2 + 0.2] }));
     }
-    if (neon) {   // neonbuizen langs de muren + speakers
-      for (const [y, c] of [[3, 0x00e5ff], [12, 0xff2bd6]]) { for (const sx of [-1, 1]) sc.add(mesh(new THREE.BoxGeometry(0.2, 0.25, HALL.d - 2), glow(c, 1.4), { cast: false, pos: [sx * (HALL.w / 2 - 0.15), y, 0] })); sc.add(mesh(new THREE.BoxGeometry(HALL.w - 2, 0.25, 0.2), glow(c, 1.4), { cast: false, pos: [0, y, -HALL.d / 2 + 0.15] })); }
-      for (const sx of [-1, 1]) { const sp = new THREE.Group(); sp.add(mesh(new THREE.BoxGeometry(2.4, 4.4, 2.2), mat(0x10162c), { pos: [0, 2.2, 0] })); for (const yy of [1.3, 3.2]) sp.add(mesh(new THREE.CircleGeometry(0.75, 14), glow(yy > 2 ? 0xff2bd6 : 0x00e5ff, 0.9), { cast: false, pos: [0, yy, 1.12] })); sp.position.set(sx * 27.5, 0, -HALL.d / 2 + 2); this.colliders.push({ x: sx * 27.5, z: -HALL.d / 2 + 2, r: 1.6 }); sc.add(sp); (this.speakers ||= []).push(sp); }
+    if (fair) {   // kermis: de tent-muren hebben al strepen; een groot bord boven het kassakraam
+      const kt = canvasTex(512, 128, (g, w, hh) => { g.fillStyle = '#d8372c'; g.fillRect(0, 0, w, hh); g.strokeStyle = '#ffd23f'; g.lineWidth = 10; g.strokeRect(8, 8, w - 16, hh - 16); g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'bold 86px Fredoka, Arial Black, sans-serif'; g.lineWidth = 12; g.strokeStyle = '#7a1010'; g.strokeText('KERMIS!', w / 2, hh / 2 + 4); g.fillStyle = '#ffe14a'; g.fillText('KERMIS!', w / 2, hh / 2 + 4); });
+      sc.add(mesh(new THREE.PlaneGeometry(9, 2.25), new THREE.MeshBasicMaterial({ map: kt }), { cast: false, receive: false, pos: [0, 10.5, -HALL.d / 2 + 0.2] }));
+      for (const sx of [-1, 1]) for (let i = 0; i < 3; i++) { const bx = sx * (HALL.w / 2 - 3), bz = -12 + i * 14; D.box(2.2, 1.0, 1.1, bx, 0.5, bz, 0xe0c060); D.box(2.2, 1.0, 1.1, bx, 1.5, bz, 0xd0b050, { ry: 0.1 }); this.colliders.push({ x: bx, z: bz, r: 1.3 }); }
     }
   }
   buildDoor() {
@@ -149,34 +155,46 @@ export class ArcadeMode {
     });
   }
   buildCabinets() {
-    const ids = this.hall.ids; const sc = this.scene;
-    ids.forEach((id, n) => {
-      const per = Math.ceil(ids.length / 2); const side = n < per ? -1 : 1; const k = n % per; const z = -17 + k * (35 / Math.max(1, per - 1)); const x = side * (HALL.w / 2 - 4.2);
-      const g = new THREE.Group(); const body = mat(0x2a1a46), trim = mat(this.theme.trim[n % 6]);
-      g.add(mesh(new THREE.BoxGeometry(3.4, 5.2, 2.6), body, { pos: [0, 2.6, 0] }));
-      g.add(mesh(new THREE.BoxGeometry(3.6, 0.5, 2.8), trim, { pos: [0, 5.4, 0] }));
-      g.add(mesh(new THREE.BoxGeometry(3.6, 0.3, 2.8), trim, { pos: [0, 0.15, 0] }));
-      const scr = new THREE.Mesh(new THREE.PlaneGeometry(2.7, 2.0), new THREE.MeshBasicMaterial({ map: this.cabTexture(id) })); scr.position.set(0, 3.5, 1.32); scr.rotation.x = -0.12; g.add(scr);
-      g.add(mesh(new THREE.BoxGeometry(3.2, 0.9, 1.6), mat(0x1a1030), { pos: [0, 1.9, 1.5], rot: [-0.25, 0, 0] }));
-      g.add(mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.55, 6), mat(0xcccccc, { metalness: 0.7 }), { pos: [-0.8, 2.4, 1.7] })); g.add(mesh(new THREE.SphereGeometry(0.18, 8, 6), mat(0xd8372c), { pos: [-0.8, 2.75, 1.7] }));
-      for (let b = 0; b < 3; b++) g.add(mesh(new THREE.CylinderGeometry(0.15, 0.15, 0.1, 8), glow([0x5ad8ff, 0xffe14a, 0x7bff7b][b], 1.0), { cast: false, pos: [0.4 + b * 0.5, 2.2, 1.78] }));
-      const mq = mesh(new THREE.PlaneGeometry(3.0, 0.7), new THREE.MeshBasicMaterial({ map: tex.sign((this.defOf(id).name || NAME[id]), { w: 384, h: 90, size: 46, bg: '#1a0a3a', fg: '#ffe14a', border: '#ff5ad8' }) }), { cast: false, pos: [0, 5.45, 1.42] }); g.add(mq);
-      g.position.set(x, 0, z); g.rotation.y = -side * Math.PI / 2; sc.add(g);
-      sc.add(mesh(new THREE.RingGeometry(1.6, 2.1, 20), new THREE.MeshBasicMaterial({ color: trim.color, transparent: true, opacity: 0.55, depthWrite: false }), { cast: false, receive: false, pos: [x - side * 4.2, 0.06, z], rot: [-Math.PI / 2, 0, 0] }));
-      this.colliders.push({ x, z, r: 2.1 });
-      const lbl = floatLabel(`${this.defOf(id).icon || PIC[id]} ${this.defOf(id).name || NAME[id]}`, '', '#ffe14a'); lbl.scale.set(4.3, 1.34, 1); lbl.position.set(x, 8.2, z); sc.add(lbl);
-      this.cabs.push({ id, g, scr, lbl, x, z, side, ix: x - side * 4.2 });
-      this.interact.push({ type: 'cab', id, x: x - side * 4.2, z, r: 3.2, label: `${this.defOf(id).name || NAME[id]} spelen` });
+    const sc = this.scene; const D = this.D; const neon = this.hallId === 1;
+    this.zoneSigns = [];
+    this.zones.forEach((z, zi) => {
+      const rt = rugTexture(z.rug, z.color, z.color2, z.name);
+      const rm = new THREE.MeshStandardMaterial({ map: rt, roughness: 0.9, emissive: neon ? 0xffffff : 0x000000, emissiveMap: neon ? rt : null, emissiveIntensity: neon ? 0.5 : 0 });
+      sc.add(mesh(new THREE.CircleGeometry(z.R, 48), rm, { cast: false, pos: [z.cx, 0.03, z.cz], rot: [-Math.PI / 2, 0, 0] }));
+      // looplichtjes langs de rand van het kleed
+      for (let i = 0; i < 26; i++) { const a = i / 26 * TAU; D.disc(0.2, z.cx + Math.cos(a) * (z.R - 0.55), 0.06, z.cz + Math.sin(a) * (z.R - 0.55), i % 2 ? z.color : z.color2, { kind: 'p' + (i % 3) }, 8); }
+      const sg = zoneSign(z); const front = z.cz > 5; sg.position.set(z.cx, front ? 10.2 : 12.2, front ? z.cz - 3 : z.cz - 6.5);   // voorste zones: lager, zodat het bord niet over de achterste zones hangt sc.add(sg); this.zoneSigns.push(sg); z.sign = sg;
+      (ZONE_PROPS[z.prop] || (() => {}))(this, D, z);
+      z.cabs.forEach((c, n) => this.addCab(c, z, zi * 3 + n, n));
     });
     this.refreshLabels();
+  }
+  addCab(c, z, k, n) {
+    const sc = this.scene, D = this.D, id = c.id; const fair = this.hallId === 2;
+    const trim = fair ? [0xe8372c, 0x2f9be0, 0xffa030, 0xb05aff][k % 4] : this.theme.trim[k % 6];
+    let spec;
+    D.at(c.x, 0, c.z, c.yaw, () => {
+      if (fair) spec = (STALLS[id] || STALLS.default)(D, trim);
+      else if (z.tableIds.includes(id)) spec = cabTable(D, trim);
+      else if (z.style === 'sit') spec = cabSit(D, trim);
+      else spec = cabUpright(D, trim, [0x2a1a46, 0x1d2a52, 0x3a1a3a, 0x1a3a3a][k % 4]);
+    });
+    const g = new THREE.Group(); g.position.set(c.x, 0, c.z); g.rotation.y = c.yaw; sc.add(g);
+    const S2 = spec.scr; const scr = new THREE.Mesh(new THREE.PlaneGeometry(S2.w, S2.h), new THREE.MeshBasicMaterial({ map: this.cabTexture(id) })); scr.position.set(S2.x, S2.y, S2.z); scr.rotation.x = S2.rx; g.add(scr);
+    const sn = Math.sin(c.yaw), cs = Math.cos(c.yaw);
+    for (const [dx, dz, r] of spec.hit) this.colliders.push({ x: c.x + dx * cs + dz * sn, z: c.z - dx * sn + dz * cs, r });
+    const ix = c.x + sn * spec.ix, iz = c.z + cs * spec.ix;
+    D.ring(0.95, 1.45, ix, 0.07, iz, z.color, { kind: 'p' + (k % 3) }, 20);
+    this.cabs.push({ id, g, scr, lbl: null, x: c.x, z: c.z, side: 0, ix, iz, ly: spec.lblY + (n % 2 ? 0.7 : 0), zone: z });
+    this.interact.push({ type: 'cab', id, x: ix, z: iz, r: 3.2, label: `${this.defOf(id).name || NAME[id]} spelen` });
   }
   refreshLabels() {
     for (const c of this.cabs) {
       const gm = S.arcade.byGame[c.id]; const sub = this.isOff(c.id) ? '(uit het toernooi)' : gm ? `${gm.wins[0] > gm.wins[1] ? '👑' + S.names[0][0] + ' ' : gm.wins[1] > gm.wins[0] ? '👑' + S.names[1][0] + ' ' : ''}${gm.wins[0]} – ${gm.wins[1]}` : (this.games.includes(c.id) ? 'NIEUW!' : 'binnenkort');
-      this.scene.remove(c.lbl); const lbl = floatLabel(`${this.defOf(c.id).icon || PIC[c.id]} ${this.defOf(c.id).name || NAME[c.id]}`, sub, '#ffe14a'); lbl.scale.set(4.3, 1.34, 1); lbl.position.set(c.x, 8.2, c.z); this.scene.add(lbl); c.lbl = lbl;
+      if (c.lbl) { this.scene.remove(c.lbl); c.lbl.material.map && c.lbl.material.map.dispose(); c.lbl.material.dispose(); }
+      const lbl = floatLabel(`${this.defOf(c.id).icon || PIC[c.id]} ${this.defOf(c.id).name || NAME[c.id]}`, sub, '#ffe14a'); lbl.scale.set(4.0, 1.24, 1); lbl.position.set(c.x, c.ly, c.z); this.scene.add(lbl); c.lbl = lbl;
     }
   }
-
   drawWheel() {
     const ids = this.hall.ids; const N = ids.length;
     const c = this.wheelCanvas || (this.wheelCanvas = Object.assign(document.createElement('canvas'), { width: 512, height: 512 })); const g = c.getContext('2d');
@@ -189,38 +207,82 @@ export class ArcadeMode {
     if (this.wheelTex) this.wheelTex.needsUpdate = true;
   }
   buildCenter() {
-    const sc = this.scene;
-    this.drawWheel();
+    const sc = this.scene; const D = this.D; const id = this.hallId; const CZ = 3;
+    const C = [{ r: 3.5, y: 2.9, hit: 5.7 }, { r: 3.1, y: 1.8, hit: 3.7 }, { r: 3.9, y: 0.95, hit: 4.7 }][id];
+    this.centerZ = CZ; this.drawWheel();
     const wt = this.wheelTex = new THREE.CanvasTexture(this.wheelCanvas); wt.colorSpace = THREE.SRGBColorSpace;
-    this.wheel = new THREE.Group(); this.wheelDisc = mesh(new THREE.CylinderGeometry(4.2, 4.2, 0.4, 36), [mat(0xffd23f, { metalness: 0.6 }), new THREE.MeshStandardMaterial({ map: wt, roughness: 0.4 }), mat(0xffd23f, { metalness: 0.6 })], { pos: [0, 1.2, 0] });
-    this.wheel.add(this.wheelDisc); this.wheel.add(mesh(new THREE.CylinderGeometry(0.8, 1.6, 1.2, 10), mat(0x7a2fd4), { pos: [0, 0.6, 0] }));
-    const ptr = mesh(new THREE.ConeGeometry(0.5, 1.4, 4), mat(0xd8372c), { pos: [0, 2.0, 4.6], rot: [Math.PI / 2 + 0.3, 0, 0] }); this.wheel.add(ptr);
-    this.wheel.add(mesh(new THREE.TorusGeometry(4.35, 0.18, 6, 36), glow(0xffe14a, 1.0), { cast: false, pos: [0, 1.4, 0], rot: [Math.PI / 2, 0, 0] }));
-    this.wheel.position.set(0, 0, 4); sc.add(this.wheel); this.colliders.push({ x: 0, z: 4, r: 4.8 });
-    this.wheelLabel = floatLabel('🎡 Wiel van Gekte', 'draai en laat het lot kiezen', '#ff9aef'); this.wheelLabel.position.set(0, 6.6, 4); sc.add(this.wheelLabel);
-    this.interact.push({ type: 'wheel', x: 0, z: 10, r: 4.2, label: 'Draai aan het Wiel van Gekte' });
+    this.wheel = new THREE.Group(); this.wheel.userData.dynamic = true;
+    const gold = mat(0xffd23f, { metalness: 0.6 });
+    this.wheelDisc = mesh(new THREE.CylinderGeometry(C.r, C.r, 0.4, 40), [gold, new THREE.MeshStandardMaterial({ map: wt, roughness: 0.4 }), gold], { pos: [0, C.y, 0] });
+    this.wheel.add(this.wheelDisc);
+    this.wheelPtr = mesh(new THREE.ConeGeometry(0.5, 1.4, 4), mat(0xd8372c), { pos: [0, C.y + 0.8, C.r + 0.3], rot: [Math.PI / 2 + 0.3, 0, 0] }); this.wheel.add(this.wheelPtr);
+    this.wheel.add(mesh(new THREE.TorusGeometry(C.r + 0.15, 0.16, 6, 40), glow(0xffe14a, 1.0), { cast: false, pos: [0, C.y + 0.2, 0], rot: [Math.PI / 2, 0, 0] }));
+    this.wheel.position.set(0, 0, CZ); sc.add(this.wheel);
+    this.colliders.push({ x: 0, z: CZ, r: C.hit });
+    this.wheelLabel = floatLabel('🎡 Wiel van Gekte', 'draai en laat het lot kiezen', '#ff9aef'); this.wheelLabel.position.set(0, C.y + (id === 2 ? 5.6 : 3.7), CZ); sc.add(this.wheelLabel);
+    const wz = CZ + C.hit + 1.3; this.interact.push({ type: 'wheel', x: 0, z: wz, r: 3.3, label: 'Draai aan het Wiel van Gekte' });
+    this.wheelC = C;
+    if (id === 0) {   // fontein met het Wiel op een sokkel
+      D.cyl(5.3, 5.5, 0.9, 28, 0, 0.45, CZ, 0xb8aec8); D.tor(5.4, 0.22, 0, 0.92, CZ, 0xe8b82a, { kind: 'metal', rx: Math.PI / 2 }, 28); D.cyl(5.0, 5.0, 0.1, 28, 0, 0.5, CZ, 0x6a8ab8);
+      D.cyl(1.4, 1.9, 2.0, 12, 0, 1.45, CZ, 0xcfc4e0); D.tor(1.5, 0.16, 0, 2.45, CZ, 0xe8b82a, { kind: 'metal', rx: Math.PI / 2 }, 14); D.cyl(2.3, 2.5, 0.5, 14, 0, 0.8, CZ, 0xb8aec8);
+      this.nozzles = []; for (let i = 0; i < 8; i++) { const a = i / 8 * TAU + 0.2; const nx = Math.cos(a) * 4.3, nz = CZ + Math.sin(a) * 4.3; D.cyl(0.16, 0.24, 0.5, 6, nx, 1.1, nz, 0xe8b82a, { kind: 'metal' }); this.nozzles.push({ x: nx, y: 1.4, z: nz, dx: -Math.cos(a), dz: -Math.sin(a) }); }
+      for (let i = 0; i < 16; i++) { const a = i * 2.4, r = 1.6 + (i % 4) * 0.7; D.cyl(0.2, 0.2, 0.04, 8, Math.cos(a) * r, 0.58, CZ + Math.sin(a) * r, 0xffd23f, { kind: 'glow' }); }
+      const wm = new THREE.MeshBasicMaterial({ map: tex.water(4, 4), transparent: true, opacity: 0.8, depthWrite: false }); this.waterMat = wm;
+      sc.add(mesh(new THREE.CircleGeometry(5.0, 32), wm, { cast: false, receive: false, pos: [0, 0.72, CZ], rot: [-Math.PI / 2, 0, 0] }));
+    } else if (id === 1) {   // draaitafel-wiel midden in de lichtshow-dansvloer
+      D.cyl(1.2, 1.7, 1.7, 12, 0, 0.85, CZ, 0x10162c); D.tor(1.3, 0.14, 0, 1.5, CZ, 0x00e5ff, { kind: 'p0', rx: Math.PI / 2 }, 16); D.tor(1.75, 0.14, 0, 0.12, CZ, 0xff2bd6, { kind: 'p1', rx: Math.PI / 2 }, 20);
+      const n = 8, tw = 2.0; const g = new THREE.PlaneGeometry(tw - 0.12, tw - 0.12); g.rotateX(-Math.PI / 2);
+      this.led = new THREE.InstancedMesh(g, new THREE.MeshBasicMaterial({ color: 0xffffff }), n * n); this.led.frustumCulled = false; this.led.userData.cells = [];
+      D.box(n * tw + 0.5, 0.06, n * tw + 0.5, 0, 0.03, CZ, 0x05081a);
+      for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { const x = (i - (n - 1) / 2) * tw, z = CZ + (j - (n - 1) / 2) * tw; this.led.setMatrixAt(i * n + j, new THREE.Matrix4().makeTranslation(x, 0.075, z)); this.led.setColorAt(i * n + j, new THREE.Color(0x101830)); this.led.userData.cells.push([i, j]); }
+      this.led.instanceColor.needsUpdate = true; sc.add(this.led);
+      for (let i = 0; i < 24; i++) { const a = i / 24 * TAU; }
+      // truss met bewegende spots boven de dansvloer
+      const gz = -5.6; for (const sx of [-1, 1]) { D.cyl(0.18, 0.22, 11.4, 6, sx * 9.4, 5.7, gz, 0x555566, { kind: 'metal' }); D.box(0.9, 0.3, 0.9, sx * 9.4, 0.15, gz, 0x333344); }
+      D.box(19.2, 0.3, 0.3, 0, 11.4, gz, 0x555566, { kind: 'metal' }); D.box(19.2, 0.3, 0.3, 0, 10.8, gz, 0x555566, { kind: 'metal' });
+      this.beams = []; const bc = [0xff2bd6, 0x00e5ff, 0x7bff00, 0xffe14a, 0xb05aff];
+      bc.forEach((c, i) => { const bx = -6.4 + i * 3.2; D.cyl(0.35, 0.28, 0.5, 8, bx, 10.7, gz, 0x222233); D.sph(0.18, bx, 10.4, gz, c, { kind: 'glow' }, 6);
+        const gr = new THREE.Group(); gr.position.set(bx, 10.5, gz); const cone = new THREE.Mesh(new THREE.ConeGeometry(1.5, 12.5, 12, 1, true), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.16, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); cone.position.y = -6.25; gr.add(cone); sc.add(gr); this.beams.push({ gr, ph: i * 1.3 }); });
+    } else {   // draaimolen van gekte: het Wiel is het draaiende platform
+      const wd = this.wheelDisc; const R = new Deco();
+      const hc = [0xff7ab0, 0x5ad8ff, 0xffd23f, 0x7bff7b, 0xb05aff, 0xff8a1c];
+      for (let i = 0; i < 6; i++) { const a = i / 6 * TAU, r = 2.55; R.at(Math.sin(a) * r, 0.2, Math.cos(a) * r, a + Math.PI / 2, () => { const c = hc[i];
+        R.cyl(0.05, 0.05, 3.6, 5, 0, 1.8, 0, 0xffd23f, { kind: 'metal' });
+        R.box(0.55, 0.5, 1.2, 0, 1.4, 0, c); R.box(0.4, 0.7, 0.4, 0, 1.8, 0.55, c, { rx: -0.4 }); R.box(0.36, 0.34, 0.5, 0, 2.15, 0.85, c); R.box(0.1, 0.4, 0.1, 0, 1.75, -0.65, 0xf6f0e0, { rx: 0.4 });
+        for (const sx of [-1, 1]) for (const sz of [-1, 1]) R.box(0.12, 0.6, 0.12, sx * 0.18, 0.95, sz * 0.4, c);
+        R.box(0.5, 0.06, 0.8, 0, 1.12, 0, 0xffd23f); R.sph(0.1, 0, 3.5, 0, 0xfff0a0, { kind: 'p' + (i % 3) }, 6); }); }
+      for (let i = 0; i < 18; i++) { const a = i / 18 * TAU; R.sph(0.17, Math.sin(a) * (C.r - 0.25), 0.28, Math.cos(a) * (C.r - 0.25), 0xfff0a0, { kind: 'p' + (i % 3) }, 6); }
+      this.carouselDeco = R.build(wd);
+      // vast: middenpaal en een open dakje (zo blijven de paardjes vanuit de lucht zichtbaar) + lampjes
+      D.cyl(0.35, 0.4, 5.6, 8, 0, 2.8, CZ, 0xffd23f, { kind: 'metal' });
+      for (let i = 0; i < 12; i++) D.add(new THREE.ConeGeometry(2.4, 1.5, 3, 1, true, i * TAU / 12, TAU / 12), i % 2 ? 0xf6f0e0 : 0xd8372c, 0, 6.3, CZ, { kind: 'dbl' });
+      D.cyl(2.4, 2.4, 0.14, 24, 0, 5.55, CZ, 0xffd23f, { kind: 'metal' }); D.sph(0.3, 0, 7.2, CZ, 0xffd23f, { kind: 'glow' }, 8); D.cyl(0.04, 0.04, 1.0, 4, 0, 7.6, CZ, 0xcfa060); D.tri(1.0, 0.6, 0.5, 8.0, CZ, 0xd8372c, { kind: 'dbl', rz: Math.PI / 2 });
+      for (let i = 0; i < 16; i++) { const a = i / 16 * TAU; D.sph(0.2, Math.sin(a) * 2.35, 5.35, CZ + Math.cos(a) * 2.35, [0xffd23f, 0xff7ab0, 0x7be0ff][i % 3], { kind: 'p' + (i % 3) }, 6); }
+      D.cyl(4.2, 4.4, 0.35, 24, 0, 0.18, CZ, 0x7a2fd4); D.cyl(0.8, 0.8, 0.2, 10, 0, 0.95, CZ, 0xffd23f, { kind: 'metal' });
+    }
   }
-
   buildBack() {
-    const sc = this.scene; const zb = -HALL.d / 2; this.hostZ = zb + 3.7;
+    const sc = this.scene; const D = this.D; const zb = -HALL.d / 2; this.hostZ = zb + 3.7;
     // troon + koning
-    const throne = new THREE.Group(); const gold = mat(0xe8b82a, { metalness: 0.6, roughness: 0.35 });
-    throne.add(mesh(new THREE.BoxGeometry(5, 1.4, 4), mat(0x7a2fd4), { pos: [0, 0.7, 0] })); throne.add(mesh(new THREE.BoxGeometry(2.6, 0.5, 2.2), gold, { pos: [0, 1.65, 0] })); throne.add(mesh(new THREE.BoxGeometry(2.6, 4.2, 0.5), gold, { pos: [0, 3.7, -1] }));
-    throne.add(mesh(new THREE.ConeGeometry(0.4, 1.0, 5), gold, { pos: [-1.1, 6.2, -1] })); throne.add(mesh(new THREE.ConeGeometry(0.4, 1.0, 5), gold, { pos: [1.1, 6.2, -1] }));
+    const gold = 0xe8b82a;
     if (this.hallId === 0) {
-      throne.position.set(0, 0, zb + 3.5); sc.add(throne); this.colliders.push({ x: 0, z: zb + 3.5, r: 3.2 });
+      D.box(5, 1.4, 4, 0, 0.7, zb + 3.5, 0x7a2fd4); D.box(2.6, 0.5, 2.2, 0, 1.65, zb + 3.5, gold, { kind: 'metal' }); D.box(2.6, 4.2, 0.5, 0, 3.7, zb + 2.5, gold, { kind: 'metal' });
+      D.cone(0.4, 1.0, 5, -1.1, 6.2, zb + 2.5, gold, { kind: 'metal' }); D.cone(0.4, 1.0, 5, 1.1, 6.2, zb + 2.5, gold, { kind: 'metal' }); D.sph(0.25, 0, 6.1, zb + 2.5, 0xd8372c, { kind: 'p1' }, 6);
+      this.colliders.push({ x: 0, z: zb + 3.5, r: 3.2 });
+      for (const sx of [-1, 1]) { D.box(2.4, 9.5, 0.15, sx * 3.3, 8.6, zb + 0.4, 0x7a2fd4); D.box(2.7, 0.3, 0.2, sx * 3.3, 13.5, zb + 0.4, gold, { kind: 'metal' }); D.tri(2.4, 1.6, sx * 3.3, 3.9, zb + 0.4, 0x7a2fd4, { kind: 'dbl' }); D.sph(0.5, sx * 3.3, 9.2, zb + 0.5, gold, { kind: 'metal' }, 8); }
       this.king = makeNPC('captain', { hat: 'crown', hatColor: 0xffd23f, beard: 'full', hair: 0xf0f0f0, beardColor: 0xf0f0f0, cape: 0x7a2fd4, shirt: 0xd8357f, sleeve: 0xd8357f, scale: 1.25, bodyW: 1.5 });
       this.king.group.position.set(0, 1.9, zb + 3.7);
     } else if (this.hallId === 2) {   // kassa-kraam van Kermis-Kees
-      const booth = new THREE.Group(); booth.add(mesh(new THREE.BoxGeometry(7, 2.2, 3), mat(0xe8372c), { pos: [0, 1.1, 0] })); booth.add(mesh(new THREE.BoxGeometry(7.4, 0.3, 3.4), mat(0xf6f0e0), { pos: [0, 2.3, 0] }));
-      for (let i = 0; i < 7; i++) booth.add(mesh(new THREE.BoxGeometry(1.0, 0.12, 2.2), mat(i % 2 ? 0xf6f0e0 : 0xe8372c), { pos: [-3 + i, 5.6, 0.2], rot: [0.35, 0, 0] }));
-      for (const sx of [-1, 1]) booth.add(mesh(new THREE.CylinderGeometry(0.12, 0.12, 5.4, 6), mat(0xcfa060), { pos: [sx * 3.4, 2.7, 1.2] }));
-      booth.position.set(0, 0, zb + 3.5); sc.add(booth); this.colliders.push({ x: 0, z: zb + 3.5, r: 3.4 });
+      D.box(7, 2.2, 3, 0, 1.1, zb + 3.5, 0xe8372c); D.box(7.4, 0.3, 3.4, 0, 2.3, zb + 3.5, 0xf6f0e0);
+      for (let i = 0; i < 7; i++) D.box(1.0, 0.12, 2.2, -3 + i, 5.6, zb + 3.7, i % 2 ? 0xf6f0e0 : 0xe8372c, { rx: 0.35, kind: 'dbl' });
+      for (const sx of [-1, 1]) D.cyl(0.12, 0.12, 5.4, 6, sx * 3.4, 2.7, zb + 4.7, 0xcfa060);
+      for (let i = 0; i < 8; i++) D.sph(0.13, -3.2 + i * 0.9, 4.95, zb + 5.1, 0xfff0a0, { kind: 'p' + (i % 3) }, 5);
+      this.colliders.push({ x: 0, z: zb + 3.5, r: 3.4 });
       this.king = makeNPC('innkeeper', { scale: 1.25 }); this.king.group.position.set(0, 0.2, zb + 2.4);
     } else {   // DJ-booth in de Neonkelder
-      const booth = new THREE.Group(); booth.add(mesh(new THREE.BoxGeometry(7, 1.8, 3), mat(0x10162c), { pos: [0, 0.9, 0] })); booth.add(mesh(new THREE.BoxGeometry(7.2, 0.15, 3.2), glow(0x00e5ff, 1.2), { cast: false, pos: [0, 1.85, 0] }));
-      for (const sx of [-1, 1]) { booth.add(mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.18, 18), mat(0x222), { pos: [sx * 2, 1.95, 0.4] })); booth.add(mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12), glow(sx > 0 ? 0xff2bd6 : 0x7bff00, 1), { cast: false, pos: [sx * 2, 2.0, 0.4] })); }
-      booth.position.set(0, 0, zb + 3.5); sc.add(booth); this.colliders.push({ x: 0, z: zb + 3.5, r: 3.4 });
+      D.box(7, 1.8, 3, 0, 0.9, zb + 3.5, 0x10162c); D.box(7.2, 0.15, 3.2, 0, 1.85, zb + 3.5, 0x00e5ff, { kind: 'p0' });
+      for (const sx of [-1, 1]) { D.cyl(0.9, 0.9, 0.18, 18, sx * 2, 1.95, zb + 3.9, 0x222222); D.cyl(0.3, 0.3, 0.2, 12, sx * 2, 2.0, zb + 3.9, sx > 0 ? 0xff2bd6 : 0x7bff00, { kind: 'p' + (sx > 0 ? 1 : 2) }); }
+      this.colliders.push({ x: 0, z: zb + 3.5, r: 3.4 });
       this.king = makeNPC('jester', { scale: 1.25 });
       this.king.group.position.set(0, 0.2, zb + 2.4);
     }
@@ -228,22 +290,24 @@ export class ArcadeMode {
     const kl = floatLabel(['👑 Koning Klopper', '🎧 DJ Dobber', '🎟️ Kermis-Kees'][this.hallId], 'toernooi & regels', '#ffe14a'); kl.position.set(0, 7.5, zb + 3.7); sc.add(kl);
     this.interact.push({ type: 'king', x: 0, z: zb + 9.2, r: 5, label: `Praten met ${this.hostName}` });
     // scorebord
-    this.boardTex = null; this.board = mesh(new THREE.PlaneGeometry(13, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }), { cast: false, pos: [-17, 8, zb + 0.2] }); sc.add(this.board);
-    sc.add(mesh(new THREE.BoxGeometry(13.8, 8.8, 0.4), mat(0xe8b82a, { metalness: 0.6 }), { cast: false, pos: [-17, 8, zb + 0.05] }));
+    this.boardTex = null; this.board = mesh(new THREE.PlaneGeometry(13, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }), { cast: false, pos: [-17, 8, zb + 0.32] }); sc.add(this.board);
+    D.box(13.8, 8.8, 0.3, -17, 8, zb + 0.1, 0xe8b82a, { kind: 'metal' });
     this.drawBoard();
     this.interact.push({ type: 'board', x: -17, z: zb + 6, r: 5, label: 'Scorebord bekijken' });
     // trofeeënkast
-    const shelf = new THREE.Group(); shelf.add(mesh(new THREE.BoxGeometry(14, 0.4, 2.2), mat(0x4a2e17), { pos: [0, 2.0, 0] })); shelf.add(mesh(new THREE.BoxGeometry(14, 0.4, 2.2), mat(0x4a2e17), { pos: [0, 5.2, 0] })); shelf.add(mesh(new THREE.BoxGeometry(14.4, 7, 0.4), mat(0x2a1a10), { pos: [0, 3.6, -1.1] }));
-    shelf.position.set(17, 0, zb + 1.6); sc.add(shelf); this.trophies = [];
+    D.box(14, 0.4, 2.2, 17, 2.0, zb + 1.6, 0x4a2e17); D.box(14, 0.4, 2.2, 17, 5.2, zb + 1.6, 0x4a2e17); D.box(14.4, 7, 0.4, 17, 3.6, zb + 0.5, 0x2a1a10);
+    for (const sx of [-1, 1]) D.box(0.4, 7, 2.2, 17 + sx * 7.1, 3.6, zb + 1.6, 0x4a2e17);
     const A = S.arcade; const totalWins = A.wins[0] + A.wins[1];
     const defs = [['Eerste Bloed', totalWins >= 1, 0xcd7f32], ['Duelist', totalWins >= 5, 0xc0c0c0], ['Meester', totalWins >= 12, 0xffd23f], ['Legende', totalWins >= 30, 0x5ad8ff], ['Gelijkspel-koning', A.draws >= 4, 0xff9aef], ['Toernooi-winnaar', A.tourneys[0] + A.tourneys[1] >= 1, 0xffd23f], ['Allesspeler', Object.keys(A.byGame).length >= 8, 0x7bff7b], ['Rivaliteit', A.plays >= 20, 0xff5a5a]];
-    defs.forEach(([name, got, col], i) => {
-      const row = Math.floor(i / 4), colI = i % 4; const tg = new THREE.Group(); const m = got ? new THREE.MeshStandardMaterial({ color: col, metalness: 0.8, roughness: 0.25, emissive: col, emissiveIntensity: 0.35 }) : mat(0x444444);
-      tg.add(mesh(new THREE.CylinderGeometry(0.5, 0.25, 0.9, 10), m, { pos: [0, 0.6, 0] })); tg.add(mesh(new THREE.CylinderGeometry(0.2, 0.2, 0.4, 8), m, { pos: [0, 0.1, 0] })); tg.add(mesh(new THREE.BoxGeometry(0.8, 0.12, 0.8), m, { pos: [0, -0.1, 0] }));
-      for (const sx of [-1, 1]) tg.add(mesh(new THREE.TorusGeometry(0.3, 0.06, 5, 8, Math.PI), m, { pos: [sx * 0.55, 0.65, 0], rot: [0, 0, sx > 0 ? -Math.PI / 2 : Math.PI / 2] }));
-      tg.position.set(17 - 5.2 + colI * 3.5, 2.55 + row * 3.2, zb + 1.6); sc.add(tg); this.trophies.push(tg);
-      const lb = floatLabel(got ? name : '???', got ? '' : 'nog niet gehaald', got ? '#ffe14a' : '#9a9a9a'); lb.scale.set(3, 0.95, 1); lb.position.set(17 - 5.2 + colI * 3.5, 4.0 + row * 3.2, zb + 2.6); sc.add(lb);
+    this.trophies = [];
+    defs.forEach(([name, got, c], i) => {
+      const row = Math.floor(i / 4), colI = i % 4; const tx = 17 - 5.2 + colI * 3.5, ty = 2.3 + row * 3.2, k = got ? 'metal' : 'lit', cc = got ? c : 0x555555;
+      D.at(tx, ty, zb + 1.6, 0, () => { D.cyl(0.5, 0.25, 0.9, 10, 0, 0.6, 0, cc, { kind: k }); D.cyl(0.2, 0.2, 0.4, 8, 0, 0.1, 0, cc, { kind: k }); D.box(0.8, 0.12, 0.8, 0, -0.1, 0, cc, { kind: k }); for (const sx of [-1, 1]) D.tor(0.3, 0.06, sx * 0.55, 0.65, 0, cc, { kind: k, rz: sx > 0 ? -Math.PI / 2 : Math.PI / 2 }, 8, Math.PI); if (got) D.sph(0.14, 0, 1.25, 0, 0xffffff, { kind: 'p' + (i % 3) }, 5); });
     });
+    for (let r = 0; r < 2; r++) {   // naamplaatjes per rij: een texture per plank
+      const nt = canvasTex(1024, 128, (g, w, hh) => { g.textAlign = 'center'; g.textBaseline = 'middle'; for (let c2 = 0; c2 < 4; c2++) { const [name, got] = defs[r * 4 + c2]; g.font = 'bold 40px Fredoka, Arial Black, sans-serif'; g.lineWidth = 8; g.lineJoin = 'round'; g.strokeStyle = 'rgba(25,10,35,.95)'; const tx = w / 8 + c2 * w / 4; g.strokeText(got ? name : '???', tx, 48, w / 4 - 12); g.fillStyle = got ? '#ffe14a' : '#9a9a9a'; g.fillText(got ? name : '???', tx, 48, w / 4 - 12); if (!got) { g.font = 'bold 28px Fredoka, Arial'; g.fillStyle = '#bbb'; g.fillText('nog niet gehaald', tx, 96, w / 4 - 12); } } });
+      sc.add(mesh(new THREE.PlaneGeometry(14, 1.75), new THREE.MeshBasicMaterial({ map: nt, transparent: true, depthWrite: false }), { cast: false, receive: false, pos: [17, 4.2 + r * 3.2, zb + 2.8], rot: [-0.2, 0, 0] }));
+    }
     this.interact.push({ type: 'trophies', x: 17, z: zb + 6.5, r: 5, label: 'Trofeeën bekijken' });
   }
   drawBoard() {
@@ -273,7 +337,7 @@ export class ArcadeMode {
     else if (!S.flags.met_king) { this.busy = true; S.flags.met_king = true; await ui.say([{ who: 'Koning Klopper', text: 'WELKOM in mijn Speelhal! Hier zijn geen karweitjes en geen heitjes te verdienen... Alleen eer, glorie en een heleboel chaos.' }, { who: 'Koning Klopper', text: 'Elk duel krijgt een TWIST: soms loop je achterstevoren, soms ruil je van lichaam, en soms staat de Deurman te kijken. Wie dan beweegt, verliest.' }, { who: 'Wes', text: 'Ik ga zo hard winnen.' }, { who: 'Jor', text: 'Dat dacht je.' }]); this.busy = false; }
     if (!o.result && !dailyDone() && !this.deur.takeover) setTimeout(() => { if (!this.leaving) ui.hud.toast(`🌟 Uitdaging van de dag wacht bij ${this.hostName}! Bonus: +${dailyBonus()} heitjes`, 4200); }, 2500);
   }
-  exit() { this.deur && this.deur.cleanup(); ui.clearScreens(); ui.activeMenus = []; ui.hudEl.innerHTML = ''; ui.setVignette(0); }
+  exit() { this.deur && this.deur.cleanup(); try { disposeObject(this.scene); this.fx.dispose(); } catch (e) { console.warn('opruimen speelhal', e); } ui.clearScreens(); ui.activeMenus = []; ui.hudEl.innerHTML = ''; ui.setVignette(0); }
   resize(w, hh) { this.camera.aspect = w / hh; this.camera.updateProjectionMatrix(); this.fx.setViewportHeight(hh); }
   hudSetup() { ui.hud.setHint(`Loop naar een kast en druk op je actieknop om te duelleren · Wiel van Gekte = verrassing · ${this.hostName} = toernooi` + (this.hallId === 0 ? ' · deuren in de achtermuur = meer hallen!' : '')); setTimeout(() => ui.hud.setHint(null), 14000); }
   refreshHud() {
@@ -308,6 +372,7 @@ export class ArcadeMode {
       else if (it.type === 'king') await this.kingTalk();
       else if (it.type === 'board') { this.drawBoard(); await this.rankModal(); }
       else if (it.type === 'trophies') await this.cardModal('Trofeeënkast', h('p', { style: { textAlign: 'center' }, html: 'Win duels, speel veel verschillende spellen en win toernooien om trofeeën te verdienen.<br>Eerste Bloed (1 winst) · Duelist (5) · Meester (12) · Legende (30) · Gelijkspel-koning (4 gelijk) · Toernooi-winnaar · Allesspeler (8 spellen) · Rivaliteit (20 duels).' }));
+      else if (it.type === 'egg') this.life.doEgg(it);
       else if (it.type === 'exit') await this.leave();
       else if (it.type === 'door') await this.useDoor(it);
     } finally { if (!this.leaving) { this.busy = false; input.reset(); } }
@@ -464,7 +529,7 @@ export class ArcadeMode {
     this.busy = true; this.refreshLabels(); this.drawBoard(); this.refreshHud();
     const w = r.winner; const names = S.names;
     const line = w == null ? pick(KING_DRAW) : pick(KING_WINS).replace(/\{w\}/g, names[w]).replace(/\{l\}/g, names[1 - w]);
-    if (w != null) { this.players[w].c.pose = 'cheer'; this.players[1 - w].c.pose = 'sad'; }
+    if (w != null) { this.players[w].c.pose = 'cheer'; this.players[1 - w].c.pose = 'sad'; this.life.cheer(); }
     await new Promise((res) => setTimeout(res, 500));
     await this.say([{ who: this.hostName, text: line }]);
     this.players.forEach((p) => (p.c.pose = 'idle'));
@@ -485,6 +550,7 @@ export class ArcadeMode {
     audio.sfx('win'); ui.flash('#fff', 400);
     for (let i = 0; i < 6; i++) setTimeout(() => this.fx.burst(rand(-8, 8), 7 + rand(0, 4), rand(0, 10), { count: 40, colors: [0xff5ad8, 0xffe14a, 0x5ad8ff, 0x7bff7b], speed: 8, size: 0.45, life: 1.4, gravity: 3 }), i * 260);
     if (win != null) { this.players[win].c.pose = 'cheer'; this.players[1 - win].c.pose = 'sad'; }
+    this.life.party(10);
     await this.say([{ who: this.hostName, text: win == null ? 'Het toernooi eindigt in een GELIJKSPEL! Dat is zo zeldzaam als een stille kip. Jullie zijn allebei Kampioen. En allebei een beetje verliezer.' : `${names[win]} is KAMPIOEN van de Speelhallen! ${names[1 - win]}, jij krijgt een applausje. Hier, ik klap voor je. Klap klap.` }, { who: this.hostName, text: 'Als beloning voor jullie moed krijgen jullie samen 50 heitjes van mijn schatkist. Gebruik ze verstandig. Of niet.' }]);
     this.players.forEach((p) => (p.c.pose = 'idle'));
   }
@@ -515,22 +581,26 @@ export class ArcadeMode {
       this.movePlayer(p, dt, frozen); p.c.update(dt);
     }
     this.mid.set((this.players[0].x + this.players[1].x) / 2, 0, (this.players[0].z + this.players[1].z) / 2);
-    // camera
-    const sep = Math.hypot(this.players[0].x - this.players[1].x, this.players[0].z - this.players[1].z); const k = clamp((sep - 6) / 30, 0, 1);
-    const tx = clamp(this.mid.x, -26, 26), ty = lerp(17, 28, k), tz = clamp(this.mid.z, -12, 20) + lerp(11, 18, k);
-    let tx2 = tx, tz2 = tz, lz = clamp(this.mid.z, -16, 22) - 1;
+    // camera: poppenhuis-overzicht; zoomt uit als de broers uit elkaar lopen, met een kleine zwaai en een openingsshot
+    const sep = Math.hypot(this.players[0].x - this.players[1].x, this.players[0].z - this.players[1].z); const k = clamp((sep - 6) / 26, 0, 1);
+    const pan = lerp(11, 3, k);
+    let lz = clamp(this.mid.z * 0.7 - 1, -11, 10);
+    const tx = clamp(this.mid.x, -pan, pan), ty = lerp(23, 35, k), tz = lz + lerp(16, 22, k);
+    let tx2 = tx, tz2 = tz, ty2 = ty;
+    if (this.intro > 0) { this.intro -= dt; const q = smoothstep(0, 1, this.intro / 3.2); ty2 = lerp(ty, ty + 20, q); tz2 = lerp(tz, tz + 14, q); }
     if (this.camOverride) { this.camOverride.t -= dt; if (this.camOverride.t <= 0) this.camOverride = null; else { tx2 = this.camOverride.x; tz2 = this.camOverride.z + 15; lz = this.camOverride.z; } }
-    this.camPos.x = damp(this.camPos.x, tx2, 4, dt); this.camPos.y = damp(this.camPos.y, ty, 3, dt); this.camPos.z = damp(this.camPos.z, tz2, 4, dt);
+    tx2 += Math.sin(t * 0.25) * 0.5;
+    this.camPos.x = damp(this.camPos.x, tx2, 4, dt); this.camPos.y = damp(this.camPos.y, ty2, 3, dt); this.camPos.z = damp(this.camPos.z, tz2, 4, dt);
     this.camLook.x = damp(this.camLook.x, tx2, 5, dt); this.camLook.z = damp(this.camLook.z, lz, 5, dt);
     this.camera.position.copy(this.camPos);
     if (this.camShake > 0.001) { this.camera.position.x += (Math.random() - 0.5) * this.camShake; this.camera.position.y += (Math.random() - 0.5) * this.camShake; this.camShake *= 0.9; } this.camera.lookAt(this.camLook.x, 1.5, this.camLook.z);
     // decor
-    this.disco.rotation.y += dt * 0.8; this.lights.forEach((l, i) => { const a = t * 0.7 + i * TAU / 3; l.position.set(Math.cos(a) * 14, 9, 2 + Math.sin(a) * 9); });
-    for (const f of this.glows) f.scale.y = 1 + Math.sin(t * 12 + f.position.x * 3) * 0.2;
+    this.disco.rotation.y += dt * 0.8; this.lights.forEach((l, i) => { const a = t * 0.7 + i * TAU / 3; l.position.set(Math.cos(a) * 12, 9, 2 + Math.sin(a) * 8); });
     (this.banners || []).forEach((b, i) => P.animateBanner(b, t + i));
+    this.life.update(dt);
     this.deur.update(dt);
     this.king.update(dt); this.king.pose = this.nearKing() ? 'wave' : 'idle';
-    this.wheel.children[2].rotation.z = Math.sin(t * 2) * 0.03;
+    this.wheelPtr.rotation.z = Math.sin(t * 2) * 0.03;
     if (this.spin) {
       const s = this.spin; s.t += dt; const k2 = Math.min(1, s.t / s.dur); const e = 1 - Math.pow(1 - k2, 3);
       const prev = this.wheelDisc.rotation.y; this.wheelDisc.rotation.y = lerp(s.from, s.to, e);

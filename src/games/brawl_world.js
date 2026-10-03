@@ -1,33 +1,27 @@
 import * as THREE from 'three';
-import { mat, mesh, canvasTex, mulberry32, TAU } from '../engine/util.js';
+import { mat, mesh, canvasTex, mulberry32, TAU, rand } from '../engine/util.js';
 import { tex } from '../engine/textures.js';
 import * as P from '../engine/props.js';
 import { mergeStatic } from './quickdraw_merge.js';
+import { STAGES } from './brawl_data.js';
 
 // Omgeving van "Smash-Arena": een zwevend eiland bij zonsondergang boven de wolken, met een kasteelberg op de achtergrond,
 // drijvende eilandjes, wolken, lantaarns en vlaggen. Statische delen worden samengevoegd (weinig draw calls).
 
 // Speelveld (wereld-eenheden). Vechters staan op z = 0, camera kijkt vanaf +z naar het podium.
-export const ST = {
-  HW: 9.0,                 // halve breedte van het hoofdeiland (botsing)
-  TOP: 0, BOT: -3.5,       // bovenkant / onderkant van het blok waar je tegenaan botst
-  // zachte platforms (je springt er van onderaf doorheen): x-midden, y, breedte
-  plats: [
-    { x: -6.4, y: 3.8, w: 5.0 },
-    { x: 6.4, y: 3.8, w: 5.0 },
-    { x: 0, y: 7.6, w: 5.0 },
-  ],
-  BLAST: { x: 27, bot: -15, top: 24 },
-};
+// Elk podium levert hetzelfde "stage"-object: { solid, plats, BLAST, mood, camBase(), resp(i), start(i), itemX(), step(dt,T), update(t,dt), fdx, fdy, wind }
+//  solid = { hw, top, bot } of null (vaste blok waar je tegenaan botst); plats = zachte platforms (spring er van onderaf doorheen): { x, y, w, on, dx, dy }
+const ISLE = { HW: 9.0, TOP: 0, BOT: -3.5 };
+export const mkPlat = (x, y, w, o = {}) => ({ x, y, w, on: true, soft: true, dx: 0, dy: 0, py: y, ...o });
 
-function skyTex() {
+export function gradTex(stops) {
   return canvasTex(16, 256, (g, w, h) => {
     const gr = g.createLinearGradient(0, 0, 0, h);
-    gr.addColorStop(0, '#1b2766'); gr.addColorStop(0.35, '#6a3f9a'); gr.addColorStop(0.62, '#e0689a'); gr.addColorStop(0.85, '#ffa064'); gr.addColorStop(1, '#ffd27a');
+    stops.forEach(([o, c]) => gr.addColorStop(o, c));
     g.fillStyle = gr; g.fillRect(0, 0, w, h);
   });
 }
-const glowTex = () => canvasTex(128, 128, (g) => { const gr = g.createRadialGradient(64, 64, 2, 64, 64, 62); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,255,255,.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); });
+export const glowTex = () => canvasTex(128, 128, (g) => { const gr = g.createRadialGradient(64, 64, 2, 64, 64, 62); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,255,255,.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); });
 
 // Een klein drijvend eiland (rots-lathe + gras + boompje of torentje)
 function miniIsland(rng, big = 1, castle = false) {
@@ -46,21 +40,48 @@ function miniIsland(rng, big = 1, castle = false) {
   return g;
 }
 
+const _crystalM = {};
+const crystalMat = (c) => _crystalM[c] || (_crystalM[c] = new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.7, roughness: 0.25, flatShading: true }));
 function crystalSpikes(rng, n, spread) {
   const g = new THREE.Group(); const cols = [0x6fe8ff, 0xff7fd0, 0xb08cff, 0x8affb0];
   for (let i = 0; i < n; i++) {
     const c = cols[i % cols.length], h = 1.2 + rng() * 2.2;
-    g.add(mesh(new THREE.ConeGeometry(0.28 + rng() * 0.2, h, 5), new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: 0.7, roughness: 0.25, flatShading: true }), { cast: false, receive: false, pos: [(rng() - 0.5) * spread, -h / 2, (rng() - 0.5) * 2], rot: [Math.PI + (rng() - 0.5) * 0.4, 0, (rng() - 0.5) * 0.5] }));
+    g.add(mesh(new THREE.ConeGeometry(0.28 + rng() * 0.2, h, 5), crystalMat(c), { cast: false, receive: false, pos: [(rng() - 0.5) * spread, -h / 2, (rng() - 0.5) * 2], rot: [Math.PI + (rng() - 0.5) * 0.4, 0, (rng() - 0.5) * 0.5] }));
   }
   return g;
 }
 
-export function buildStage(ctx) {
+// Wolken (1 draw call, geinstantieerd). Geeft update(dt) terug. flow = extra snelheid (voor het draken-podium)
+export function makeClouds(scene, rng, { N = 16, flow = 1, lows = true, tint = [0xffd0dc, 0xffe6c8, 0xe8c0ff], near = 0xfff2f6 } = {}) {
+  const PUF = 5, geo = new THREE.IcosahedronGeometry(1, 1);
+  const im = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, opacity: 0.86 }), N * PUF);
+  im.frustumCulled = false; im.renderOrder = -1;
+  const cl = [], col = new THREE.Color(), d = new THREE.Object3D();
+  for (let i = 0; i < N; i++) {
+    const nr = i % 4 === 0, z = nr ? -8 - rng() * 5 : -24 - rng() * 50, sc = nr ? 1.5 + rng() * 0.9 : 2.4 + rng() * 3.2;
+    cl.push({ x: (rng() - 0.5) * 150, y: nr ? -12 - rng() * 5 : (i % 2 ? -17 + rng() * 15 : 17 + rng() * 12), z, sc, sp: (0.25 + rng() * 0.5) * (nr ? 1.4 : 1) * flow, ph: rng() * 6 });
+    for (let k = 0; k < PUF; k++) { col.set(nr ? near : tint[i % tint.length]); im.setColorAt(i * PUF + k, col); }
+  }
+  scene.add(im);
+  return {
+    im,
+    update(dt) {
+      for (let i = 0; i < cl.length; i++) {
+        const o = cl[i]; o.x += o.sp * dt; if (o.x > 85) o.x = -85; if (o.x < -85) o.x = 85;
+        for (let k = 0; k < PUF; k++) { d.position.set(o.x + (k - 2) * o.sc * 0.8, o.y + Math.sin(k * 1.7 + o.ph) * o.sc * 0.25, o.z); d.scale.set(o.sc * (1.2 - Math.abs(k - 2) * 0.18), o.sc * 0.7, o.sc * 0.8); d.updateMatrix(); im.setMatrixAt(i * PUF + k, d.matrix); }
+      }
+      im.instanceMatrix.needsUpdate = true;
+    },
+  };
+}
+
+export function buildIsland(ctx, api) {
   const { scene } = ctx;
   const rng = mulberry32(4242);
-  const W = { clouds: null, banners: [], flames: [], lanterns: null, far: null, sun: null };
-  scene.background = skyTex();
+  const W = { banners: [], flames: [], lanterns: null, far: null };
+  scene.background = gradTex([[0, '#1b2766'], [0.35, '#6a3f9a'], [0.62, '#e0689a'], [0.85, '#ffa064'], [1, '#ffd27a']]);
   scene.fog = new THREE.Fog(0xe08aa8, 70, 230);
+  const ST = ISLE;
 
   // zon + gloed
   const gt = glowTex();
@@ -117,7 +138,8 @@ export function buildStage(ctx) {
   for (const [sx, col] of [[-1, 0x2f9e5b], [1, 0x3a78e0]]) { const b = P.banner(col, 3.2, 1.1); b.position.set(sx * (ST.HW - 1.8), 0.1, -2.4); b.userData.dyn = true; isle.add(b); W.banners.push(b); }
   // platforms: houten planken met gouden uiteinden en een wolkje eronder
   const plankM = new THREE.MeshStandardMaterial({ map: tex.planks(3, 1), roughness: 0.9 });
-  for (const p of ST.plats) {
+  const plats = [mkPlat(-6.4, 3.8, 5.0), mkPlat(6.4, 3.8, 5.0), mkPlat(0, 7.6, 5.0)];
+  for (const p of plats) {
     const g = new THREE.Group(); g.position.set(p.x, p.y, 0);
     g.add(mesh(new THREE.BoxGeometry(p.w, 0.4, 2.6), plankM, { cast: false, pos: [0, -0.2, 0] }));
     g.add(mesh(new THREE.BoxGeometry(p.w + 0.3, 0.12, 2.8), mat(0xe8c24a, { metalness: 0.5, roughness: 0.4 }), { cast: false, pos: [0, -0.02, 0] }));
@@ -127,19 +149,7 @@ export function buildStage(ctx) {
   }
   mergeStatic(isle);
 
-  // ---- wolken (1 draw call, geinstantieerd) ----
-  {
-    const N = 16, PUF = 5, geo = new THREE.IcosahedronGeometry(1, 1);
-    const im = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, opacity: 0.86 }), N * PUF);
-    im.frustumCulled = false; im.renderOrder = -1;
-    const cl = [], col = new THREE.Color();
-    for (let i = 0; i < N; i++) {
-      const near = i % 4 === 0, z = near ? -8 - rng() * 5 : -24 - rng() * 50, sc = near ? 1.5 + rng() * 0.9 : 2.4 + rng() * 3.2;
-      cl.push({ x: (rng() - 0.5) * 150, y: near ? -12 - rng() * 5 : (i % 2 ? -17 + rng() * 15 : 17 + rng() * 12), z, sc, sp: (0.25 + rng() * 0.5) * (near ? 1.4 : 1), ph: rng() * 6 });
-      for (let k = 0; k < PUF; k++) { col.set(near ? 0xfff2f6 : [0xffd0dc, 0xffe6c8, 0xe8c0ff][i % 3]); im.setColorAt(i * PUF + k, col); }
-    }
-    scene.add(im); W.clouds = { im, cl, PUF, d: new THREE.Object3D() };
-  }
+  const clouds = makeClouds(scene, rng);
   // ---- lantaarns die omhoog zweven ----
   {
     const N = 14, im = new THREE.InstancedMesh(new THREE.SphereGeometry(0.28, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffd070, fog: false }), N);
@@ -148,22 +158,24 @@ export function buildStage(ctx) {
     scene.add(im); W.lanterns = { im, ls, d: new THREE.Object3D() };
   }
 
-  W.isle = isle;
-  W.update = (t, dt) => {
-    const c = W.clouds, d = c.d;
-    for (let i = 0; i < c.cl.length; i++) {
-      const o = c.cl[i]; o.x += o.sp * dt; if (o.x > 85) o.x = -85;
-      for (let k = 0; k < c.PUF; k++) { d.position.set(o.x + (k - 2) * o.sc * 0.8, o.y + Math.sin(k * 1.7 + o.ph) * o.sc * 0.25, o.z); d.scale.set(o.sc * (1.2 - Math.abs(k - 2) * 0.18), o.sc * 0.7, o.sc * 0.8); d.updateMatrix(); c.im.setMatrixAt(i * c.PUF + k, d.matrix); }
-    }
-    c.im.instanceMatrix.needsUpdate = true;
-    const L = W.lanterns;
-    for (let i = 0; i < L.ls.length; i++) { const o = L.ls[i]; o.y += o.s * dt; if (o.y > 30) o.y = -16; L.d.position.set(o.x + Math.sin(t * 0.7 + o.ph) * 0.8, o.y, o.z); L.d.scale.setScalar(0.9 + Math.sin(t * 3 + o.ph) * 0.12); L.d.updateMatrix(); L.im.setMatrixAt(i, L.d.matrix); }
-    L.im.instanceMatrix.needsUpdate = true;
-    W.far.position.y = Math.sin(t * 0.35) * 0.6;
-    for (let i = 0; i < W.flames.length; i++) { const f = W.flames[i]; f.scale.y = 1 + Math.sin(t * 13 + i * 2) * 0.16 + Math.sin(t * 7.3) * 0.08; f.rotation.y = t * 2; }
-    for (const b of W.banners) P.animateBanner(b, t);
-    sun2.material.opacity = 0.9 + Math.sin(t * 0.8) * 0.08;
+  const S = {
+    kind: 'island', ...STAGES.island, solid: { hw: ST.HW, top: ST.TOP, bot: ST.BOT }, mainP: { x: 0, y: 0, w: ST.HW * 2, solid: true, on: true, dx: 0, dy: 0, py: 0 }, plats, BLAST: { x: 27, bot: -15, top: 24 },
+    mood: { hemi: 0xffd0e8, ground: 0x7a5a9a, hemiI: 1.25, sun: 0xffc890, sunI: 2.0, sunPos: [-10, 26, 22], fogNear: 70, fogFar: 230 },
+    fdx: 0, fdy: 0, wind: 0,
+    camBase: () => ({ x0: -ST.HW - 1.5, x1: ST.HW + 1.5, y0: -3.2, y1: 10.6 }),
+    resp: (i) => ({ x: i ? 3.6 : -3.6, y: 10.5 }), start: (i) => ({ x: i ? 5 : -5, y: 0 }),
+    itemX: () => rand(-7.5, 7.5),
+    step() {},
+    update(t, dt) {
+      clouds.update(dt);
+      const L = W.lanterns;
+      for (let i = 0; i < L.ls.length; i++) { const o = L.ls[i]; o.y += o.s * dt; if (o.y > 30) o.y = -16; L.d.position.set(o.x + Math.sin(t * 0.7 + o.ph) * 0.8, o.y, o.z); L.d.scale.setScalar(0.9 + Math.sin(t * 3 + o.ph) * 0.12); L.d.updateMatrix(); L.im.setMatrixAt(i, L.d.matrix); }
+      L.im.instanceMatrix.needsUpdate = true;
+      W.far.position.y = Math.sin(t * 0.35) * 0.6;
+      for (let i = 0; i < W.flames.length; i++) { const f = W.flames[i]; f.scale.y = 1 + Math.sin(t * 13 + i * 2) * 0.16 + Math.sin(t * 7.3) * 0.08; f.rotation.y = t * 2; }
+      for (const b of W.banners) P.animateBanner(b, t);
+      sun2.material.opacity = 0.9 + Math.sin(t * 0.8) * 0.08;
+    },
   };
-  return W;
+  return S;
 }
-
