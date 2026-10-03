@@ -172,7 +172,7 @@ export const tex = {
     t.userData.keep = true; cache.set(key, t); return t;
   },
   // poster van de YouTuber
-  poster(name = 'DutchTuber') {
+  poster(name = 'DJ Dobber') {
     const key = 'poster' + name;
     if (cache.has(key)) return cache.get(key);
     const t = canvasTex(256, 384, (g, w, h) => {
@@ -187,8 +187,8 @@ export const tex = {
       g.fillStyle = '#111'; g.fillRect(w / 2 - 36, 118, 72, 8); // zonnebril balk
       g.fillStyle = '#fff'; g.textAlign = 'center'; g.font = 'bold 40px Fredoka, Arial Black, sans-serif';
       g.fillText(name.toUpperCase(), w / 2, 250);
-      g.font = 'bold 28px Fredoka, sans-serif'; g.fillStyle = '#ffe14a'; g.fillText('LIVE CONCERT', w / 2, 290);
-      g.font = '20px Fredoka, sans-serif'; g.fillStyle = '#fff'; g.fillText('Tickets 400 heitjes', w / 2, 330);
+      g.font = 'bold 28px Fredoka, sans-serif'; g.fillStyle = '#ffe14a'; g.fillText('LIVE FEEST', w / 2, 290);
+      g.font = '20px Fredoka, sans-serif'; g.fillStyle = '#fff'; g.fillText('Gratis voor alle spelers!', w / 2, 330);
       g.font = '18px Fredoka, sans-serif'; g.fillText('★ ★ ★', w / 2, 360);
     });
     t.userData.keep = true; cache.set(key, t); return t;

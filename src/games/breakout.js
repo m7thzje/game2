@@ -154,7 +154,7 @@ export default {
         for (const yy of [0.5, -0.5]) stage.add(mesh(new THREE.CylinderGeometry(0.62, 0.62, 0.12, 14), mat(0x3a3a48), { cast: false, pos: [sx * 11, 2.9 + k * 2.7 + yy, 1.25 - k * 0.2], rot: [Math.PI / 2, 0, 0] }));
       }
       // drumstel-achtig + poster
-      const pst = mesh(new THREE.PlaneGeometry(5, 7.5), new THREE.MeshStandardMaterial({ map: tex.poster('DutchTuber') }), { cast: false, pos: [0, 5.2, -4.0] });
+      const pst = mesh(new THREE.PlaneGeometry(5, 7.5), new THREE.MeshStandardMaterial({ map: tex.poster('DJ Dobber') }), { cast: false, pos: [0, 5.2, -4.0] });
       stage.add(pst);
       stage.add(mesh(new THREE.BoxGeometry(5.4, 0.3, 0.3), mat(0x5b3d24), { cast: false, pos: [0, 9.1, -3.9] }));
       group.userData.stage = stage;

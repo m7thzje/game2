@@ -28,11 +28,11 @@ export function buildStage(ctx, L) {
     const h = P.houseSimple(9 + (i % 3) * 2, 7, 5 + (i % 2) * 1.5, { wall: ['#f2e2c0', '#e8d0b8', '#d8e0c8', '#f0d8d8'][i % 4], roof: ['#b5483a', '#5a6aa8', '#8a5a3a', '#4a8a6a'][i % 4] });
     h.position.set(x, 0, z); h.rotation.y = Math.atan2(-x, 30 - z) * 0.5 + (x < 0 ? -0.1 : 0.1) * 0; S.add(h);
   });
-  // billboard met de poster van DutchTuber
+  // billboard met de poster van DJ Dobber
   const PW = 7.4, PH = PW * 1.5, PY = 6.9, PZ = -37;
   for (const sx of [-1, 1]) S.add(mesh(new THREE.CylinderGeometry(0.25, 0.3, PY + PH / 2, 6), mat(0x5b3d24), { pos: [sx * (PW / 2 + 0.4), (PY + PH / 2) / 2 - 0.5, PZ - 0.3] }));
   S.add(mesh(new THREE.BoxGeometry(PW + 1.0, PH + 1.0, 0.4), mat(0x3a2a1c), { pos: [0, PY, PZ - 0.35] }));
-  const poster = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), new THREE.MeshBasicMaterial({ map: tex.poster('DutchTuber'), fog: false, color: 0xe8e8f0 }));
+  const poster = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), new THREE.MeshBasicMaterial({ map: tex.poster('DJ Dobber'), fog: false, color: 0xe8e8f0 }));
   poster.position.set(0, PY, PZ); scene.add(poster);
   // lamp boven de poster
   for (const sx of [-1, 1]) S.add(mesh(new THREE.BoxGeometry(0.9, 0.4, 0.6), glow(0xfff0c0, 1.6), { cast: false, pos: [sx * 3, PY + PH / 2 + 0.9, PZ + 0.6] }));

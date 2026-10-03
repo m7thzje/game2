@@ -22,6 +22,7 @@ import * as STORY from './story.js';
 import { openSettings, openOnline } from './menu.js';
 import { mergeStatic } from './merge.js';
 import { openShop } from './shop.js';
+import { villageCameoTick } from '../engine/cameo.js';
 
 const ICONS = { catch: '🥖', kitchen: '🍲', rhythm: '🎸', hotbomb: '💣', sokoban: '📦', whack: '🔨', mudcart: '🛒', goblins: '🐑', fishing: '🎣', potion: '🧪', plates: '🐉', sweeper: '🏰', breakout: '🧱', sumo: '🤼' };
 const NAMES = { catch: 'Broodjes Vangen', kitchen: 'Taverne-keuken', rhythm: 'Straatmuzikant', hotbomb: 'Hete Aardappel', sokoban: 'Kratten Schuiven', whack: 'Mollen Meppen', mudcart: 'Karretje uit de Modder', goblins: 'Goblin-jacht', fishing: 'Samen Vissen', potion: 'Toverdrank', plates: 'Drakengrot', sweeper: 'Zwaaibalk', breakout: 'Muur Slopen', sumo: 'IJs-Sumo' };
@@ -456,13 +457,14 @@ export class HubMode {
   // ---------------------------------------------------------------- pauze
   async pauseMenu() {
     if (this.busy) return; this.busy = true;
-    const c = await this.choose('Pauze', ['Doorgaan', '🎮 Terug naar de Speelhal', 'Dagboek', '👒 Hoeden & kleuren', 'Instellingen', '🌐 Online spelen', 'Naar het titelscherm'], 'De Deurman is een grapjas. Zwaai maar terug!');
+    const c = await this.choose('Pauze', ['Doorgaan', '🎮 Terug naar de Speelhal', 'Dagboek', '👒 Hoeden & kleuren', '📒 Deurman-vriendenboek', 'Instellingen', '🌐 Online spelen', 'Naar het titelscherm'], 'De Deurman is een grapjas. Zwaai maar terug!');
     if (c === 1) await this.naarSpeelhal();
     else if (c === 2) await this.journal();
     else if (c === 3) await this.openShop();
-    else if (c === 4) await new Promise((r) => openSettings(r));
-    else if (c === 5) await new Promise((r) => openOnline(this.app, r));
-    else if (c === 6) { persist(); await ui.fade(1, 400); this.busy = false; await this.app.goMenu(); ui.fade(0, 500); await new Promise(() => {}); }
+    else if (c === 4) { const { openAlbum } = await import('../engine/cameo.js'); await new Promise((r) => openAlbum(r)); }
+    else if (c === 5) await new Promise((r) => openSettings(r));
+    else if (c === 6) await new Promise((r) => openOnline(this.app, r));
+    else if (c === 7) { persist(); await ui.fade(1, 400); this.busy = false; await this.app.goMenu(); ui.fade(0, 500); await new Promise(() => {}); }
     this.busy = false; input.reset();
   }
 
@@ -501,6 +503,7 @@ export class HubMode {
     this.fx.update(dt);
     this.updateNpcs(dt, t);
     this.deur.update(dt);
+    villageCameoTick(this, dt);
     this.W.updaters.forEach((u) => u(dt, t));
     for (const tc of this.W.torches) P.animateFire(tc, t); for (const cf of this.W.campfires) P.animateFire(cf, t);
     WS.water.userData.anim && WS.water.userData.anim(t);
@@ -513,7 +516,7 @@ export class HubMode {
     this.hudT -= dt; if (this.hudT <= 0) { this.hudT = 0.12; this.drawMini(); this.updateArcadeHint(); }
     if (!this.busy && !this.cinematic) { this.remindT -= dt; if (this.remindT <= 0) { this.remindT = 150 + Math.random() * 60; this.speelhalHerinnering(); } }
     this.hintEl.style.padding = innerWidth > 900 ? '0 190px 0 360px' : '';
-    this.hintT -= dt; this.hintEl.innerHTML = this.hintT > 0 && !this.busy ? `<span>Lopen: <kbd>WASD</kbd>/<kbd>Pijltjes</kbd> · <kbd>F</kbd>/<kbd>Enter</kbd> praten of springen · <kbd>G</kbd>/<kbd>Shift</kbd> lantaarn · <kbd>Esc</kbd> menu · <kbd>Tab</kbd> dagboek</span>` : '';
+    this.hintT -= dt; this.hintEl.innerHTML = this.hintT > 0 && !this.busy ? `<span>Lopen: <kbd>WASD</kbd>/<kbd>Pijltjes</kbd> · <kbd>F</kbd>/<kbd>Enter</kbd> praten of springen · <kbd>G</kbd>/<kbd>Shift</kbd> selfie-licht · <kbd>Esc</kbd> menu · <kbd>Tab</kbd> dagboek</span>` : '';
     if (!this._lastPh || this._lastPh !== this.sky.phase()) { this._lastPh = this.sky.phase(); if (this.deur.state === 'idle') audio.music(this.musicName()); this.onCoinsChanged(); }
     this.updateCamera(dt);
   }
