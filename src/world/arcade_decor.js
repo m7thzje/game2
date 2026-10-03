@@ -47,6 +47,15 @@ export function zoneSign(z) {
   return sp;
 }
 
+// eigen kleed: paint(g, w, m, R) tekent in een cirkel-clip; rand + naam worden hier gedaan (voor Sporthal / Deurenhal)
+export function rugCustom(name, paint) {
+  return canvasTex(512, 512, (g, w) => {
+    const m = w / 2, R = w / 2; g.save(); g.beginPath(); g.arc(m, m, R, 0, TAU); g.clip(); paint(g, w, m, R); g.restore();
+    g.strokeStyle = 'rgba(0,0,0,.45)'; g.lineWidth = 6; g.beginPath(); g.arc(m, m, R - 3, 0, TAU); g.stroke();
+    if (name) { g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'bold 66px Fredoka, Arial Black, sans-serif'; g.lineJoin = 'round'; g.lineWidth = 14; g.strokeStyle = 'rgba(20,8,40,.9)'; g.strokeText(name.toUpperCase(), m, w * 0.885, w * 0.7); g.fillStyle = '#fff'; g.fillText(name.toUpperCase(), m, w * 0.885, w * 0.7); }
+  });
+}
+
 // ---------------------------------------------------------------- hulpjes
 export function bunting(D, x0, y0, z0, x1, y1, z1, cols, n = 14, sag = 1.0, size = 0.7) {
   const dx = x1 - x0, dz = z1 - z0, len = Math.hypot(dx, dz), ry = -Math.atan2(dz, dx);
@@ -213,7 +222,7 @@ export function shell(a, D) {
   const W = a.W, Dp = a.Dp, id = a.hallId, T = a.theme; const rnd = mulberry32(100 + id);
   // ramen (geen mist) + bogen
   const cols = T.trim;
-  for (let i = 0; i < 4; i++) for (const sx of [-1, 1]) {
+  if (id !== 4) for (let i = 0; i < 4; i++) for (const sx of [-1, 1]) {   // Deurenhal heeft spiegels en deurbehang i.p.v. ramen
     D.at(sx * (W / 2 - 0.12), 0, -Dp / 2 + 5.5 + i * 10, -sx * PI / 2, () => {
       D.pln(2.8, 6.2, 0, 9.6, 0, cols[(i + (sx > 0 ? 3 : 0)) % 6], { kind: 'win' }); D.tor(1.4, 0.2, 0, 12.7, 0.05, 0x3a3a50, { kind: 'lit' }, 10, PI);
       D.box(0.3, 6.4, 0.3, -1.5, 9.6, 0.1, 0x3a3a50); D.box(0.3, 6.4, 0.3, 1.5, 9.6, 0.1, 0x3a3a50); D.box(3.2, 0.3, 0.3, 0, 6.4, 0.1, 0x3a3a50);
@@ -223,7 +232,7 @@ export function shell(a, D) {
   for (let i = 0; i < 160; i++) { const x = (rnd() - 0.5) * (W - 4), zz = (rnd() - 0.5) * (Dp - 3); D.disc(0.07 + rnd() * 0.12, x, 0.045, zz, [0xff5ad8, 0xffe14a, 0x5ad8ff, 0x7bff7b, 0xff8a1c][i % 5], { ry: rnd() * 6 }, 5); }
   // vlaggetjes en lichtsnoeren over de hal
   const bc = [0xff5ad8, 0xffe14a, 0x5ad8ff, 0x7bff7b, 0xff8a1c, 0xb05aff];
-  if (id !== 1) for (const zz of [-6, 6, 16]) bunting(D, -W / 2 + 0.5, 11.5, zz, W / 2 - 0.5, 11.5, zz, bc, 26, 1.8, 0.9);
+  if (id !== 1 && id !== 4) for (const zz of [-6, 6, 16]) bunting(D, -W / 2 + 0.5, 11.5, zz, W / 2 - 0.5, 11.5, zz, bc, 26, 1.8, 0.9);
   else for (const zz of [-8, 15]) lampString(D, -W / 2 + 0.5, 11.2, zz, W / 2 - 0.5, 11.2, zz, 30, 1.4);
   if (id === 2) for (const zz of [0, 11]) lampString(D, -W / 2 + 0.5, 12, zz, W / 2 - 0.5, 12, zz, 30, 1.2);
 }

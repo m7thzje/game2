@@ -46,6 +46,26 @@ export const ZONES = [
     { id: 'gok', name: 'Gokhoek', icon: '🎰', sub: 'alles of niets', color: 0xffa030, color2: 0xff7ab0, cx: 18, cz: 11.5, R: 8.4, rug: 'straw', prop: 'gok', style: 'stall',
       ids: ['pinball', 'kalaha', 'flappy'], at: [{ x: -6, z: -2.4, yaw: 0.4 }, { x: -0.2, z: -5.4, yaw: 0 }, { x: 5.8, z: -2.4, yaw: -0.4 }], tableIds: [] },
   ],
+  [   // 3 Sporthal: sportkasten als mini-arena's; 'kantine' is een zone zonder kasten (alleen sfeer + easter egg)
+    { id: 'balsport', name: 'Balsporten', icon: '⚽', sub: 'trap, gooi, tik', color: 0x2fae5b, color2: 0xffe14a, cx: -19, cz: -4, R: 8.6, rug: 'parket', prop: 'balsport', style: 'sport',
+      ids: ['penalty', 'basket', 'pingpong'], at: [{ x: -5.6, z: -2.4, yaw: 0.5 }, { x: 0, z: -5.8, yaw: 0 }, { x: 5.8, z: -2.6, yaw: -0.5 }], tableIds: [] },
+    { id: 'mikken', name: 'Mikken', icon: '🎯', sub: 'raak! (of toch niet)', color: 0xe8372c, color2: 0xf6f0e0, cx: 19, cz: -4, R: 8.4, rug: 'mik', prop: 'mikken', style: 'sport',
+      ids: ['darts', 'boog'], at: [{ x: -3.8, z: -3.6, yaw: 0.4 }, { x: 3.8, z: -3.6, yaw: -0.4 }], tableIds: [] },
+    { id: 'kantine', name: 'Kantine', icon: '🌭', sub: 'worstjes & water', color: 0xffa030, color2: 0xf6f0e0, cx: -18, cz: 11.5, R: 8.2, rug: 'kantine', prop: 'kantine', style: 'sport',
+      ids: [], at: [], tableIds: [] },
+    { id: 'ijsbaan', name: 'IJsbaan', icon: '🥌', sub: 'glijden en vegen', color: 0x5ad8ff, color2: 0xf6f0e0, cx: 18, cz: 11.5, R: 8.6, rug: 'ijs', prop: 'ijsbaan', style: 'sport',
+      ids: ['curling'], at: [{ x: 0, z: -1.2, yaw: 0 }], tableIds: [] },
+  ],
+  [   // 4 Deurenhal: elke kast is een eigen deur
+    { id: 'zeg', name: 'Zeg-Gang', icon: '🗣️', sub: 'de Deurman zegt...', color: 0x4aa8e8, color2: 0xffe14a, cx: -19, cz: -4, R: 8.4, rug: 'deurmat', prop: 'zeg', style: 'door',
+      ids: ['deurzegt'], at: [{ x: 0, z: -3.6, yaw: 0 }], tableIds: [] },
+    { id: 'hand', name: 'Handtekeningen', icon: '✍️', sub: 'pen mee!', color: 0xff6fa5, color2: 0xffe14a, cx: 19, cz: -4, R: 8.4, rug: 'handtek', prop: 'hand', style: 'door',
+      ids: ['handtekening'], at: [{ x: 0, z: -3.6, yaw: 0 }], tableIds: [] },
+    { id: 'race', name: 'Deurenrace', icon: '🏁', sub: 'klop, klop, ren!', color: 0x4fd88a, color2: 0xf6f0e0, cx: -18, cz: 11.5, R: 8.4, rug: 'deurrace', prop: 'drace', style: 'door',
+      ids: ['deurenrace'], at: [{ x: 0, z: -3.6, yaw: 0 }], tableIds: [] },
+    { id: 'disco', name: 'Disco-Gang', icon: '🪩', sub: 'dans door de deur', color: 0xb06aff, color2: 0xff7ab0, cx: 18, cz: 11.5, R: 8.4, rug: 'deurdisco', prop: 'ddisco', style: 'door',
+      ids: ['deurdisco'], at: [{ x: 0, z: -3.6, yaw: 0 }], tableIds: [] },
+  ],
 ];
 
 // Geeft per hal de zones terug met geplaatste kasten: zone.cabs = [{ id, x, z, yaw, zone }]. Ids die ontbreken in de data komen in de laatste zone.

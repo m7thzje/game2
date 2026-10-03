@@ -4,7 +4,7 @@ export const GAME_IDS = [
   'kitchen', 'hotbomb', 'goblins', 'rhythm', 'sweeper', 'breakout', 'sumo',
 ];
 
-// Duel-spellen voor de Speelhal (1 tegen 1, met een willekeurige twist), verdeeld over twee hallen
+// Duel-spellen voor de Speelhal (1 tegen 1, met een willekeurige twist), verdeeld over vijf hallen (hal 4 = geheime Deurenhal)
 export const ARCADE_HALLS = [
   { id: 0, name: 'Speelhal', ids: [
     'dodgeball', 'cakefight', 'tugwar', 'airhockey', 'quickdraw', 'memory',
@@ -19,6 +19,8 @@ export const ARCADE_HALLS = [
     'quiz', 'code', 'bake', 'claw', 'kalaha', 'bowling',
     'ducks', 'flappy', 'pinball', 'hide', 'heist', 'catapult',
   ] },
+  { id: 3, name: 'Sporthal', ids: ['penalty', 'basket', 'pingpong', 'darts', 'boog', 'curling'] },
+  { id: 4, name: 'Deurenhal', ids: ['deurzegt', 'handtekening', 'deurenrace', 'deurdisco'] },   // geheim: opent met Deurman-stickers
 ];
 export const ARCADE_IDS = ARCADE_HALLS.flatMap((h) => h.ids);
 

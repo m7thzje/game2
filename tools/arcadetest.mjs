@@ -1,5 +1,5 @@
 // Integratietest Speelhal: laadt de hal, speelt (kort) elk duel via de echte route playGame -> finishPvp -> terug in de hal.
-// Gebruik: node tools/arcadetest.mjs [id ...]   (zonder ids: alle 18).   TWIST=<id> forceert een twist.
+// Gebruik: node tools/arcadetest.mjs [id ...]   (zonder ids: alle 54, uit ARCADE_IDS).   TWIST=<id> forceert een twist.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');

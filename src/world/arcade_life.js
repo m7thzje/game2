@@ -13,7 +13,7 @@ const SHIRT = [0xd8372c, 0x2f6fe0, 0xffd23f, 0x2fae5b, 0xb05aff, 0xff7ab0, 0xff8
 const PANTS = [0x3d4a73, 0x5b4636, 0x2a2a38, 0x4a6a9a, 0x6a3a5a, 0x2f7a5a];
 const HAIR = [0x2a1a10, 0x7a4a24, 0xe8b84a, 0xcfcfcf, 0x111111, 0xc0392b];
 const CONF = [0xff5ad8, 0xffe14a, 0x5ad8ff, 0x7bff7b, 0xff8a1c, 0xb05aff, 0xffffff];
-const COUNT = [9, 11, 10];
+const COUNT = [9, 11, 10, 11, 10];
 
 const _B = new THREE.Matrix4(), _L = new THREE.Matrix4(), _M = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
 
@@ -116,7 +116,7 @@ export class ArcadeLife {
       if (!c.occ) { c.occ = v; v.cab = c; v.mode = 'play'; v.tx = c.x + fx / d * (d - 1.5) + rand(-0.3, 0.3); v.tz = c.z + fz / d * (d - 1.5) + rand(-0.3, 0.3); }
       else { v.mode = 'watch'; const side = Math.random() < 0.5 ? -1 : 1; v.tx = c.ix + (fz / d) * side * 1.8 + fx / d * 0.8; v.tz = c.iz - (fx / d) * side * 1.8 + fz / d * 0.8; v.cab = null; v.look = c; }
     } else if (r < 0.86) {
-      const a2 = rand(0, TAU); const R = [7.7, 0, 6.6][this.hall];
+      const a2 = rand(0, TAU); const R = [7.7, 0, 6.6, 7.4, 7.2][this.hall];
       if (this.hall === 1) { v.mode = 'dance'; v.tx = rand(-7, 7); v.tz = a.centerZ + rand(-7, 7); if (Math.hypot(v.tx, v.tz - a.centerZ) < 4.4) { v.tx *= 1.8; v.tz = a.centerZ + (v.tz - a.centerZ) * 1.8; } }
       else { v.tx = Math.cos(a2) * R; v.tz = a.centerZ + Math.sin(a2) * R; }
     } else { const z = pick(a.zones); v.tx = z.cx + rand(-6, 6); v.tz = z.cz + rand(-1, 6); }
@@ -179,6 +179,8 @@ export class ArcadeLife {
     const spots = () => { for (let i = 0; i < 40; i++) { const x = rand(-this.W / 2 + 3, this.W / 2 - 3), z = rand(-this.Dp / 2 + 8, this.Dp / 2 - 3); if (this.free(x, z, 1.0)) return [x, z]; } return [0, 12]; };
     const add = (obj, kind) => { const [x, z] = spots(); obj.group.position.set(x, 0, z); this.sc.add(obj.group); const o = { obj, kind, x, z, tx: x, tz: z, pause: rand(0, 2), yaw: rand(0, TAU), hop: 0 }; this.crit.push(o); return o; };
     if (h === 1) { add(new Slime(0x39ffb0, 0.9), 'slime'); add(new Slime(0xff2bd6, 0.7), 'slime'); }
+    else if (h === 3) { add(new Animal('sheep'), 'chicken'); add(new Animal('sheep'), 'chicken'); add(new Animal('chicken'), 'chicken'); }   // mascotte-schaapjes
+    else if (h === 4) { add(new Slime(0xffb3d1, 0.8), 'slime'); add(new Slime(0xfff0a0, 0.7), 'slime'); }
     else { add(new Animal('chicken'), 'chicken'); add(new Animal('chicken'), 'chicken'); }
     if (h === 2) this.chickenEgg = this.crit[0];
   }
@@ -207,7 +209,7 @@ export class ArcadeLife {
   // ------------------------------------------------------------ easter eggs
   buildEggs() {
     const a = this.a; const D = new Deco(); const h = this.hall; this.egg = {};
-    const hidden = [{ x: -22.5, z: -10.8 }, { x: 24.9, z: -19.1 }, { x: -4.8, z: -19.0 }][h];   // het muntje achter een kast / speaker / kraam
+    const hidden = [{ x: -22.5, z: -10.8 }, { x: 24.9, z: -19.1 }, { x: -4.8, z: -19.0 }, { x: -24.6, z: -15.4 }, { x: 24.8, z: 17.6 }][h];   // het muntje achter een kast / speaker / kraam
     this.coin = new THREE.Group(); const R = new Deco(); R.cyl(0.4, 0.4, 0.09, 14, 0, 0, 0, 0xffd23f, { kind: 'metal', rx: Math.PI / 2 }); R.cyl(0.28, 0.28, 0.11, 12, 0, 0, 0, 0xfff0a0, { kind: 'metal', rx: Math.PI / 2 }); R.build(this.coin);
     this.coin.position.set(hidden.x, 0.8, hidden.z); this.sc.add(this.coin); this.coinPos = hidden;
     a.interact.push({ type: 'egg', egg: 'munt', x: hidden.x, z: hidden.z, r: 2.1, label: 'Het glimmende muntje oppakken' });
@@ -236,6 +238,18 @@ export class ArcadeLife {
       if (!this.reward('gong', 5, 'BONG! Ronde één... vechten maar.')) ui.hud.toast('BONG! Het publiek schrikt zich een hoedje.', 2200);
     } else if (it.egg === 'party') {
       this.party(14); a.king.pose = 'wave'; audio.sfx('powerup'); if (!this.reward('party', 5, 'De geheime DJ-knop! Disco-feest voor iedereen.')) ui.hud.toast('DISCO-FEEST! De DJ doet alsof hij dit niet gepland had.', 2600);
+    } else if (it.egg === 'bal') {   // Sporthal: tegen de ballenzak schoppen
+      a.fx.burst(it.x, 1.6, it.z - 1.8, { count: 40, colors: [0xffffff, 0xffe14a, 0xff8a1c, 0xd8372c], speed: 7, size: 0.45, life: 1.4, gravity: 6 }); audio.sfx('thud'); audio.sfx('cheer'); this.cheer(); a.camShake = 0.25;
+      if (!this.reward('bal', 5, 'GOOOAAAL! Of een basket. Of... iets met ballen.')) ui.hud.toast('De ballen vliegen weer overal. Tim zucht.', 2400);
+    } else if (it.egg === 'fluit') {   // Sporthal: het gouden fluitje
+      audio.sfx('airhorn'); a.king.pose = 'wave'; this.party(6); a.camShake = 0.2;
+      if (!this.reward('fluit', 5, 'FLUUUIT! Iedereen stopt. En juicht. Tim is trots.')) ui.hud.toast('FLUIT! Trainer Tim zegt dat dat zijn fluitje is.', 2400);
+    } else if (it.egg === 'deurbel') {   // Deurenhal: aanbellen
+      if (a.hx) a.hx.peek(); a.fx.burst(it.x, 3, it.z - 2, { count: 20, colors: [0xffb3d1, 0xfff0a0, 0xffffff], speed: 4, size: 0.35, life: 1.0 });
+      if (!this.reward('deurbel', 5, 'Ding-dong! Er stond iemand achter de deur. Hij zwaaide.')) ui.hud.toast('Ding-dong! Er is niemand thuis. (Hij is er wél.)', 2400);
+    } else if (it.egg === 'klink') {   // Deurenhal: gouden deurknop
+      if (a.hx) a.hx.turn(); this.party(8); a.king.pose = 'wave';
+      if (!this.reward('klink', 5, 'De gouden deurknop draaide! Alle deuren zweven sneller.')) ui.hud.toast('Klik. Alle deuren zweven weer feestelijk.', 2400);
     } else if (it.egg === 'kip') {
       const c = this.chickenEgg; c.flap = 2.5; c.hopY = 1; c.pause = 0; const [x, z] = this.pick2(); c.tx = x; c.tz = z; audio.sfx('boing'); a.fx.burst(c.x, 1.2, c.z, { count: 14, colors: [0xffffff, 0xf8f4ea], speed: 3, size: 0.25, life: 0.9, gravity: 4 });
       this.pets = (this.pets || 0) + 1;
@@ -263,7 +277,7 @@ export class ArcadeLife {
     this.signT -= dt; if (this.signT <= 0 && k < 0.3) { this.signT = rand(0.25, 0.6); const z = pick(a.zones); a.fx.emit(z.cx + rand(-4.5, 4.5), 10.2 + rand(0, 2), z.cz - 1 + rand(-0.5, 0.5), 0, rand(0.2, 0.8), 0, { life: rand(0.8, 1.4), size: rand(0.25, 0.5), color: z.color2 === 0x1a1a22 ? z.color : z.color2, gravity: -0.2 }); }
     if (this.coin.visible) { this.coin.rotation.y += dt * 2; this.coin.position.y = 0.9 + Math.sin(t * 2.5) * 0.12; if (Math.random() < dt * 1.5) a.fx.emit(this.coinPos.x + rand(-0.3, 0.3), 0.9 + rand(0, 0.6), this.coinPos.z + rand(-0.3, 0.3), 0, 0.5, 0, { life: 0.8, size: 0.3, color: 0xfff0a0, gravity: 0 }); }
     // middenplein
-    if (!a.spin) a.wheelDisc.rotation.y += dt * [0.12, 0.35, 0.45][this.hall] * (1 - k);
+    if (!a.spin) a.wheelDisc.rotation.y += dt * [0.12, 0.35, 0.45, 0.25, 0.3][this.hall] * (1 - k);
     if (this.hall === 0) {
       if (this.waterMat) { this.waterMat.map.offset.x = t * 0.02; this.waterMat.map.offset.y = t * 0.012; }
       this.fountT -= dt; if (this.fountT <= 0 && k < 0.5) { this.fountT = 0.07; for (const n of a.nozzles) a.fx.emit(n.x, n.y, n.z, n.dx * rand(2.3, 3.0) + rand(-0.2, 0.2), rand(7, 8.6), n.dz * rand(2.3, 3.0) + rand(-0.2, 0.2), { life: 1.2, size: 0.28, color: 0xbfe8ff, gravity: 15 }); }

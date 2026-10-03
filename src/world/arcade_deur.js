@@ -138,7 +138,7 @@ export class ArcadeDeurman {
     this.t += dt; const a = this.a; const m = this.m; const lvl = this.level();
     this.applyMood(dt); this.lanterns(dt);
     if (this.state === 'idle') {
-      if (lvl <= 0 || a.busy || scare.active || a.leaving || a.picker || a.modal || a.menu || a.hasTourney()) return;
+      if (lvl <= 0 || a.hallId === 4 || a.busy || scare.active || a.leaving || a.picker || a.modal || a.menu || a.hasTourney()) return;   // in de Deurenhal is hij de gastheer
       this.timer -= dt * (lvl === 3 ? 1.5 : lvl === 1 ? 0.6 : 1);
       if (this.timer <= 0) this.warn();
       return;

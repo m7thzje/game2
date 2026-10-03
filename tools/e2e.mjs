@@ -73,7 +73,7 @@ const hud = await page.evaluate(() => (document.querySelector('.hud-quest') || {
 check(/Bouw de Speelhal uit/.test(hud) && /Rang/.test(hud) && /Volgende hal/.test(hud), 'HUD doel + rang: ' + hud.replace(/\n/g, ' | '));
 // dichtgetimmerde deur
 const lock = await page.evaluate(async () => { const { isUnlocked } = await import('/src/engine/progress.js'); const m = window.__app.mode; return { l1: isUnlocked(1), l2: isUnlocked(2), info: Object.values(m.doorInfo).map((i) => [i.to, !!i.lock]) }; });
-check(!lock.l1 && !lock.l2 && lock.info.filter(([t, l]) => t > 0 && l).length === 2, 'hal 1 en 2 dichtgetimmerd: ' + JSON.stringify(lock.info));
+check(!lock.l1 && !lock.l2 && lock.info.filter(([t, l]) => t > 0 && l).length === 3, 'hal 1, 2 en 3 dichtgetimmerd (4 = geheime deur zonder planken): ' + JSON.stringify(lock.info));
 await page.evaluate(() => { const m = window.__app.mode; const d = m.doorInfo[1]; m.players.forEach((p, i) => { p.x = d.x + (i ? 1.3 : -1.3); p.z = d.z + 1; p.vx = p.vz = 0; }); });
 await page.waitForTimeout(1500); await shot('8_dichtgetimmerd');
 await press(0, 'a', 300); await page.waitForTimeout(500); await waitMenu(); await shot('9_bouw_vraag');
