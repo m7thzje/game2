@@ -28,7 +28,7 @@ Gamepads werken ook (pad 1 = Wes, pad 2 = Jor). Online mag de gast zowel WASD al
 ## Online spelen met 2 apparaten (2 links)
 
 Eén van jullie is de **host** (Wes) en draait het spel. De ander doet mee als **Jor** via een link. Het beeld en geluid van de host
-worden live doorgestuurd (WebRTC), Jor stuurt alleen zijn toetsen terug. Daardoor werken alle 14 minigames, het dorp, de Deurman en het concert
+worden live doorgestuurd (WebRTC), Jor stuurt alleen zijn toetsen terug. Daardoor werken alle 14 minigames, de Speelhal met 18 duels, het dorp, de Deurman en het concert
 meteen online. Niemand hoeft iets te installeren; een computer met Chrome of Edge is genoeg.
 
 1. **Zet het spel online** (eenmalig, voor een publieke link): GitHub-repo → *Settings* → *Pages* → *Source: Deploy from a branch* →
@@ -65,6 +65,24 @@ het ritmespel is daardoor wat lastiger. Lukt de verbinding niet (strenge netwerk
   | 🧱 Muur Slopen | samenwerken | Breakout (2 batjes) |
   | 🤼 IJs-Sumo | broer vs broer | Mario Party *bumper* |
 
+* **De Speelhal** (🎮, poort in de berg linksboven in het dorp): een kasteel vol arcadekasten met **18 duels voor 2 spelers op één scherm**
+  (broer tegen broer). Voor elk duel wordt een **twist** geloot: omgekeerde besturing, verwisselde knoppen, dronken kikker, turbo, slow-mo,
+  reus tegen dwerg, zeepvloer, maanzwaartekracht, lichaamswissel of **de Deurman die komt kijken** (wie beweegt, verliest). Er is een scorebord,
+  een trofeeënkast, het **Wiel van Gekte** (willekeurig duel) en **Koning Klopper** die een **toernooi** van 5 duels organiseert (+50 heitjes).
+  Een duel levert 20 heitjes op (12 bij herhaling).
+
+  | Duel | Geïnspireerd op |
+  |---|---|
+  | 🏐 Dodgeball, 🎂 Taartengevecht | Mario Party / Smash-achtige arena's |
+  | 🪢 Touwtrekken boven de Lava, 🏒 IJshockey-Chaos | Tug o' War, Air Hockey |
+  | 🤠 Quickdraw (Shy Guy Showdown), 🧠 Memory | Mario Party |
+  | 🎨 Verfgevecht, 🦆 Schiettent | Splatoon, kermis-schiettent |
+  | 🏎️ Karts, 🧗 Torenklim | Mario Kart, Ice Climber |
+  | 💥 Kanonnenduel, 🪑 Stoelendans | Worms, Mario Party |
+  | ⏰ Klokkentoren-Sprint (Ticktock Hop), 🛤️ Mijnkarren (Motor Rooter) | Mario Party |
+  | 🧱 Knoppen-Breker (Button Mashers), 🌿 Lianen-Zwaaien (Vine with Me) | Mario Party |
+  | 🔩 Schroef-Duel (Silly Screws), 🪓 Houthakkers-Duel (Skyline Hack) | Mario Party |
+
 * Elke klus betaalt 0-3 sterren. Spaar **600 heitjes**, koop kaartjes bij het loket, en ga 's avonds naar de kasteelpoort.
 * Verzamel muntjes, schatkisten en de **8 gouden deurknoppen** van de Deurman.
 * **De Deurman** (creepypasta-stijl): deuren kraken open, hij staat in de opening, en tijdens klusjes moet je *stil blijven staan*
@@ -76,8 +94,9 @@ het ritmespel is daardoor wat lastiger. Lukt de verbinding niet (strenge netwerk
 * [Three.js](https://threejs.org) (r170) als ES-module, opgeslagen in `lib/` (geen CDN nodig).
 * `src/engine/` — invoer, procedurele audio (WebAudio), poppetjes/animatie, props, textures, deeltjes, UI, Deurman-scares, minigame-harness.
 * `src/world/` — terrein, vegetatie (instanced), dorp, hemel/dag-nacht, leven, verzamelobjecten, verhaal, menu en einde.
-* `src/games/` — de 14 minigames (één bestand per game). Zie `docs/MINIGAME_API.md` om er zelf een toe te voegen.
-* `tools/` — `serve.mjs` (server), `shot.mjs` (headless test van één minigame met screenshots), `hubtest.mjs`, `e2e.mjs` (dorp + flow).
+* `src/games/` — de 14 minigames en 18 duels (één bestand per game, plus `*_world.js` voor de 3D-wereld). Zie `docs/MINIGAME_API.md` en `docs/PVP_API.md` om er zelf een toe te voegen.
+* `src/world/arcade.js` — de Speelhal; `src/engine/twist.js` — de twists.
+* `tools/` — `serve.mjs` (server), `shot.mjs` (headless test van één minigame met screenshots), `hubtest.mjs`, `e2e.mjs` (dorp + flow), `arcadetest.mjs` (alle 18 duels via de Speelhal), `tourneytest.mjs` (volledig toernooi), `test_<duel>.mjs` per duel (bots, twists, screenshots).
 
 ## Eigen minigame toevoegen
 

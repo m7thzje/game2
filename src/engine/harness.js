@@ -259,6 +259,7 @@ export class MinigameMode {
     if (this.instance.onResult) this.instance.onResult(r);
   }
   close() {
+    if (this.closed) return; this.closed = true;   // dubbel drukken mag niet dubbel tellen
     const r = this.result; this.dispose();
     if (r.pvp) {
       if (!this.practice) {

@@ -19,23 +19,34 @@ for (let i = 0; i < 400 && !done; i++) {
   const r = await page.evaluate(async () => {
     const app = window.__app, m = app.mode, inp = app.input, pulse = () => { inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); m.update && 0; inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); };
     const { S } = await import('/src/save.js');
+    if (!m) return 'wait';
     if (m.ctx) {   // minigame
-      if (m.finished) { if (m.resultReady) { pulse(); m.update(0.016); return 'close'; } return 'wait'; }
-      if (m.state !== 'play') { pulse(); m.update(0.016); let g = 0; while (m.state !== 'play' && g++ < 3000) { inp.update(); m.update(0.016); } return 'start'; }
-      for (let k = 0; k < 60; k++) { inp.update(); m.update(0.016); }
-      m.ctx.finishPvp({ winner: S.arcade.plays % 3 === 0 ? null : S.arcade.plays % 2, score: [1, 0], summary: 'toernooitest' }); return 'finish';
+      if (m.finished) { if (m.resultReady) { inp.virtual[0].a = true; inp.update(); m.update(0.016); inp.virtual[0].a = false; inp.update(); m.update(0.016); return 'close'; } return 'wait'; }
+      if (!m.__seen) { m.__seen = true; return 'new ' + m.def.id + ' ' + (m.extra && m.extra.tourney); }
+      if (!m.__go) {
+        m.__go = true;
+        inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); m.update(0.016);
+        inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); m.update(0.016);
+        await new Promise((r) => setTimeout(r, 400));
+        let g = 0; while (m.state !== 'play' && g++ < 3000) { inp.update(); m.update(0.016); }
+        for (let k = 0; k < 60; k++) { inp.update(); m.update(0.016); }
+        m.ctx.finishPvp({ winner: S.arcade.plays % 3 === 0 ? null : S.arcade.plays % 2, score: [1, 0], summary: 'toernooitest' }); return 'finish';
+      }
+      return 'wait';
     }
-    if (m.cabs) { const ui = (await import('/src/engine/ui.js')).ui; return (ui.dialogActive() || m.menu || m.modal) ? 'dialog' : 'idle'; }
+    if (m.cabs) { for (const p of m.players) { p.x = 12; p.z = -2; }  const ui = (await import('/src/engine/ui.js')).ui; return (ui.dialogActive() || m.menu || m.modal) ? 'dialog' : 'idle'; }
     return 'other';
   });
+  if (r.startsWith('new')) await page.waitForTimeout(700);
   if (r === 'dialog') { await page.evaluate(() => { const v = window.__app.input.virtual; v[0].a = true; }); await page.waitForTimeout(150); await page.evaluate(() => { window.__app.input.virtual[0].a = false; }); await page.waitForTimeout(150); }
+  if (r !== 'dialog' && r !== 'wait' && r !== 'idle' && r !== 'close') console.log(i, r);
   if (r === 'close') duels++;
   const s = await page.evaluate(async () => { const { S } = await import('/src/save.js'); return { coins: S.coins, t: [...S.arcade.tourneys], plays: S.arcade.plays }; });
-  if (s.coins >= c0.coins + 5 * 12 + 50 - 30 && s.plays >= c0.plays + 5 && (s.t[0] + s.t[1] > c0.t[0] + c0.t[1] || s.coins >= c0.coins + 100)) { done = true; console.log('toernooi klaar', JSON.stringify({ c0, s })); }
+  if (s.plays >= c0.plays + 5 && s.coins >= c0.coins + 150) { done = true; console.log('toernooi klaar', JSON.stringify({ c0, s })); }
   await page.waitForTimeout(250);
 }
 await page.waitForTimeout(3000);
-const fin = await page.evaluate(async () => { const { S } = await import('/src/save.js'); return { coins: S.coins, t: [...S.arcade.tourneys], plays: S.arcade.plays }; });
+const fin = await page.evaluate(async () => { const { S } = await import('/src/save.js'); return { by: Object.keys(S.arcade.byGame).join(','), coins: S.coins, t: [...S.arcade.tourneys], plays: S.arcade.plays }; });
 console.log('duels gespeeld:', duels, 'eind:', JSON.stringify(fin), 'start:', JSON.stringify(c0));
 await page.screenshot({ path: '/tmp/tourney_end.png' });
 console.log(errors.length ? 'ERRORS ' + errors.join(' | ') : 'NO ERRORS');
