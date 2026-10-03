@@ -31,6 +31,11 @@ export const HATS = [
   { id: 'crown', name: 'Kroon', price: 120, kind: 'crown', icon: '👑' },
   { id: 'goldcrown', name: 'Gouden Koningskroon', price: 150, kind: 'goldcrown', icon: '🏆' },
   { id: 'rainbow', name: 'Regenboog-hoed', price: 150, kind: 'rainbowhat', icon: '🌈' },
+  // Deurman-hoeden (meme-merch)
+  { id: 'deurparty', name: 'Deurman-feesthoed', price: 55, kind: 'deurparty', icon: '🥳' },
+  { id: 'minidoor', name: 'Mini-deur op je hoofd', price: 95, kind: 'minidoor', c: 0x8a5a2b, c2: 0xffd23f, icon: '🚪' },
+  { id: 'deurhead', name: 'Deurman-hoofd', price: 85, kind: 'deurhead', icon: '😁' },
+  { id: 'doorknob', name: 'Deurknop-kroon', price: 120, kind: 'doorknobcrown', icon: '🔑' },
 ];
 const col = (id, name, c, price, fx) => ({ id, name, c, price, fx });
 const GOLD = (p = 100) => col('gold', 'Goud ✨', 0xf2c230, p, 'gold');
@@ -38,17 +43,18 @@ const RAIN = (p = 150) => col('rainbow', 'Regenboog 🌈', 0xffffff, p, 'rainbow
 export const SHIRTS = [
   col('red', 'Rood', 0xd8372c, 20), col('orange', 'Oranje', 0xf0862a, 20), col('yellow', 'Geel', 0xf2c830, 20), col('green', 'Groen', 0x35b24a, 20),
   col('teal', 'Turkoois', 0x22b8b0, 25), col('blue', 'Blauw', 0x2f6fe0, 25), col('purple', 'Paars', 0x8a3fd8, 30), col('pink', 'Roze', 0xff6fb5, 30),
-  col('black', 'Zwart', 0x2a2830, 30), col('white', 'Wit', 0xf2f0ea, 30), GOLD(), RAIN(),
+  col('black', 'Zwart', 0x2a2830, 30), col('white', 'Wit', 0xf2f0ea, 30),
+  col('dsuit', 'Deurman-pak 🕴️', 0x14141a, 45, 'dsuit'), col('dsuitw', 'Wit Deurman-pak', 0xeeeef2, 45, 'dsuitw'), GOLD(), RAIN(),
 ];
 export const HAIRS = [
   col('black', 'Zwart', 0x1e1a1c, 20), col('dbrown', 'Donkerbruin', 0x4a2e1c, 20), col('brown', 'Bruin', 0x7a4a24, 20), col('blond', 'Blond', 0xe8b84a, 20),
   col('ginger', 'Gember', 0xc8581e, 25), col('white', 'Wit', 0xe8e6ee, 25), col('blue', 'Blauw', 0x3a78e0, 30), col('green', 'Groen', 0x4ac84a, 30),
-  col('pink', 'Roze', 0xff6fb5, 30), col('purple', 'Paars', 0x8a3fd8, 30), GOLD(), RAIN(),
+  col('pink', 'Roze', 0xff6fb5, 30), col('purple', 'Paars', 0x8a3fd8, 30), col('dpale', 'Deurman-bleek', 0xe4e4e0, 25), GOLD(), RAIN(),
 ];
 export const CAPES = [
   col('red', 'Rood', 0xd8372c, 25), col('orange', 'Oranje', 0xf0862a, 25), col('yellow', 'Geel', 0xf2c830, 25), col('green', 'Groen', 0x2f9e5b, 25),
   col('teal', 'Turkoois', 0x22b8b0, 30), col('blue', 'Blauw', 0x2f6fe0, 30), col('purple', 'Paars', 0x8a3fd8, 35), col('pink', 'Roze', 0xff6fb5, 35),
-  col('black', 'Zwart', 0x2a2830, 35), col('white', 'Wit', 0xf2f0ea, 35), GOLD(), RAIN(),
+  col('black', 'Zwart', 0x2a2830, 35), col('white', 'Wit', 0xf2f0ea, 35), col('dtie', 'Deurman-stropdas', 0xb3182a, 35), GOLD(), RAIN(),
 ];
 const LISTS = { shirt: SHIRTS, hair: HAIRS, cape: CAPES };
 // standaardkleuren per broer (voor het staal bij 'standaard'); komt overeen met BROTHER_SPECS in chars.js

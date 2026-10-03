@@ -1,4 +1,5 @@
 // Test: volledig toernooi (5 duels) in de Speelhal, met automatisch doorklikken. Controleert Kampioen + 50 heitjes.
+// Standaard met ?unlock=1 (alle hallen open). LOCKED=1: geen hallen gebouwd -> het toernooi mag alleen spellen uit de Speelhal (hal 0) kiezen.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -7,7 +8,7 @@ await new Promise((r) => server.listen(0, r)); const port = server.address().por
 const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 const page = await b.newPage({ viewport: { width: 1100, height: 650 } });
 const errors = []; page.on('pageerror', (e) => errors.push(e.message + ' ' + (e.stack||'').split('\n').slice(1,4).join(' | ')));
-await page.goto(`http://localhost:${port}/?quality=low`);
+await page.goto(`http://localhost:${port}/?quality=low&unlock=${process.env.LOCKED ? 0 : 1}`);
 await page.waitForFunction(() => window.__app && window.__app.games, null, { timeout: 90000 });
 await page.waitForTimeout(1500);
 await page.evaluate(() => window.__app.goArcade({}));
@@ -50,5 +51,6 @@ await page.waitForTimeout(3000);
 const fin = await page.evaluate(async () => { const { S } = await import('/src/save.js'); return { by: Object.keys(S.arcade.byGame).join(','), coins: S.coins, t: [...S.arcade.tourneys], plays: S.arcade.plays }; });
 console.log('toegestaan:', await page.evaluate(() => window.__allowed), 'duels gespeeld:', duels, 'eind:', JSON.stringify(fin), 'start:', JSON.stringify(c0));
 await page.screenshot({ path: '/tmp/tourney_end.png' });
+if (process.env.LOCKED) { const hall0 = (await import('/home/user/game2/src/games/index.js')).ARCADE_HALLS[0].ids; const played = fin.by.split(','); console.log(played.every((id) => hall0.includes(id)) ? 'OK   toernooi gebruikt alleen ontgrendelde hal (hal 0)' : 'FOUT toernooi pakte spellen uit een dichte hal: ' + played); }
 console.log(errors.length ? 'ERRORS ' + errors.join(' | ') : 'NO ERRORS');
 await b.close(); server.close();

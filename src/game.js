@@ -28,6 +28,7 @@ export const app = {
   },
   async goMenu() { const { MenuMode } = await import('./world/menu.js'); app.setMode(null); app.setMode(new MenuMode(app)); },
   async goHub(opts = {}) { const { HubMode } = await import('./world/hub.js'); app.setMode(null); app.setMode(await HubMode.create(app, opts)); },
+  async goEnding(opts = {}) { const { EndingMode } = await import('./world/ending.js'); app.setMode(null); app.setMode(await EndingMode.create(app, opts)); },
   async goBoard(opts = {}) { const { BoardMode } = await import('./world/board.js'); app.setMode(null); app.setMode(await BoardMode.create(app, opts)); },
   async goOpening(opts = {}) { const { OpeningMode } = await import('./world/opening.js'); app.setMode(null); app.setMode(new OpeningMode(app, opts)); },
   async goArcade(opts = {}) { const { ArcadeMode } = await import('./world/arcade.js'); app.setMode(null); app.setMode(await ArcadeMode.create(app, opts)); },
@@ -88,12 +89,15 @@ setInterval(() => persist(), 15000);
 async function boot() {
   const q = new URLSearchParams(location.search);
   if (q.has('scare')) S.settings.scare = +q.get('scare');
+  if (q.has('unlock')) S.settings.unlockAll = q.get('unlock') !== '0';   // ?unlock=1: alle hallen open (handig voor tests)
   if (q.has('quality')) { S.settings.quality = q.get('quality'); renderer.shadowMap.enabled = S.settings.quality !== 'low'; resize(); }
   app.games = await loadAllGames();
   document.getElementById('boot').remove();
   requestAnimationFrame(frame);
   if (q.has('game')) { S.settings.scare = q.has('scare') ? +q.get('scare') : 0; await app.playGame(q.get('game'), { practice: true, back: 'menu' }); }
   else if (q.has('hub')) await app.goHub({});
+  else if (q.has('opening')) await app.goOpening({});
+  else if (q.has('arcade')) await app.goArcade({ intro: q.get('arcade') === 'intro' });
   else await app.goMenu();
 }
 app.net = new Host(app);

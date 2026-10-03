@@ -6,7 +6,6 @@ import { S, persist } from '../save.js';
 import { h } from '../engine/util.js';
 import { Character, brotherSpec, PLAYER_CSS, PLAYER_COLORS } from '../engine/chars.js';
 import { CATS, CAT_ICON, catLabel, itemsFor, owns, equippedId, equip, buy, cosm } from '../engine/cosmetics.js';
-import { TICKET_PRICE } from './layout.js';
 
 // ============================================================================
 // Hoedenmaker Hettie: winkel voor hoeden en kleuren, twee kolommen (Wes links, Jor rechts),
@@ -22,7 +21,7 @@ export function openShop(app, { onClose } = {}) {
     const itemOf = (i) => { const cat = CATS[st[i].cat]; return itemsFor(i, cat)[st[i].sel[st[i].cat]]; };
 
     // ---------- DOM ----------
-    const coinEl = h('div', { class: 'shop-coins' }), warn = h('div', { class: 'shop-warn' }, '⚠️ Let op: heitjes die je hier uitgeeft heb je niet voor het concert!');
+    const coinEl = h('div', { class: 'shop-coins' }), warn = h('div', { class: 'shop-warn' }, '💡 Heitjes zijn ook nodig om nieuwe hallen in de Speelhal te laten bouwen!');
     const view = h('canvas', { class: 'shop-view', width: 960, height: 210 });
     const caps = [0, 1].map(() => h('div', { class: 'shop-cap' }));
     const cols = [0, 1].map((i) => {
@@ -71,7 +70,7 @@ export function openShop(app, { onClose } = {}) {
       s.msgT = 3; persist(); draw();
     };
     const draw = () => {
-      coinEl.innerHTML = `🪙 <b>${S.coins}</b> heitjes` + (S.ticket ? ' · 🎟️ kaartjes gekocht' : S.coins >= TICKET_PRICE ? ` · 🎟️ je hebt genoeg voor de kaartjes (${TICKET_PRICE})!` : ` · 🎟️ kaartjes kosten ${TICKET_PRICE} (nog ${TICKET_PRICE - S.coins} te sparen)`);
+      coinEl.innerHTML = `🪙 <b>${S.coins}</b> heitjes`;
       for (let i = 0; i < 2; i++) {
         const s = st[i], col = cols[i], cat = CATS[s.cat], items = itemsFor(i, cat);
         col.tabs.innerHTML = '';

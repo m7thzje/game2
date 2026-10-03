@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mat, glow, mesh, clamp, damp, dampAngle, TAU, canvasTex, lerp, disposeObject } from './util.js';
 import { applyCosmetics, lookSig } from './cosmetics.js';
+import { S } from '../save.js';
 
 // ============================================================================
 // Character: lowpoly poppetje met procedurele animatie. Kijkt naar +z (lokaal).
@@ -52,6 +53,11 @@ export class Character {
     // romp
     const torsoG = new THREE.Group(); torsoG.position.y = legLen; body.add(torsoG); this.torso = torsoG;
     torsoG.add(fxTag(mesh(new THREE.CylinderGeometry(0.27 * s * W, 0.31 * s * W, torsoH, 10), fxMat(shirt, spec.shirtFx), { pos: [0, torsoH / 2, 0] }), spec.shirtFx));
+    if (spec.shirtFx === 'dsuit' || spec.shirtFx === 'dsuitw') {   // Deurman-kostuum: overhemd + stropdas op de buik
+      const wsuit = spec.shirtFx === 'dsuitw';
+      torsoG.add(mesh(new THREE.BoxGeometry(0.1 * s, 0.4 * s, 0.02 * s), mat(wsuit ? 0xc4c4cc : 0xf4f4f0), { pos: [0, torsoH * 0.62, 0.29 * s * W], cast: false }));
+      torsoG.add(mesh(new THREE.BoxGeometry(0.055 * s, 0.34 * s, 0.022 * s), mat(wsuit ? 0x15151a : 0xb3182a), { pos: [0, torsoH * 0.6, 0.302 * s * W], cast: false }));
+    }
     if (spec.tunic) { // rokje onderaan
       torsoG.add(fxTag(mesh(new THREE.CylinderGeometry(0.31 * s * W, 0.42 * s * W, 0.28 * s, 10, 1, true), fxMat(spec.tunic, spec.tunicFx, { side: THREE.DoubleSide }), { pos: [0, 0.06 * s, 0] }), spec.tunicFx));
     }
@@ -201,6 +207,34 @@ export class Character {
       case 'chickenhat': { const w = 0xf8f4ea; add(M(new THREE.SphereGeometry(0.25 * s, 10, 8), w), 0, top + 0.14 * s, 0, 0, 0, 0).scale.set(1, 0.85, 1.25); add(M(new THREE.SphereGeometry(0.13 * s, 8, 6), w), 0, top + 0.34 * s, 0.2 * s); add(M(new THREE.ConeGeometry(0.045 * s, 0.14 * s, 4), 0xf2a33a), 0, top + 0.32 * s, 0.34 * s, Math.PI / 2); add(M(new THREE.BoxGeometry(0.04 * s, 0.1 * s, 0.14 * s), 0xd83a2a), 0, top + 0.46 * s, 0.2 * s); for (const sd of [1, -1]) add(M(new THREE.SphereGeometry(0.02 * s, 5, 4), 0x111111), sd * 0.07 * s, top + 0.37 * s, 0.3 * s); add(M(new THREE.ConeGeometry(0.12 * s, 0.3 * s, 4), 0xe8e0d0), 0, top + 0.22 * s, -0.3 * s, -1.0); break; }
       case 'goldcrown': { const G = { metalness: 0.75, roughness: 0.28, emissive: 0x6a4800 }; add(M(new THREE.CylinderGeometry(hr * 0.78, hr * 0.72, 0.2 * s, 12, 1, true), 0xf2c230, { ...G, side: THREE.DoubleSide }), 0, top + 0.04 * s, 0); for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; add(M(new THREE.ConeGeometry(0.05 * s, 0.24 * s, 4), 0xf2c230, G), Math.cos(a) * hr * 0.77, top + 0.26 * s, Math.sin(a) * hr * 0.77); add(M(new THREE.SphereGeometry(0.035 * s, 6, 5), i % 2 ? 0xd8372c : 0x3a78e0), Math.cos(a) * hr * 0.77, top + 0.4 * s, Math.sin(a) * hr * 0.77); } add(M(new THREE.SphereGeometry(0.07 * s, 8, 6), 0xd8372c), 0, top + 0.04 * s, hr * 0.78); add(M(new THREE.TorusGeometry(hr * 0.75, 0.03 * s, 4, 14), 0xffe680, G), 0, top - 0.06 * s, 0, Math.PI / 2); break; }
       case 'rainbowhat': { const rb = [0xff3b3b, 0xff9a2a, 0xffe53b, 0x4ad84a, 0x3ab4ff, 0x7a4aff, 0xe04aff]; add(M(new THREE.CylinderGeometry(hr * 1.35, hr * 1.35, 0.04 * s, 16), 0xff6fb5), 0, top - 0.08 * s, 0); rb.forEach((k, i) => add(M(new THREE.CylinderGeometry(hr * (0.7 - i * 0.04), hr * (0.72 - i * 0.04), 0.075 * s, 14), k), 0, top + (0.0 + i * 0.07) * s, 0)); add(M(new THREE.SphereGeometry(0.06 * s, 8, 6), 0xffffff), 0, top + 0.54 * s, 0); break; }
+      // --- Deurman-hoeden ---
+      case 'deurhead': {   // een heel Deurman-hoofd bovenop je eigen hoofd
+        const hd = add(M(new THREE.SphereGeometry(hr * 0.78, 14, 10), 0xe9e9e4), 0, top + 0.78 * hr, 0); hd.scale.set(0.95, 1.25, 0.95);
+        const fp = new THREE.Mesh(new THREE.PlaneGeometry(hr * 1.45, hr * 1.8), new THREE.MeshBasicMaterial({ map: hatFaceTex(), transparent: true, depthWrite: false })); fp.position.set(0, top + 0.82 * hr, hr * 0.78 * 0.95 + 0.004); head.add(fp);
+        break;
+      }
+      case 'doorknobcrown': {   // kroon van deurknoppen
+        const G = { metalness: 0.8, roughness: 0.25, emissive: 0x6a4800 };
+        add(M(new THREE.CylinderGeometry(hr * 0.78, hr * 0.72, 0.16 * s, 12, 1, true), 0xc8a030, { ...G, side: THREE.DoubleSide }), 0, top + 0.02 * s, 0);
+        for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; add(M(new THREE.CylinderGeometry(0.012 * s, 0.012 * s, 0.1 * s, 5), 0xc8a030, G), Math.cos(a) * hr * 0.76, top + 0.12 * s, Math.sin(a) * hr * 0.76); add(M(new THREE.SphereGeometry(0.055 * s, 8, 6), 0xffd23f, G), Math.cos(a) * hr * 0.76, top + 0.2 * s, Math.sin(a) * hr * 0.76); }
+        break;
+      }
+      case 'deurparty': {   // zwart-wit feesthoedje met bleke pompon
+        add(M(new THREE.ConeGeometry(hr * 0.62, 0.55 * s, 12), 0x16161c), 0, top + 0.22 * s, 0, -0.1);
+        for (let i = 0; i < 3; i++) add(M(new THREE.TorusGeometry(hr * (0.5 - i * 0.14), 0.016 * s, 4, 12), 0xf4f4f0), 0, top + (0.07 + i * 0.14) * s, -0.012 * s * i, Math.PI / 2 - 0.1);
+        add(M(new THREE.SphereGeometry(0.075 * s, 8, 6), 0xe9e9e4), 0.02 * s, top + 0.5 * s, -0.06 * s);
+        for (const sd of [1, -1]) add(M(new THREE.SphereGeometry(0.012 * s, 5, 4), 0x000000), 0.02 * s + sd * 0.025 * s, top + 0.51 * s, -0.06 * s + 0.07 * s);
+        add(M(new THREE.TorusGeometry(hr * 0.62, 0.02 * s, 4, 12), 0xc4182a), 0, top - 0.03 * s, 0, Math.PI / 2);
+        break;
+      }
+      case 'minidoor': {   // een mini-deur op je hoofd, op een kier, er kijkt iets uit
+        add(M(new THREE.BoxGeometry(hr * 1.2, 0.52 * s, 0.07 * s), 0x3a2412), 0, top + 0.2 * s, 0);
+        add(M(new THREE.BoxGeometry(hr * 0.95, 0.44 * s, 0.03 * s), 0x070709), 0, top + 0.19 * s, 0.02 * s);
+        for (const sd of [1, -1]) { add(M(new THREE.SphereGeometry(0.03 * s, 8, 6), 0xffffff), sd * 0.055 * s, top + 0.3 * s, 0.045 * s); add(M(new THREE.SphereGeometry(0.014 * s, 6, 5), 0x000000), sd * 0.055 * s, top + 0.3 * s, 0.07 * s); }
+        const lf = add(M(new THREE.BoxGeometry(hr * 0.95, 0.44 * s, 0.03 * s), c), -hr * 0.475, top + 0.19 * s, 0.07 * s); lf.geometry.translate(hr * 0.475, 0, 0); lf.rotation.y = -1.0;
+        add(M(new THREE.SphereGeometry(0.03 * s, 8, 6), c2, { metalness: 0.7 }), -hr * 0.475 + hr * 0.95 * 0.85 * Math.cos(1.0), top + 0.19 * s, 0.07 * s + hr * 0.95 * 0.85 * Math.sin(1.0) + 0.02 * s);
+        break;
+      }
       default: break;
     }
   }
@@ -306,89 +340,144 @@ export const NPC_SPECS = {
 export function makeNPC(kind, overrides = {}) { return new Character({ ...(NPC_SPECS[kind] || NPC_SPECS.kid), ...overrides }); }
 
 // ============================================================================
-// De DEURMAN. Lang, bleek, glimlach te breed. Staat altijd in deuropeningen.
+// De DEURMAN (meme-mascotte). Lang, bleek, glimlach te breed, staat in deuropeningen, wil high-fives en handtekeningen.
+//   makeDeurman(scale, { outfit }) — outfit = presetnaam ('feest', 'dj', 'fan', 'cool', 'king', 'deurtje', 'sjiek', 'random'),
+//   een lijst accessoires ['partyhat','tie','bowtie','shades','highfive','flower','headphones','mustache','knobcrown','minidoor','hat:<kind>']
+//   of { acc: [...], pose: 'highfive', laser: true }. d.setOutfit(..) wisselt later; d.pose = 'idle'|'highfive'|'wave'|'cheer'|'dance'|'dj'|'shy'|'point'|'thumbs'.
+//   d.blush = 0..1 (blozen), d.glitch = seconden cartoon-'boing' (squash & stretch). Rode laser-ogen alleen bij de 'Overal!'-stand (of outfit.laser).
 // ============================================================================
+export const DEUR_PRESETS = {
+  klassiek: { acc: [] },
+  feest: { acc: ['partyhat', 'bowtie', 'flower'] },
+  dj: { acc: ['headphones', 'shades'], pose: 'dj' },
+  fan: { acc: ['highfive', 'flower', 'tie'], pose: 'highfive' },
+  cool: { acc: ['shades', 'tie', 'mustache'] },
+  king: { acc: ['knobcrown', 'tie'] },
+  deurtje: { acc: ['minidoor', 'bowtie'] },
+  sjiek: { acc: ['hat:tophat', 'mustache', 'flower'] },
+};
+function parseOutfit(o) {
+  if (o === 'random') { const k = Object.keys(DEUR_PRESETS); o = k[Math.floor(Math.random() * k.length)]; }
+  if (typeof o === 'string') o = DEUR_PRESETS[o] || { acc: [] };
+  if (Array.isArray(o)) o = { acc: o };
+  o = o || {};
+  return { acc: new Set(o.acc || []), pose: o.pose || 'idle', laser: o.laser };
+}
 let _faceTex = null;
 function faceTexture() {
   if (_faceTex) return _faceTex;
+  // vriendelijk gezicht: grote ogen, rode wangetjes, een veel te brede glimlach
   _faceTex = canvasTex(256, 256, (g, w, h) => {
-    g.fillStyle = '#e9e9e6'; g.fillRect(0, 0, w, h);
-    const gr = g.createRadialGradient(w / 2, h / 2, 20, w / 2, h / 2, 170); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(60,60,70,.55)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
-    // hol oogkassen
+    g.fillStyle = '#ecece8'; g.fillRect(0, 0, w, h);
+    const gr = g.createRadialGradient(w / 2, h / 2, 40, w / 2, h / 2, 170); gr.addColorStop(0, 'rgba(255,255,255,0)'); gr.addColorStop(1, 'rgba(120,110,130,.35)'); g.fillStyle = gr; g.fillRect(0, 0, w, h);
+    // wangen
+    g.fillStyle = 'rgba(255,110,140,.5)'; for (const sx of [-1, 1]) { g.beginPath(); g.ellipse(w / 2 + sx * 82, 150, 22, 15, 0, 0, 7); g.fill(); }
+    // grote ogen
     for (const sx of [-1, 1]) {
-      const cx = w / 2 + sx * 52, cy = 104;
-      const og = g.createRadialGradient(cx, cy, 3, cx, cy, 40); og.addColorStop(0, '#000'); og.addColorStop(0.65, '#050505'); og.addColorStop(1, 'rgba(0,0,0,0)');
-      g.fillStyle = og; g.beginPath(); g.ellipse(cx, cy, 30, 40, sx * 0.15, 0, 7); g.fill();
-      g.fillStyle = '#ff2a1a'; g.beginPath(); g.arc(cx + sx * 1, cy + 3, 2.5, 0, 7); g.fill();
+      const cx = w / 2 + sx * 50, cy = 100;
+      g.fillStyle = '#fff'; g.strokeStyle = '#222'; g.lineWidth = 4; g.beginPath(); g.ellipse(cx, cy, 25, 31, 0, 0, 7); g.fill(); g.stroke();
+      g.fillStyle = '#000'; g.beginPath(); g.arc(cx - sx * 2, cy - 2, 11, 0, 7); g.fill();
+      g.fillStyle = '#fff'; g.beginPath(); g.arc(cx - sx * 2 + 4, cy - 7, 3.5, 0, 7); g.fill();
+      g.strokeStyle = '#333'; g.lineWidth = 5; g.lineCap = 'round'; g.beginPath(); g.moveTo(cx - 24, cy - 42 + sx * 3); g.quadraticCurveTo(cx, cy - 56, cx + 24, cy - 42 - sx * 3); g.stroke();
     }
-    // brede glimlach
-    g.strokeStyle = '#000'; g.lineWidth = 7; g.lineCap = 'round';
-    g.beginPath(); g.moveTo(40, 160); g.bezierCurveTo(90, 235, 166, 235, 216, 160); g.stroke();
-    g.fillStyle = '#080808'; g.beginPath(); g.moveTo(44, 162); g.bezierCurveTo(90, 228, 166, 228, 212, 162); g.bezierCurveTo(166, 190, 90, 190, 44, 162); g.fill();
-    g.strokeStyle = '#d8d8d0'; g.lineWidth = 2;
-    for (let i = 0; i < 17; i++) { const t = i / 16; const x = 52 + t * 152; const y = 176 + Math.sin(t * Math.PI) * 28; g.beginPath(); g.moveTo(x, y - 6); g.lineTo(x, y + 8); g.stroke(); }
-    // smalle neus
-    g.strokeStyle = 'rgba(0,0,0,.25)'; g.lineWidth = 3; g.beginPath(); g.moveTo(w / 2, 125); g.lineTo(w / 2 - 4, 152); g.stroke();
+    // neus
+    g.strokeStyle = 'rgba(0,0,0,.3)'; g.lineWidth = 3; g.beginPath(); g.moveTo(w / 2 + 2, 128); g.quadraticCurveTo(w / 2 - 8, 146, w / 2 + 4, 148); g.stroke();
+    // brede open glimlach met tanden en tong
+    const mouth = () => { g.beginPath(); g.moveTo(30, 166); g.bezierCurveTo(70, 262, 186, 262, 226, 166); g.bezierCurveTo(186, 186, 70, 186, 30, 166); g.closePath(); };
+    mouth(); g.fillStyle = '#4a0c16'; g.fill();
+    g.save(); mouth(); g.clip();
+    g.fillStyle = '#fff'; g.fillRect(20, 160, 220, 34);
+    g.strokeStyle = '#bbb'; g.lineWidth = 1.5; for (let i = 0; i < 17; i++) { const x = 38 + i * 11.2; g.beginPath(); g.moveTo(x, 164); g.lineTo(x, 196); g.stroke(); }
+    g.fillStyle = '#ff7a96'; g.beginPath(); g.ellipse(w / 2, 232, 40, 20, 0, 0, 7); g.fill();
+    g.restore();
+    mouth(); g.strokeStyle = '#111'; g.lineWidth = 5; g.lineJoin = 'round'; g.stroke();
   });
   _faceTex.userData.keep = true;
   return _faceTex;
 }
-export function drawScareFace(g, w, h, t, intensity = 1) {
-  // volledig scherm gezicht voor jumpscare
-  g.save();
-  g.fillStyle = '#000'; g.fillRect(0, 0, w, h);
-  const s = Math.min(w, h) * (1.05 + t * 0.6);
-  const sx = (Math.random() - 0.5) * 18 * intensity, sy = (Math.random() - 0.5) * 18 * intensity;
-  g.translate(w / 2 + sx, h / 2 + sy);
+// Cartoon-gezicht op een canvas (jumpscare-vervanger, schermen, album). s = hoogte-eenheid; hoofd is ~1.1 s hoog.
+// o: { look:[x,y] (-1..1), blink 0..1, open 0..1 (mond), hat:'party'|'tophat'|'crown'|'headphones'|null, stache, shades, cheeks=true, t (tijd voor wiebel), hatColor }
+export function drawDeurFace(g, cx, cy, s, o = {}) {
+  const { look = [0, 0], blink = 0, open = 0.6, hat = null, stache = false, shades = false, cheeks = true, t = 0, eye = 1 } = o;
+  g.save(); g.translate(cx, cy); g.rotate(Math.sin(t * 6) * 0.05); g.lineJoin = 'round'; g.lineCap = 'round';
+  const L = (w) => Math.max(2, s * w);
+  // nek + pak (alleen als er ruimte is)
+  g.fillStyle = '#101014'; g.beginPath(); g.moveTo(-s * 0.7, s * 1.05); g.lineTo(-s * 0.3, s * 0.45); g.lineTo(s * 0.3, s * 0.45); g.lineTo(s * 0.7, s * 1.05); g.closePath(); g.fill();
+  g.fillStyle = '#f4f4f0'; g.beginPath(); g.moveTo(-s * 0.12, s * 0.5); g.lineTo(s * 0.12, s * 0.5); g.lineTo(0, s * 1.05); g.closePath(); g.fill();
+  g.fillStyle = '#c4182a'; g.beginPath(); g.moveTo(-s * 0.05, s * 0.55); g.lineTo(s * 0.05, s * 0.55); g.lineTo(s * 0.07, s * 1.0); g.lineTo(0, s * 1.06); g.lineTo(-s * 0.07, s * 1.0); g.closePath(); g.fill();
   // hoofd
-  const hg = g.createRadialGradient(0, -s * 0.05, s * 0.1, 0, 0, s * 0.62);
-  hg.addColorStop(0, '#f4f4ef'); hg.addColorStop(0.7, '#cfcfca'); hg.addColorStop(1, '#2a2a2e');
-  g.fillStyle = hg; g.beginPath(); g.ellipse(0, 0, s * 0.42, s * 0.58, 0, 0, 7); g.fill();
+  const hg = g.createRadialGradient(-s * 0.1, -s * 0.15, s * 0.05, 0, 0, s * 0.62); hg.addColorStop(0, '#fbfbf7'); hg.addColorStop(0.75, '#e8e8e2'); hg.addColorStop(1, '#bdbdb6');
+  g.fillStyle = hg; g.strokeStyle = '#222'; g.lineWidth = L(0.018); g.beginPath(); g.ellipse(0, 0, s * 0.4, s * 0.55, 0, 0, 7); g.fill(); g.stroke();
+  if (cheeks) { g.fillStyle = 'rgba(255,100,140,.45)'; for (const sx of [-1, 1]) { g.beginPath(); g.ellipse(sx * s * 0.27, s * 0.14, s * 0.075, s * 0.05, 0, 0, 7); g.fill(); } }
   // ogen
-  for (const sx2 of [-1, 1]) {
-    const ex = sx2 * s * 0.17, ey = -s * 0.14;
-    const eg = g.createRadialGradient(ex, ey, 2, ex, ey, s * 0.16); eg.addColorStop(0, '#000'); eg.addColorStop(0.7, '#000'); eg.addColorStop(1, 'rgba(0,0,0,0)');
-    g.fillStyle = eg; g.beginPath(); g.ellipse(ex, ey, s * 0.12, s * 0.17, sx2 * 0.18, 0, 7); g.fill();
-    g.fillStyle = `rgba(255,${30 + Math.random() * 40},20,.95)`; g.beginPath(); g.arc(ex, ey + s * 0.01, s * 0.012 + Math.random() * 2, 0, 7); g.fill();
+  for (const sx of [-1, 1]) {
+    const ex = sx * s * 0.15, ey = -s * 0.1, ry = s * 0.14 * eye * (1 - blink * 0.92);
+    g.fillStyle = '#fff'; g.strokeStyle = '#222'; g.lineWidth = L(0.014); g.beginPath(); g.ellipse(ex, ey, s * 0.1 * Math.min(1.2, eye), ry, 0, 0, 7); g.fill(); g.stroke();
+    if (blink < 0.6) { g.fillStyle = '#000'; g.beginPath(); g.arc(ex + look[0] * s * 0.04, ey + look[1] * s * 0.05, s * 0.045 * eye, 0, 7); g.fill(); g.fillStyle = '#fff'; g.beginPath(); g.arc(ex + look[0] * s * 0.04 + s * 0.016, ey + look[1] * s * 0.05 - s * 0.018, s * 0.014, 0, 7); g.fill(); }
+    g.strokeStyle = '#333'; g.lineWidth = L(0.02); g.beginPath(); g.moveTo(ex - s * 0.1, ey - s * 0.2 + sx * s * 0.01); g.quadraticCurveTo(ex, ey - s * 0.27, ex + s * 0.1, ey - s * 0.2 - sx * s * 0.01); g.stroke();
   }
-  // mond: veel te breed, openvallend
-  const open = 0.5 + Math.min(1, t * 2) * 0.5;
-  g.fillStyle = '#020202'; g.beginPath(); g.moveTo(-s * 0.36, s * 0.14);
-  g.bezierCurveTo(-s * 0.2, s * (0.14 + 0.5 * open), s * 0.2, s * (0.14 + 0.5 * open), s * 0.36, s * 0.14);
-  g.bezierCurveTo(s * 0.2, s * 0.2, -s * 0.2, s * 0.2, -s * 0.36, s * 0.14); g.fill();
-  g.strokeStyle = '#e9e9e2'; g.lineWidth = Math.max(2, s * 0.006);
-  for (let i = 0; i < 26; i++) { const k = i / 25; const x = -s * 0.34 + k * s * 0.68; const y = s * (0.16 + Math.sin(k * Math.PI) * 0.05); g.beginPath(); g.moveTo(x, y); g.lineTo(x + (Math.random() - .5) * 3, y + s * 0.07 + Math.random() * s * 0.03); g.stroke(); }
+  // neus
+  g.strokeStyle = 'rgba(0,0,0,.3)'; g.lineWidth = L(0.012); g.beginPath(); g.moveTo(s * 0.01, s * 0.0); g.quadraticCurveTo(-s * 0.04, s * 0.1, s * 0.02, s * 0.11); g.stroke();
+  // mond: veel te breed
+  const my = s * 0.2, mw = s * 0.34, md = s * (0.16 + 0.26 * open);
+  const mouth = () => { g.beginPath(); g.moveTo(-mw, my); g.bezierCurveTo(-mw * 0.55, my + md * 1.35, mw * 0.55, my + md * 1.35, mw, my); g.bezierCurveTo(mw * 0.55, my + s * 0.06, -mw * 0.55, my + s * 0.06, -mw, my); g.closePath(); };
+  mouth(); g.fillStyle = '#4a0c16'; g.fill();
+  g.save(); mouth(); g.clip(); g.fillStyle = '#fff'; g.fillRect(-mw, my - s * 0.02, mw * 2, s * 0.1);
+  g.strokeStyle = '#bbb'; g.lineWidth = L(0.005); for (let i = 0; i < 15; i++) { const x = -mw + (i + 0.5) * mw * 2 / 15; g.beginPath(); g.moveTo(x, my - s * 0.02); g.lineTo(x, my + s * 0.08); g.stroke(); }
+  g.fillStyle = '#ff7a96'; g.beginPath(); g.ellipse(0, my + md * 0.95, mw * 0.4, md * 0.3, 0, 0, 7); g.fill(); g.restore();
+  mouth(); g.strokeStyle = '#111'; g.lineWidth = L(0.016); g.stroke();
+  if (stache) { g.fillStyle = '#16161a'; for (const sx of [-1, 1]) { g.beginPath(); g.moveTo(0, s * 0.145); g.bezierCurveTo(sx * s * 0.1, s * 0.09, sx * s * 0.25, s * 0.12, sx * s * 0.3, s * 0.2); g.bezierCurveTo(sx * s * 0.2, s * 0.17, sx * s * 0.1, s * 0.19, 0, s * 0.185); g.fill(); } }
+  if (shades) { g.fillStyle = '#0a0a0e'; for (const sx of [-1, 1]) { g.beginPath(); g.roundRect(sx * s * 0.15 - s * 0.14, -s * 0.2, s * 0.28, s * 0.2, s * 0.05); g.fill(); } g.fillRect(-s * 0.04, -s * 0.15, s * 0.08, s * 0.03); g.fillStyle = 'rgba(255,255,255,.7)'; for (const sx of [-1, 1]) g.fillRect(sx * s * 0.15 - s * 0.09, -s * 0.18, s * 0.06, s * 0.02); }
+  // hoed / koptelefoon
+  if (hat === 'party') {
+    const hc = o.hatColor || '#ff4aa8';
+    g.fillStyle = hc; g.strokeStyle = '#222'; g.lineWidth = L(0.014); g.beginPath(); g.moveTo(-s * 0.26, -s * 0.42); g.lineTo(s * 0.26, -s * 0.46); g.lineTo(s * 0.05, -s * 1.12); g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = '#ffe14a'; for (let i = 0; i < 3; i++) { g.beginPath(); g.arc(-s * 0.08 + i * s * 0.09, -s * (0.6 + i * 0.14), s * 0.032, 0, 7); g.fill(); }
+    g.fillStyle = '#4ac8ff'; g.beginPath(); g.arc(s * 0.05, -s * 1.13, s * 0.06, 0, 7); g.fill();
+  } else if (hat === 'tophat') {
+    g.fillStyle = '#17151c'; g.fillRect(-s * 0.24, -s * 0.95, s * 0.48, s * 0.5); g.fillRect(-s * 0.4, -s * 0.47, s * 0.8, s * 0.07); g.fillStyle = '#c4182a'; g.fillRect(-s * 0.24, -s * 0.55, s * 0.48, s * 0.07);
+  } else if (hat === 'crown') {
+    g.fillStyle = '#f2c230'; g.strokeStyle = '#8a6a00'; g.lineWidth = L(0.012); g.beginPath(); g.moveTo(-s * 0.3, -s * 0.42); g.lineTo(-s * 0.32, -s * 0.78); g.lineTo(-s * 0.15, -s * 0.6); g.lineTo(0, -s * 0.86); g.lineTo(s * 0.15, -s * 0.6); g.lineTo(s * 0.32, -s * 0.78); g.lineTo(s * 0.3, -s * 0.42); g.closePath(); g.fill(); g.stroke();
+  } else if (hat === 'headphones') {
+    g.strokeStyle = '#222'; g.lineWidth = L(0.05); g.beginPath(); g.arc(0, -s * 0.05, s * 0.5, Math.PI * 1.08, Math.PI * 1.92); g.stroke();
+    g.fillStyle = '#ff4aa8'; g.strokeStyle = '#222'; g.lineWidth = L(0.015); for (const sx of [-1, 1]) { g.beginPath(); g.roundRect(sx * s * 0.45 - s * 0.07, -s * 0.2, s * 0.14, s * 0.3, s * 0.05); g.fill(); g.stroke(); }
+  }
   g.restore();
-  // glitch strepen + ruis
+}
+// Schermgezicht voor de kasten (feestje) en overig gebruik: vrolijke achtergrond + Deurman met feesthoed
+export function drawScareFace(g, w, h, t, intensity = 1) {
   g.save();
-  for (let i = 0; i < 14 * intensity; i++) {
-    const y = Math.random() * h, hh = 2 + Math.random() * 20; const dx = (Math.random() - .5) * 90 * intensity;
-    g.drawImage(g.canvas, 0, y, w, hh, dx, y, w, hh);
-  }
-  g.globalAlpha = 0.18; g.fillStyle = '#ff0000'; g.fillRect(0, 0, w, h);
-  g.globalAlpha = 0.5;
-  for (let i = 0; i < 220; i++) { g.fillStyle = Math.random() < .5 ? '#fff' : '#000'; g.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 14, 1 + Math.random() * 3); }
+  const hue = (t * 120) % 360;
+  const bg = g.createLinearGradient(0, 0, w, h); bg.addColorStop(0, `hsl(${hue},85%,55%)`); bg.addColorStop(1, `hsl(${(hue + 80) % 360},85%,50%)`);
+  g.fillStyle = bg; g.fillRect(0, 0, w, h);
+  g.globalAlpha = 0.35; g.fillStyle = '#fff'; for (let i = 0; i < 14; i++) { g.beginPath(); g.arc(((i * 53) % 100) / 100 * w, ((i * 37 + t * 50) % 100) / 100 * h, 3 + (i % 4) * 2, 0, 7); g.fill(); } g.globalAlpha = 1;
+  const s = Math.min(w, h) * 0.55;
+  drawDeurFace(g, w / 2, h * 0.58, s, { hat: 'party', open: 0.7, t: t * intensity, look: [Math.sin(t * 3), 0] });
   g.restore();
 }
 
+const _hatFaceTex = { t: null };
+function hatFaceTex() { return _hatFaceTex.t || (_hatFaceTex.t = canvasTex(128, 160, (g, w, h) => { g.clearRect(0, 0, w, h); drawDeurFace(g, w / 2, h * 0.5, 100, { open: 0.5 }); }), _hatFaceTex.t.userData.keep = true, _hatFaceTex.t); }
+
 export class Deurman {
-  constructor(scale = 1) {
+  constructor(scale = 1, opts = {}) {
     const s = scale;
     const root = new THREE.Group(); this.group = root; this.s = s;
     const suit = mat(0x0c0c10, { roughness: 0.9, flatShading: false });
     const skin = mat(0xe4e4e0, { roughness: 0.6, flatShading: false });
+    this.body = new THREE.Group(); root.add(this.body); const body = this.body;
     // lange benen
     this.legs = [];
     for (const sd of [1, -1]) {
-      const l = new THREE.Group(); l.position.set(sd * 0.14 * s, 1.35 * s, 0); root.add(l);
+      const l = new THREE.Group(); l.position.set(sd * 0.14 * s, 1.35 * s, 0); body.add(l);
       l.add(mesh(new THREE.CapsuleGeometry(0.07 * s, 1.15 * s, 3, 8), suit, { pos: [0, -0.7 * s, 0] }));
       l.add(mesh(new THREE.BoxGeometry(0.14 * s, 0.1 * s, 0.32 * s), mat(0x050505), { pos: [0, -1.34 * s, 0.07 * s] }));
       this.legs.push(l);
     }
-    this.torso = new THREE.Group(); this.torso.position.y = 1.35 * s; root.add(this.torso);
+    this.torso = new THREE.Group(); this.torso.position.y = 1.35 * s; body.add(this.torso);
     this.torso.add(mesh(new THREE.CylinderGeometry(0.2 * s, 0.24 * s, 0.95 * s, 10), suit, { pos: [0, 0.48 * s, 0] }));
     this.torso.add(mesh(new THREE.BoxGeometry(0.08 * s, 0.7 * s, 0.02 * s), mat(0xf0f0f0), { pos: [0, 0.55 * s, 0.215 * s] }));
-    this.torso.add(mesh(new THREE.BoxGeometry(0.07 * s, 0.55 * s, 0.025 * s), mat(0x6a0a0a), { pos: [0, 0.5 * s, 0.225 * s] }));
+    this.tie = mesh(new THREE.BoxGeometry(0.07 * s, 0.55 * s, 0.025 * s), mat(0xb3182a), { pos: [0, 0.5 * s, 0.225 * s] }); this.torso.add(this.tie);
     // te lange armen
     this.arms = [];
     for (const sd of [1, -1]) {
@@ -401,34 +490,86 @@ export class Deurman {
     const hm = mesh(new THREE.SphereGeometry(0.2 * s, 18, 14), skin, { scale: [0.9, 1.25, 1] }); this.head.add(hm);
     const face = new THREE.Mesh(new THREE.SphereGeometry(0.2 * s * 1.01, 24, 16, Math.PI / 2 - 0.95, 1.9, 0.3, 2.2), new THREE.MeshBasicMaterial({ map: faceTexture(), transparent: false }));
     face.scale.set(0.9, 1.25, 1); this.head.add(face);
-    // ogen gloeien rood als hij kijkt
+    // blosjes (zichtbaar bij blush > 0)
+    this.cheeks = [];
+    for (const sd of [1, -1]) { const c = new THREE.Mesh(new THREE.CircleGeometry(0.05 * s, 12), new THREE.MeshBasicMaterial({ color: 0xff5f8a, transparent: true, opacity: 0, depthWrite: false })); c.position.set(sd * 0.115 * s, -0.025 * s, 0.172 * s); c.rotation.y = sd * 0.6; this.head.add(c); this.cheeks.push(c); }
+    // laser-ogen: alleen bij 'Overal!' (of outfit.laser) als grap
     this.eyeGlow = [];
     for (const sd of [1, -1]) {
-      const e = new THREE.Mesh(new THREE.SphereGeometry(0.014 * s, 6, 4), new THREE.MeshBasicMaterial({ color: 0xff2a1a }));
-      e.position.set(sd * 0.057 * s * 1.0, 0.07 * s, 0.195 * s); this.head.add(e); this.eyeGlow.push(e);
+      const e = new THREE.Mesh(new THREE.SphereGeometry(0.02 * s, 6, 4), new THREE.MeshBasicMaterial({ color: 0xff2a1a })); e.visible = false;
+      e.position.set(sd * 0.064 * s, 0.085 * s, 0.185 * s); this.head.add(e); this.eyeGlow.push(e);
     }
     this.t = Math.random() * 10; this.speed = 0; this.twitchT = 1; this.tilt = 0; this.tiltTarget = 0; this.yaw = 0; this.targetYaw = 0; this.glitch = 0;
+    this.pose = 'idle'; this.blush = 0; this.bob = 0; this._acc = [];
+    this.setOutfit(opts.outfit);
     root.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  }
+  // Accessoires wisselen (oude worden verwijderd)
+  setOutfit(outfit) {
+    for (const o of this._acc) { o.parent && o.parent.remove(o); o.traverse((c) => { if (c.geometry) c.geometry.dispose(); }); }
+    this._acc = []; const s = this.s; const O = this.outfit = parseOutfit(outfit); const A = O.acc;
+    const add = (parent, obj) => { parent.add(obj); this._acc.push(obj); return obj; };
+    const hat = (kind, c, c2) => { const n0 = this.head.children.length; Character.prototype._hat(kind, c, c2, 0.22, s, this.head); for (const o of this.head.children.slice(n0)) { this._acc.push(o); o.traverse((m) => { if (m.isMesh) m.castShadow = true; }); } };
+    this.tie.visible = !A.has('bowtie'); this.tie.material = mat(A.has('tie') ? 0xff4aa8 : 0xb3182a);
+    if (A.has('tie')) add(this.torso, mesh(new THREE.BoxGeometry(0.075 * s, 0.1 * s, 0.03 * s), mat(0xffe14a), { pos: [0, 0.62 * s, 0.232 * s], cast: false }));
+    if (A.has('bowtie')) { const g = new THREE.Group(); g.position.set(0, 0.86 * s, 0.225 * s); for (const sd of [1, -1]) g.add(mesh(new THREE.ConeGeometry(0.07 * s, 0.14 * s, 4), mat(0xff4aa8), { pos: [sd * 0.07 * s, 0, 0], rot: [0, 0, -sd * Math.PI / 2], cast: false })); g.add(mesh(new THREE.SphereGeometry(0.035 * s, 8, 6), mat(0xffe14a), { cast: false })); add(this.torso, g); }
+    if (A.has('flower')) { const g = new THREE.Group(); g.position.set(-0.12 * s, 0.8 * s, 0.232 * s); g.add(mesh(new THREE.CapsuleGeometry(0.008 * s, 0.1 * s, 2, 4), mat(0x3b9a45), { pos: [0, -0.06 * s, 0], cast: false })); for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; g.add(mesh(new THREE.SphereGeometry(0.03 * s, 6, 5), mat(0xff6fa5), { pos: [Math.cos(a) * 0.04 * s, Math.sin(a) * 0.04 * s, 0], cast: false })); } g.add(mesh(new THREE.SphereGeometry(0.025 * s, 6, 5), mat(0xffe14a), { cast: false })); add(this.torso, g); }
+    if (A.has('shades')) { const g = new THREE.Group(); g.position.set(0, 0.09 * s, 0.178 * s); const bk = mat(0x08080c, { roughness: 0.2 }); for (const sd of [1, -1]) g.add(mesh(new THREE.BoxGeometry(0.075 * s, 0.05 * s, 0.015 * s), bk, { pos: [sd * 0.07 * s, 0, 0.004 * s], rot: [0, sd * 0.35, 0], cast: false })); g.add(mesh(new THREE.BoxGeometry(0.06 * s, 0.012 * s, 0.012 * s), bk, { cast: false })); add(this.head, g); }
+    if (A.has('mustache')) { const g = new THREE.Group(); g.position.set(0, 0.0 * s, 0.185 * s); const bk = mat(0x14141a); for (const sd of [1, -1]) g.add(mesh(new THREE.CapsuleGeometry(0.014 * s, 0.075 * s, 3, 6), bk, { pos: [sd * 0.04 * s, 0, 0], rot: [0, sd * 0.4, sd * 1.25], cast: false })); add(this.head, g); }
+    if (A.has('headphones')) {
+      const g = new THREE.Group(); g.position.set(0, 0.01 * s, 0);
+      g.add(mesh(new THREE.TorusGeometry(0.255 * s, 0.018 * s, 6, 18, Math.PI), mat(0x1a1a20), { scale: [0.76, 1, 1], cast: false }));
+      for (const sd of [1, -1]) { g.add(mesh(new THREE.CylinderGeometry(0.075 * s, 0.075 * s, 0.05 * s, 12), mat(0xff4aa8, { emissive: 0x802050 }), { pos: [sd * 0.195 * s, 0, 0], rot: [0, 0, Math.PI / 2], cast: false })); }
+      add(this.head, g);
+    }
+    if (A.has('partyhat')) hat('party', 0xff4aa8, 0xffe14a);
+    if (A.has('knobcrown')) hat('doorknobcrown', 0xf2c230, 0xffd23f);
+    if (A.has('minidoor')) hat('minidoor', 0x8a5a2b, 0xffd23f);
+    for (const k of A) if (k.startsWith('hat:')) hat(k.slice(4), 0x5b2a86, 0xffd24a);
+    if (A.has('highfive')) {   // enorme high-five-hand aan zijn rechterarm
+      const g = new THREE.Group(); g.position.set(0, -1.78 * s, 0.01 * s); const sk = mat(0xf0f0ec);
+      g.add(mesh(new THREE.SphereGeometry(0.15 * s, 10, 8), sk, { scale: [1, 1.05, 0.35], cast: false }));
+      for (let i = 0; i < 4; i++) g.add(mesh(new THREE.CapsuleGeometry(0.03 * s, 0.17 * s, 3, 6), sk, { pos: [(i - 1.5) * 0.06 * s, -0.19 * s, 0], rot: [0, 0, (i - 1.5) * 0.12], cast: false }));
+      g.add(mesh(new THREE.CapsuleGeometry(0.032 * s, 0.14 * s, 3, 6), sk, { pos: [0.16 * s, -0.04 * s, 0], rot: [0, 0, -0.9], cast: false }));
+      add(this.arms[0], g);
+    }
+    this.pose = O.pose || 'idle';
+    const laser = O.laser ?? (S.settings.scare === 3); this.eyeGlow.forEach((e) => { e.visible = !!laser; });
+    return this;
   }
   faceDir(dx, dz) { if (Math.abs(dx) + Math.abs(dz) > 0.001) this.targetYaw = Math.atan2(dx, dz); }
   update(dt) {
-    this.t += dt; const sp = this.speed;
+    this.t += dt; const sp = this.speed; const t = this.t;
     this.yaw = dampAngle(this.yaw, this.targetYaw, 5, dt); this.group.rotation.y = this.yaw;
-    const ph = this.t * 3.2;
-    this.legs[0].rotation.x = Math.sin(ph) * 0.35 * sp; this.legs[1].rotation.x = -Math.sin(ph) * 0.35 * sp;
-    this.arms[0].rotation.x = Math.sin(this.t * 0.9) * 0.05 - Math.sin(ph) * 0.12 * sp; this.arms[1].rotation.x = Math.sin(this.t * 0.8 + 1) * 0.05 + Math.sin(ph) * 0.12 * sp;
-    this.arms[0].rotation.z = 0.04 + Math.sin(this.t * 0.6) * 0.03; this.arms[1].rotation.z = -0.04 - Math.sin(this.t * 0.7) * 0.03;
-    this.torso.rotation.x = 0.06 + Math.sin(this.t * 0.7) * 0.02;
+    const ph = t * 3.2; const P = this.pose;
+    let l0 = Math.sin(ph) * 0.35 * sp, l1 = -Math.sin(ph) * 0.35 * sp;
+    let a0x = Math.sin(t * 0.9) * 0.05 - Math.sin(ph) * 0.12 * sp, a1x = Math.sin(t * 0.8 + 1) * 0.05 + Math.sin(ph) * 0.12 * sp;
+    let a0z = 0.04 + Math.sin(t * 0.6) * 0.03, a1z = -0.04 - Math.sin(t * 0.7) * 0.03;
+    let tz = 0, tx = 0.06 + Math.sin(t * 0.7) * 0.02, bob = 0;
+    if (P === 'highfive') { a0x = -2.75 + Math.sin(t * 5) * 0.12; a0z = 0.15; }
+    else if (P === 'wave') { a0x = -2.6; a0z = 0.35 + Math.sin(t * 9) * 0.4; }
+    else if (P === 'cheer') { a0x = -2.9 + Math.sin(t * 12) * 0.3; a1x = -2.9 - Math.sin(t * 12) * 0.3; a0z = 0.25; a1z = -0.25; bob = Math.abs(Math.sin(t * 6)) * 0.12 * this.s; }
+    else if (P === 'dance') { const b = Math.sin(t * 8); a0x = -2.2 + b; a1x = -2.2 - b; a0z = 0.5; a1z = -0.5; l0 = b * 0.5; l1 = -b * 0.5; tz = b * 0.12; bob = Math.abs(b) * 0.1 * this.s; }
+    else if (P === 'dj') { const b = Math.sin(t * 7.5); a0x = -1.1 + b * 0.35; a1x = -1.1 - b * 0.35; a0z = 0.2; a1z = -0.2; tz = Math.sin(t * 3.75) * 0.06; bob = Math.abs(Math.sin(t * 3.75)) * 0.05 * this.s; }
+    else if (P === 'shy') { a0x = -2.2; a1x = -2.2; a0z = -0.5; a1z = 0.5; tx = 0.2; }
+    else if (P === 'point') { a0x = -1.55; a0z = 0.05; }
+    else if (P === 'thumbs') { a0x = -1.45; a0z = 0.1; a1x = -1.45; a1z = -0.1; bob = Math.abs(Math.sin(t * 5)) * 0.04 * this.s; }
+    this.legs[0].rotation.x = l0; this.legs[1].rotation.x = l1;
+    this.arms[0].rotation.x = a0x; this.arms[1].rotation.x = a1x; this.arms[0].rotation.z = a0z; this.arms[1].rotation.z = a1z;
+    this.torso.rotation.x = tx; this.torso.rotation.z = tz;
+    this.bob = damp(this.bob, bob, 20, dt); this.torso.position.y = 1.35 * this.s + this.bob; for (const l of this.legs) l.position.y = 1.35 * this.s + this.bob;
     this.twitchT -= dt;
-    if (this.twitchT < 0) { this.tiltTarget = (Math.random() - 0.5) * 0.9; this.twitchT = 0.4 + Math.random() * 2.5; }
-    this.tilt = damp(this.tilt, this.tiltTarget, 30, dt);
+    if (this.twitchT < 0) { this.tiltTarget = (Math.random() - 0.5) * 0.5; this.twitchT = 0.6 + Math.random() * 2.5; }   // vrolijk hoofdschuddertje
+    this.tilt = damp(this.tilt, this.tiltTarget, 12, dt);
     this.head.rotation.z = this.tilt; this.head.rotation.x = 0.1;
-    this.group.position.y += 0;
-    if (this.glitch > 0) { this.glitch -= dt; this.group.scale.set(1 + (Math.random() - .5) * 0.15, 1 + (Math.random() - .5) * 0.1, 1); this.group.visible = Math.random() > 0.15; }
-    else { this.group.scale.set(1, 1, 1); this.group.visible = true; }
+    // blozen
+    for (const c of this.cheeks) c.material.opacity = Math.min(0.85, this.blush * 0.85);
+    // cartoon 'boing' bij een verrassing (squash & stretch i.p.v. flikkeren)
+    if (this.glitch > 0) { this.glitch -= dt; const k = Math.sin(this.glitch * 22) * Math.min(1, this.glitch + 0.2) * 0.12; this.body.scale.set(1 - k * 0.6, 1 + k, 1 - k * 0.6); }
+    else this.body.scale.set(1, 1, 1);
   }
 }
-export function makeDeurman(scale = 1) { return new Deurman(scale); }
+export function makeDeurman(scale = 1, opts = {}) { return new Deurman(scale, opts); }
 
 // ============================================================================
 // Dieren, draken, slijmerds

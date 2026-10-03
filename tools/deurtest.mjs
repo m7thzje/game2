@@ -1,4 +1,5 @@
-// Test: de Deurman neemt een hal van de Speelhal over (waarschuwing -> deur -> sluipen -> gepakt -> takeover -> spookduel -> verjaagd)
+// Test: DEURENFEESTJE: de Deurman neemt een hal van de Speelhal over (disco-waarschuwing -> deur -> dansen naar high-five -> selfie-licht verjaagt / gepakt -> DJ op de troon -> feest-duel -> hal terug)
+// Screenshots: /tmp/deur_warn|door|stalk|takeover|result|after.png
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -8,7 +9,7 @@ const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-119
 const page = await b.newPage({ viewport: { width: 1100, height: 650 } });
 const errors = []; page.on('pageerror', (e) => errors.push(e.message + ' ' + (e.stack || '').split('\n').slice(1, 3).join('|')));
 page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT/.test(m.text())) errors.push(m.text().slice(0, 200)); });
-await page.goto(`http://localhost:${port}/?quality=low`);
+await page.goto(`http://localhost:${port}/?quality=low&unlock=1`);
 await page.waitForFunction(() => window.__app && window.__app.games, null, { timeout: 90000 });
 await page.waitForTimeout(1500);
 await page.evaluate(async () => { const { S } = await import('/src/save.js'); S.settings.scare = 2; S.flags.met_king = true; });
@@ -18,33 +19,39 @@ await page.waitForTimeout(1500);
 const st = () => page.evaluate(() => window.__app.mode.deur && window.__app.mode.deur.state);
 const log = [];
 const note = async (tag) => { const s = await st(); log.push(tag + ':' + s); console.log(tag, s); };
+// de wereld loopt hier op ~4 fps (software-GL): daarom de hal-update zelf in stapjes van 0.05 s voortbewegen
+const adv = (target, max = 600, pre = '') => page.evaluate(async ([target, max, pre]) => { const m = window.__app.mode, inp = window.__app.input; const f = pre ? new Function('m', 'inp', pre) : null; for (let i = 0; i < max && m.deur.state !== target; i++) { f && f(m, inp); inp.update(); m.update(0.05); } return m.deur.state; }, [target, max, pre]);
 await page.evaluate(() => { const m = window.__app.mode; m.busy = false; m.deur.timer = 0.05; for (const p of m.players) { p.x = (p.i ? 6 : -6); p.z = 12; } });
-for (let i = 0; i < 40 && (await st()) !== 'warn'; i++) await page.waitForTimeout(250);
-await note('warn'); await page.screenshot({ path: '/tmp/deur_warn.png' });
-for (let i = 0; i < 60 && (await st()) !== 'door'; i++) await page.waitForTimeout(250);
-await note('door'); await page.waitForTimeout(1800); await page.screenshot({ path: '/tmp/deur_door.png' });
-for (let i = 0; i < 40 && (await st()) !== 'stalk'; i++) await page.waitForTimeout(250);
-await note('stalk');
-// lantaarn: laat Wes naar de Deurman kijken en B vasthouden
-await page.evaluate(() => { const m = window.__app.mode; const d = m.deur; const p = m.players[0]; const gp = d.m.group.position; p.x = gp.x; p.z = gp.z + 9; p.yaw = Math.PI; window.__app.input.virtual[0].b = true; });
-await page.waitForTimeout(1500); await page.screenshot({ path: '/tmp/deur_stalk.png' });
-// eerst verjagen (lantaarn blijft op hem gericht)
-for (let i = 0; i < 80 && (await st()) === 'stalk'; i++) { await page.evaluate(() => { const m = window.__app.mode; const p = m.players[0]; const gp = m.deur.m.group.position; p.x = gp.x; p.z = gp.z + 8; p.yaw = Math.PI; }); await page.waitForTimeout(250); }
+await adv('warn'); await note('warn'); await page.screenshot({ path: '/tmp/deur_warn.png' });
+await adv('door'); await page.evaluate(() => { for (let i = 0; i < 40; i++) window.__app.mode.update(0.05); }); await note('door'); await page.screenshot({ path: '/tmp/deur_door.png' });
+await adv('stalk'); await note('stalk');
+// selfie-licht: laat Wes naar de Deurman kijken en B vasthouden: hij bloost en danst weg
+await page.evaluate(() => { const m = window.__app.mode; const p = m.players[0]; const gp = m.deur.m.group.position; p.x = gp.x; p.z = gp.z + 9; p.yaw = Math.PI; window.__app.input.virtual[0].b = true; for (let i = 0; i < 20; i++) { window.__app.input.update(); m.update(0.05); } });
+await page.waitForTimeout(300); await page.screenshot({ path: '/tmp/deur_stalk.png' });
+await adv('banished', 800, "const p = m.players[0]; const gp = m.deur.m.group.position; p.x = gp.x; p.z = gp.z + 8; p.yaw = Math.PI;");
+await page.waitForTimeout(300); await page.screenshot({ path: '/tmp/deur_dance.png' });
 await page.evaluate(() => { window.__app.input.virtual[0].b = false; });
-await note('na-lantaarn');
+await adv('idle', 200);
+await note('na-selfie');
 const coins = await page.evaluate(async () => { const { S } = await import('/src/save.js'); return { c: S.coins, banished: S.banished }; });
-console.log('verjaagd?', JSON.stringify(coins));
-// tweede ronde: laat hem je pakken
-await page.waitForTimeout(1500);
+console.log('verjaagd (selfie-licht)?', JSON.stringify(coins));
+console.log(coins.banished >= 1 && coins.c >= 15 && (await page.evaluate(async () => (await import('/src/save.js')).S.deur.stickers.includes('selfie'))) ? 'OK   selfie-verjagen: +15 heitjes + sticker' : 'FOUT selfie-verjagen');
+// tweede ronde: laat hem je pakken (high-five) -> DJ-overname
 await page.evaluate(() => { const m = window.__app.mode; m.deur.state = 'idle'; m.deur.timer = 0.05; });
-for (let i = 0; i < 80 && (await st()) !== 'stalk'; i++) await page.waitForTimeout(250);
-await page.evaluate(() => { const m = window.__app.mode; const gp = m.deur.m.group.position; for (const p of m.players) { p.x = gp.x + 1; p.z = gp.z + 1; } });
-for (let i = 0; i < 40 && (await st()) !== 'takeover'; i++) { await page.evaluate(() => { const v = window.__app.input.virtual[0]; v.a = true; }); await page.waitForTimeout(150); await page.evaluate(() => { window.__app.input.virtual[0].a = false; }); await page.waitForTimeout(150); }
+await adv('stalk');
+await page.evaluate(() => { const m = window.__app.mode; const gp = m.deur.m.group.position; for (const p of m.players) { p.x = gp.x + 1; p.z = gp.z + 1; } for (let i = 0; i < 4; i++) m.update(0.05); });
+for (let i = 0; i < 80 && (await st()) !== 'takeover'; i++) await page.waitForTimeout(150);   // jumpscare ('FEESTJE!') speelt in echte tijd
 await note('gepakt');
-await page.waitForTimeout(1500); await page.screenshot({ path: '/tmp/deur_takeover.png' });
+for (let i = 0; i < 20; i++) { await page.evaluate(() => { window.__app.mode.update(0.05); }); }
+await page.waitForTimeout(500); await page.screenshot({ path: '/tmp/deur_takeover.png' });
+// dialoog wegklikken en de DJ-hal bekijken
+for (let i = 0; i < 12; i++) { await page.evaluate(() => { const v = window.__app.input.virtual[0]; v.a = true; window.__app.input.update(); window.__app.mode.update(0.05); v.a = false; window.__app.input.update(); window.__app.mode.update(0.05); }); await page.waitForTimeout(120); }
+await page.evaluate(() => { const m = window.__app.mode; const d = m.deur; m.players[0].x = -3; m.players[0].z = d.seat.z + 11; m.players[1].x = 3; m.players[1].z = d.seat.z + 11; for (let i = 0; i < 30; i++) m.update(0.05); });
+await page.waitForTimeout(600); await page.screenshot({ path: '/tmp/deur_takeover2.png' });
 // spookduel via de route van de hal
 const mode0 = await page.evaluate(() => { const m = window.__app.mode; return m.deur.takeover; });
 console.log('takeover actief:', mode0);
+console.log(mode0 === true ? 'OK   DJ-takeover' : 'FOUT geen takeover');
 await page.evaluate(() => { window.__app.mode.launch('dodgeball'); });
 await page.waitForFunction(() => window.__app.mode && window.__app.mode.ctx, null, { timeout: 60000 });
 const tw = await page.evaluate(() => ({ twist: window.__app.mode.ctx.twist.id, spooky: !!(window.__app.mode.extra && window.__app.mode.extra.spooky) }));
@@ -58,8 +65,9 @@ await page.screenshot({ path: '/tmp/deur_result.png' });
 await page.evaluate(() => { const app = window.__app, m = app.mode, inp = app.input; inp.virtual[0].a = true; inp.update(); m.update(0.016); inp.virtual[0].a = false; inp.update(); m.update(0.016); });
 await page.waitForFunction(() => window.__app.mode && window.__app.mode.deur, null, { timeout: 60000 });
 // dialogen wegklikken tot hij verdwenen is
-for (let i = 0; i < 60; i++) { const s = await st(); if (s === 'idle') break; await page.evaluate(() => { window.__app.input.virtual[0].a = true; }); await page.waitForTimeout(150); await page.evaluate(() => { window.__app.input.virtual[0].a = false; }); await page.waitForTimeout(250); }
-await note('na-spookduel');
+for (let i = 0; i < 60; i++) { const s = await st(); if (s === 'idle') break; await page.evaluate(() => { window.__app.input.virtual[0].a = true; }); await page.waitForTimeout(150); await page.evaluate(() => { window.__app.input.virtual[0].a = false; for (let k = 0; k < 12; k++) window.__app.mode.update(0.05); }); await page.waitForTimeout(250); }
+await note('na-feestduel');
+console.log((await page.evaluate(async () => (await import('/src/save.js')).S.deur.stickers.join(','))), '(stickers)');
 await page.waitForTimeout(1500); await page.screenshot({ path: '/tmp/deur_after.png' });
 console.log(errors.length ? 'ERRORS ' + errors.slice(0, 5).join(' || ') : 'NO ERRORS');
 await b.close(); server.close();

@@ -28,11 +28,11 @@ export const JOB_BY_ID = Object.fromEntries(JOBS.map((j) => [j.id, j]));
 export const HOME = { x: -9, z: 24, yaw: Math.PI / 2 };   // huisje van de broers (deur kijkt oost, naar de weg)
 export const SPAWN = { x: -1.5, z: 20 };
 export const PLAZA = { x: 0, z: 0, r: 14 };
-export const BOOTH = { x: 9, z: -5 };                       // kaartverkoop
+export const TIPKRAAM = { x: 9, z: -5 };                    // Speelhal-tipkraam van Lotte (was het kaartjesloket)
 export const BOARD = { x: 0, z: 12 };                       // klussenbord
 export const CAVE = { x: 62, z: -12 };
 export const CASTLE = { x: 0, z: -80, y: 11 };
-export const CONCERT_GATE = { x: 0, z: -63 };
+export const POORT = { x: 0, z: -63 };                      // kasteelpoort (alleen decor: de koning zit in de Speelhal)
 export const ICE = { x: 44, z: -40, r: 13 };
 export const SWAMP = { x: -58, z: 8, r: 26 };
 export const FARM = { x: -14, z: 38 };
@@ -101,5 +101,13 @@ export function coinTrail() {
 // Speelhal van Koning Klopper: ingang in de berg (noordwesten)
 export const ARCADE = { x: -66, z: -54, yaw: Math.atan2(66, 54) };
 
-export const TICKET_PRICE = 600;
-export const VIP_PRICE = 400;
+// Straatpraatjes: kleine NPC's met korte grappen over de Speelhal (lijnen staan in story.js STRAAT). Lotte staat bij de tipkraam.
+export const STRAAT = [
+  { id: 'lotte',  who: 'Lotte van de Tipkraam', kind: 'princess', x: TIPKRAAM.x + 0.6, z: TIPKRAAM.z + 0.9, yaw: 0.4, lift: 0.1, icon: '💡', spec: { hat: 'beanie', hatColor: 0x5a1fd1, hatColor2: 0xffe14a, shirt: 0xd8357f, tunic: 0xd8357f, hair: 0x2a1a30 }, at: [TIPKRAAM.x + 0.4, TIPKRAAM.z + 2.4] },
+  { id: 'piet',   who: 'Pixel-Piet',            kind: 'kid',      x: 4.4,  z: 14.6, yaw: 0.4,  icon: '🕹️', spec: { shirt: 0x3ad8c8, hat: 'capback', hatColor: 0xd8372c } },
+  { id: 'oma',    who: 'Oma Arcadia',           kind: 'elder',    x: -5.5, z: 4.2,  yaw: 0.8,  icon: '👵', spec: { shirt: 0xb04aa8 } },
+  { id: 'rick',   who: 'Ridder Rick',           kind: 'guard',    x: -50.5, z: -12, yaw: -0.6, icon: '🛡️', spec: {} },
+  { id: 'joop',   who: 'Joystick-Joop',         kind: 'farmer',   x: 3.2,  z: 27.5, yaw: 0.6,  icon: '🎮', spec: { shirt: 0xe8a33d } },
+  { id: 'pieter', who: 'Poortwachter Pieter',   kind: 'guard',    x: 3.5,  z: -52.5, yaw: 0.2, icon: '🏰', spec: {} },
+];
+

@@ -143,6 +143,27 @@ class AudioSys {
         break;
       }
       case 'scareSoft': this.noise(0.5, { type: 'bandpass', freq: 1200, freq2: 500, q: 1, vol: 0.5 * v, attack: 0.005 }); this.tone(60, 0.5, { type: 'sine', vol: 0.6 * v, slide: 32 }); break;
+      // --- Deurman-meme-geluiden (vrolijk, procedureel) ---
+      case 'airhorn': {
+        [466, 587, 698].forEach((f, i) => this.tone(f * r, 0.7, { type: 'sawtooth', vol: (i ? 0.16 : 0.22) * v, slide: f * 0.93 * r, filter: 2600, attack: 0.012 }));
+        this.noise(0.5, { type: 'bandpass', freq: 1500, q: 1, vol: 0.06 * v });
+        break;
+      }
+      case 'tada': [523, 659, 784].forEach((f, i) => T(f, 0.11, { type: 'square', vol: 0.12, delay: i * 0.1 })); T(1047, 0.7, { type: 'square', vol: 0.14, delay: 0.3, send: 0.2 }); T(1319, 0.7, { type: 'triangle', vol: 0.12, delay: 0.3 }); break;
+      case 'trombone': [[233, 0.32], [220, 0.32], [208, 0.32], [196, 0.9]].forEach(([f, d], i) => T(f, d, { type: 'sawtooth', vol: 0.2, delay: i * 0.36, filter: i === 3 ? 520 : 900, vib: i === 3 ? 0.03 : 0, slide: i === 3 ? f * 0.82 : f * 0.98, attack: 0.04 })); break;
+      case 'kiss': T(1500, 0.05, { type: 'sine', vol: 0.28, slide: 2400 }); N(0.04, { type: 'highpass', freq: 4000, vol: 0.15, delay: 0.04 }); T(900, 0.08, { type: 'sine', vol: 0.25, slide: 380, delay: 0.07 }); break;
+      case 'squeak': T(1900, 0.1, { type: 'sine', vol: 0.22, slide: 2700 }); T(2300, 0.09, { type: 'sine', vol: 0.18, slide: 3000, delay: 0.1 }); break;
+      case 'highfive': N(0.07, { type: 'bandpass', freq: 2600, q: 0.9, vol: 0.5 }); T(320, 0.09, { type: 'triangle', vol: 0.3, slide: 120 }); break;
+      case 'doorbell': T(659, 0.42, { type: 'sine', vol: 0.25, send: 0.2 }); T(523, 0.7, { type: 'sine', vol: 0.25, delay: 0.36, send: 0.25 }); break;
+      case 'slide': T(380, 0.55, { type: 'sine', vol: 0.22, slide: 1900, vib: 0.01 }); break;
+      case 'kazoo': [330, 392, 330, 262].forEach((f, i) => T(f, 0.16, { type: 'sawtooth', vol: 0.14, delay: i * 0.17, filter: 1700, vib: 0.03 })); break;
+      case 'shutter': N(0.035, { type: 'highpass', freq: 3500, vol: 0.3 }); N(0.05, { type: 'highpass', freq: 2500, vol: 0.25, delay: 0.07 }); T(2200, 0.03, { type: 'square', vol: 0.06 }); break;
+      case 'cheer': N(0.9, { type: 'bandpass', freq: 1400, freq2: 2600, q: 0.7, vol: 0.2, attack: 0.15 }); for (let i = 0; i < 4; i++) T(700 + i * 160, 0.2, { type: 'triangle', vol: 0.08, delay: 0.1 + i * 0.1, slide: 1500 }); break;
+      case 'boop': T(330, 0.1, { type: 'triangle', vol: 0.25, slide: 540 }); break;
+      case 'beat': T(125, 0.16, { type: 'sine', vol: 0.4, slide: 45 }); break;
+      case 'party': T(700, 0.4, { type: 'square', vol: 0.09, slide: 1500, attack: 0.05 }); N(0.12, { type: 'highpass', freq: 5000, vol: 0.08, delay: 0.35 }); break;
+      case 'honk': T(290, 0.16, { type: 'square', vol: 0.16, filter: 1400 }); T(230, 0.28, { type: 'square', vol: 0.16, delay: 0.15, filter: 1400 }); break;
+      case 'swap': T(300, 0.3, { type: 'triangle', vol: 0.2, slide: 900 }); T(900, 0.3, { type: 'triangle', vol: 0.2, slide: 300, delay: 0.3 }); break;
       default: break;
     }
   }
@@ -248,7 +269,41 @@ function tense() {
     },
   };
 }
+// Vrolijke 'spannende' muziek voor de Deurman: sluipend pizzicato + kazoo-achtige noten (geen drone, geen hartslag)
+function deurchase() {
+  const mel = [0, 3, 7, 3, 5, 3, 0, -2];
+  return {
+    bpm: 124,
+    step(A, s, bar, t, spb) {
+      const r = 50 + [0, 0, 5, 3][bar % 4];
+      if (s % 4 === 0) A.bass(r - 12 + (s === 8 ? 7 : 0), t, spb * 2, 0.2);
+      if (s % 2 === 0) A.pluck(r + 12 + mel[(s / 2 + bar) % 8 | 0], t, 0.14, 0.085, 'square');
+      if (s === 4 || s === 12) A.snare(t, 0.07);
+      if (s % 4 === 2) A.hat(t, 0.03);
+      if (s === 14 && bar % 4 === 3) A.tone(500, 0.4, { type: 'sine', vol: 0.1, when: t, dest: A.musG, slide: 1600 });
+    },
+  };
+}
+// Disco voor het Deurenfeestje
+function deurparty() {
+  const prog = [0, 5, 7, 5];
+  return {
+    bpm: 122,
+    step(A, s, bar, t, spb) {
+      const r = 57 + prog[bar % 4];
+      if (s % 4 === 0) A.kick(t, 0.42);
+      if (s === 4 || s === 12) A.snare(t, 0.1);
+      if (s % 4 === 2) A.hat(t, 0.06);
+      if (s % 2 === 0) A.bass(r - 12 + (s % 8 === 2 || s % 8 === 6 ? 12 : 0), t, spb * 1.4, 0.18);
+      const arp = [0, 4, 7, 12, 7, 4, 9, 4];
+      if (s % 2 === 1) A.lead(r + 12 + arp[(s >> 1) % 8], t, spb * 1.2, 0.05, 'square');
+      if (s === 0) A.pad(r + 4, t, spb * 15, 0.04, 'triangle', 1400);
+    },
+  };
+}
 const TRACKS = {
+  deurchase: deurchase(),
+  deurparty: deurparty(),
   menu: folk(60, [[0, 'maj'], [7, 'maj'], [9, 'min'], [5, 'maj']], 108, MAJ),
   hub_day: folk(60, [[0, 'maj'], [9, 'min'], [5, 'maj'], [7, 'maj']], 96, MAJ),
   hub_dusk: folk(57, [[0, 'min'], [8, 'maj'], [3, 'maj'], [10, 'maj']], 76, MIN),

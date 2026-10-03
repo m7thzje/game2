@@ -92,9 +92,9 @@ kbd{display:inline-block;min-width:24px;padding:0 6px;text-align:center;border-r
 .mini.done{background:rgba(120,220,140,.5)}
 .small-note{font-size:13px;opacity:.7;text-align:center;margin-top:8px}
 @media (max-width:760px){.card{padding:16px}.ctrl{grid-template-columns:1fr}.pbox{min-width:120px}}
-.hud-deur{position:absolute;left:50%;top:78px;transform:translateX(-50%);width:300px;padding:4px 12px;border-radius:12px;background:rgba(20,0,0,.72);border:2px solid #7a1d1d;text-align:center;font-size:15px}
-.hud-deur .bar{height:10px;margin-top:3px;border-radius:6px;background:#2a0a0a;overflow:hidden}
-.hud-deur .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ffe14a,#fff)}
+.hud-deur{position:absolute;left:50%;top:78px;transform:translateX(-50%);width:300px;padding:4px 12px;border-radius:12px;background:rgba(70,14,100,.82);border:2px solid #ff4aa8;text-align:center;font-size:15px}
+.hud-deur .bar{height:10px;margin-top:3px;border-radius:6px;background:#2a0a3a;overflow:hidden}
+.hud-deur .bar>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ffe14a,#ff7ac8,#4ac8ff)}
 
 .twist{margin:10px 0;padding:10px 16px;border-radius:14px;background:linear-gradient(90deg,#ffe14a,#ff9a3a);color:#3a1a00;text-align:center;border:3px solid #7a3a00;animation:pop .5s}
 .twist b{display:block;font-size:20px}.twist span{font-size:16px}
@@ -112,8 +112,9 @@ kbd{display:inline-block;min-width:24px;padding:0 6px;text-align:center;border-r
 .ranktbl th{background:#6b4226;color:#ffe9b0;padding:6px 8px}
 .ranktbl td{padding:5px 8px;border-bottom:1px solid rgba(0,0,0,.15);text-align:center}
 .ranktbl td:first-child{text-align:left}
-.spook-tint{position:fixed;inset:0;pointer-events:none;z-index:4;background:radial-gradient(ellipse at center,rgba(0,0,0,0) 35%,rgba(90,0,0,.45) 100%);mix-blend-mode:multiply;animation:spook 2.4s ease-in-out infinite}
-@keyframes spook{0%,100%{opacity:.75}50%{opacity:1}}
+.spook-tint{position:fixed;inset:0;pointer-events:none;z-index:4}
+.spook-tint::before{content:'';position:absolute;inset:0;background:conic-gradient(from 0deg at 50% 50%,#ff4aa8,#ffe14a,#7bff7b,#4ac8ff,#b06aff,#ff4aa8);opacity:.42;-webkit-mask:radial-gradient(ellipse at center,transparent 55%,#000 100%);mask:radial-gradient(ellipse at center,transparent 55%,#000 100%);animation:feesthue 7s linear infinite}
+@keyframes feesthue{to{filter:hue-rotate(360deg)}}
 
 /* Hoedenmaker Hettie: winkel voor hoeden en kleuren */
 .card.shop{width:min(1040px,98vw);padding:14px 20px 12px}
@@ -152,3 +153,121 @@ kbd{display:inline-block;min-width:24px;padding:0 6px;text-align:center;border-r
 .hud-arcade{position:absolute;transform:translate(-50%,-50%);padding:5px 14px;border-radius:20px;background:rgba(70,14,100,.85);border:3px solid #ffe14a;font-size:18px;font-weight:700;white-space:nowrap;box-shadow:0 0 18px #ff2bd6;animation:arcpulse .7s infinite alternate}
 .hud-arcade .ar{display:inline-block;color:#ffe14a;font-size:22px}
 @keyframes arcpulse{from{box-shadow:0 0 6px #ff2bd6;transform:translate(-50%,-50%) scale(1)}to{box-shadow:0 0 26px #ff2bd6;transform:translate(-50%,-50%) scale(1.08)}}
+
+/* ---------- Deurman als meme: stare, discoflikkering, cameo's, vriendenboek ---------- */
+.deur-stare{color:#ffe14a;font-family:'Fredoka',sans-serif;font-weight:700;font-size:min(5.6vw,58px);text-shadow:0 5px 0 #7a1d6a,0 0 24px rgba(255,120,220,.8);animation:dstare .6s ease-in-out infinite alternate;z-index:55}
+@keyframes dstare{from{transform:scale(1) rotate(-2deg)}to{transform:scale(1.07) rotate(2deg)}}
+.deur-hold{position:absolute;left:50%;top:calc(12% + min(8vw,80px));transform:translateX(-50%);width:min(420px,70vw);height:16px;border-radius:10px;background:rgba(40,0,60,.7);border:3px solid #fff;overflow:hidden;z-index:55}
+.deur-hold>i{display:block;height:100%;width:100%;background:linear-gradient(90deg,#ff4aa8,#ffe14a,#7bff7b)}
+.deur-disco{position:fixed;inset:0;pointer-events:none;z-index:41;background:linear-gradient(120deg,#ff4aa8,#ffe14a,#7bff7b,#4ac8ff,#b06aff);mix-blend-mode:soft-light;opacity:0;animation:disco 1.2s ease-in-out}
+.deur-disco.soft{animation:discosoft 1.2s ease-in-out}
+@keyframes disco{0%{opacity:0}20%{opacity:.7}45%{opacity:.25}70%{opacity:.7}100%{opacity:0}}
+@keyframes discosoft{0%,100%{opacity:0}50%{opacity:.35}}
+.deur-hall-hint{position:absolute;left:50%;top:8px;transform:translateX(-50%);padding:3px 14px;border-radius:14px;background:rgba(70,14,100,.8);border:2px solid #ff4aa8;font-size:15px}
+
+/* Deurman-cameo's (src/engine/cameo.js) */
+#cameo-layer{position:absolute;inset:0;pointer-events:none;z-index:44;overflow:hidden}
+.dm-cam{--dm-h:clamp(280px,62vh,600px);--bt:-50%;position:absolute;bottom:0;animation-duration:var(--dur);animation-timing-function:linear;animation-fill-mode:both}
+.dm-cam.small{--dm-h:clamp(120px,25vh,250px)}
+.dm-clip{position:relative}
+.dm-fig{height:var(--dm-h);width:calc(var(--dm-h) * 240 / 440)}
+.dm-svg{display:block;width:100%;height:100%}
+.dm-bubble{position:absolute;left:50%;bottom:calc(100% - 14%);transform:translateX(var(--bt)) scale(0);transform-origin:50% 100%;width:max-content;max-width:min(300px,46vw);padding:8px 16px;background:#fff;color:#111;border:4px solid #111;border-radius:22px;font:700 clamp(15px,2.3vw,26px)/1.15 'Fredoka',sans-serif;text-align:center;box-shadow:0 5px 0 rgba(0,0,0,.35);animation:dmbub var(--dur) ease-out both;z-index:3}
+.dm-cam.small .dm-bubble{font-size:clamp(13px,1.7vw,18px);padding:5px 12px;border-width:3px}
+.dm-bubble::after{content:'';position:absolute;left:50%;top:100%;margin-left:-11px;border:11px solid transparent;border-top-color:#111}
+@keyframes dmbub{0%,8%{transform:translateX(var(--bt)) scale(0)}13%{transform:translateX(var(--bt)) scale(1.12)}17%,88%{transform:translateX(var(--bt)) scale(1)}95%,100%{transform:translateX(var(--bt)) scale(0)}}
+.dm-eyes{transform-origin:80px 50px;animation:dmblink 2.6s infinite}
+@keyframes dmblink{0%,92%,100%{transform:scaleY(1)}95%{transform:scaleY(.08)}}
+.dm-head{transform-origin:80px 100px;animation:dmhead 1.4s ease-in-out infinite alternate}
+@keyframes dmhead{from{transform:rotate(-3deg)}to{transform:rotate(3deg)}}
+.dm-wave,.dm-waves{animation:dmwaves .5s ease-in-out infinite alternate}
+@keyframes dmwaves{from{opacity:.3}to{opacity:1}}
+.dm-arm-R.dm-p-wave,.dm-arm-R.dm-p-up,.dm-arm-L.dm-p-up{animation:dmwavearm .35s ease-in-out infinite alternate}
+.dm-arm-R{transform-origin:108px 126px}.dm-arm-L{transform-origin:52px 126px}
+@keyframes dmwavearm{from{transform:rotate(-9deg)}to{transform:rotate(9deg)}}
+.dm-legl{transform-origin:68px 206px}.dm-legr{transform-origin:92px 206px}
+@keyframes dmleg{from{transform:rotate(-17deg)}to{transform:rotate(17deg)}}
+@keyframes dmbob{from{transform:translateY(0)}to{transform:translateY(-2.5%)}}
+@keyframes dmarm{from{transform:rotate(-14deg)}to{transform:rotate(14deg)}}
+/* wandelen */
+.dm-walk{left:0}
+.dm-walk.dm-l2r{animation-name:dmwalk-l2r}.dm-walk.dm-r2l{animation-name:dmwalk-r2l}
+.dm-walk.slow{animation-timing-function:linear}
+@keyframes dmwalk-l2r{from{transform:translateX(-30vw)}to{transform:translateX(108vw)}}
+@keyframes dmwalk-r2l{from{transform:translateX(108vw)}to{transform:translateX(-30vw)}}
+.dm-walk .dm-fig{animation:dmbob .5s ease-in-out infinite alternate}
+.dm-walk .dm-legl{animation:dmleg .5s ease-in-out infinite alternate}.dm-walk .dm-legr{animation:dmleg .5s ease-in-out infinite alternate-reverse}
+.dm-walk .dm-arm-L.dm-p-down{animation:dmarm .5s ease-in-out infinite alternate}.dm-walk .dm-arm-R.dm-p-down{animation:dmarm .5s ease-in-out infinite alternate-reverse}
+.dm-minidoor{position:absolute;left:90%;bottom:0;width:calc(var(--dm-h) * .22);height:calc(var(--dm-h) * .4);background:linear-gradient(90deg,#9a6a35,#7a4a22);border:6px solid #3a2412;border-bottom:0;border-radius:8px 8px 0 0}
+.dm-minidoor i{position:absolute;right:12%;top:52%;width:12px;height:12px;border-radius:50%;background:#ffd23f;box-shadow:0 0 6px #fff}
+/* glijden */
+.dm-slide{right:0;animation-name:dmslide;animation-timing-function:cubic-bezier(.25,.55,.7,.45)}
+@keyframes dmslide{from{transform:translateX(45vw) rotate(-9deg)}to{transform:translateX(-125vw) rotate(-9deg)}}
+/* deur */
+.dm-door{left:calc(var(--cx) * .8)}
+.dm-doorframe{position:relative;width:calc(var(--dm-h) * .56);height:calc(var(--dm-h) * .98);border:12px solid #5a3414;border-bottom:0;border-radius:14px 14px 0 0;background:linear-gradient(180deg,#fff2a8,#ff9ad5);overflow:hidden;perspective:900px}
+.dm-door .dm-clip{position:absolute;left:0;bottom:-2%;animation:dmpopout var(--dur) linear both}
+.dm-door .dm-fig{height:calc(var(--dm-h) * .95);width:calc(var(--dm-h) * .95 * 240 / 440)}
+@keyframes dmpopout{0%,9%{transform:translateY(108%)}22%{transform:translateY(-5%)}30%,80%{transform:translateY(0)}92%,100%{transform:translateY(108%)}}
+.dm-leaf{position:absolute;inset:0;transform-origin:left center;background:linear-gradient(90deg,#b87a3a,#9a6228);border-right:6px solid #6a4220;animation:dmleaf var(--dur) ease-in-out both}
+.dm-leaf i{position:absolute;right:12%;top:52%;width:16px;height:16px;border-radius:50%;background:#ffd23f}
+@keyframes dmleaf{0%,6%{transform:rotateY(0)}16%,84%{transform:rotateY(-112deg)}94%,100%{transform:rotateY(0)}}
+/* gluren (onderrand) */
+.dm-peekB{left:var(--cx);animation-name:dmpeekb}
+@keyframes dmpeekb{0%{transform:translateY(108%)}18%,82%{transform:translateY(47%)}100%{transform:translateY(108%)}}
+.dm-peekB.small{animation-name:dmpeekbs}
+@keyframes dmpeekbs{0%{transform:translateY(108%)}18%,82%{transform:translateY(54%)}100%{transform:translateY(108%)}}
+.dm-peekB .dm-fig{animation:dmhead 1.1s ease-in-out infinite alternate}
+/* hoek */
+.dm-corner{animation-name:dmcorner}
+.dm-corner.dm-side-r{right:2vw}.dm-corner.dm-side-l{left:2vw}
+@keyframes dmcorner{0%{transform:translateY(108%)}12%{transform:translateY(-4%)}18%,82%{transform:translateY(0)}100%{transform:translateY(108%)}}
+.dm-corner .dm-fig{animation:dmbob .6s ease-in-out infinite alternate}
+/* langszoomen en toeteren */
+.dm-zoom{right:0;animation-name:dmzoom}
+@keyframes dmzoom{0%{transform:translateX(60vw)}14%{transform:translateX(-26vw)}86%{transform:translateX(-26vw)}100%{transform:translateX(60vw)}}
+.dm-zoom.small{animation-name:dmzooms}
+@keyframes dmzooms{0%{transform:translateX(60vw)}14%{transform:translateX(-2vw)}86%{transform:translateX(-2vw)}100%{transform:translateX(60vw)}}
+.dm-zoom .dm-fig{animation:dmbob .25s ease-in-out infinite alternate}
+/* dansen in het midden */
+.dm-center{left:50%;animation-name:dmcenter}
+@keyframes dmcenter{0%{transform:translateX(-50%) translateY(108%)}14%{transform:translateX(-50%) translateY(-3%)}20%,84%{transform:translateX(-50%) translateY(0)}100%{transform:translateX(-50%) translateY(108%)}}
+.dm-center .dm-fig{animation:dmdance .4s ease-in-out infinite alternate}
+.dm-center .dm-legl{animation:dmleg .4s ease-in-out infinite alternate}.dm-center .dm-legr{animation:dmleg .4s ease-in-out infinite alternate-reverse}
+@keyframes dmdance{from{transform:rotate(-4deg) translateY(0)}to{transform:rotate(4deg) translateY(-3%)}}
+/* achter een plant */
+.dm-bush{left:var(--cx);animation-name:dmbush}
+@keyframes dmbush{0%{transform:translateY(100%)}12%{transform:translateY(16%)}30%{transform:translateY(12%)}45%{transform:translateY(17%)}70%{transform:translateY(12%)}90%{transform:translateY(16%)}100%{transform:translateY(100%)}}
+.dm-plant{position:absolute;left:-14%;right:-14%;bottom:-1%;height:34%;z-index:2;animation:dmshake .3s ease-in-out infinite alternate}
+.dm-plant i{position:absolute;bottom:14%;width:46%;height:100%;border-radius:60% 60% 8% 8%;background:radial-gradient(circle at 40% 30%,#5ec060,#2f7a38)}
+.dm-plant i:nth-child(1){left:0;transform:rotate(-12deg)}.dm-plant i:nth-child(2){left:27%;height:120%}.dm-plant i:nth-child(3){right:0;transform:rotate(12deg)}
+.dm-plant b{position:absolute;left:18%;right:18%;bottom:0;height:30%;border-radius:4px 4px 14px 14px;background:#c4623a;border:4px solid #7a3a1e}
+@keyframes dmshake{from{transform:rotate(-1.2deg)}to{transform:rotate(1.2deg)}}
+/* gluren van de zijkant */
+.dm-peekS{right:0;bottom:12vh;--bt:-110%;animation-name:dmpeeks}
+.dm-peekS .dm-bubble{left:30%;bottom:62%}
+@keyframes dmpeeks{0%{transform:translateX(106%) rotate(-10deg)}16%,84%{transform:translateX(40%) rotate(-10deg)}100%{transform:translateX(106%) rotate(-10deg)}}
+/* hangend aan de bovenrand */
+.dm-top{left:var(--cx);bottom:auto;top:0;animation-name:dmtop}
+.dm-top .dm-fig{transform:rotate(180deg);animation:dmswing 1s ease-in-out infinite alternate}
+.dm-top .dm-bubble{bottom:auto;top:calc(100% - 22%)}
+.dm-top .dm-bubble::after{top:auto;bottom:100%;border-top-color:transparent;border-bottom-color:#111}
+@keyframes dmtop{0%{transform:translateY(-108%)}14%{transform:translateY(-24%)}86%{transform:translateY(-24%)}100%{transform:translateY(-108%)}}
+@keyframes dmswing{from{transform:rotate(176deg)}to{transform:rotate(184deg)}}
+/* effecten */
+.dm-conf{position:absolute;top:-20px;width:10px;height:16px;border-radius:2px;animation:dmconf linear forwards}
+@keyframes dmconf{to{transform:translate(var(--dx),108vh) rotate(var(--r))}}
+.dm-heart{position:absolute;bottom:26%;font-size:34px;animation:dmheart 2.4s ease-out forwards;opacity:0}
+@keyframes dmheart{0%{transform:translateY(0) scale(.5);opacity:0}15%{opacity:1}100%{transform:translateY(-34vh) scale(1.2);opacity:0}}
+.dm-snap{position:absolute;inset:0;background:#fff;opacity:.3;animation:dmsnap .45s ease-out forwards}
+@keyframes dmsnap{to{opacity:0}}
+/* vriendenboek */
+.card.album{width:min(880px,95vw)}
+.album-count{text-align:center;font-size:24px;font-weight:700;margin:2px 0 8px}
+.album-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(98px,1fr));gap:10px}
+.album-cell{position:relative;border-radius:14px;border:4px solid var(--wood);background:rgba(255,255,255,.4);padding:4px 2px 2px;text-align:center;font-size:13px;font-weight:600;line-height:1.1}
+.album-cell canvas{width:100%;max-width:104px;height:auto;display:block;margin:0 auto}
+.album-cell .q{font-size:56px;line-height:1;padding:16px 0 18px;color:rgba(0,0,0,.25);font-family:'MedievalSharp',serif}
+.album-cell.found{background:#fff6d0}
+.album-hall{text-align:center;margin-top:10px;font-weight:600}
+@media (prefers-reduced-motion:reduce){.dm-conf,.dm-heart{display:none}}

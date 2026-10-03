@@ -11,7 +11,7 @@ export const TWISTS = [
   { id: 'slippery', name: 'Zeepvloer', icon: '🧼', desc: 'Alles is spekglad. Remmen? Bestaat niet.', slip: 0.85, weight: 2 },
   { id: 'lowgrav', name: 'Maanzwaartekracht', icon: '🌙', desc: 'Alles zweeft en springt extra hoog.', gravity: 0.4, weight: 2 },
   { id: 'bodyswap', name: 'Lichaamswissel!', icon: '🔄', desc: 'Halverwege ruil je van broer: jij bestuurt ineens het poppetje van de ander!', weight: 3 },
-  { id: 'deurman', name: 'De Deurman kijkt mee', icon: '👁️', desc: 'De Deurman komt kijken. Wie dan beweegt, verliest een punt.', weight: 2 },
+  { id: 'deurman', name: 'De Deurman kijkt mee', icon: '👀', desc: 'De Deurman is jullie grootste fan en kijkt mee. Staat hij in de deur? STIL STAAN! Wie beweegt, verliest een punt.', weight: 2 },
 ];
 export const TWIST_BY_ID = Object.fromEntries(TWISTS.map((t) => [t.id, t]));
 

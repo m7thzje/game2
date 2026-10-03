@@ -6,25 +6,36 @@ import { S, persist, hasSave, reset as resetSave } from '../save.js';
 import { Particles } from '../engine/particles.js';
 import { makeBrother, makeDeurman } from '../engine/chars.js';
 import { setupLights } from '../engine/lights.js';
-import { tex } from '../engine/textures.js';
 import * as P from '../engine/props.js';
-import { h, mesh, mat, glow, rand, TAU, damp } from '../engine/util.js';
+import { h, rand, damp } from '../engine/util.js';
+import { buildGate, partyHat } from './opening.js';
 
-const SCARE_LABELS = ['Uit (geen spoken)', 'Gezellig (zacht)', 'Eng (jumpscares)', 'Doodeng (extra veel)'];
+// Deurman-gedrag (S.settings.scare 0-3): hoe vaak de grapjas langskomt
+const HY = -0.36;   // draairichting van het schuurtje (kijkt naar de camera)
+const SCARE_LABELS = ['Uit (hij blijft thuis)', 'Af en toe', 'Vaak', 'Overal!'];
+const SCARE_TXT = [
+  'De Deurman blijft lekker thuis. Veel te rustig, maar dat mag.',
+  'Af en toe staat er ineens een Deurman in een deur. Hij zwaait. Niemand weet waarom.',
+  'Hij duikt geregeld op: in deuren, achter kasten en soms midden in je duel. Blijf stilstaan als hij kijkt!',
+  'OVERAL DEURMANNEN! Bijna elke deur heeft er één. Dit is de chaosstand. Succes.',
+];
 
 // Instellingen-kaart. onClose() wanneer gesloten.
 export function openSettings(onClose) {
   let el;
   const close = () => { ui.activeMenus = ui.activeMenus.filter((m) => m !== menu); el.remove(); persist(); onClose && onClose(); };
+  const note = h('div', { class: 'small-note' }, '');
   const menu = new Menu([
-    { label: () => `Griezelniveau: ${SCARE_LABELS[S.settings.scare]}`, cycle: true, onSelect: (d) => { S.settings.scare = (S.settings.scare + (d || 1) + 4) % 4; } },
+    { label: () => { note.textContent = SCARE_TXT[S.settings.scare] || ''; return `Deurman-gedrag: ${SCARE_LABELS[S.settings.scare]}`; }, cycle: true, onSelect: (d) => { S.settings.scare = (S.settings.scare + (d || 1) + 4) % 4; } },
     { label: () => `Flitsvrij: ${S.settings.flashFree ? 'AAN (geen felle flitsen)' : 'uit'}`, cycle: true, onSelect: () => { S.settings.flashFree = !S.settings.flashFree; } },
+    { label: () => `Alles ontgrendeld: ${S.settings.unlockAll ? 'AAN (alle hallen open)' : 'uit'}`, cycle: true, onSelect: () => { S.settings.unlockAll = !S.settings.unlockAll; } },
+    { label: () => `Sneller beginnen: ${S.settings.quickStart ? 'AAN (opening overslaan)' : 'uit'}`, cycle: true, onSelect: () => { S.settings.quickStart = !S.settings.quickStart; } },
     { label: () => `Muziek: ${Math.round(S.settings.music * 10)}/10`, cycle: true, onSelect: (d) => { S.settings.music = Math.min(1, Math.max(0, S.settings.music + 0.1 * (d || 1))); audio.musicVol = S.settings.music; if (audio.musG) audio.musG.gain.value = S.settings.music * 0.5; } },
     { label: () => `Geluidseffecten: ${Math.round(S.settings.sfx * 10)}/10`, cycle: true, onSelect: (d) => { S.settings.sfx = Math.min(1, Math.max(0, S.settings.sfx + 0.1 * (d || 1))); audio.sfxVol = S.settings.sfx; if (audio.sfxG) audio.sfxG.gain.value = S.settings.sfx; audio.sfx('coin'); } },
     { label: () => `Kwaliteit: ${S.settings.quality === 'low' ? 'Laag (snel)' : 'Hoog'} (pas na herladen)`, cycle: true, onSelect: () => { S.settings.quality = S.settings.quality === 'low' ? 'high' : 'low'; } },
     { label: 'Klaar', onSelect: () => close() },
   ]);
-  const card = h('div', { class: 'card', style: { width: 'min(640px,94vw)' } }, h('h2', {}, 'Instellingen'), menu.el, h('div', { class: 'small-note' }, 'Links/rechts verandert een waarde. De Deurman is gemaakt om te griezelen: kies "Gezellig" of "Uit" als je het te eng vindt.'));
+  const card = h('div', { class: 'card', style: { width: 'min(640px,94vw)' } }, h('h2', {}, 'Instellingen'), menu.el, note, h('div', { class: 'small-note' }, 'Links/rechts verandert een waarde.'));
   el = ui.overlay(card); ui.activeMenus.push(menu);
 }
 // Online spelen: jij bent de host (Wes), je broer doet mee als Jor via een link of code
@@ -50,12 +61,16 @@ export function openOnline(app, onClose) {
   host.start().then(render).catch((e) => { statusEl.textContent = '❌ ' + (e.message || 'Mislukt'); });
 }
 function howToPlay(onClose) {
-  const card = h('div', { class: 'card' }, h('h2', {}, 'Hoe werkt het?'),
-    h('p', { html: 'Wes en Jor sparen voor <b>DutchTuber LIVE</b>. Loop door het dorp, praat met de dorpelingen en doe <b>karweitjes</b> (minigames) voor <b>heitjes</b>. Verzamel <b>600</b> voor 2 kaartjes!' }),
-    h('div', { class: 'ctrl' }, ...[0, 1].map((i) => h('div', { style: { '--c': i ? '#4a8cff' : '#35c46f' } }, h('h4', {}, i ? 'Jor (speler 2)' : 'Wes (speler 1)'), h('ul', {}, h('li', { html: `<kbd>${KEY_LABELS[i].move}</kbd> lopen` }), h('li', { html: `<kbd>${KEY_LABELS[i].a}</kbd> praten / springen / actie` }), h('li', { html: `<kbd>${KEY_LABELS[i].b}</kbd> lantaarn / tweede actie` }))))),
-    h('p', { html: '👁️ <b>De Deurman</b> opent deuren in het dorp en tijdens de klusjes. <b>Blijf stil</b> als hij in de deur staat! Als hij je volgt: houd je lantaarn op hem gericht.' }),
-    h('p', { html: '✨ Zoek de <b>8 gouden deurknoppen</b>, kisten en muntjes. <kbd>Esc</kbd> = menu · <kbd>Tab</kbd> = dagboek · <kbd>M</kbd> = geluid uit.' }),
-    h('div', { class: 'small-note' }, 'Druk op een actieknop om te sluiten (gamepad werkt ook!)'));
+  const card = h('div', { class: 'card', style: { maxHeight: '92vh', overflow: 'auto' } }, h('h2', {}, 'Hoe werkt het?'),
+    h('p', { html: 'Wes en Jor runnen de <b>Speelhal</b> van Koning Klopper! Loop naar een kast en druk op je actieknop voor een <b>duel</b>: 1 tegen 1 op hetzelfde scherm. Wie wint? Dat bepaal jij.' }),
+    h('div', { class: 'ctrl' }, ...[0, 1].map((i) => h('div', { style: { '--c': i ? '#4a8cff' : '#35c46f' } }, h('h4', {}, i ? 'Jor (speler 2)' : 'Wes (speler 1)'), h('ul', {}, h('li', { html: `<kbd>${KEY_LABELS[i].move}</kbd> lopen` }), h('li', { html: `<kbd>${KEY_LABELS[i].a}</kbd> praten / springen / actie` }), h('li', { html: `<kbd>${KEY_LABELS[i].b}</kbd> tweede actie` }))))),
+    h('p', { html: '🌀 Elk duel krijgt een <b>twist</b>: omgekeerde besturing, lichaamswissel, zeepvloer... Het wordt vanzelf grappig.' }),
+    h('p', { html: '🏗️ Duels leveren <b>heitjes</b> op. Daarmee laat je nieuwe <b>hallen bouwen</b> (dichtgetimmerde deuren in de hoofdhal). Hoe meer je speelt, hoe hoger je <b>rang</b>!' }),
+    h('p', { html: '🏆 Het <b>Wiel van Gekte</b> kiest een duel, een <b>toernooi</b> mixt er meerdere en de <b>Uitdaging van de dag</b> geeft bonus. Het <b>Feestbord</b> houdt de stand bij.' }),
+    h('p', { html: '🏘️ Het <b>dorp</b> staat nog steeds klaar voor <b>karweitjes</b>: samen klussen voor extra heitjes (en hoedjes!).' }),
+    h('p', { html: '🚪 <b>De Deurman</b> is een grapjas in een pak. Hij staat graag in deuren, zwaait met feesthoedjes en verzamelt handtekeningen. Hij doet niks. Meestal.' }),
+    h('p', { html: '<kbd>Esc</kbd> = pauze · <kbd>M</kbd> = geluid uit · gamepads werken ook.' }),
+    h('div', { class: 'small-note' }, 'Druk op een actieknop om te sluiten'));
   const el = ui.overlay(card); let t = 0.3;
   const drv = { update() { t -= 0.016; if (t < 0 && (input.p[0].aP || input.p[1].aP || input.pressed('Escape'))) { ui.activeMenus = ui.activeMenus.filter((m) => m !== drv); el.remove(); onClose && onClose(); } } };
   ui.activeMenus.push(drv);
@@ -64,69 +79,83 @@ function howToPlay(onClose) {
 export class MenuMode {
   constructor(app) {
     this.app = app; this.t = 0;
-    const r = app.renderer;
-    this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 300);
-    this.fx = new Particles(600, { additive: true }); this.fx.setViewportHeight(innerHeight);
+    this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 400);
+    this.fx = new Particles(900, { additive: true }); this.fx.setViewportHeight(innerHeight);
     this.scene.add(this.fx.points);
-    const L = setupLights(this.scene, 'dusk', { shadow: 16, center: [0, 0, 2], fogNear: 18, fogFar: 70 });
-    L.sun.position.set(-14, 9, 12); L.sun.intensity = 1.6;
-    const gr = mesh(new THREE.CircleGeometry(60, 40), new THREE.MeshStandardMaterial({ map: tex.grass(30, 30), color: 0xb0c8b0 }), { cast: false, rot: [-Math.PI / 2, 0, 0] }); this.scene.add(gr);
-    const path = mesh(new THREE.PlaneGeometry(3, 30), new THREE.MeshStandardMaterial({ map: tex.dirt(1, 8) }), { cast: false, pos: [0, 0.02, 8], rot: [-Math.PI / 2, 0, 0] }); this.scene.add(path);
-    const house = P.houseSimple(8, 6, 3.6, { thatch: true, wall: '#d8c9a8', doorColor: 0x5a3a24 }); house.position.set(0, 0, -5); this.scene.add(house); this.door = house.userData.door; this.house = house;
-    // deur is een eigen glanzend rechthoek; Deurman staat erin
-    this.deur = makeDeurman(0.9); this.deur.group.position.set(0, 0, -1.9); this.scene.add(this.deur.group); this.deur.group.visible = false;
-    for (let i = 0; i < 26; i++) { const a = rand(0, TAU), d = rand(9, 40); const t = i % 3 ? P.pine(rand(5, 9)) : P.tree(rand(5, 8)); t.position.set(Math.cos(a) * d, 0, Math.sin(a) * d - 8); if (t.position.z > 6) t.position.z -= 18; this.scene.add(t); }
-    for (const [x, z] of [[-6, -3], [6, -2]]) { const l = P.lampPost(); l.position.set(x, 0, z); this.scene.add(l); }
-    for (const [x, z, c] of [[-4, 3, 0xff6fa5], [4.5, 3, 0xffe14a], [-7, 6, 0xffffff]]) { const f = P.flowerPatch(c, 8, 1.2); f.position.set(x, 0, z); this.scene.add(f); }
-    const m = glow(0xfff0b0, 1.6); const moon = mesh(new THREE.SphereGeometry(5, 20, 14), m, { cast: false, pos: [-22, 24, -50] }); moon.material = new THREE.MeshBasicMaterial({ color: 0xfff6d0, fog: false }); this.scene.add(moon);
-    this.bros = [0, 1].map((i) => { const c = makeBrother(i); c.group.position.set(i ? 1.4 : -1.4, 0, 3.2); c.targetYaw = c.yaw = Math.PI + (i ? -0.2 : 0.2); this.scene.add(c.group); c.pose = 'wave'; return c; });
-    this.fliesT = 0; this.doorT = 4; this.doorState = 0; this.open = 0;
-    this.camera.position.set(0, 2.6, 11); this.camera.lookAt(0, 1.8, 0);
+    const L = setupLights(this.scene, 'night', { shadows: false, fogNear: 40, fogFar: 200 }); L.sun.intensity = 1.6; L.hemi.intensity = 1.5;
+    // de Speelhal-berg met neonpoort (bord aan, deuren dicht: het is nacht en de poort gloeit)
+    this.gate = buildGate(this.scene, { trees: 16, clear: [[8.4, -11, 6]] }); this.gate.setSign(true);
+    // schuurtje met een deur: daar komt de Deurman uit met een feesthoedje
+    const house = P.houseSimple(5, 4, 3.2, { thatch: true, wall: '#d8c9a8', doorColor: 0x5a3a24 }); house.position.set(8.4, 0, -11); house.rotation.y = HY; this.scene.add(house);
+    this.leaf = house.userData.door.userData.leaf; this.doorG = house.userData.door;
+    this.doorGlow = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 2.0), new THREE.MeshBasicMaterial({ color: 0xffe0a0 })); this.doorGlow.position.set(0, 1.05, 0.026); this.doorGlow.visible = false; this.doorG.add(this.doorGlow);   // warme gloed achter de Deurman
+    this.deur = makeDeurman(0.78); this.deur.group.visible = false; this.scene.add(this.deur.group);
+    this.hat = partyHat(0.78); this.hat.position.set(0.02, 0.2, 0); this.hat.rotation.z = 0.18; this.deur.head.add(this.hat);
+    this.bros = [0, 1].map((i) => { const c = makeBrother(i); c.group.position.set(i ? 3.0 : 1.4, 0, i ? -3 : -2); c.targetYaw = c.yaw = Math.PI + (i ? -0.3 : 0.3); this.scene.add(c.group); return c; });
+    this.doorT = 3.5; this.doorState = 0; this.open = 0; this.flickT = 9;
+    this.camera.position.set(0, 4, 12); this.camera.lookAt(-9, 7, -30);
   }
   enter() {
-    ui.hud.clear && (ui.hudEl.innerHTML = '');
+    ui.hudEl.innerHTML = '';
     this.build(); audio.music('menu'); ui.fade(0, 700);
   }
-  exit() { ui.activeMenus = []; ui.clearScreens(); }
+  exit() { ui.activeMenus = []; ui.clearScreens(); try { this.fx.dispose(); } catch (e) { /* al weg */ } }
   build() {
     ui.clearScreens(); ui.activeMenus = [];
     const items = [];
-    if (hasSave()) items.push({ label: 'Verder spelen', sub: () => `🪙 ${S.coins} heitjes · ${Object.keys(S.jobs).length} klussen gedaan`, onSelect: () => this.go(false) });
-    items.push({ label: hasSave() ? 'Nieuw spel' : 'Spel starten', onSelect: () => { if (hasSave()) { resetSave(); S.names = ['Wes', 'Jor']; } this.go(true); } });
-    items.push({ label: '🌐 Online spelen (host)', sub: 'Twee apparaten, één spel', onSelect: () => { this.hide(); openOnline(this.app, () => this.show()); } });
+    if (hasSave()) items.push({ label: 'Verder spelen', sub: () => `🪙 ${S.coins} heitjes · ${S.arcade ? S.arcade.plays : 0} duels gespeeld`, onSelect: () => this.go(false) });
+    items.push({ label: hasSave() ? 'Nieuw spel' : 'Spel starten', onSelect: () => { if (hasSave()) this.confirmNew(); else this.go(true); } });
+    items.push({ label: '🌐 Online spelen', sub: 'Twee apparaten, één spel (jij bent de host)', onSelect: () => { this.hide(); openOnline(this.app, () => this.show()); } });
     items.push({ label: '🌐 Meedoen met een code', onSelect: () => { location.search = '?join'; } });
     items.push({ label: 'Hoe werkt het?', onSelect: () => { this.hide(); howToPlay(() => this.show()); } });
     items.push({ label: 'Instellingen', onSelect: () => { this.hide(); openSettings(() => this.show()); } });
     this.menu = new Menu(items);
-    const wrap = h('div', { class: 'menu-wrap', style: { position: 'absolute', inset: 0, justifyContent: 'flex-start', paddingTop: '4vh', pointerEvents: 'none' } },
-      h('div', { class: 'title' }, 'Heitjes voor', h('br'), 'Karweitjes'),
-      h('div', { class: 'subtitle' }, 'Een co-op avontuur voor twee broers — en één Deurman'),
-      h('div', { style: { pointerEvents: 'auto', width: 'min(420px,92vw)', marginTop: '2vh' } }, this.menu.el),
-      h('div', { class: 'small-note', style: { color: '#fff', textShadow: '0 2px 0 #000', marginTop: '14px' } }, `Wes: WASD + F/G   ·   Jor: pijltjes + Enter/Shift   ·   M = geluid`));
+    const wrap = h('div', { class: 'menu-wrap mm', style: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 'min(500px,100vw)', justifyContent: 'flex-start', paddingTop: '2.5vh', pointerEvents: 'none', background: 'linear-gradient(90deg,rgba(8,4,24,.72),rgba(8,4,24,.45) 70%,rgba(8,4,24,0))' } },
+      h('style', {}, '.mm .btn{font-size:21px;padding:7px 14px}.mm .btnrow{gap:7px;margin-top:6px}.mm .title{font-size:min(7.5vw,66px)!important}.mm .subtitle{font-size:20px!important;margin:4px 0 8px!important}'),
+      h('div', { class: 'title' }, 'Wes & Jor:', h('br'), 'De Speelhal'),
+      h('div', { class: 'subtitle' }, 'Duels, feestjes en één Deurman'),
+      h('div', { style: { pointerEvents: 'auto', width: 'min(380px,92vw)', marginTop: '1vh' } }, this.menu.el),
+      h('div', { class: 'small-note', style: { color: '#fff', textShadow: '0 2px 0 #000', marginTop: '10px', fontSize: '13px' } }, `Wes: WASD + F/G   ·   Jor: pijltjes + Enter/Shift   ·   M = geluid`));
     this.wrap = wrap; ui.screens.append(wrap); ui.activeMenus.push(this.menu);
+  }
+  // Nieuw spel wist alles: even vragen
+  confirmNew() {
+    this.hide(); let el;
+    const done = (yes) => { ui.activeMenus = ui.activeMenus.filter((m) => m !== cm); el.remove(); if (yes) this.go(true); else this.show(); };
+    const cm = new Menu([{ label: 'Nee, terug', onSelect: () => done(false) }, { label: 'Ja, begin helemaal opnieuw', onSelect: () => done(true) }]);
+    el = ui.overlay(h('div', { class: 'card', style: { width: 'min(520px,94vw)' } }, h('h2', {}, 'Nieuw spel?'), h('p', { style: { textAlign: 'center' } }, 'Je heitjes, hallen, rang en hoedjes worden gewist.'), cm.el)); ui.activeMenus.push(cm);
   }
   hide() { this.wrap.style.display = 'none'; }
   show() { this.wrap.style.display = ''; }
   async go(newGame) {
     if (this.going) return; this.going = true; ui.activeMenus = [];
     audio.sfx('powerup'); await ui.fade(1, 600);
+    if (newGame) { resetSave(); S.names = ['Wes', 'Jor']; }
     persist();
-    await this.app.goHub({ newGame });
+    if (newGame && !S.settings.quickStart) await this.app.goOpening({});
+    else await this.app.goArcade({ intro: !!newGame });
   }
   resize(w, hh) { this.camera.aspect = w / hh; this.camera.updateProjectionMatrix(); this.fx.setViewportHeight(hh); }
   update(dt) {
     this.t += dt; const t = this.t;
-    this.bros.forEach((c, i) => { c.update(dt); });
-    // sfeer: de deur kraakt open, de Deurman kijkt, de broers schrikken
+    this.gate.update(dt, t);
+    this.flickT -= dt; if (this.flickT <= 0) { this.flickT = rand(10, 18); this.gate.flicker(); }
+    // de Deurman: deur gaat open, hij komt zwaaien met een feesthoedje, deur gaat weer dicht
     this.doorT -= dt;
-    if (this.doorT <= 0) { if (this.doorState === 0) { this.doorState = 1; this.doorT = 5.5; audio.sfx('creak'); this.bros.forEach((c) => (c.pose = 'scared')); } else { this.doorState = 0; this.doorT = 7 + Math.random() * 4; audio.sfx('door'); this.bros.forEach((c) => (c.pose = 'wave')); } }
-    this.open = damp(this.open, this.doorState, 1.6, dt);
-    this.door.userData.leaf.rotation.y = -1.9 * this.open;
-    this.deur.group.visible = this.open > 0.6; this.deur.group.position.set(0, 0, -1.85); this.deur.group.rotation.y = 0; this.deur.update(dt); this.deur.group.rotation.y = 0;
-    this.fliesT -= dt; if (this.fliesT < 0) { this.fliesT = 0.12; this.fx.emit(rand(-12, 12), rand(0.5, 4), rand(-6, 8), rand(-.3, .3), rand(0, .3), rand(-.3, .3), { life: 3, size: 0.15, color: 0xfff08a, gravity: 0, shrink: false }); }
+    if (this.doorT <= 0) {
+      if (this.doorState === 0) { this.doorState = 1; this.doorT = 5.2; audio.sfx('creak', { vol: 0.5 }); setTimeout(() => { if (this.doorState && this.t > 0) { audio.sfx('pop'); const g = this.deur.group.position; this.fx.burst(g.x, 3, g.z, { count: 30, colors: [0xff5ad8, 0xffe14a, 0x5ad8ff, 0x7bff7b], speed: 5, size: 0.35, life: 1.3, gravity: 3 }); } }, 900); }
+      else { this.doorState = 0; this.doorT = 8 + Math.random() * 5; audio.sfx('door', { vol: 0.5 }); }
+      this.bros.forEach((c) => (c.pose = this.doorState ? 'wave' : 'idle'));
+    }
+    this.open = damp(this.open, this.doorState, 1.8, dt);
+    this.leaf.rotation.y = -1.9 * this.open; this.doorGlow.visible = this.open > 0.05;
+    const hp = this.doorG.getWorldPosition(new THREE.Vector3());
+    const d = this.deur; d.group.position.set(hp.x + Math.sin(HY) * 0.7, 0, hp.z + Math.cos(HY) * 0.7); d.yaw = d.targetYaw = HY; d.update(dt); d.group.visible = this.open > 0.7;
+    d.arms[1].rotation.z = -2.7 + Math.sin(t * 9) * 0.35; d.group.position.y = 0;
+    this.bros.forEach((c) => c.update(dt));
+    this.fx.emit(rand(-30, 30), rand(0.5, 6), rand(-20, 20), rand(-.3, .3), rand(0, .3), rand(-.3, .3), { life: 3, size: 0.15, color: 0xfff08a, gravity: 0, shrink: false });
     this.fx.update(dt);
-    this.camera.position.x = Math.sin(t * 0.2) * 1.6; this.camera.position.y = 2.6 + Math.sin(t * 0.3) * 0.25; this.camera.lookAt(0, 1.9, 0);
-    ui.setVignette(this.doorState ? 0.35 * this.open : 0);
+    this.camera.position.x = Math.sin(t * 0.18) * 1.8; this.camera.position.y = 4 + Math.sin(t * 0.27) * 0.3; this.camera.lookAt(-9 + Math.sin(t * 0.13) * 1.2, 7, -30);
   }
   render(renderer) { renderer.render(this.scene, this.camera); }
 }

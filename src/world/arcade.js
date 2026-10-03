@@ -21,6 +21,10 @@ import { rugTexture, zoneSign, ZONE_PROPS, shell } from './arcade_decor.js';
 import { ArcadeLife } from './arcade_life.js';
 import { mergeStatic } from './merge.js';
 import { dailyInfo, dailyDone, dailyBonus, dailyStreak } from '../engine/daily.js';
+import { isUnlocked, unlockHall, HALL_COST, HALL_NAMES, DEUR_HALL_STICKERS, rank, rankFrac, rankUp, RANKS, nextHall, hallStatus, hallExists, unlockedIds, stickers } from '../engine/progress.js';
+import { openSettings, openOnline } from './menu.js';
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const HALL = HALL_SIZE;              // 56 x 40: x: -28..28, z: -20..20 (zones/decor: arcade_zones.js, arcade_decor.js, arcade_cabs.js, arcade_life.js)
 const PIC = { dodgeball: '🔥', cakefight: '🎂', tugwar: '🪢', airhockey: '🏒', quickdraw: '🤠', memory: '🃏', paint: '🎨', duckshoot: '🦆', karts: '🏎️', climb: '🧗', tanks: '💥', chairs: '🪑', ticktock: '🕰️', minecart: '🚃', buttons: '🧱', vines: '🌿', screws: '🔩', chop: '🪓', bomber: '💣', tron: '🏍️', hexagone: '⬡', tag: '🧨', brawl: '🥊', spacewar: '🚀', volley: '🏐', soccer: '⚽', pacduel: '👻', golf: '⛳', stack: '🏗️', blocks: '🧩', connect4: '🔴', dance: '💃', quiz: '🎤', code: '🔮', bake: '🥧', claw: '🧸', kalaha: '💎', bowling: '🎳', ducks: '🛁', flappy: '🐲', pinball: '🎱', hide: '🕵️', heist: '💰', catapult: '🏰' };
@@ -48,6 +52,7 @@ export class ArcadeMode {
   constructor(app, opts) {
     this.app = app; this.opts = opts;
     this.hallId = (opts.extra && opts.extra.hall != null) ? opts.extra.hall : (opts.from ? hallOf(opts.from) : 0);
+    if (!isUnlocked(this.hallId) || !ARCADE_HALLS[this.hallId]) this.hallId = 0;
     this.hall = ARCADE_HALLS[this.hallId]; this.theme = THEMES[this.hallId]; this.hostName = this.theme.host;
     this.t = 0; this.busy = false; this.menu = null; this.modal = null; this.hudT = 0; this.spin = null; this.promptKey = '';
     this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.3, 300);
@@ -56,7 +61,7 @@ export class ArcadeMode {
     this.sun = this.sunL = L.sun; this.hemi = L.hemi; L.sun.intensity = 1.0; L.sun.position.set(10, 30, 15); L.hemi.intensity = 1.35;
     this.scene.background = new THREE.Color(THEMES[this.hallId].bg); this.scene.fog.color.set(THEMES[this.hallId].bg);
     this.W = HALL.w; this.Dp = HALL.d;
-    this.colliders = []; this.interact = []; this.cabs = []; this.glows = []; this.eggs = [];
+    this.colliders = []; this.interact = []; this.cabs = []; this.glows = []; this.eggs = []; this.doorInfo = {}; this.fallers = []; this.pointers = []; this.noAct = false;
     this.games = this.loadedIds(); this.D = new Deco(); this.zones = layoutHall(this.hallId);
     const first = this.scene.children.length;
     this.buildHall(); this.buildDoor(); this.buildCabinets(); this.buildCenter(); this.buildBack();
@@ -76,7 +81,7 @@ export class ArcadeMode {
   }
   hasTourney() { return !!TOURNEY; }
   loadedIds() { return this.hall.ids.filter((id) => this.app.games[id]); }
-  allLoaded() { return ARCADE_IDS.filter((id) => this.app.games[id]); }
+  allLoaded() { const ok = new Set(unlockedIds()); return ARCADE_IDS.filter((id) => this.app.games[id] && ok.has(id)); }   // alleen spellen uit ontgrendelde hallen
   isOff(id) { return (S.arcade.excluded || []).includes(id); }
   defOf(id) { return this.app.games[id] || { name: NAME[id], icon: PIC[id] }; }
 
@@ -131,17 +136,180 @@ export class ArcadeMode {
   buildDoor() {
     const sc = this.scene; const zb = -HALL.d / 2;
     for (const d of DOORS[this.hallId]) {
-      const other = ARCADE_HALLS[d.to]; const dx = d.x; const col = [0xffd23f, 0xff2bd6, 0xffa030][d.to];
-      const g = new THREE.Group(); const fr = mat([0x7a2fd4, 0x1a2a6a, 0xb03020][d.to], { metalness: 0.5, roughness: 0.4 });
+      const other = ARCADE_HALLS[d.to]; const dx = d.x; const col = [0xffd23f, 0xff2bd6, 0xffa030][d.to] || 0xffd23f;
+      const g = new THREE.Group(); const fr = mat([0x7a2fd4, 0x1a2a6a, 0xb03020][d.to] || 0x4a3a7a, { metalness: 0.5, roughness: 0.4 });
       for (const sx of [-1, 1]) g.add(mesh(new THREE.BoxGeometry(0.7, 8, 0.8), fr, { pos: [sx * 2.1, 4, 0] }));
       g.add(mesh(new THREE.BoxGeometry(5, 0.8, 0.8), fr, { pos: [0, 8.2, 0] }));
       const gl = mesh(new THREE.PlaneGeometry(3.6, 7.6), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55, depthWrite: false }), { cast: false, receive: false, pos: [0, 4, 0.15] }); g.add(gl); (this.doorGlows ||= []).push(gl);
       g.add(mesh(new THREE.TorusGeometry(2.1, 0.12, 5, 20, Math.PI), glow(col, 1.4), { cast: false, pos: [0, 7.6, 0.3] }));
       g.position.set(dx, 0, zb + 0.5); sc.add(g);
       const back = d.to === 0;
-      const lb = floatLabel(`${back ? '↩' : ['', '🌀', '🎪'][d.to]} ${other.name}`, back ? 'terug naar de Speelhal' : 'meer spellen!', back ? '#ffe14a' : '#ff9aef'); lb.scale.set(4.4, 1.4, 1); lb.position.set(dx, 10.2, zb + 1); sc.add(lb);
-      this.interact.push({ type: 'door', to: d.to, x: dx, z: zb + 3.8, r: 3.4, label: `Naar de ${other.name}` });
+      const info = this.doorInfo[d.to] = { to: d.to, x: dx, z: zb + 3.8, gl, name: HALL_NAMES[d.to] || other.name, back };
+      info.it = { type: 'door', to: d.to, x: dx, z: zb + 3.8, r: 3.4, label: `Naar de ${other.name}` }; this.interact.push(info.it);
+      if (!back && !isUnlocked(d.to)) this.buildLock(info, zb);
+      this.setDoorLabel(info);
     }
+  }
+
+  // ---- hallen bouwen: dichtgetimmerde deur ('in aanbouw') met planken, bouwhekken, hoedjes en een bord
+  buildLock(info, zb) {
+    const L = new THREE.Group(); L.userData.dynamic = true; L.position.set(info.x, 0, zb + 0.5); this.scene.add(L); info.lock = L; info.parts = [];
+    const wood = new THREE.MeshStandardMaterial({ map: tex.planks(1, 1, '#b98a54'), roughness: 0.9 });
+    const add = (m) => { L.add(m); info.parts.push(m); return m; };
+    for (const [y, rz] of [[1.6, 0.05], [3.2, -0.07], [4.9, 0.06], [6.6, -0.04]]) add(mesh(new THREE.BoxGeometry(5.6, 0.55, 0.22), wood, { pos: [0, y, 0.45], rot: [0, 0, rz] }));
+    for (const rz of [0.62, -0.62]) add(mesh(new THREE.BoxGeometry(0.5, 9.4, 0.2), wood, { pos: [0, 4.2, 0.7], rot: [0, 0, rz] }));
+    const stripe = canvasTex(256, 64, (g, w, hh) => { g.fillStyle = '#f6f0e0'; g.fillRect(0, 0, w, hh); g.fillStyle = '#ff7a1a'; for (let i = -2; i < 8; i++) { g.beginPath(); g.moveTo(i * 40, hh); g.lineTo(i * 40 + 20, hh); g.lineTo(i * 40 + 52, 0); g.lineTo(i * 40 + 32, 0); g.fill(); } });
+    for (const sx of [-1, 1]) { const b = add(mesh(new THREE.BoxGeometry(3.0, 0.8, 0.14), new THREE.MeshStandardMaterial({ map: stripe, roughness: 0.8 }), { pos: [sx * 2.0, 1.1, 2.4], rot: [0, sx * 0.25, 0] })); for (const lx of [-1.2, 1.2]) b.add(mesh(new THREE.BoxGeometry(0.12, 1.0, 0.12), mat(0x888890), { pos: [lx, -0.5, 0] })); }
+    for (const sx of [-1, 1]) { const c = add(mesh(new THREE.ConeGeometry(0.42, 1.1, 8), mat(0xff7a1a), { pos: [sx * 3.9, 0.55, 3.0] })); c.add(mesh(new THREE.CylinderGeometry(0.27, 0.31, 0.2, 8), mat(0xf6f0e0), { pos: [0, 0.12, 0] })); }
+    const sg = add(new THREE.Mesh(new THREE.PlaneGeometry(3.4, 2.1), new THREE.MeshBasicMaterial({ map: null }))); sg.position.set(0, 4.3, 1.0); info.sign = sg;
+    info.gl.material.opacity = 0.1;
+    this.drawLockSign(info);
+  }
+  drawLockSign(info) {
+    if (!info.sign) return; const cost = HALL_COST[info.to] || 0, need = Math.max(0, cost - S.coins);
+    const t = canvasTex(340, 210, (g, w, hh) => {
+      g.fillStyle = '#f2e2b0'; g.fillRect(0, 0, w, hh); g.strokeStyle = '#7a4a1a'; g.lineWidth = 12; g.strokeRect(6, 6, w - 12, hh - 12); g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = '#2a1a50'; g.font = 'bold 44px Fredoka, Arial Black, sans-serif'; g.fillText(info.name.toUpperCase(), w / 2, 48, w - 30);
+      g.fillStyle = '#d8372c'; g.font = 'bold 36px Fredoka, Arial, sans-serif'; g.fillText('🚧 IN AANBOUW', w / 2, 100, w - 30);
+      g.fillStyle = '#3a2412'; g.font = 'bold 32px Fredoka, Arial, sans-serif'; g.fillText(need > 0 ? `nog ${need} heitjes` : `bouw nu voor ${cost}!`, w / 2, 152, w - 30);
+      g.font = '22px Fredoka, Arial, sans-serif'; g.fillStyle = '#7a5a3a'; g.fillText(`(kost ${cost} heitjes)`, w / 2, 186, w - 30);
+    });
+    const old = info.sign.material.map; info.sign.material.map = t; info.sign.material.needsUpdate = true; if (old) old.dispose();
+  }
+  setDoorLabel(info) {
+    if (info.lb) { this.scene.remove(info.lb); info.lb.material.map && info.lb.material.map.dispose(); info.lb.material.dispose(); }
+    const locked = !!info.lock && !info.built; const o = ARCADE_HALLS[info.to];
+    const lb = floatLabel(`${info.back ? '↩' : locked ? '🚧' : ['', '🌀', '🎪'][info.to] || '🚪'} ${o.name}`, info.back ? 'terug naar de Speelhal' : locked ? 'in aanbouw!' : 'meer spellen!', info.back ? '#ffe14a' : locked ? '#ffb347' : '#ff9aef');
+    lb.scale.set(4.4, 1.4, 1); lb.position.set(info.x, 10.2, -HALL.d / 2 + 1); this.scene.add(lb); info.lb = lb;
+    info.it.label = locked ? `Bouwen: ${o.name}` : `Naar de ${o.name}`;
+  }
+  refreshDoors() { for (const i of Object.values(this.doorInfo)) if (i.lock && !i.built) this.drawLockSign(i); }
+  // Bouwanimatie: hameren, planken vallen weg, confetti en fanfare; daarna werkt de deur
+  async buildAnim(to) {
+    const info = this.doorInfo[to]; const L = info.lock; const zb = -HALL.d / 2; const dx = info.x;
+    this.camOverride = { x: dx, z: -15, t: 99 }; await sleep(800);
+    for (let i = 0; i < 8; i++) { audio.sfx(i % 2 ? 'wood' : 'chop'); this.camShake = 0.22; L.position.x = dx + rand(-0.06, 0.06); this.fx.burst(dx + rand(-2.5, 2.5), 1 + rand(0, 5), zb + 2.2, { count: 8, color: 0xd8c8a8, speed: 3, life: 0.6, gravity: 4, size: 0.45 }); await sleep(190); }
+    L.position.x = dx; audio.sfx('win'); audio.sfx('powerup'); ui.flash('#fff', 300);
+    for (let i = 0; i < 5; i++) setTimeout(() => this.fx.burst(dx + rand(-3, 3), 4 + rand(0, 5), zb + 3, { count: 40, colors: [0xff5ad8, 0xffe14a, 0x5ad8ff, 0x7bff7b], speed: 8, size: 0.45, life: 1.5, gravity: 3 }), i * 220);
+    for (const m of info.parts) this.fallers.push({ m, vx: rand(-4, 4), vy: rand(4, 9), vz: rand(3, 9), wx: rand(-4, 4), wz: rand(-4, 4), t: 3.5 });
+    info.built = true; info.gl.material.opacity = 0.55; this.setDoorLabel(info); this.life.cheer && this.life.cheer(); this.refreshHud();
+    await sleep(2300); this.camOverride = null;
+    S.flags['built_' + to] = true; persist();
+    await this.say([{ who: 'Koning Klopper', text: `KLAAR! De ${info.name} is gebouwd! De bouwvakkers nemen vanaf nu vrij. Voor altijd, zeiden ze. Ik denk dat ze twee dagen bedoelden.` }, { who: 'Koning Klopper', text: `Er zijn ${ARCADE_HALLS[to].ids.length} nieuwe spellen. Ze doen nu ook mee aan het Wiel en de toernooien!` }]);
+  }
+  async buildHallDoor(it) {
+    const id = it.to, cost = HALL_COST[id] || 0, name = (this.doorInfo[id] && this.doorInfo[id].name) || ARCADE_HALLS[id].name;
+    const c = await this.choose(`🚧 Laat de ${name} bouwen voor ${cost} heitjes?`, ['Ja, bouwen!', 'Nee, nog niet'], `Jullie hebben 🪙 ${S.coins} heitjes · ${ARCADE_HALLS[id].ids.length} nieuwe spellen erbij`);
+    if (c !== 0) return;
+    if (S.coins < cost) { await this.say([{ who: 'Koning Klopper', text: `Dat kost ${cost} heitjes en jullie hebben er ${S.coins}. Win nog ${cost - S.coins} heitjes met duels, toernooien of de Uitdaging van de dag!` }]); return; }
+    if (!unlockHall(id)) return;
+    this.refreshHud(); await this.buildAnim(id);
+  }
+  // Bouwplan-bord (kaart met alle hallen, rang en statistieken)
+  buildPlan() {
+    const D = this.D; const px = 7.5, pz = 14.2;
+    D.cyl(0.1, 0.12, 3.0, 6, px - 1.2, 1.5, pz, 0x6b4a2e); D.cyl(0.1, 0.12, 3.0, 6, px + 1.2, 1.5, pz, 0x6b4a2e);
+    const bt = canvasTex(256, 160, (g, w, hh) => { g.fillStyle = '#1d4a9a'; g.fillRect(0, 0, w, hh); g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 1; for (let x = 0; x < w; x += 16) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, hh); g.stroke(); } for (let y = 0; y < hh; y += 16) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } g.strokeStyle = '#fff'; g.lineWidth = 3; g.strokeRect(34, 60, 70, 60); g.strokeRect(120, 60, 50, 60); g.strokeRect(184, 60, 40, 60); g.textAlign = 'center'; g.fillStyle = '#fff'; g.font = 'bold 34px Fredoka, Arial Black, sans-serif'; g.fillText('BOUWPLAN', w / 2, 38); });
+    this.scene.add(mesh(new THREE.BoxGeometry(2.8, 1.8, 0.12), new THREE.MeshStandardMaterial({ map: bt, roughness: 0.8 }), { pos: [px, 2.4, pz], cast: false }));
+    const pl = floatLabel('🏗️ Bouwplan', 'hallen, rang & stand', '#9ad8ff'); pl.position.set(px, 4.9, pz); this.scene.add(pl);
+    this.colliders.push({ x: px, z: pz, r: 1.0 });
+    this.interact.push({ type: 'plan', x: px, z: pz + 2, r: 3.2, label: 'Bouwplan bekijken' });
+  }
+  async planModal() {
+    const r = rank(), A = S.arcade, n = S.names; const cards = [];
+    for (let id = 0; id <= 4; id++) {
+      const st = hallStatus(id), cost = HALL_COST[id] || 0, ex = hallExists(id), nm = ex || st === 'built' ? (HALL_NAMES[id] || ARCADE_HALLS[id].name) : null;
+      let body, cls;
+      if (st === 'built') { body = `✅ Gebouwd${ex ? ` · ${ARCADE_HALLS[id].ids.length} spellen` : ''}`; cls = '#1d9a52'; }
+      else if (st === 'building') { body = `🚧 In aanbouw · kost ${cost} 🪙<br><small>${S.coins >= cost ? 'Genoeg heitjes! Ga naar de deur.' : `nog ${cost - S.coins} heitjes`}</small>`; cls = '#c77a1a'; }
+      else body = id === 4 ? `Geheim<br><small>Deurman-stickers: ${stickers().length}/${DEUR_HALL_STICKERS}</small>` : `Geheim<br><small>${cost ? `kost later ${cost} 🪙` : 'nog niet klaar'}</small>`, cls = '#7a5aa8';
+      cards.push(h('div', { style: { border: `3px solid ${cls}`, borderRadius: '12px', padding: '6px 10px', background: 'rgba(255,255,255,.55)', textAlign: 'center', minWidth: '118px', flex: '1' }, html: `<b style="font-size:19px">${nm ? ['🏛️', '🌀', '🎪', '⚽', '🚪'][id] + ' ' + nm : '❓ ???'}</b><br><span style="color:${cls};font-weight:700">${body}</span>` }));
+    }
+    const nx = r.next; const goal = nx ? `Volgende rang: ${nx.icon} ${nx.name} bij ${nx.at} punten (nu ${r.points})` : 'Hoogste rang bereikt! Vraag Koning Klopper om het Slotfeest.';
+    const bar = h('div', { style: { height: '14px', borderRadius: '8px', background: '#cdbf9a', overflow: 'hidden', border: '2px solid #5b3a1e', margin: '4px 0' } }, h('i', { style: { display: 'block', height: '100%', width: Math.round(rankFrac() * 100) + '%', background: 'linear-gradient(90deg,#ffcf3a,#ff8a3a)' } }));
+    const fav = Object.entries(A.byGame).sort((a, b) => b[1].plays - a[1].plays)[0];
+    const stats = `🎮 ${A.plays} duels · 🏅 ${n[0]} ${A.wins[0]} – ${A.wins[1]} ${n[1]} · 🤝 ${A.draws} gelijk · 🏆 toernooien ${A.tourneys[0]} – ${A.tourneys[1]}<br>🌟 dagduels ${(S.daily && S.daily.total) || 0} · 🚪 Deurman-stickers ${stickers().length} · 🪙 ${S.coins} heitjes${fav ? ` · favoriet: ${this.defOf(fav[0]).icon || ''} ${this.defOf(fav[0]).name}` : ''}`;
+    const body = h('div', { style: { maxHeight: '62vh', overflow: 'auto' } }, h('p', { style: { textAlign: 'center', fontSize: '22px', margin: '4px 0' }, html: `Rang: <b>${r.icon} ${r.name}</b>` }), bar, h('p', { class: 'small-note', style: { margin: '2px 0 8px' } }, goal), h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '8px 0' } }, ...cards), h('p', { style: { textAlign: 'center', fontSize: '16px' }, html: stats }));
+    await this.cardModal('🏗️ Bouwplan van de Speelhal', body);
+  }
+  // Rang-HUD linksonder: rang + voortgangsbalk + doel
+  refreshRankHud() {
+    if (!this.rankEl || !this.rankEl.isConnected) { this.rankEl = h('div', { class: 'hud-quest', style: { maxWidth: '330px' } }); ui.hudEl.append(this.rankEl); this._rk = null; }
+    const r = rank(), nh = nextHall(); const nx = r.next; const frac = Math.round(rankFrac() * 100);
+    const nextTxt = nh != null ? `Volgende hal: ${HALL_NAMES[nh]} (🪙 ${Math.min(S.coins, HALL_COST[nh])}/${HALL_COST[nh]})` : 'Alle hallen gebouwd!';
+    const key = [r.index, r.points, frac, nh, S.coins].join('|'); if (this._rk === key) return; this._rk = key;
+    this.rankEl.innerHTML = `<h4>Bouw de Speelhal uit!</h4><div>Rang: <b>${r.icon} ${r.name}</b>${nx ? ` <small>(${r.points}/${nx.at})</small>` : ' 👑'}</div><div style="height:9px;margin:3px 0;background:#2a1a3a;border-radius:6px;overflow:hidden;border:2px solid #000"><i style="display:block;height:100%;width:${frac}%;background:linear-gradient(90deg,#ffcf3a,#ff8a3a)"></i></div><div style="font-size:13px">${nextTxt}</div>`;
+  }
+  // Rang gestegen: feestje, fanfare en een regel van Koning Klopper
+  async checkRankUp() {
+    const r = rankUp(); if (!r) return;
+    this.busy = true; this.refreshHud(); audio.sfx('win'); audio.sfx('powerup'); ui.flash('#fff', 300); ui.hud.showBig(`${r.icon} ${r.name}!`, 2400, '#ffe14a');
+    for (let i = 0; i < 6; i++) setTimeout(() => this.fx.burst(rand(-10, 10), 6 + rand(0, 5), rand(-2, 10), { count: 36, colors: [0xff5ad8, 0xffe14a, 0x5ad8ff, 0x7bff7b], speed: 8, size: 0.45, life: 1.5, gravity: 3 }), i * 240);
+    this.life.party && this.life.party(7); this.players.forEach((p) => (p.c.pose = 'cheer'));
+    const lines = [{ who: 'Koning Klopper', text: pick([`RANGSTIJGING! Jullie zijn nu ${r.icon} ${r.name}! Ik heb er een fanfare voor laten maken. De fanfare is nog aan het oefenen.`, `${r.icon} ${r.name}! Dat staat mooi op jullie visitekaartje. Als jullie een visitekaartje hadden.`, `Hoor je dat? Dat is het geluid van ${r.icon} ${r.name} worden. Het klinkt een beetje als confetti.`]) }];
+    if (r.index === RANKS.length - 1) lines.push({ who: 'Koning Klopper', text: 'Jullie zijn SPEELHAL-LEGENDES! Voor jullie geef ik het GROTE SLOTFEEST. Praat met mij en kies "Het Grote Slotfeest" wanneer jullie klaar zijn. Doorspelen mag daarna gewoon.' });
+    await this.say(lines); this.players.forEach((p) => (p.c.pose = 'idle')); this.busy = false; input.reset();
+  }
+  // Wijzer (bouncende pijl) voor de uitleg
+  pointAt(pts) {
+    this.pointOff();
+    for (const [x, z, y] of pts) { const g = new THREE.Group(); g.add(mesh(new THREE.ConeGeometry(0.8, 1.8, 4), new THREE.MeshBasicMaterial({ color: 0xffe14a }), { cast: false, receive: false, rot: [Math.PI, 0, 0] })); g.add(mesh(new THREE.RingGeometry(1.5, 1.9, 24), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.7, depthWrite: false }), { cast: false, receive: false, pos: [0, -(y || 3) + 0.1, 0], rot: [-Math.PI / 2, 0, 0] })); g.position.set(x, y || 3, z); g.userData.y0 = y || 3; this.scene.add(g); this.pointers.push(g); }
+  }
+  pointOff() { for (const g of this.pointers) { this.scene.remove(g); disposeObject(g); } this.pointers = []; }
+  waitMove() {
+    const st = this.players.map((p) => [p.x, p.z]); const t0 = Date.now(); ui.hud.setHint('Loop een stukje rond! Wes: WASD · Jor: pijltjes');
+    return new Promise((res) => { const iv = setInterval(() => { if (Date.now() - t0 > 20000 || this.players.every((p, i) => Math.hypot(p.x - st[i][0], p.z - st[i][1]) > 2.5)) { clearInterval(iv); ui.hud.setHint(null); res(); } }, 200); });
+  }
+  // Begroeting + uitleg (guided tutorial) na de opening
+  async introTutorial() {
+    this.busy = true; this.noAct = true; S.flags.met_king = true; S.flags.intro_done = true; persist();
+    const K = 'Koning Klopper'; const cab = (id) => this.cabs.find((c) => c.id === id);
+    this.camOverride = { x: 0, z: -13, t: 999 };
+    await this.say([{ who: K, text: 'WELKOM, WELKOM! Wes en Jor, de nieuwe beheerders van mijn Speelhal! De Deurman heeft jullie handtekening netjes bezorgd. Hij wilde hem eerst inlijsten.' }, { who: 'Wes', text: 'Wat een mooie hal!' }, { who: K, text: 'Dank je. Ik heb hem vorige week gepoetst. Met een sok.' }]);
+    const c = await this.choose('Uitleg nodig?', ['Ja, leg maar uit!', 'Nee, ik weet het al']);
+    if (c === 0) {
+      this.camOverride = null; await this.say([{ who: K, text: 'Eerst het lopen. Wes loopt met W A S D, Jor met de pijltjestoetsen. Probeer maar eens!' }]);
+      this.busy = false; await this.waitMove(); this.busy = true;
+      await this.say([{ who: K, text: 'Prachtig! Als er niks in de buurt is, spring je met je actieknop (F of Enter). Dat doet niks, maar het ziet er geweldig uit.' }]);
+      const tg = cab('tugwar') || this.cabs[0]; this.camOverride = { x: tg.x, z: tg.z, t: 999 }; this.pointAt([[tg.ix, tg.iz, 3.2]]);
+      await this.say([{ who: K, text: 'Dit zijn de kasten. Loop ernaartoe en druk op je actieknop: dan kiezen jullie een duel. Elk duel is 1 tegen 1 en krijgt een TWIST. Die is soms een ramp.' }]);
+      this.camOverride = { x: 0, z: 3, t: 999 }; this.pointAt([[0, this.centerZ + this.wheelC.hit + 1.3, 3.2]]);
+      await this.say([{ who: K, text: 'Het WIEL VAN GEKTE kiest een duel voor jullie. Draaien kost niets. Behalve geduld.' }]);
+      this.camOverride = { x: 0, z: -13, t: 999 }; this.pointAt([[0, -HALL.d / 2 + 9.2, 3.2]]);
+      await this.say([{ who: K, text: 'Bij mij start je een TOERNOOI: meerdere duels achter elkaar. Ik ga ook over de Uitdaging van de dag en de hoedenwinkel.' }]);
+      this.camOverride = { x: 0, z: -15, t: 999 }; this.pointAt(Object.values(this.doorInfo).filter((i) => !i.back).map((i) => [i.x, -HALL.d / 2 + 3.8, 4.5]));
+      await this.say([{ who: K, text: Object.values(this.doorInfo).some((i) => i.lock && !i.built) ? 'En die dichtgetimmerde deuren? Daar komen nieuwe hallen! Met heitjes uit jullie duels laat je ze bouwen. De bouwvakkers staan al klaar. Ze staan er al sinds maandag.' : 'En die deuren leiden naar nog meer hallen. Veel plezier daarin!' }]);
+      const pl = this.interact.find((i) => i.type === 'plan'); if (pl) { this.camOverride = { x: pl.x, z: pl.z - 2, t: 999 }; this.pointAt([[pl.x, pl.z - 2, 5.6]]); }
+      await this.say([{ who: K, text: 'Op het BOUWPLAN zie je welke hallen er komen. Linksonder zie je jullie rang: hoe meer jullie spelen, hoe hoger. En het dorp heeft ook nog karweitjes, via de uitgang!' }]);
+      this.pointOff(); this.camOverride = null;
+    }
+    this.pointOff(); this.camOverride = null; this.noAct = false; const g = this.app.games.tugwar;
+    if (g) {
+      const c2 = await this.choose('Eerste duel?', ['Touwtrekken!', 'Later, ik kijk eerst rond'], 'Touwtrekken is een lekker vriendelijk spel om mee te beginnen.');
+      if (c2 === 0) { await this.say([{ who: K, text: 'Touwtrekken! Het enige spel waarbij trekken wél mag. Veel succes, en niet loslaten!' }]); await this.launch('tugwar'); }
+    }
+    this.busy = false; input.reset();
+  }
+  // Het Grote Slotfeest (einde): alleen als de rang Speelhal-Legende is bereikt
+  async slotfeest() {
+    const c = await this.choose('🎉 Het Grote Slotfeest?', ['Feest!', 'Nog niet'], 'Een feest met iedereen uit de Speelhal. Daarna kun je gewoon doorspelen.');
+    if (c !== 0) return;
+    this.leaving = true; TOURNEY = null; await ui.fade(1, 600); persist(); this.app.goEnding({}); await new Promise(() => {});
+  }
+  async pauseMenu() {
+    if (this.busy) return; this.busy = true; ui.hud.setPrompt(null);
+    try {
+      for (;;) {
+        const r = rank();
+        const c = await this.choose('Pauze', ['Doorgaan', '🏗️ Rang & Bouwplan', '👒 Hoeden & kleuren', 'Instellingen', '🌐 Online spelen', 'Naar het titelscherm'], `${r.icon} ${r.name}${r.next ? ` · ${r.points}/${r.next.at} punten` : ''} · 🪙 ${S.coins}`, true);
+        if (c === 0 || c == null) break;
+        if (c === 1) await this.planModal();
+        else if (c === 2) await this.openShop();
+        else if (c === 3) await new Promise((res) => openSettings(res));
+        else if (c === 4) await new Promise((res) => openOnline(this.app, res));
+        else if (c === 5) { this.leaving = true; TOURNEY = null; await ui.fade(1, 500); persist(); await this.app.goMenu(); ui.fade(0, 500); await new Promise(() => {}); }
+      }
+    } finally { if (!this.leaving) { this.busy = false; input.reset(); } }
   }
 
   cabTexture(id, glitch = false) {
@@ -309,6 +477,7 @@ export class ArcadeMode {
       sc.add(mesh(new THREE.PlaneGeometry(14, 1.75), new THREE.MeshBasicMaterial({ map: nt, transparent: true, depthWrite: false }), { cast: false, receive: false, pos: [17, 4.2 + r * 3.2, zb + 2.8], rot: [-0.2, 0, 0] }));
     }
     this.interact.push({ type: 'trophies', x: 17, z: zb + 6.5, r: 5, label: 'Trofeeën bekijken' });
+    if (this.hallId === 0) this.buildPlan();
   }
   drawBoard() {
     const A = S.arcade; const names = S.names;
@@ -331,28 +500,31 @@ export class ArcadeMode {
     if (this.deur.takeover) { audio.music('tense'); ui.hud.setHint('De Deurman heeft de hal overgenomen! Speel één duel (in spookmodus) om hem te verjagen.'); }
     ui.fade(0, 600);
     const o = this.opts;
-    if (o.result && o.result.pvp) await this.afterDuel(o.result);
+    if (o.intro && !o.result) await this.introTutorial();
+    else if (o.result && o.result.pvp) await this.afterDuel(o.result);
     else if (o.result === null && TOURNEY) { TOURNEY = null; ui.hud.toast('Toernooi afgebroken.', 2200); }
-    else if (o.via === 'door' && !S.flags['met_hall' + this.hallId]) { this.busy = true; S.flags['met_hall' + this.hallId] = true; await ui.say(this.hallId === 1 ? [{ who: 'DJ Dobber', text: 'Welkom in de NEONKELDER! Hier draait de muziek hard en zijn de spellen nóg gekker. Bommen, ruimteschepen, flipperkasten... jullie zeggen het maar.' }, { who: 'Jor', text: 'Waar is de pauzeknop?' }, { who: 'DJ Dobber', text: 'Die is stuk. Veel plezier!' }] : [{ who: 'Kermis-Kees', text: 'Kom d\'ren, kom d\'ren! Welkom op de KERMIS! Quiz, taart, bowlen, eendjes... en geen kaartje nodig. Ik ben niet van het kaartjes.' }, { who: 'Wes', text: 'Is dat een kip in de grijpkraan?' }, { who: 'Kermis-Kees', text: 'Ja. Niet aanraken. Hij weet wat hij doet.' }]); this.busy = false; }
-    else if (!S.flags.met_king) { this.busy = true; S.flags.met_king = true; await ui.say([{ who: 'Koning Klopper', text: 'WELKOM in mijn Speelhal! Hier zijn geen karweitjes en geen heitjes te verdienen... Alleen eer, glorie en een heleboel chaos.' }, { who: 'Koning Klopper', text: 'Elk duel krijgt een TWIST: soms loop je achterstevoren, soms ruil je van lichaam, en soms staat de Deurman te kijken. Wie dan beweegt, verliest.' }, { who: 'Wes', text: 'Ik ga zo hard winnen.' }, { who: 'Jor', text: 'Dat dacht je.' }]); this.busy = false; }
-    if (!o.result && !dailyDone() && !this.deur.takeover) setTimeout(() => { if (!this.leaving) ui.hud.toast(`🌟 Uitdaging van de dag wacht bij ${this.hostName}! Bonus: +${dailyBonus()} heitjes`, 4200); }, 2500);
+    else if (o.via === 'door' && !S.flags['met_hall' + this.hallId]) { this.busy = true; S.flags['met_hall' + this.hallId] = true; await ui.say(this.hallId === 1 ? [{ who: 'DJ Dobber', text: 'Welkom in de NEONKELDER! Hier draait de muziek hard en zijn de spellen nóg gekker. Bommen, ruimteschepen, flipperkasten... jullie zeggen het maar.' }, { who: 'Jor', text: 'Waar is de pauzeknop?' }, { who: 'DJ Dobber', text: 'Die is stuk. Veel plezier!' }] : [{ who: 'Kermis-Kees', text: 'Kom d\'ren, kom d\'ren! Welkom op de KERMIS! Quiz, taart, bowlen, eendjes... en gratis kauwgom voor wie wint. Ik ben er heel gul in.' }, { who: 'Wes', text: 'Is dat een kip in de grijpkraan?' }, { who: 'Kermis-Kees', text: 'Ja. Niet aanraken. Hij weet wat hij doet.' }]); this.busy = false; }
+    else if (!S.flags.met_king) { this.busy = true; S.flags.met_king = true; S.flags.intro_done = true; await ui.say([{ who: 'Koning Klopper', text: 'WELKOM in mijn Speelhal! Hier winnen jullie heitjes met duels, en met die heitjes laat je nieuwe hallen bouwen. Zo werkt dat hier.' }, { who: 'Koning Klopper', text: 'Elk duel krijgt een TWIST: soms loop je achterstevoren, soms ruil je van lichaam, en soms staat de Deurman te zwaaien. Wie dan beweegt, verliest.' }, { who: 'Wes', text: 'Ik ga zo hard winnen.' }, { who: 'Jor', text: 'Dat dacht je.' }]); this.busy = false; }
+    await this.checkRankUp();
+    if (!o.result && !o.intro && !dailyDone() && !this.deur.takeover) setTimeout(() => { if (!this.leaving) ui.hud.toast(`🌟 Uitdaging van de dag wacht bij ${this.hostName}! Bonus: +${dailyBonus()} heitjes`, 4200); }, 2500);
   }
   exit() { this.deur && this.deur.cleanup(); try { disposeObject(this.scene); this.fx.dispose(); } catch (e) { console.warn('opruimen speelhal', e); } ui.clearScreens(); ui.activeMenus = []; ui.hudEl.innerHTML = ''; ui.setVignette(0); }
   resize(w, hh) { this.camera.aspect = w / hh; this.camera.updateProjectionMatrix(); this.fx.setViewportHeight(hh); }
-  hudSetup() { ui.hud.setHint(`Loop naar een kast en druk op je actieknop om te duelleren · Wiel van Gekte = verrassing · ${this.hostName} = toernooi` + (this.hallId === 0 ? ' · deuren in de achtermuur = meer hallen!' : '')); setTimeout(() => ui.hud.setHint(null), 14000); }
+  hudSetup() { ui.hud.setHint(`Loop naar een kast en druk op je actieknop om te duelleren · Wiel van Gekte = verrassing · ${this.hostName} = toernooi` + (this.hallId === 0 ? ' · dichtgetimmerde deuren = nieuwe hallen bouwen!' : '') + ' · Esc = pauze'); setTimeout(() => ui.hud.setHint(null), 14000); }
   refreshHud() {
-    const A = S.arcade; ui.hud.setScore(`Stand: ${S.names[0]} ${A.wins[0]} – ${A.wins[1]} ${S.names[1]}` + (TOURNEY ? `   ·   🏆 Toernooi ${TOURNEY.idx + 1}/${TOURNEY.queue.length}: ${TOURNEY.score[0]} – ${TOURNEY.score[1]}` : ''));
+    const A = S.arcade; this.refreshRankHud(); this.refreshDoors();
+    ui.hud.setScore(`Stand: ${S.names[0]} ${A.wins[0]} – ${A.wins[1]} ${S.names[1]}   ·   🪙 ${S.coins}` + (TOURNEY ? `   ·   🏆 Toernooi ${TOURNEY.idx + 1}/${TOURNEY.queue.length}: ${TOURNEY.score[0]} – ${TOURNEY.score[1]}` : ''));
     ui.hud.setPlayerInfo(0, `Duels gewonnen: ${A.wins[0]}`); ui.hud.setPlayerInfo(1, `Duels gewonnen: ${A.wins[1]}`);
   }
 
   // ------------------------------------------------------------------ dialoog-hulp
   async say(lines, o) { await ui.say(lines, o); }
-  choose(title, labels, sub) {
+  choose(title, labels, sub, center = false) {
     return new Promise((resolve) => {
       const items = labels.map((l, i) => ({ label: l, onSelect: () => { this.menu = null; el.remove(); resolve(i); } }));
       const menu = new Menu(items); this.menu = menu;
       const card = h('div', { class: 'card', style: { width: 'min(560px,92vw)' } }, h('h2', { style: { fontSize: '28px' } }, title), sub ? h('p', { style: { textAlign: 'center' } }, sub) : null, menu.el);
-      const el = ui.overlay(card, 'clear'); el.style.alignItems = 'flex-end'; el.style.paddingBottom = '200px'; el.style.background = 'none'; el.style.backdropFilter = 'none';
+      const el = ui.overlay(card, center ? '' : 'clear'); if (!center) { el.style.alignItems = 'flex-end'; el.style.paddingBottom = '200px'; el.style.background = 'none'; el.style.backdropFilter = 'none'; }
     });
   }
   cardModal(title, body, note) {
@@ -371,6 +543,7 @@ export class ArcadeMode {
       else if (it.type === 'wheel') await this.wheelSpin();
       else if (it.type === 'king') await this.kingTalk();
       else if (it.type === 'board') { this.drawBoard(); await this.rankModal(); }
+      else if (it.type === 'plan') await this.planModal();
       else if (it.type === 'trophies') await this.cardModal('Trofeeënkast', h('p', { style: { textAlign: 'center' }, html: 'Win duels, speel veel verschillende spellen en win toernooien om trofeeën te verdienen.<br>Eerste Bloed (1 winst) · Duelist (5) · Meester (12) · Legende (30) · Gelijkspel-koning (4 gelijk) · Toernooi-winnaar · Allesspeler (8 spellen) · Rivaliteit (20 duels).' }));
       else if (it.type === 'egg') this.life.doEgg(it);
       else if (it.type === 'exit') await this.leave();
@@ -405,11 +578,12 @@ export class ArcadeMode {
     await this.cardModal('🏆 Ranglijst per spel', body);
   }
   async useDoor(it) {
+    if (!isUnlocked(it.to)) return this.buildHallDoor(it);
     const o = ARCADE_HALLS[it.to]; const c = await this.choose(`${it.to === 0 ? '↩' : '🚪'} ${o.name}`, [`Ja, naar de ${o.name}!`, 'Nog niet'], `${o.ids.length} spellen`); if (c !== 0) return;
     this.leaving = true; audio.sfx('powerup'); await ui.fade(1, 450); persist(); this.app.goArcade({ extra: { hall: it.to }, via: 'door', fromHall: this.hallId }); await new Promise(() => {});
   }
   async leave() {
-    const c = await this.choose('Speelhal verlaten?', ['Ja, terug naar het dorp', 'Nog niet']); if (c !== 0) return;
+    const c = await this.choose('Speelhal verlaten?', ['Ja, naar het dorp (karweitjes!)', 'Nog niet']); if (c !== 0) return;
     this.leaving = true; TOURNEY = null; await ui.fade(1, 500); persist(); this.app.goHub({ fromArcade: true }); await new Promise(() => {});
   }
   async kingTalk() {
@@ -419,22 +593,26 @@ export class ArcadeMode {
     const done = dailyDone(); const keys = []; const labels = [];
     if (TOURNEY) { keys.push('go', 'stop'); labels.push('Toernooi voortzetten', 'Toernooi stoppen'); } else { keys.push('start'); labels.push(`🏆 Toernooi starten (${A.tlen} duels)`); }
     keys.push('daily'); labels.push(done ? '🌟 Uitdaging van de dag (gedaan ✔)' : '🌟 Uitdaging van de dag (+bonus!)');
-    keys.push('shop', 'pick', 'how', 'none'); labels.push('👒 Hoeden & kleuren', '⚙️ Spellen & twists kiezen', 'Hoe werkt het?', 'Niets');
+    if (this.hallId === 0 && rank().index === RANKS.length - 1) { keys.push('party'); labels.push('🎉 Het Grote Slotfeest!'); }
+    keys.push('plan', 'shop', 'pick', 'how', 'none'); labels.push('🏗️ Rang & Bouwplan', '👒 Hoeden & kleuren', '⚙️ Spellen & twists kiezen', 'Hoe werkt het?', 'Niets');
     const c = await this.choose(H, labels); const key = keys[c];
     if (key === 'start') { await this.startTourney(); return; }
     if (key === 'go') { await this.nextTourney(); return; }
     if (key === 'stop') { TOURNEY = null; this.refreshHud(); ui.hud.toast('Toernooi gestopt.', 1800); return; }
     if (key === 'daily') { await this.dailyChallenge(); return; }
+    if (key === 'party') { await this.slotfeest(); return; }
+    if (key === 'plan') { await this.planModal(); return this.kingTalk(); }
     if (key === 'shop') { await this.openShop(); return this.kingTalk(); }
     if (key === 'pick') { await this.pickGames(); return this.kingTalk(); }
-    if (key === 'how') await this.say([{ who: H, text: 'Elk duel is 1 tegen 1 op hetzelfde scherm. Voor elk spel wordt een TWIST geloot: omgekeerde besturing, verwisselde knoppen, dronken kikker, reus tegen dwerg, zeepvloer, maanzwaartekracht, lichaamswissel of de Deurman die komt kijken.' }, { who: H, text: `In een toernooi spelen jullie ${A.tlen} verschillende duels uit álle hallen. Spellen die jullie niet leuk vinden kun je uitzetten bij "Spellen kiezen". Elke dag is er ook een Uitdaging van de dag met bonus-heitjes. En pas op: soms neemt de Deurman een hal over...` }]);
+    if (key === 'how') await this.say([{ who: H, text: 'Elk duel is 1 tegen 1 op hetzelfde scherm. Voor elk spel wordt een TWIST geloot: omgekeerde besturing, verwisselde knoppen, dronken kikker, reus tegen dwerg, zeepvloer, maanzwaartekracht, lichaamswissel of de Deurman die komt kijken.' }, { who: H, text: `In een toernooi spelen jullie ${A.tlen} verschillende duels uit álle gebouwde hallen. Spellen die jullie niet leuk vinden kun je uitzetten bij "Spellen kiezen". Elke dag is er ook een Uitdaging van de dag met bonus-heitjes. En pas op: soms neemt de Deurman een hal over...` }]);
   }
   async openShop() {
     try { const m = await import('./shop.js'); await m.openShop(this.app, {}); this.refreshHud(); }
     catch (e) { console.warn('winkel niet beschikbaar', e); await this.say([{ who: this.hostName, text: 'De hoedenwinkel is nog dicht. Kom straks terug!' }]); }
   }
   async dailyChallenge() {
-    const info = dailyInfo(this.app.games); const H = this.hostName;
+    const ok = new Set(unlockedIds()); const gs = {}; for (const id of Object.keys(this.app.games)) if (ARCADE_IDS.includes(id) ? ok.has(id) : true) gs[id] = this.app.games[id];
+    const info = dailyInfo(gs); const H = this.hostName;
     if (!info) { await this.say([{ who: H, text: 'Ik heb vandaag geen uitdaging. Vreemd.' }]); return; }
     const def = this.defOf(info.id); const tw = TWISTS.find((t) => t.id === info.twist) || TWISTS[0];
     const st = dailyStreak();
@@ -576,8 +754,11 @@ export class ArcadeMode {
     if (this.menu) this.menu.update();
     if (this.picker) this.picker.update(dt);
     const frozen = this.busy || scare.active;
+    const esc = input.pressed('Escape'); if (esc && !this._esc && !frozen && !this.modal && !this.picker) this.pauseMenu(); this._esc = esc;
+    for (let i = this.fallers.length - 1; i >= 0; i--) { const f = this.fallers[i], m = f.m; f.vy -= 22 * dt; m.position.x += f.vx * dt; m.position.y += f.vy * dt; m.position.z += f.vz * dt; m.rotation.x += f.wx * dt; m.rotation.z += f.wz * dt; if (m.position.y < 0.2 && f.vy < 0) { m.position.y = 0.2; f.vy *= -0.3; f.vx *= 0.6; f.vz *= 0.6; f.wx *= 0.5; f.wz *= 0.5; } f.t -= dt; if (f.t < 0.6) m.scale.setScalar(Math.max(0.01, f.t / 0.6)); if (f.t <= 0) { m.parent && m.parent.remove(m); this.fallers.splice(i, 1); } }
+    for (const g of this.pointers) { g.position.y = g.userData.y0 + Math.sin(t * 5) * 0.35; }
     for (const p of this.players) {
-      if (!frozen && input.p[p.i].aP) { const it = this.nearest(p); if (it && this.deur.active && it.type !== 'exit') { ui.hud.toast('Nu niet! De Deurman komt eraan...', 1400); } else if (it) this.doInteract(it, p); else if (p.grounded) { p.vy = 8; p.grounded = false; p.c.air = true; p.c.jump(); audio.sfx('jump', { vol: 0.5 }); } }
+      if (!frozen && input.p[p.i].aP) { const it = this.noAct ? null : this.nearest(p); if (it && this.deur.active && it.type !== 'exit') { ui.hud.toast('Nu niet! De Deurman komt eraan...', 1400); } else if (it) this.doInteract(it, p); else if (p.grounded) { p.vy = 8; p.grounded = false; p.c.air = true; p.c.jump(); audio.sfx('jump', { vol: 0.5 }); } }
       this.movePlayer(p, dt, frozen); p.c.update(dt);
     }
     this.mid.set((this.players[0].x + this.players[1].x) / 2, 0, (this.players[0].z + this.players[1].z) / 2);
@@ -613,7 +794,7 @@ export class ArcadeMode {
     if (this.nextGlitch <= 0 && S.settings.scare >= 1 && this.cabs.length && !this.deur.moodOn) { this.nextGlitch = rand(70, 140); const cab = pick(this.cabs); const old = cab.scr.material.map; cab.scr.material.map = this.cabTexture(cab.id, true); cab.scr.material.needsUpdate = true; audio.sfx('static'); setTimeout(() => { cab.scr.material.map = old; cab.scr.material.needsUpdate = true; }, 1600); }
     this.fx.update(dt);
     // prompt
-    if (this.busy) ui.hud.setPrompt(null);
+    if (this.busy || this.noAct) ui.hud.setPrompt(null);
     else { const lines = []; for (const p of this.players) { const it = this.nearest(p); if (it) lines.push(`<span style="color:${PLAYER_CSS[p.i]}">${S.names[p.i]}</span> <b>${KEY_LABELS[p.i].a}</b> ${it.label}`); } ui.hud.setPrompt(lines.length ? lines.join('<br>') : null); }
   }
   nearKing() { return this.players.some((p) => Math.hypot(p.x - 0, p.z - (-HALL.d / 2 + 3.7)) < 9); }

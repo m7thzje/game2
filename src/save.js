@@ -9,13 +9,13 @@ const defaults = () => ({
   collected: {},       // verzamelde muntjes/kisten in de wereld
   sightings: 0,        // aantal keer dat de Deurman gezien is
   scared: 0,           // aantal keer geschrokken
-  ticket: false, vip: false, ending: false,
+  ticket: false, vip: false, ending: false,   // (oud, door het dorp-team nog gelezen)
   arcade: { wins: [0, 0], draws: 0, plays: 0, byGame: {}, tourneys: [0, 0], unlocked: [0] },
   deur: { stickers: [], cameos: 0 },   // Deurman-vriendenboek
   // hoedjes en kleuren per broer (zie engine/cosmetics.js); 'std' = standaard
   cosmetics: { owned: [{ hat: ['std'], shirt: ['std'], hair: ['std'], cape: ['std'] }, { hat: ['std'], shirt: ['std'], hair: ['std'], cape: ['std'] }], equipped: [{ hat: 'std', shirt: 'std', hair: 'std', cape: 'std' }, { hat: 'std', shirt: 'std', hair: 'std', cape: 'std' }] },
   playTime: 0, tod: 0.1, hubPos: null, banished: 0,
-  settings: { scare: 2, flashFree: false, music: 0.5, sfx: 0.8, quality: 'high' },
+  settings: { scare: 2, flashFree: false, music: 0.5, sfx: 0.8, quality: 'high', unlockAll: false, quickStart: false },   // scare = Deurman-gedrag 0-3 (Uit/Af en toe/Vaak/Overal!)
 });
 export const S = defaults();
 let mem = null;
@@ -35,4 +35,7 @@ export function persist() {
 export function reset() {
   const settings = S.settings; Object.assign(S, defaults(), { settings }); persist();
 }
-export function hasSave() { try { return !!localStorage.getItem(KEY) && (JSON.parse(localStorage.getItem(KEY)).totalEarned > 0 || Object.keys(JSON.parse(localStorage.getItem(KEY)).jobs || {}).length > 0); } catch (e) { return false; } }
+// Is er iets om verder mee te spelen? (duels, heitjes, klusjes of de opening gezien)
+export function hasSave() {
+  try { const raw = localStorage.getItem(KEY); if (!raw) return false; const o = JSON.parse(raw); return !!((o.flags && o.flags.intro_done) || o.totalEarned > 0 || Object.keys(o.jobs || {}).length > 0 || (o.arcade && o.arcade.plays > 0)); } catch (e) { return false; }
+}

@@ -3,11 +3,12 @@ import { input, KEY_LABELS } from './input.js';
 import { audio } from './audio.js';
 import { ui } from './ui.js';
 import { scare } from './scare.js';
+import { maybeCameo, stopCameo } from './cameo.js';
 import { S, persist } from '../save.js';
 import { Particles, FloatTexts } from './particles.js';
 import { makeBrother, makeNPC, PLAYER_CSS, PLAYER_COLORS } from './chars.js';
 import { setupLights } from './lights.js';
-import { h, clamp, mulberry32, disposeObject, rand } from './util.js';
+import { h, clamp, mulberry32, disposeObject, rand, pick } from './util.js';
 import { pickTwist, applyTwist, blankIn, TWISTS } from './twist.js';
 import { dailyDone, dailyBonus, completeDaily } from './daily.js';
 
@@ -77,6 +78,7 @@ export class MinigameMode {
     this.showIntro();
     audio.music(def.music || (def.mode === 'puzzle' ? 'puzzle' : 'game'));
     this._deurT = this.nextDeurTime(true);
+    this._cameoT = 14 + Math.random() * 16; this._cameos = 0;   // Deurman-cameo's (alleen kijkgrapjes, geen gevolgen voor het spel)
     this._onBlur = () => { if (this.state === 'play' && !this.paused) this.pause(); };
     addEventListener('blur', this._onBlur);
   }
@@ -84,8 +86,8 @@ export class MinigameMode {
   nextDeurTime(first = false) {
     const lvl = S.settings.scare; if (lvl <= 0) return 1e9;
     const f = lvl === 1 ? 1.8 : lvl === 3 ? 0.65 : 1;
-    if (this.extra && this.extra.spooky) return first ? rand(5, 8) : rand(9, 13);   // spookduel: hij kijkt steeds mee
-    if (this.isPvp && this.twist.id !== 'deurman') return 1e9;          // in duels alleen met de Deurman-twist
+    if (this.extra && this.extra.spooky) return first ? rand(5, 8) : rand(9, 13);   // feest-duel (Deurenfeestje): hij kijkt steeds mee
+    if (this.isPvp && this.twist.id !== 'deurman') return 1e9;          // in duels alleen met de Deurman-twist (Deurman kijkt mee)
     if (this.twist.id === 'deurman') return first ? rand(8, 14) : rand(12, 20);
     return (first ? rand(22, 38) : rand(30, 55)) * f;
   }
@@ -135,7 +137,7 @@ export class MinigameMode {
       this.cdT -= dt;
       const n = Math.ceil(this.cdT);
       if (n !== this._cdN && n > 0) { this._cdN = n; ui.hud.showBig(String(n), 800); audio.sfx('countdown'); }
-      if (this.cdT <= 0) { this.state = 'play'; ui.hud.showBig('GA!', 700, '#ffe14a'); audio.sfx('go'); this.instance.onStart && this.instance.onStart(); if (this.extra && this.extra.spooky && !this.tintEl) { this.tintEl = h('div', { class: 'spook-tint' }); document.body.append(this.tintEl); audio.sfx('drone'); } }
+      if (this.cdT <= 0) { this.state = 'play'; ui.hud.showBig('GA!', 700, '#ffe14a'); audio.sfx('go'); this.instance.onStart && this.instance.onStart(); if (this.extra && this.extra.spooky && !this.tintEl) { this.tintEl = h('div', { class: 'spook-tint' }); document.body.append(this.tintEl); audio.sfx('party'); ui.hud.toast('🥳 DEURENFEESTJE! Feest-duel!', 2200); } }
       if (this.instance.introUpdate) this.instance.introUpdate(dt);
     } else if (this.state === 'play') {
       if (escP) { this.pause(); return; }
@@ -144,6 +146,7 @@ export class MinigameMode {
         this.instance.update(dt);
         this._deurT -= dt;
         if (this._deurT <= 0 && !this.finished) this.deurEvent();
+        this.cameoTick(dt);
       }
     } else if (this.state === 'result') {
       if (this.instance.resultUpdate) this.instance.resultUpdate(dt);
@@ -178,22 +181,30 @@ export class MinigameMode {
     this.instance.onCountdown && this.instance.onCountdown();
   }
 
+  // Cameo van de Deurman op een rustig moment (max 2 per potje, kans/cooldown volgens S.settings.scare). Geen invloed op punten.
+  cameoTick(dt) {
+    if (this._cameos >= 2 || this.finished || S.settings.scare <= 0) return;
+    this._cameoT -= dt; if (this._cameoT > 0) return;
+    if (this._deurT < 6) { this._cameoT = 3; return; }   // hij komt zo al kijken: even wachten
+    const p = maybeCameo('duel', Math.random, { small: true });
+    if (p) { this._cameos++; this._cameoT = 30 + Math.random() * 25; } else this._cameoT = 8;
+  }
   async deurEvent() {
     this._deurT = this.nextDeurTime();
     this.events++;
     const lvl = S.settings.scare;
-    if (this.events % 3 === 2 && lvl >= 1) { // alleen sfeer: gekraak en geklop
-      audio.sfx(Math.random() < 0.5 ? 'knock' : 'creak'); ui.hud.toast(Math.random() < 0.5 ? 'Wie klopt daar...?' : 'Hoorde je dat?'); return;
+    if (this.events % 3 === 2 && lvl >= 1) { // alleen sfeer: deurbel en gekke geluidjes
+      audio.sfx(Math.random() < 0.5 ? 'doorbell' : 'squeak'); ui.hud.toast(pick(['Ergens gaat een deurbel...', 'Hoorde je dat? De Deurman oefent zijn high-five.', 'Er staat iemand bij de deur. Het is vast de Deurman.'])); return;
     }
     const lunge = Math.random() < (lvl >= 3 ? 0.5 : lvl === 2 ? 0.28 : 0);
     if (lvl >= 3 && Math.random() < 0.4) await scare.flicker(3);
     const res = await scare.stare({ hold: 2.2 + Math.random() * 1.2 });
     if (this.isPvp) {   // duel: wie bewoog verliest een punt (spel bepaalt hoe)
-      if (res.caught) { const who = res.movers.map((m, i) => (m ? S.names[i] : null)).filter(Boolean).join(' en '); ui.hud.toast(`${who} bewoog! De Deurman neemt een punt af.`, 2800); this.instance.onDeurman && this.instance.onDeurman(res.movers); }
-      else ui.hud.toast('Niemand bewoog. De Deurman is teleurgesteld...', 2200);
+      if (res.caught) { const who = res.movers.map((m, i) => (m ? S.names[i] : null)).filter(Boolean).join(' en '); ui.hud.toast(`${who} bewoog! BOEM! De Deurman neemt een punt af.`, 2800); this.instance.onDeurman && this.instance.onDeurman(res.movers); }
+      else ui.hud.toast('Niemand bewoog. De Deurman is apetrots op jullie!', 2200);
       return;
     }
-    if (res.caught) { this.penalty += 10; ui.hud.toast('Je bewoog! De Deurman pakt 10 heitjes...', 2600); }
+    if (res.caught) { ui.hud.toast('Je bewoog! BOEM! De Deurman lacht zich slap.', 2600); }
     else if (lunge) { await scare.jumpscare(); this.bonus += 5; ui.hud.toast('Hij sprong toch! (+5 heitjes durfal-bonus)', 2600); }
     else { this.bonus += 5; ui.hud.toast('Stil gebleven! +5 heitjes durfal-bonus', 2200); }
   }
@@ -256,6 +267,7 @@ export class MinigameMode {
     this.resEl = ui.overlay(card);
     if (w != null && this.instance.celebrate) this.instance.celebrate(w);
     setTimeout(() => { this.resultReady = true; }, 900);
+    this._resCameo = setTimeout(() => { if (!this.closed) maybeCameo('result', Math.random, { allowOverlay: true }); }, 1500);
     if (this.instance.onResult) this.instance.onResult(r);
   }
   drawResOpts() {
@@ -275,6 +287,7 @@ export class MinigameMode {
     this.resEl = ui.overlay(card);
     [...stars.children].forEach((s, i) => { if (i < r.stars) setTimeout(() => { s.classList.add('on'); audio.sfx('star', { rate: 1 + i * 0.2 }); }, 400 + i * 450); });
     setTimeout(() => { this.resultReady = true; }, 600 + r.stars * 450);
+    this._resCameo = setTimeout(() => { if (!this.closed) maybeCameo('result', Math.random, { allowOverlay: true }); }, 1800);
     if (this.instance.onResult) this.instance.onResult(r);
   }
   close(rematch = false) {
@@ -316,6 +329,7 @@ export class MinigameMode {
   dispose() {
     removeEventListener('blur', this._onBlur);
     try { this.instance.dispose && this.instance.dispose(); } catch (e) { console.error(e); }
+    clearTimeout(this._resCameo); stopCameo();
     this.tintEl && this.tintEl.remove(); this.introEl && this.introEl.remove(); this.pauseEl && this.pauseEl.remove(); this.resEl && this.resEl.remove();
     this.fx.particles.dispose(); this.fx.texts.dispose();
     disposeObject(this.scene);

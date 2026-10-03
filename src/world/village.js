@@ -5,14 +5,27 @@ import * as P from '../engine/props.js';
 import { Animal, makeNPC, makeHatMesh } from '../engine/chars.js';
 import { S } from '../save.js';
 import { groundY, isWater, onBridge } from './terrain.js';
-import { JOBS, JOB_BY_ID, ARCADE, HOME, PLAZA, BOOTH, BOARD, CAVE, CASTLE, CONCERT_GATE, ICE, SWAMP, FARM, PASTURE, BRIDGE, riverX, ARCADE_TRAIL, HERALD, HAT_SHOP } from './layout.js';
+import { JOBS, JOB_BY_ID, ARCADE, HOME, PLAZA, TIPKRAAM, BOARD, CAVE, CASTLE, POORT, ICE, SWAMP, FARM, PASTURE, BRIDGE, riverX, ARCADE_TRAIL, HERALD, HAT_SHOP, STRAAT } from './layout.js';
 import { stall, tent, bench, table, mug, cart, milkCan, scarecrow, dummy, target, wheelbarrow, snowman, brazier, cabbageRows, stripedTex, floatLabel, questMark } from './build.js';
 
 const PI = Math.PI;
 
+// Speelhal-poster (banieren op het plein, tipkraam)
+let _poster = null;
+function speelhalPoster() {
+  return _poster || (_poster = canvasTex(256, 384, (g, w, hh) => {
+    const gr = g.createLinearGradient(0, 0, 0, hh); gr.addColorStop(0, '#ff3d81'); gr.addColorStop(1, '#3a1170'); g.fillStyle = gr; g.fillRect(0, 0, w, hh);
+    g.strokeStyle = '#ffe14a'; g.lineWidth = 10; g.strokeRect(10, 10, w - 20, hh - 20);
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '110px serif'; g.fillText('🎮', w / 2, 120);
+    g.font = 'bold 50px Fredoka, Arial Black, sans-serif'; g.fillStyle = '#fff'; g.fillText('SPEELHAL', w / 2, 225);
+    g.font = 'bold 26px Fredoka, sans-serif'; g.fillStyle = '#ffe14a'; g.fillText('Koning Klopper', w / 2, 272); g.fillText('44 duels!', w / 2, 306);
+    g.font = '22px Fredoka, sans-serif'; g.fillStyle = '#fff'; g.fillText('★ ★ ★', w / 2, 346);
+  }));
+}
+
 export function buildVillage(W) {
   buildPlaza(W); buildHome(W); buildBakery(W); buildTavern(W); buildWarehouse(W); buildFarm(W); buildMud(W); buildPasture(W);
-  buildPier(W); buildArcadeGate(W); buildArcadeGuide(W); buildHatShop(W); buildHerald(W); buildWitch(W); buildCave(W); buildCastleYard(W); buildCastle(W); buildWall(W); buildIce(W); buildBridge(W);
+  buildPier(W); buildArcadeGate(W); buildArcadeGuide(W); buildHatShop(W); buildHerald(W); buildStreetNpcs(W); buildWitch(W); buildCave(W); buildCastleYard(W); buildCastle(W); buildWall(W); buildIce(W); buildBridge(W);
   buildJobNpcs(W);
 }
 
@@ -33,10 +46,10 @@ function buildPlaza(W) {
   for (const [x, z, yaw, c, goods] of stalls) { const s = stall(c, '#fff3d6', goods); W.put(s, x, z, yaw); W.box(x, z, 3.4, 1.8, yaw); }
   // lantaarnpalen
   for (let i = 0; i < 8; i++) { const a = i / 8 * TAU + 0.2; const x = Math.cos(a) * 12.6, z = Math.sin(a) * 12.6; const lp = P.lampPost(); W.put(lp, x, z, 0); W.circle(x, z, 0.3); W.glowMats.push(lp.children[1].material); W.lamps.push({ x, y: groundY(x, z) + 2.75, z, mat: lp.children[1].material }); }
-  // banieren met DutchTuber-poster
+  // banieren met Speelhal-poster
   for (const [x, z, yaw] of [[-5, 9, 0.3], [5, 9, -0.3], [-13, -4, 1.6], [13, -9, -1.6], [-5, -13, 0], [6, -13, 0]]) {
     const g = new THREE.Group(); g.add(mesh(new THREE.CylinderGeometry(0.06, 0.07, 3.4, 5), mat(0x4a3220), { pos: [0, 1.7, 0] }));
-    g.add(mesh(new THREE.BoxGeometry(1.3, 1.95, 0.08), new THREE.MeshStandardMaterial({ map: tex.poster('DutchTuber'), roughness: 0.8 }), { pos: [0, 2.3, 0.05] }));
+    g.add(mesh(new THREE.BoxGeometry(1.3, 1.95, 0.08), new THREE.MeshStandardMaterial({ map: speelhalPoster(), roughness: 0.8 }), { pos: [0, 2.3, 0.05] }));
     W.put(g, x, z, yaw);
   }
   // banken
@@ -53,17 +66,14 @@ function buildPlaza(W) {
   const cols = [0xff5a5a, 0xffd23f, 0x5ab4ff, 0x7be07b, 0xd86bff];
   const pts = [[-12, 3], [-6, 8], [0, 10], [6, 8], [12, 3]];
   for (let i = 0; i < pts.length; i++) for (let k = 0; k < 6; k++) { const t = k / 6; const nx = pts[i][0] + (pts[(i + 1) % pts.length][0] - pts[i][0]) * t, nz = pts[i][1] + (pts[(i + 1) % pts.length][1] - pts[i][1]) * t; if (i === pts.length - 1) break; const l = mesh(new THREE.SphereGeometry(0.22, 6, 5), glow(cols[(i + k) % 5], 1.0), { cast: false, pos: [nx, groundY(nx, nz) + 4.4 - Math.sin(t * PI) * 0.7, nz] }); W.add(l); W.glowMats.push(l.material); }
-  // kaartverkoop-kraam
+  // tipkraam van Lotte (Speelhal-tips; was het kaartjesloket)
   const booth = new THREE.Group();
   booth.add(mesh(new THREE.BoxGeometry(3.2, 2.4, 2.2), new THREE.MeshStandardMaterial({ map: tex.plaster(2, 1, '#f3d9a4'), roughness: 0.9 }), { pos: [0, 1.2, 0] }));
   booth.add(mesh(new THREE.ConeGeometry(2.7, 1.6, 4), mat(0xd8357f), { pos: [0, 3.2, 0], rot: [0, PI / 4, 0] }));
   booth.add(mesh(new THREE.BoxGeometry(2.4, 0.9, 0.1), mat(0x111111), { pos: [0, 1.5, 1.12] }));
-  booth.add(mesh(new THREE.PlaneGeometry(2.4, 0.5), new THREE.MeshStandardMaterial({ map: tex.sign('KAARTJES DutchTuber LIVE', { w: 768, h: 160, size: 56, bg: '#5a1fd1', fg: '#ffe14a' }) }), { cast: false, pos: [0, 2.3, 1.13] }));
-  booth.add(mesh(new THREE.PlaneGeometry(1.1, 1.65), new THREE.MeshStandardMaterial({ map: tex.poster('DutchTuber') }), { cast: false, pos: [-1.65, 1.5, 0.3], rot: [0, -PI / 2, 0] }));
-  W.put(booth, BOOTH.x, BOOTH.z, 0.4); W.box(BOOTH.x, BOOTH.z, 3.4, 2.4, 0.4);
-  const lotte = W.npc('princess', BOOTH.x + 0.6, BOOTH.z + 0.9, 0.4, { spec: { hat: 'beanie', hatColor: 0x5a1fd1, hatColor2: 0xffe14a, shirt: 0xd8357f, tunic: 0xd8357f, hair: 0x2a1a30 } });
-  lotte.group.position.y += 0.1; W.jobNpc.booth = lotte;
-  W.interact.push({ type: 'booth', x: BOOTH.x + 0.4, z: BOOTH.z + 2.4, r: 3.2, label: 'Kaartjes kopen' });
+  booth.add(mesh(new THREE.PlaneGeometry(2.4, 0.5), new THREE.MeshStandardMaterial({ map: tex.sign('TIPKRAAM\nSpeelhal-tips!', { w: 768, h: 192, size: 56, bg: '#5a1fd1', fg: '#ffe14a' }) }), { cast: false, pos: [0, 2.3, 1.13] }));
+  booth.add(mesh(new THREE.PlaneGeometry(1.1, 1.65), new THREE.MeshStandardMaterial({ map: speelhalPoster() }), { cast: false, pos: [-1.65, 1.5, 0.3], rot: [0, -PI / 2, 0] }));
+  W.put(booth, TIPKRAAM.x, TIPKRAAM.z, 0.4); W.box(TIPKRAAM.x, TIPKRAAM.z, 3.4, 2.4, 0.4);
   // klussenbord
   const bd = new THREE.Group();
   for (const sx of [-1, 1]) bd.add(mesh(new THREE.CylinderGeometry(0.1, 0.12, 3.2, 6), mat(0x5b3d24), { pos: [sx * 1.6, 1.6, 0] }));
@@ -326,6 +336,17 @@ function buildHerald(W) {
   W.heraldNpc = n; W.interact.push({ type: 'herald', x: HERALD.x, z: HERALD.z, r: 3.6, label: 'Heraut Hans aanspreken' }); W.circle(HERALD.x, HERALD.z, 0.7);
 }
 
+// ---------------------------------------------------------------- straatpraatjes (kleine NPC's met Speelhal-grappen; Lotte staat bij de tipkraam)
+function buildStreetNpcs(W) {
+  for (const s of STRAAT) {
+    const n = W.npc(s.kind, s.x, s.z, s.yaw, { spec: s.spec, lookR: 10, lift: s.lift || 0 }); n.userData = n.userData || {};
+    const lbl = floatLabel(`${s.icon} ${s.who}`, 'Praatje!', '#9ad8ff'); lbl.position.y = n.height + 1.2; n.group.add(lbl);
+    W.interact.push({ type: 'chat', id: s.id, x: s.at ? s.at[0] : s.x, z: s.at ? s.at[1] : s.z, r: 3.2, label: s.who + ' aanspreken', npc: n });
+    if (!s.at) W.circle(s.x, s.z, 0.6);
+    W.chatNpc = W.chatNpc || {}; W.chatNpc[s.id] = n;
+  }
+}
+
 // ---------------------------------------------------------------- Hoedenmaker Hettie: kraam op het plein
 // Voegt alle plain-gekleurde meshes onder `root` samen tot één vertexkleuren-mesh (hoedjes bestaan uit veel kleine stukjes)
 function bakeColors(root) {
@@ -431,14 +452,11 @@ function buildCastle(W) {
   for (const [wx, wz, w, d] of [[cx - 22, cz + 3, 1.8, 24], [cx + 22, cz + 3, 1.8, 24], [cx, cz - 14, 46, 1.8]]) { const g = new THREE.Group(); g.add(mesh(new THREE.BoxGeometry(w, 5, d), sm, { pos: [0, 2.5, 0] })); W.put(g, wx, wz, 0); g.position.y = y; }
   for (const [tx, tz] of [[cx - 22, cz + 15], [cx + 22, cz + 15], [cx - 22, cz - 14], [cx + 22, cz - 14]]) { const t = P.tower(10, 2.4); t.position.set(tx, y, tz); W.add(t); }
   for (const [bx, bz, c] of [[cx - 7, cz + 8.5, 0x3b58a8], [cx + 7, cz + 8.5, 0x3b58a8]]) { const b = P.banner(c, 5, 1.6); b.position.set(bx, y + 9, bz); W.add(b); W.updaters.push((dt, t) => P.animateBanner(b, t)); }
-  // poort van het concert
+  // kasteelpoort (decor): de koning zit in de Speelhal, dus de poort is dicht
   const gate = new THREE.Group(); gate.add(mesh(new THREE.BoxGeometry(0.8, 6, 0.8), mat(0x3a2a52), { pos: [-3.5, 3, 0] })); gate.add(mesh(new THREE.BoxGeometry(0.8, 6, 0.8), mat(0x3a2a52), { pos: [3.5, 3, 0] })); gate.add(mesh(new THREE.BoxGeometry(8.4, 1.4, 0.8), mat(0x3a2a52), { pos: [0, 6.2, 0] }));
-  gate.add(mesh(new THREE.PlaneGeometry(7.4, 1.1), new THREE.MeshStandardMaterial({ map: tex.sign('DutchTuber LIVE', { w: 768, h: 128, size: 66, bg: '#5a1fd1', fg: '#ffe14a' }) }), { cast: false, pos: [0, 6.2, 0.45] }));
+  gate.add(mesh(new THREE.PlaneGeometry(7.4, 1.1), new THREE.MeshStandardMaterial({ map: tex.sign('Kasteel dicht: de koning\nzit in de Speelhal!', { w: 768, h: 160, size: 48, bg: '#5a1fd1', fg: '#ffe14a' }) }), { cast: false, pos: [0, 6.2, 0.45] }));
   for (const sx of [-1, 1]) for (let i = 0; i < 3; i++) { const l = mesh(new THREE.SphereGeometry(0.28, 6, 5), glow([0xff5a5a, 0xffd23f, 0x5ab4ff][i], 1.2), { cast: false, pos: [sx * 3.5, 1.2 + i * 1.8, 0.6] }); gate.add(l); W.glowMats.push(l.material); }
-  W.put(gate, CONCERT_GATE.x, CONCERT_GATE.z, 0); W.circle(-3.5, CONCERT_GATE.z, 0.6); W.circle(3.5, CONCERT_GATE.z, 0.6);
-  W.interact.push({ type: 'gate', x: CONCERT_GATE.x, z: CONCERT_GATE.z + 2.5, r: 5, label: 'Naar het concert' });
-  W.gateBeam = mesh(new THREE.CylinderGeometry(1.4, 1.4, 60, 12, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false }), { cast: false });
-  W.gateBeam.position.set(CONCERT_GATE.x, groundY(CONCERT_GATE.x, CONCERT_GATE.z) + 30, CONCERT_GATE.z + 2.5); W.gateBeam.visible = false; W.add(W.gateBeam);
+  W.put(gate, POORT.x, POORT.z, 0); W.circle(-3.5, POORT.z, 0.6); W.circle(3.5, POORT.z, 0.6);
 }
 
 // ---------------------------------------------------------------- oude muur (Metselaar Mo)

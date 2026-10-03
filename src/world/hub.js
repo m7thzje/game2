@@ -16,7 +16,8 @@ import { Sky } from './sky.js';
 import { Life } from './life.js';
 import { Pickups } from './pickups.js';
 import { HubDeurman } from './hubdeur.js';
-import { JOBS, JOB_BY_ID, ARCADE, HOME, SPAWN, BOOTH, BOARD, CONCERT_GATE, PATHS, riverX, TICKET_PRICE, VIP_PRICE, DOORKNOBS, ICE, PLAZA, CAVE } from './layout.js';
+import { JOBS, JOB_BY_ID, ARCADE, HOME, SPAWN, BOARD, PATHS, riverX, DOORKNOBS, ICE, PLAZA, CAVE } from './layout.js';
+import { HALL_COST, HALL_NAMES, DEUR_HALL_STICKERS, isUnlocked, canAfford, rank, stickers } from '../engine/progress.js';
 import * as STORY from './story.js';
 import { openSettings, openOnline } from './menu.js';
 import { mergeStatic } from './merge.js';
@@ -85,6 +86,12 @@ function makeMiniBg() {
   return { canvas: c, R, sc, N };
 }
 
+// Eerstvolgende hal die nog gebouwd moet worden (Neonkelder, Kermis, Sporthal); null als alles klaar is
+function nextHall() {
+  for (const id of [1, 2, 3]) if (!isUnlocked(id)) return { id, name: HALL_NAMES[id], cost: HALL_COST[id] };
+  return null;
+}
+
 export class HubMode {
   static async create(app, opts = {}) {
     const boot = h('div', { class: 'overlay', style: { background: '#0c0814', zIndex: 80 } }, h('div', { class: 'title', style: { fontSize: '42px' } }, 'Het dorp wordt gebouwd...'));
@@ -94,7 +101,7 @@ export class HubMode {
   constructor(app, opts) {
     this.app = app; this.opts = opts; Object.assign(this, { scene: WS.scene, camera: WS.camera, sky: WS.sky, W: WS.W, life: WS.life, players: WS.players, fx: WS.fx });
     this.W.camera = this.camera; this.mid = new THREE.Vector3(); this.focus = new THREE.Vector3(); this.busy = false; this.cinematic = false; this.t = 0; this.hudT = 0; this.modal = null; this.chaseLight = false;
-    this.camPos = new THREE.Vector3(); this.camLook = new THREE.Vector3(); this.promptItems = [null, null]; this.floatT = 0; this.hintT = 18;
+    this.camPos = new THREE.Vector3(); this.camLook = new THREE.Vector3(); this.promptItems = [null, null]; this.floatT = 0; this.hintT = 18; this.remindT = 110;
     if (WS.pickups) { WS.pickups.onCollect = (...a) => this.onCollect(...a); } else { WS.pickups = new Pickups(this.scene, this.fx, (...a) => this.onCollect(...a)); }
     this.pickups = WS.pickups; this.pickups.fx = this.fx;
     this.deur = new HubDeurman(this);
@@ -140,6 +147,7 @@ export class HubMode {
     if (o.newGame || !S.flags.intro) { this.busy = true; this.cinematic = true; await ui.say(STORY.INTRO); S.flags.intro = true; this.busy = false; this.cinematic = false; persist(); this.deur.timer = 18; this.scriptedFirstDoor = true; }
     else if (o.result && o.from) await this.afterJob(o.from, o.result);
     else if (o.result === null) ui.hud.toast('Klus gestopt.', 1500);
+    else if (o.fromArcade) ui.hud.toast('Terug in Heitjesveen! Karweitjes = heitjes = nieuwe hallen in de Speelhal.', 3800);
   }
   exit() {
     S.hubPos = { x: this.mid.x, z: this.mid.z }; persist();
@@ -172,25 +180,26 @@ export class HubMode {
     if (txt !== this._arcTxt) { this._arcTxt = txt; el.innerHTML = txt; }
   }
   onCoinsChanged() {
-    const goal = !S.ticket ? TICKET_PRICE : (!S.vip ? 0 : 0);
-    const frac = S.ticket ? 1 : clamp(S.coins / TICKET_PRICE, 0, 1);
+    const nh = nextHall();
     const ph = this.sky.phase(); const ic = ph === 'nacht' ? '🌙' : ph === 'avond' ? '🌆' : ph === 'ochtend' ? '🌅' : '☀️';
-    this.coinEl.innerHTML = `<span>${ic}</span><span>🪙 ${S.coins}</span>` + (S.ticket ? `<span class="goal">🎟️ kaartjes gekocht!</span>` : `<div><div class="goal">doel: ${TICKET_PRICE} voor 2 kaartjes</div><div class="bar"><i style="width:${frac * 100}%"></i></div></div>`);
+    const goal = nh ? `<div><div class="goal">volgende hal: ${nh.name} voor ${nh.cost} heitjes</div><div class="bar"><i style="width:${clamp(S.coins / nh.cost, 0, 1) * 100}%"></i></div></div>` : `<span class="goal">🎮 alle hallen staan er!</span>`;
+    this.coinEl.innerHTML = `<span>${ic}</span><span>🪙 ${S.coins}</span>` + goal;
     this.refreshQuest();
   }
   refreshQuest() {
     if (!this.questEl) return;
-    const done = JOBS.filter((j) => S.jobs[j.id]).length; const knobs = DOORKNOBS.filter((k) => S.collected[k.id]).length;
-    let obj;
-    if (!S.ticket) obj = S.coins >= TICKET_PRICE ? `Je hebt genoeg heitjes! Koop kaartjes bij het <b>loket</b> op het plein.` : `Spaar <b>${TICKET_PRICE}</b> heitjes voor 2 kaartjes. Doe karweitjes!`;
-    else obj = this.sky.isNight() ? `Het is donker: ga naar de <b>poort van het kasteel</b> voor het concert!` : `Kaartjes gekocht! Wacht tot het donker is en ga naar de <b>kasteelpoort</b> (noorden).`;
-    if (!S.flags.met_king) obj += `<br><b>🎮 Ontdek de Speelhal (noordwesten) — duel tegen elkaar!</b>`;
-    this.questEl.innerHTML = `<h4>Doel</h4>${obj}<br><small>Klussen: ${done}/${JOBS.length} · Gouden deurknoppen: ${knobs}/${DOORKNOBS.length}</small>`;
+    const done = JOBS.filter((j) => S.jobs[j.id]).length; const knobs = DOORKNOBS.filter((k) => S.collected[k.id]).length; const st = stickers().length;
+    const r = rank(); const nh = nextHall();
+    let obj = `Verdien heitjes met karweitjes, bouw de Speelhal uit en word <b>Speelhal-Legende</b>!`;
+    obj += `<br>${r.icon} Rang: <b>${r.name}</b>` + (r.next ? ` <small>(${r.points}/${r.next.at} punten voor ${r.next.name})</small>` : ' 👑');
+    if (nh) obj += `<br>🏗️ Volgende hal: <b>${nh.name}</b> voor <b>${nh.cost}</b> heitjes` + (canAfford(nh.id) ? ` — <b>genoeg heitjes! Naar de Speelhal!</b>` : ` (nog ${nh.cost - S.coins})`);
+    else obj += `<br>🏗️ Alle hallen staan er. Sterk gedaan!`;
+    this.questEl.innerHTML = `<h4>Doel</h4>${obj}<br><small>Klussen: ${done}/${JOBS.length} · Gouden Deurknoppen: ${knobs}/${DOORKNOBS.length} · Stickers: ${st}/${DEUR_HALL_STICKERS}</small>`;
   }
   onCollect(type, v, x, y, z, p) {
     if (type === 'coin') { S.coins += v; S.totalEarned += v; audio.sfx('coin', { rate: 0.95 + Math.random() * 0.2 }); this.fx.burst(x, y + 0.3, z, { count: 4, color: 0xffe14a, speed: 2, size: 0.2, life: 0.5 }); }
     else if (type === 'chest') { S.coins += v; S.totalEarned += v; audio.sfx('powerup'); ui.hud.toast(`Schatkist! +${v} heitjes`, 2200); }
-    else if (type === 'knob') { audio.sfx('star'); audio.sfx('bell'); const n = this.pickups.knobsFound(); ui.hud.toast(`✨ Gouden deurknop gevonden! (${n}/${DOORKNOBS.length})`, 3000); if (n === DOORKNOBS.length) setTimeout(() => ui.say([{ who: 'Jor', text: 'Dat was de laatste! Alle acht! De Deurman gaat dolblij zijn!' }]), 1500); }
+    else if (type === 'knob') { audio.sfx('star'); audio.sfx('bell'); const n = this.pickups.knobsFound(); ui.hud.toast(`✨ Gouden Deurknop gevonden! De Deurman is er gek op (${n}/${DOORKNOBS.length})`, 3200); if (n === DOORKNOBS.length) setTimeout(() => ui.say([{ who: 'Jor', text: 'Dat was de laatste! Alle acht! De Deurman gaat dolblij zijn!' }]), 1500); }
     this.onCoinsChanged(); this.coinT = 1;
   }
   drawMini() {
@@ -210,9 +219,9 @@ export class HubMode {
         if (dd > lim) { g.save(); g.translate(ax, ay); g.rotate(Math.atan2(dy, dx)); g.fillStyle = '#ffe14a'; g.beginPath(); g.moveTo(pr + 18, 0); g.lineTo(pr + 6, -8); g.lineTo(pr + 6, 8); g.fill(); g.restore(); }
         g.font = '18px sans-serif'; g.fillStyle = '#000';
       } else g.fillText('🎮', ax, ay + 6);
-      const [x, y] = toS(BOOTH.x, BOOTH.z); g.font = '18px sans-serif'; g.textAlign = 'center'; g.fillText('🎟️', x, y + 6); const [gx, gy] = toS(CONCERT_GATE.x, CONCERT_GATE.z); g.fillText(S.ticket ? '🎤' : '🏰', gx, gy + 6); }
+    }
     this.players.forEach((p, i) => { const [x, y] = toS(p.x, p.z); g.fillStyle = PLAYER_CSS[i]; g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 8, 0, TAU); g.fill(); g.stroke(); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(x + Math.sin(p.yaw) * 14, y + Math.cos(p.yaw) * 14); g.lineTo(x + Math.sin(p.yaw + 2.6) * 8, y + Math.cos(p.yaw + 2.6) * 8); g.lineTo(x + Math.sin(p.yaw - 2.6) * 8, y + Math.cos(p.yaw - 2.6) * 8); g.fill(); });
-    if (this.deur.state === 'chase' || this.deur.state === 'door') { const [x, y] = toS(this.deur.m.group.position.x, this.deur.m.group.position.z); g.fillStyle = '#ff2a2a'; g.beginPath(); g.arc(x, y, 7, 0, TAU); g.fill(); }
+    if (this.deur.state === 'chase' || this.deur.state === 'door') { const [x, y] = toS(this.deur.m.group.position.x, this.deur.m.group.position.z); g.fillStyle = '#ffb02a'; g.beginPath(); g.arc(x, y, 7, 0, TAU); g.fill(); }
     g.restore();
   }
 
@@ -316,9 +325,8 @@ export class HubMode {
       else if (it.type === 'villager') await this.talkVillager(it.v);
       else if (it.type === 'home') await this.home();
       else if (it.type === 'board') await this.board();
-      else if (it.type === 'booth') await this.booth();
+      else if (it.type === 'chat') await this.chat(it, p);
       else if (it.type === 'fountain') await this.fountain();
-      else if (it.type === 'gate') await this.gate();
       else if (it.type === 'arcade') await this.arcadeGate();
       else if (it.type === 'shop') await this.shop();
       else if (it.type === 'herald') await this.herald();
@@ -348,7 +356,8 @@ export class HubMode {
     await new Promise((res) => setTimeout(res, 300));
     const msg = T.res[r.stars] || '';
     await this.say([{ who: j.who, text: msg }, { who: j.who, text: r.total > 0 ? `Hier is je loon: ${r.total} heitjes!` : 'Helaas, geen loon.' }]);
-    if (S.coins >= TICKET_PRICE && !S.ticket && !S.flags.enough) { S.flags.enough = true; await this.say([{ who: 'Jor', text: `Wes! We hebben ${S.coins} heitjes! Genoeg voor de kaartjes!` }, { who: 'Wes', text: 'Naar het loket op het plein! Dat staat bij het podium.' }]); }
+    const nh = nextHall();
+    if (nh && S.coins >= nh.cost && !S.flags['genoeg' + nh.id]) { S.flags['genoeg' + nh.id] = true; await this.say([{ who: 'Jor', text: `Wes! We hebben ${S.coins} heitjes! Genoeg voor de ${nh.name}!` }, { who: 'Wes', text: 'Terug naar de Speelhal! Dan laat Koning Klopper hem bouwen.' }]); }
     this.busy = false;
     if (!S.flags.firstJobDone) { S.flags.firstJobDone = true; }
   }
@@ -368,11 +377,7 @@ export class HubMode {
     const target = [0.03, 0.45, 0.72][c];
     await ui.fade(1, 700); audio.sfx('door'); S.tod = target; this.sky.setTime(target); this.onCoinsChanged(); persist();
     await new Promise((r) => setTimeout(r, 500)); audio.music(this.musicName()); await ui.fade(0, 900);
-    if (c === 2 && S.settings.scare >= 2 && Math.random() < 0.7) {
-      await this.say([{ text: 'Midden in de nacht word je wakker. Je hoort een zacht gekraak...', creepy: true }], { creepy: true });
-      await scare.flicker(3);
-      await scare.stare({ label: 'NIET BEWEGEN!', hold: 3.2 }); this.updateMid();
-    }
+    if (c === 2 && Math.random() < 0.7) await this.say([{ text: 'Midden in de nacht word je wakker. Naast je bed staat de Deurman. Hij heeft een kopje thee voor je gemaakt.' }, { who: 'Jor', text: 'Dank je, Deurman. Wil je ook een koekje?' }, { text: 'De Deurman knikt, houdt de deur voor je open en vertrekt. Voor de vorm.' }]);
   }
   async board() {
     const rows = JOBS.map((j) => { const def = this.app.games[j.id]; const d = S.jobs[j.id]; return h('div', { class: 'mini' + (d ? ' done' : '') }, h('b', {}, `${def?.icon || ICONS[j.id]} ${def?.name || NAMES[j.id]}`), h('span', {}, `${j.who}`), h('br'), h('span', { style: { opacity: 0.75, fontSize: '13px' } }, `📍 ${j.place}${j.when === 'nacht' ? ' · alleen \'s nachts' : ''}`), h('br'), h('span', {}, d ? '★'.repeat(d.bestStars) + '☆'.repeat(3 - d.bestStars) + ` · ${d.plays}x gedaan` : '⭐ nieuw!')); });
@@ -380,13 +385,14 @@ export class HubMode {
   }
   async journal() {
     const done = JOBS.filter((j) => S.jobs[j.id]).length; const stars = JOBS.reduce((a, j) => a + (S.jobs[j.id]?.bestStars || 0), 0); const knobs = DOORKNOBS.filter((k) => S.collected[k.id]).length;
-    const mins = Math.floor(S.playTime / 60);
+    const mins = Math.floor(S.playTime / 60); const r = rank(); const st = stickers().length; const A = S.arcade || { wins: [0, 0] };
+    const hallen = [0, 1, 2, 3, 4].filter((i) => isUnlocked(i)).map((i) => HALL_NAMES[i]).join(', ');
     const lore = STORY.ELDER_LORE.filter((l) => done >= l.need).map((l) => h('p', { style: { fontStyle: 'italic', fontSize: '16px' } }, '“' + l.text + '”'));
     const knobHints = DOORKNOBS.filter((k) => !S.collected[k.id] && done >= 4).slice(0, 3).map((k) => h('li', {}, '✨ ' + k.hint));
     await this.cardModal('Dagboek van Wes & Jor', h('div', {},
-      h('p', { html: `🪙 <b>${S.coins}</b> heitjes (totaal verdiend: ${S.totalEarned}) · 🎟️ ${S.ticket ? 'kaartjes gekocht' : 'nog geen kaartjes'}<br>⭐ ${stars}/${JOBS.length * 3} sterren · 🔨 ${done}/${JOBS.length} klussen<br>✨ ${knobs}/${DOORKNOBS.length} gouden deurknoppen<br>👁️ Deurman gezien: ${S.sightings}× · verjaagd: ${S.banished || 0}× · geschrokken: ${S.scared || 0}×<br>⏱️ speeltijd ${mins} min` }),
+      h('p', { html: `🪙 <b>${S.coins}</b> heitjes (totaal verdiend: ${S.totalEarned})<br>🔨 Klussen gedaan: <b>${done}/${JOBS.length}</b> · ⭐ ${stars}/${JOBS.length * 3} sterren<br>${r.icon} Rang: <b>${r.name}</b> (${r.points} punten${r.next ? `, volgende rang: ${r.next.name} bij ${r.next.at}` : ''})<br>🏗️ Hallen: ${hallen}<br>🎮 Duelstand: ${S.names[0]} ${A.wins[0]} – ${A.wins[1]} ${S.names[1]}<br>✨ Gouden Deurknoppen — de Deurman is er gek op: <b>${knobs}/${DOORKNOBS.length}</b><br>🏷️ Deurman-stickers: <b>${st}/${DEUR_HALL_STICKERS}</b> voor de geheime Deurenhal<br>👋 Deurman gezien: ${S.sightings}×<br>⏱️ speeltijd ${mins} min` }),
       lore.length ? h('div', {}, h('h4', {}, 'Wat het dorp over de Deurman vertelt:'), ...lore) : null,
-      knobHints.length ? h('div', {}, h('h4', {}, 'Hints voor deurknoppen:'), h('ul', { style: { paddingLeft: '20px' } }, ...knobHints)) : null), '');
+      knobHints.length ? h('div', {}, h('h4', {}, 'Hints voor Gouden Deurknoppen:'), h('ul', { style: { paddingLeft: '20px' } }, ...knobHints)) : null), '');
   }
   cardModal(title, body, note) {
     return new Promise((resolve) => {
@@ -394,25 +400,14 @@ export class HubMode {
       const el = ui.overlay(card); this.modal = { el, resolve, t: 0.25 };
     });
   }
-  async booth() {
-    const B = STORY.BOOTH_LINES;
-    const first = !S.flags.met_booth; S.flags.met_booth = true;
-    if (first) await this.say(B.intro.map((t) => ({ who: 'Loket-Lotte', text: t })));
-    if (S.ticket) {
-      if (!S.vip && S.coins >= VIP_PRICE) {
-        await this.say([{ who: 'Loket-Lotte', text: B.vip }]);
-        const c = await this.choose('VIP-upgrade', [`Ja! (${VIP_PRICE} heitjes)`, 'Nee, dank je']);
-        if (c === 0) { S.coins -= VIP_PRICE; S.vip = true; audio.sfx('win'); this.onCoinsChanged(); persist(); ui.hud.toast('VIP-kaartjes! Backstage ontmoeting geregeld!', 3000); }
-      } else await this.say([{ who: 'Loket-Lotte', text: B.already }]);
-      return;
-    }
-    if (S.coins < TICKET_PRICE) { await this.say([{ who: 'Loket-Lotte', text: B.noMoney.replace('{need}', TICKET_PRICE - S.coins) }]); return; }
-    const c = await this.choose('2 kaartjes DutchTuber LIVE', [`Kopen! (${TICKET_PRICE} heitjes)`, 'Nog niet']);
-    if (c !== 0) return;
-    S.coins -= TICKET_PRICE; S.ticket = true; persist(); this.onCoinsChanged();
-    audio.sfx('win'); ui.flash('#fff', 400);
-    for (let i = 0; i < 5; i++) setTimeout(() => this.fx.burst(BOOTH.x + rand(-4, 4), 6 + rand(0, 3), BOOTH.z + rand(-4, 4), { count: 40, colors: [0xff4a4a, 0xffe14a, 0x4ac8ff, 0x7bff7b, 0xff7ad5], speed: 7, size: 0.4, life: 1.4, gravity: 3 }), i * 250);
-    await this.say([{ who: 'Loket-Lotte', text: B.buy }, { who: 'Jor', text: 'WE GAAN NAAR DUTCHTUBER!' }, { who: 'Wes', text: 'Het concert begint zodra het donker is. Naar de kasteelpoort! Als de Deurman ons laat...' }]);
+  // Straatpraatje: korte grap over de Speelhal-spellen (om de beurt, zodat het niet herhaalt)
+  async chat(it, p) {
+    const T = STORY.STRAAT[it.id]; if (!T) return;
+    if (it.npc) it.npc.faceTowards(p.x, p.z);
+    const k = 'chat_' + it.id; const idx = (S.flags[k] || 0) % T.lines.length; S.flags[k] = idx + 1;
+    const e = T.lines[idx]; const lines = [{ who: T.who, text: typeof e === 'string' ? e : e.t }];
+    if (e.r) lines.push({ who: e.w, text: e.r });
+    await this.say(lines);
   }
   async fountain() {
     if (S.coins < 1) { await this.say([{ text: 'Je hebt geen heitje om te gooien.' }]); return; }
@@ -421,23 +416,29 @@ export class HubMode {
     await this.say([{ text: pick(STORY.WISHES) }]);
     if (Math.random() < 0.12) { S.coins += 5; this.onCoinsChanged(); audio.sfx('coin'); ui.hud.toast('De fontein spuugt 5 heitjes terug!', 2000); }
   }
-  async arcadeGate() {
-    const first = !S.flags.met_arcade; S.flags.met_arcade = true;
-    if (first) await this.say([{ text: 'Een enorme poort in de berg, vol neon en lampionnen. Boven de ingang staat: SPEELHAL — Koning Klopper.' }, { who: 'Wes', text: 'Een speelhal in een berg?!' }, { who: 'Jor', text: 'Duels tegen elkaar! Dit wordt GEWELDIG. Ik ga winnen.' }, { who: 'Wes', text: 'In je dromen.' }]);
-    const A = S.arcade; const c = await this.choose('🎮 Speelhal van Koning Klopper', ['Naar binnen!', 'Nog niet'], `Stand: ${S.names[0]} ${A.wins[0]} – ${A.wins[1]} ${S.names[1]}`);
-    if (c !== 0) return;
+  // Naar de Speelhal (poort in de berg, Heraut Hans en het pauzemenu)
+  async naarSpeelhal() {
     S.hubPos = { x: this.mid.x, z: this.mid.z }; persist(); audio.sfx('powerup'); await ui.fade(1, 500);
     this.busy = false; this.app.goArcade({});
     await new Promise(() => {});
   }
-  // Heraut Hans nodigt uit voor de Speelhal
+  async arcadeGate() {
+    const first = !S.flags.met_arcade; S.flags.met_arcade = true;
+    if (first) await this.say([{ text: 'Een enorme poort in de berg, vol neon en lampionnen. Boven de ingang staat: SPEELHAL — Koning Klopper.' }, { who: 'Wes', text: 'Terug naar de Speelhal!' }, { who: 'Jor', text: 'Duels tegen elkaar! Ik ga winnen.' }, { who: 'Wes', text: 'In je dromen.' }]);
+    const A = S.arcade; const c = await this.choose('🎮 Naar de Speelhal', ['Naar binnen!', 'Nog niet'], `Stand: ${S.names[0]} ${A.wins[0]} – ${A.wins[1]} ${S.names[1]}`);
+    if (c === 0) await this.naarSpeelhal();
+  }
+  // Heraut Hans: nodigt uit om terug te gaan naar de Speelhal
   async herald() {
     const H = 'Heraut Hans'; const n = this.W.heraldNpc; if (n) n.faceTowards(this.mid.x, this.mid.z);
     const first = !S.flags.met_herald; S.flags.met_herald = true;
     if (n && n.userData.mark) { n.group.remove(n.userData.mark); n.userData.mark = null; }
-    if (first) { await this.say([{ who: H, text: '*TOETERTOET!* Hoor ye, hoor ye! Koning Klopper nodigt jullie uit in de Speelhal!' }, { who: H, text: '44 spelletjes, een toernooi en... een winkel voor hoedjes!' }, { who: 'Jor', text: 'Een winkel voor HOEDJES?! Wes, ik wil een tovenaarshoed!' }, { who: H, text: 'Volg de gloeiende pijlen op de grond: over het plein, over de brug en dan het noordwesten in. Je ziet de lichtzuil al van ver.', onShow: () => this.peekArcade(true) }, { who: 'Wes', text: 'Die roze kolom die tot in de wolken schiet?' }, { who: H, text: 'Precies die. Hij is helemaal niet opvallend. Succes!' }]); this.peekArcade(false); }
-    else await this.say([{ who: H, text: S.flags.met_king ? 'Welkom terug! De koning vraagt elke dag naar jullie. Meestal als hij zich verveelt.' : 'De Speelhal? Gewoon de gloeiende pijlen volgen: plein, brug, noordwesten. Je kunt er niet naast kijken!' }]);
-    if (!S.flags.met_king) ui.hud.toast('🎮 Volg de gloeiende pijlen naar de Speelhal (noordwesten)', 3500);
+    const nh = nextHall();
+    if (first) { await this.say([{ who: H, text: '*TOETERTOET!* Hoor ye, hoor ye! Wes en Jor, welkom in Heitjesveen!' }, { who: H, text: 'Karweitjes doen jullie hier. De echte pret zit in de Speelhal van Koning Klopper: 44 duels, toernooien en een winkel voor hoedjes!' }, { who: 'Jor', text: 'Een winkel voor HOEDJES?! Wes, ik wil een tovenaarshoed!' }, { who: H, text: `Brengen jullie heitjes mee uit het dorp, dan laat de koning nieuwe hallen bouwen${nh ? `: de ${nh.name} kost ${nh.cost}` : ''}. Het pad ligt vol gloeiende pijlen: over het plein, over de brug en het noordwesten in.`, onShow: () => this.peekArcade(true) }, { who: 'Wes', text: 'Die roze kolom die tot in de wolken schiet?' }, { who: H, text: 'Precies die. Hij is helemaal niet opvallend. En de Deurman bezorgt mijn post, maar er zitten nooit brieven in. Wel veel sfeer.' }]); }
+    else await this.say([{ who: H, text: pick(['Terug naar de Speelhal? Het toernooi wacht! Koning Klopper heeft weer een toernooi aangekondigd. Hij doet er elke dag één.', 'Wist je dat in de Speelhal 44 duels zijn? Ik heb ze allemaal gezien. Ik heb nog nooit gewonnen.', nh ? `Brengen jullie ${nh.cost} heitjes mee? Dan laat Klopper de ${nh.name} bouwen. Hij belt er al een architect voor.` : 'Alle hallen staan er! Jullie zijn echte Speelhal-helden. Klopper is trots. Op zichzelf, maar ook een beetje op jullie.', 'De Deurman bezorgde mijn post vanochtend. Zonder brief. Hij liet wel een sticker achter!']) }]);
+    this.peekArcade(false);
+    const c = await this.choose('📯 Heraut Hans', ['Naar de Speelhal!', 'Straks']);
+    if (c === 0) await this.naarSpeelhal();
   }
   // camera kijkt even naar de Speelhal-lichtzuil (tijdens het gesprek met de heraut)
   peekArcade(on) { this.peek = on ? { x: ARCADE.x, z: ARCADE.z, y: groundY(ARCADE.x, ARCADE.z) } : null; if (on) audio.sfx('sparkle'); }
@@ -447,31 +448,21 @@ export class HubMode {
     if (this.W.hettie) this.W.hettie.faceTowards(this.mid.x, this.mid.z);
     if (first) await this.say([{ who: H, text: 'Welkom bij Hettie! Hoeden voor hoofden van elke maat. Ook voor hoofden zonder maat.' }, { who: 'Jor', text: 'Mag ik die met de kip erop?' }, { who: H, text: 'Alles wat je maar wilt, als je maar heitjes hebt. En shirts, haarverf en capes heb ik ook!' }]);
     else await this.say([{ who: H, text: pick(['Een mooie hoed maakt van elke dag een feestdag.', 'Een hoed zegt: ik ben hier, en ik heb stijl.', 'Dit seizoen is de bloempot helemaal in.']) }]);
-    const c = await this.choose('👒 Hoeden & kleuren', ['Winkel bekijken', 'Nu even niet'], `Heitjes: ${S.coins} · de kaartjes kosten ${TICKET_PRICE}`);
+    const c = await this.choose('👒 Hoeden & kleuren', ['Winkel bekijken', 'Nu even niet'], `Heitjes: ${S.coins}`);
     if (c === 0) await this.openShop();
   }
   async openShop() { await openShop(this.app, { onClose: () => { this.refreshLooks(); this.onCoinsChanged(); } }); }
   refreshLooks() { for (const p of this.players) p.c.refreshBrother(); }
-  async gate() {
-    if (!S.ticket) { await this.say([{ who: 'Wachter', text: 'Alleen met kaartje! Ga naar het loket op het plein.' }]); return; }
-    if (!this.sky.isNight() && this.sky.phase() !== 'avond') { await this.say([{ who: 'Wachter', text: 'Het concert begint pas als het donker is. Kom terug in de avond. (Je kunt thuis slapen tot de avond.)' }]); return; }
-    const c = await this.choose('Concert', ['Naar binnen!', 'Nog even niet']); if (c !== 0) return;
-    S.hubPos = { x: this.mid.x, z: this.mid.z }; persist();
-    await ui.fade(1, 700);
-    const { EndingMode } = await import('./ending.js');
-    this.app.setMode(await EndingMode.create(this.app, {}));
-    await new Promise(() => {});
-  }
-
   // ---------------------------------------------------------------- pauze
   async pauseMenu() {
     if (this.busy) return; this.busy = true;
-    const c = await this.choose('Pauze', ['Doorgaan', 'Dagboek', '👒 Hoeden & kleuren', 'Instellingen', '🌐 Online spelen', 'Terug naar het titelscherm']);
-    if (c === 1) await this.journal();
-    else if (c === 2) await this.openShop();
-    else if (c === 3) await new Promise((r) => openSettings(r));
-    else if (c === 4) await new Promise((r) => openOnline(this.app, r));
-    else if (c === 5) { persist(); await ui.fade(1, 400); this.busy = false; await this.app.goMenu(); ui.fade(0, 500); await new Promise(() => {}); }
+    const c = await this.choose('Pauze', ['Doorgaan', '🎮 Terug naar de Speelhal', 'Dagboek', '👒 Hoeden & kleuren', 'Instellingen', '🌐 Online spelen', 'Naar het titelscherm'], 'De Deurman is een grapjas. Zwaai maar terug!');
+    if (c === 1) await this.naarSpeelhal();
+    else if (c === 2) await this.journal();
+    else if (c === 3) await this.openShop();
+    else if (c === 4) await new Promise((r) => openSettings(r));
+    else if (c === 5) await new Promise((r) => openOnline(this.app, r));
+    else if (c === 6) { persist(); await ui.fade(1, 400); this.busy = false; await this.app.goMenu(); ui.fade(0, 500); await new Promise(() => {}); }
     this.busy = false; input.reset();
   }
 
@@ -512,7 +503,6 @@ export class HubMode {
     this.deur.update(dt);
     this.W.updaters.forEach((u) => u(dt, t));
     for (const tc of this.W.torches) P.animateFire(tc, t); for (const cf of this.W.campfires) P.animateFire(cf, t);
-    if (this.W.gateBeam) { this.W.gateBeam.visible = S.ticket && !S.flags.ended; this.W.gateBeam.material.opacity = 0.16 + Math.sin(t * 2) * 0.05; }
     WS.water.userData.anim && WS.water.userData.anim(t);
     // schaduwkader volgt
     // prompts
@@ -521,9 +511,17 @@ export class HubMode {
     if (this.scriptedFirstDoor && this.deur.state === 'idle' && !this.busy) { this.scriptedFirstDoor = false; this.firstDoor(); }
     // HUD
     this.hudT -= dt; if (this.hudT <= 0) { this.hudT = 0.12; this.drawMini(); this.updateArcadeHint(); }
+    if (!this.busy && !this.cinematic) { this.remindT -= dt; if (this.remindT <= 0) { this.remindT = 150 + Math.random() * 60; this.speelhalHerinnering(); } }
+    this.hintEl.style.padding = innerWidth > 900 ? '0 190px 0 360px' : '';
     this.hintT -= dt; this.hintEl.innerHTML = this.hintT > 0 && !this.busy ? `<span>Lopen: <kbd>WASD</kbd>/<kbd>Pijltjes</kbd> · <kbd>F</kbd>/<kbd>Enter</kbd> praten of springen · <kbd>G</kbd>/<kbd>Shift</kbd> lantaarn · <kbd>Esc</kbd> menu · <kbd>Tab</kbd> dagboek</span>` : '';
     if (!this._lastPh || this._lastPh !== this.sky.phase()) { this._lastPh = this.sky.phase(); if (this.deur.state === 'idle') audio.music(this.musicName()); this.onCoinsChanged(); }
     this.updateCamera(dt);
+  }
+  // Grappige herinnering aan de Speelhal als de spelers lang in het dorp blijven
+  speelhalHerinnering() {
+    const nh = nextHall();
+    const txt = nh && canAfford(nh.id) && Math.random() < 0.6 ? STORY.HERINNERING_HAL(nh.name, nh.cost) : pick(STORY.HERINNERING);
+    audio.sfx('sparkle', { vol: 0.4 }); ui.hud.toast('🎮 ' + txt, 5500);
   }
   async firstDoor() {
     if (S.settings.scare === 0) return;
@@ -532,7 +530,7 @@ export class HubMode {
     this.updateMid();
     await new Promise((r) => setTimeout(r, 2800));
     this.busy = true; await ui.say(STORY.FIRST_DOOR); this.busy = false; this.cinematic = false;
-    ui.hud.toast('Tip: houd G / Shift vast voor je lantaarn tegen de Deurman.', 4500);
+    ui.hud.toast('Tip: de Deurman is een grapjas. Zwaai maar!', 4500);
   }
   applyDayNight(st, t) {
     const n = st.night;

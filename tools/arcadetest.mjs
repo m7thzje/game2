@@ -21,7 +21,7 @@ const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
 let cur = '-';
 page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY/.test(m.text())) errors.push(`[${cur}] ${m.text()}`); });
 page.on('pageerror', (e) => errors.push(`[${cur}] [pageerror] ${e.message} ${(e.stack||'').split('\n').slice(0,4).join(' | ')}`));
-await page.goto(`http://localhost:${port}/?quality=low`);
+await page.goto(`http://localhost:${port}/?quality=low&unlock=1`);
 await page.waitForFunction(() => window.__app && window.__app.games, null, { timeout: 90000 }).catch(() => {});
 await page.waitForTimeout(1500);
 const loaded = await page.evaluate(() => Object.keys(window.__app.games || {}));
