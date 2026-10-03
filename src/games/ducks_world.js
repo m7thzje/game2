@@ -223,7 +223,7 @@ export function buildWorld(ctx, course, rng) {
   const line = (lx, tint) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.4, 2 * W), new THREE.MeshBasicMaterial({ map: checker, transparent: true, opacity: 0.85, color: tint, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.position.set(lx, hY(lx) + 0.07, 0); m.renderOrder = 2; root.add(m); };
   line(L, 0xffffff); line(TRK.START - 1.5, 0xaaffbb);
   const signTex = (txt, bg) => canvasTex(512, 160, (g, w, h) => { g.fillStyle = bg; g.fillRect(0, 0, w, h); g.fillStyle = 'rgba(255,255,255,.2)'; for (let i = 0; i < 8; i++) g.fillRect(i * 64, 0, 32, h); g.lineWidth = 12; g.strokeStyle = '#fff'; g.strokeRect(6, 6, w - 12, h - 12); g.font = 'bold 96px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 14; g.strokeStyle = 'rgba(0,0,0,.65)'; g.lineJoin = 'round'; g.strokeText(txt, w / 2, h / 2 + 4); g.fillStyle = '#fff'; g.fillText(txt, w / 2, h / 2 + 4); });
-  const sign = (lx, txt, bg) => { for (const sd of [-1, 1]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(9, 2.8), new THREE.MeshBasicMaterial({ map: signTex(txt, bg), side: THREE.DoubleSide })); m.position.set(lx, hY(lx) + 7.2 + (sd > 0 ? -1.4 : 0.6), sd * (W + 1.3)); root.add(m); } };
+  const sign = (lx, txt, bg) => { for (const sd of [-1]) { const m = new THREE.Mesh(new THREE.PlaneGeometry(9, 2.8), new THREE.MeshBasicMaterial({ map: signTex(txt, bg), side: THREE.DoubleSide })); m.position.set(lx, hY(lx) + 6.4, sd * (W + 1.3)); root.add(m); } };
   sign(L - 4.5, 'FINISH!', '#c8283c'); sign(TRK.START + 5, 'START', '#2f9e5b');
 
   // ---- rotsen, boeien, waterlelies, schuimrandjes, draaikolken (instanced) ----
