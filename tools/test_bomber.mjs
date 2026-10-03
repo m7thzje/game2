@@ -152,7 +152,7 @@ async function runMatch(page, maxFrames = 60 * 400) {
 for (const name of scen) {
   if (['bots', 'twists', 'idle', 'timeout'].includes(name)) {
     const A = { skill: 0.97, aggr: 0.8, style: 'attack' }, Bw = { skill: 0.6, aggr: 0.5, style: 'attack' };
-    const list = name === 'twists' ? TWISTS.map((t) => [t, [A, Bw]])
+    const list = name === 'twists' ? TWISTS.filter((t) => !process.env.ONLY || t === process.env.ONLY).map((t) => [t, [A, Bw]])
       : name === 'idle' ? [['none', [{ style: 'idle' }, { style: 'idle' }]]]
         : name === 'timeout' ? [['none', [{ skill: 0.9, aggr: 0, style: 'defend' }, { skill: 0.9, aggr: 0, style: 'defend' }]]]
           : [[process.env.TW || 'none', [A, Bw]], [process.env.TW || 'none', [Bw, A]], [process.env.TW || 'none', [A, A]], [process.env.TW || 'none', [A, A]]];

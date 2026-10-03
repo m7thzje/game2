@@ -376,7 +376,7 @@ export default {
     const camP = new THREE.Vector3(), camL = new THREE.Vector3(); let camX = 0, camZ = 0;
     function updateCamera(dt) {
       const asp = camera.aspect || 1.7, tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), tanH = tanV * asp;
-      const dist = clamp(Math.max(20.8 / tanH, 14.0 / tanV) * 1.04, 30, 90);
+      const dist = clamp(Math.max(21.5 / tanH, 15.6 / tanV) * 1.04, 30, 90);
       G.camPunch = Math.max(0, G.camPunch - dt * 1.5);
       const sMid = G.sx + G.sz > 0 ? 0 : 0; camX = damp(camX, 0, 2, dt);
       const el = 1.1, d = dist * (1 - G.camPunch * 0.03);
