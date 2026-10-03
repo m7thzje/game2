@@ -169,6 +169,11 @@ for (const name of scen) {
     await runMatch('sudden(bots)', 'none', [{ skill: 0.9, style: 'coins', block: 0, sprint: 0 }, { skill: 0.9, style: 'coins', block: 0, sprint: 0 }], () => { const d = window.__app.mode.instance.dbg; d.setTime(0.05); d.setCoins(10, 10); });
     continue;
   }
+  if (name === 'hooks') {
+    const { browser, page, errors } = await open('none');
+    const r = await page.evaluate(() => { const m = window.__app.mode, inp = window.__app.input, i = m.instance; m.paused = false; for (let k = 0; k < 90; k++) { inp.update(); m.update(1 / 60); } i.onDeurman([true, false]); i.onSwap(true); i.onDeurman([false, true]); for (let k = 0; k < 60; k++) { inp.update(); m.update(1 / 60); } i.celebrate(0); i.celebrate(1); i.resultUpdate(0.05); return true; });
+    check(r && !errors.length, 'hooks (onDeurman/onSwap/celebrate) zonder fouten ' + errors.join('|')); await browser.close(); continue;
+  }
   if (name === 'shots') {
     const { browser, page, errors } = await open(process.env.TW || 'none');
     await installBots(page, [{ skill: 0.85, style: 'hunt', block: 0.003, sprint: 0.04 }, { skill: 0.8, style: 'coins', block: 0.002, sprint: 0.03 }]);

@@ -191,6 +191,11 @@ for (const name of scen) {
     });
     console.log(JSON.stringify(r)); check(r.dragon >= 1, 'draak kaapt een bal'); check(!errors.length, 'dragon: geen console-fouten ' + errors.join('|')); await browser.close(); continue;
   }
+  if (name === 'hooks') {
+    const { browser, page, errors } = await open('none');
+    const r = await page.evaluate(() => { const m = window.__app.mode, inp = window.__app.input, i = m.instance; m.paused = false; for (let k = 0; k < 90; k++) { inp.update(); m.update(1 / 60); } i.onDeurman([true, false]); i.onSwap(true); i.onDeurman([false, true]); for (let k = 0; k < 60; k++) { inp.update(); m.update(1 / 60); } i.celebrate(0); i.celebrate(1); i.resultUpdate(0.05); return true; });
+    check(r && !errors.length, 'hooks (onDeurman/onSwap/celebrate) zonder fouten ' + errors.join('|')); await browser.close(); continue;
+  }
   if (name === 'shots') {
     const { browser, page, errors } = await open(process.env.TW || 'none');
     await installBots(page, [A, Bw]);
