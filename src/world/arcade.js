@@ -10,13 +10,13 @@ import { setupLights } from '../engine/lights.js';
 import { tex } from '../engine/textures.js';
 import * as P from '../engine/props.js';
 import { h, mesh, mat, glow, canvasTex, clamp, damp, dampAngle, rand, pick, shuffle, TAU, lerp, smoothstep } from '../engine/util.js';
-import { ARCADE_IDS } from '../games/index.js';
+import { ARCADE_IDS, ARCADE_HALLS } from '../games/index.js';
 import { floatLabel } from './build.js';
 import { TWISTS } from '../engine/twist.js';
 
 const HALL = { w: 72, d: 52 };       // x: -36..36, z: -26..26
-const PIC = { dodgeball: '🔥', cakefight: '🎂', tugwar: '🪢', airhockey: '🏒', quickdraw: '🤠', memory: '🃏', paint: '🎨', duckshoot: '🦆', karts: '🏎️', climb: '🧗', tanks: '💥', chairs: '🪑', ticktock: '🕰️', minecart: '🚃', buttons: '🧱', vines: '🌿', screws: '🔩', chop: '🪓' };
-const NAME = { dodgeball: 'Vuurbal-Duel', cakefight: 'Taartengevecht', tugwar: 'Touwtrekken', airhockey: 'IJshockey-Chaos', quickdraw: 'Snelle Vingers', memory: 'Geheugen-Duel', paint: 'Verfgevecht', duckshoot: 'Schiettent', karts: 'Kartrace', climb: 'Torenklim', tanks: 'Kanonnenduel', chairs: 'Stoelendans', ticktock: 'Klokkentoren-Sprong', minecart: 'Mijnkar-Race', buttons: 'Knoppen-Breker', vines: 'Lianen-Zwaaien', screws: 'Schroef-Duel', chop: 'Houthakkers-Duel' };
+const PIC = { dodgeball: '🔥', cakefight: '🎂', tugwar: '🪢', airhockey: '🏒', quickdraw: '🤠', memory: '🃏', paint: '🎨', duckshoot: '🦆', karts: '🏎️', climb: '🧗', tanks: '💥', chairs: '🪑', ticktock: '🕰️', minecart: '🚃', buttons: '🧱', vines: '🌿', screws: '🔩', chop: '🪓', bomber: '💣', tron: '🏍️', hexagone: '⬡', tag: '🧨', brawl: '🥊', spacewar: '🚀', volley: '🏐', soccer: '⚽', pacduel: '👻', golf: '⛳', stack: '🏗️', blocks: '🧩', connect4: '🔴', dance: '💃', quiz: '🎤', code: '🔮', bake: '🥧', claw: '🧸', kalaha: '💎', bowling: '🎳', ducks: '🛁', flappy: '🐲', pinball: '🎱', hide: '🕵️', heist: '💰', catapult: '🏰' };
+const NAME = { dodgeball: 'Vuurbal-Duel', cakefight: 'Taartengevecht', tugwar: 'Touwtrekken', airhockey: 'IJshockey-Chaos', quickdraw: 'Snelle Vingers', memory: 'Geheugen-Duel', paint: 'Verfgevecht', duckshoot: 'Schiettent', karts: 'Kartrace', climb: 'Torenklim', tanks: 'Kanonnenduel', chairs: 'Stoelendans', ticktock: 'Klokkentoren-Sprong', minecart: 'Mijnkar-Race', buttons: 'Knoppen-Breker', vines: 'Lianen-Zwaaien', screws: 'Schroef-Duel', chop: 'Houthakkers-Duel', bomber: 'Boem-Man Arena', tron: 'Lichtspoor-Duel', hexagone: 'Zinkende Vloer', tag: 'Bommentikkertje', brawl: 'Smash-Arena', spacewar: 'Ruimtegevecht', volley: 'Slijm-Volleybal', soccer: 'Raket-Voetbal', pacduel: 'Spookjacht-Duel', golf: 'Minigolf-Race', stack: 'Torenbouw-Duel', blocks: 'Blokkenstrijd', connect4: 'Vier op een Rij', dance: 'Dansduel', quiz: 'Quizshow', code: 'Kristal-Code', bake: 'Taartenbakkers-Battle', claw: 'Grijpkraan-Gekte', kalaha: 'Edelsteen-Kalaha', bowling: 'Reuzen-Bowling', ducks: 'Eendenrace', flappy: 'Wolkenrace', pinball: 'Flipper-Duel', hide: 'Verkleed-Verstoppertje', heist: 'Dievenduel', catapult: 'Kasteelbelegering' };
 const KING_WINS = [
   '{w} wint! {l}, niet huilen. De koning huilt ook weleens. Meestal om uien.',
   'Een glansrijke overwinning voor {w}! {l} had pech. Of geen talent. Dat weten we nog niet.',
@@ -26,38 +26,59 @@ const KING_WINS = [
 ];
 const KING_DRAW = ['Gelijkspel! Dat is net zo saai als een stoel zonder poten.', 'Niemand wint! Dan moet je het gewoon nog eens doen. Met kracht.'];
 
-let TOURNEY = null;   // { queue:[ids], idx, score:[0,0], log:[] }
+let TOURNEY = null;   // { queue:[ids], idx, score:[0,0], hall }
+const hallOf = (id) => { const h0 = ARCADE_HALLS.find((x) => x.ids.includes(id)); return h0 ? h0.id : 0; };
+const THEMES = [
+  { bg: 0x120a1e, floorA: '#cbbfdc', floorB: '#6a4a8a', lights: [0xff5ad8, 0x5ad8ff, 0xffe14a], banner: [0x7a2fd4, 0xd8372c, 0x2f6fe0], flame: 0xffa030, trim: [0xff5ad8, 0x5ad8ff, 0xffe14a, 0x7bff7b, 0xb05aff, 0xff8a1c], host: 'Koning Klopper', hostTag: 'toernooi & regels' },
+  { bg: 0x040a1c, floorA: '#0a1230', floorB: '#101c46', lights: [0x00e5ff, 0xff2bd6, 0x7bff00], banner: [0x00b8d4, 0xd81bb0, 0x5fc800], flame: 0x20f0ff, trim: [0x00e5ff, 0xff2bd6, 0x7bff00, 0xffe14a, 0xb05aff, 0x00ffa8], host: 'DJ Dobber', hostTag: 'toernooi & regels' },
+  { bg: 0x1a0e2e, floorA: '#f1d9a6', floorB: '#d49a58', lights: [0xffd23f, 0xff7ab0, 0xffa030], banner: [0xe8372c, 0xf6f0e0, 0x2f9be0], flame: 0xffd23f, trim: [0xe8372c, 0xffd23f, 0x2f9be0, 0x7bff7b, 0xff7ab0, 0xffa030], host: 'Kermis-Kees', hostTag: 'toernooi & regels' },
+];
+const DOORS = [[{ to: 1, x: -6.5 }, { to: 2, x: 6.5 }], [{ to: 0, x: 6.5 }], [{ to: 0, x: 6.5 }]];   // deuren per hal
 
 export class ArcadeMode {
   static async create(app, opts = {}) { return new ArcadeMode(app, opts); }
   constructor(app, opts) {
-    this.app = app; this.opts = opts; this.t = 0; this.busy = false; this.menu = null; this.modal = null; this.hudT = 0; this.spin = null; this.promptKey = '';
+    this.app = app; this.opts = opts;
+    this.hallId = (opts.extra && opts.extra.hall != null) ? opts.extra.hall : (opts.from ? hallOf(opts.from) : 0);
+    this.hall = ARCADE_HALLS[this.hallId]; this.theme = THEMES[this.hallId]; this.hostName = this.theme.host;
+    this.t = 0; this.busy = false; this.menu = null; this.modal = null; this.hudT = 0; this.spin = null; this.promptKey = '';
     this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.3, 300);
     this.fx = new Particles(1500); this.scene.add(this.fx.points); this.fx.setViewportHeight(innerHeight);
     const L = setupLights(this.scene, 'indoor', { shadow: 36, center: [0, 0, 0], fog: true, fogNear: 50, fogFar: 140, shadows: S.settings.quality !== 'low' });
     this.sun = L.sun; L.sun.intensity = 1.0; L.sun.position.set(10, 30, 15); L.hemi.intensity = 1.35;
-    this.scene.background = new THREE.Color(0x120a1e); this.scene.fog.color.set(0x120a1e);
+    this.scene.background = new THREE.Color(THEMES[this.hallId].bg); this.scene.fog.color.set(THEMES[this.hallId].bg);
     this.colliders = []; this.interact = []; this.cabs = []; this.glows = [];
     this.games = this.loadedIds();
-    this.buildHall(); this.buildCabinets(); this.buildCenter(); this.buildBack();
+    this.buildHall(); this.buildDoor(); this.buildCabinets(); this.buildCenter(); this.buildBack();
     this.players = [0, 1].map((i) => {
       const c = makeBrother(i); this.scene.add(c.group);
       const ring = mesh(new THREE.RingGeometry(0.75, 0.95, 24), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.7, depthWrite: false }), { cast: false, receive: false, rot: [-Math.PI / 2, 0, 0] }); this.scene.add(ring);
       const label = floatLabel(S.names[i], '', i ? '#7fb2ff' : '#6bf09a'); label.scale.set(2.6, 0.8, 1); label.position.y = c.height + 0.95; label.material.depthTest = false; c.group.add(label);
-      return { i, c, ring, x: (i ? 1 : -1) * 2, z: 22, y: 0, vx: 0, vz: 0, vy: 0, grounded: true, yaw: Math.PI, stepT: 0 };
+      const viaDoor = opts.via === 'door'; const dxs = (DOORS[this.hallId].find((d) => d.to === opts.fromHall) || DOORS[this.hallId][0]).x; return { i, c, ring, x: viaDoor ? dxs + (i ? 1.4 : -1.4) : (i ? 1 : -1) * 2, z: viaDoor ? -18.5 : 22, y: 0, vx: 0, vz: 0, vy: 0, grounded: true, yaw: Math.PI, stepT: 0 };
     });
     this.mid = new THREE.Vector3(0, 0, 18); this.camPos = new THREE.Vector3(0, 16, 36); this.camLook = new THREE.Vector3(0, 0, 18);
     this.nextGlitch = rand(40, 80);
   }
-  loadedIds() { return ARCADE_IDS.filter((id) => this.app.games[id]); }
+  loadedIds() { return this.hall.ids.filter((id) => this.app.games[id]); }
+  allLoaded() { return ARCADE_IDS.filter((id) => this.app.games[id]); }
+  isOff(id) { return (S.arcade.excluded || []).includes(id); }
   defOf(id) { return this.app.games[id] || { name: NAME[id], icon: PIC[id] }; }
 
   // ------------------------------------------------------------------ gebouw
   buildHall() {
-    const sc = this.scene; const sm = new THREE.MeshStandardMaterial({ map: tex.stone(10, 3), roughness: 0.95, flatShading: true });
-    sc.add(mesh(new THREE.PlaneGeometry(HALL.w, HALL.d), new THREE.MeshStandardMaterial({ map: tex.checker(HALL.w / 5, HALL.d / 5, '#cbbfdc', '#6a4a8a'), roughness: 0.35, metalness: 0.15 }), { cast: false, rot: [-Math.PI / 2, 0, 0] }));
-    // loper naar de troon
-    sc.add(mesh(new THREE.PlaneGeometry(7, HALL.d - 4), new THREE.MeshStandardMaterial({ map: tex.carpet(1, 8), roughness: 1 }), { cast: false, pos: [0, 0.03, 0], rot: [-Math.PI / 2, 0, 0] }));
+    const T = this.theme; const neon = this.hallId === 1, fair = this.hallId === 2;
+    const sc = this.scene; const sm = neon ? new THREE.MeshStandardMaterial({ color: 0x2a3664, roughness: 0.8, flatShading: true, emissive: 0x0c1840, emissiveIntensity: 0.9 }) : fair ? new THREE.MeshStandardMaterial({ map: (() => { const t = canvasTex(256, 64, (g, w, hh) => { for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#f6f0e0' : '#d8372c'; g.fillRect(i * w / 8, 0, w / 8 + 1, hh); } g.fillStyle = 'rgba(0,0,0,.12)'; for (let i = 0; i < 8; i++) g.fillRect(i * w / 8, 0, 3, hh); }); t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(10, 3); return t; })(), roughness: 0.9 }) : new THREE.MeshStandardMaterial({ map: tex.stone(10, 3), roughness: 0.95, flatShading: true });
+    if (neon) {
+      const gt = canvasTex(256, 256, (g, w, hh) => { g.fillStyle = '#0a1230'; g.fillRect(0, 0, w, hh); g.strokeStyle = '#00e5ff'; g.lineWidth = 3; g.strokeRect(1, 1, w - 2, hh - 2); g.strokeStyle = 'rgba(255,43,214,.55)'; g.lineWidth = 2; g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, hh); g.moveTo(0, hh / 2); g.lineTo(w, hh / 2); g.stroke(); g.fillStyle = 'rgba(0,229,255,.12)'; g.fillRect(0, 0, w / 2, hh / 2); g.fillRect(w / 2, hh / 2, w / 2, hh / 2); });
+      gt.wrapS = gt.wrapT = THREE.RepeatWrapping; gt.repeat.set(HALL.w / 6, HALL.d / 6);
+      sc.add(mesh(new THREE.PlaneGeometry(HALL.w, HALL.d), new THREE.MeshStandardMaterial({ map: gt, roughness: 0.25, metalness: 0.4, emissive: 0x0a2a4a, emissiveMap: gt, emissiveIntensity: 0.9 }), { cast: false, rot: [-Math.PI / 2, 0, 0] }));
+      // gloeiende looplijn naar het podium
+      sc.add(mesh(new THREE.PlaneGeometry(0.5, HALL.d - 4), new THREE.MeshBasicMaterial({ color: 0xff2bd6 }), { cast: false, pos: [-3.5, 0.04, 0], rot: [-Math.PI / 2, 0, 0] })); sc.add(mesh(new THREE.PlaneGeometry(0.5, HALL.d - 4), new THREE.MeshBasicMaterial({ color: 0x00e5ff }), { cast: false, pos: [3.5, 0.04, 0], rot: [-Math.PI / 2, 0, 0] }));
+    } else {
+      sc.add(mesh(new THREE.PlaneGeometry(HALL.w, HALL.d), new THREE.MeshStandardMaterial({ map: tex.checker(HALL.w / 5, HALL.d / 5, T.floorA, T.floorB), roughness: 0.35, metalness: 0.15 }), { cast: false, rot: [-Math.PI / 2, 0, 0] }));
+      // loper naar de troon
+      sc.add(mesh(new THREE.PlaneGeometry(7, HALL.d - 4), new THREE.MeshStandardMaterial({ map: tex.carpet(1, 8), roughness: 1 }), { cast: false, pos: [0, 0.03, 0], rot: [-Math.PI / 2, 0, 0] }));
+    }
     const wallH = 15;
     const wall = (w, hh, x, y, z, ry = 0) => sc.add(mesh(new THREE.BoxGeometry(w, hh, 1.4), sm, { pos: [x, y, z], rot: [0, ry, 0] }));
     wall(HALL.w + 2, wallH, 0, wallH / 2, -HALL.d / 2 - 0.7); wall(HALL.d + 2, wallH, -HALL.w / 2 - 0.7, wallH / 2, 0, Math.PI / 2); wall(HALL.d + 2, wallH, HALL.w / 2 + 0.7, wallH / 2, 0, Math.PI / 2);
@@ -67,25 +88,50 @@ export class ArcadeMode {
     const exl = floatLabel('🚪 Uitgang', 'terug naar het dorp', '#ffe14a'); exl.position.set(0, 4.0, HALL.d / 2 - 2.5); sc.add(exl);
     this.interact.push({ type: 'exit', x: 0, z: HALL.d / 2 - 2.5, r: 4.2, label: 'Terug naar het dorp' });
     // gekleurde ramen
-    const cols = [0xff5ad8, 0x5ad8ff, 0xffe14a, 0x7bff7b, 0xb05aff, 0xff8a1c];
+    const cols = T.trim;
     for (let i = 0; i < 6; i++) for (const sx of [-1, 1]) {
       const wnd = mesh(new THREE.PlaneGeometry(2.6, 6), new THREE.MeshBasicMaterial({ color: cols[(i + (sx > 0 ? 3 : 0)) % 6], transparent: true, opacity: 0.85, fog: false }), { cast: false, pos: [sx * (HALL.w / 2 - 0.1), 10, -21 + i * 8.4], rot: [0, -sx * Math.PI / 2, 0] }); sc.add(wnd);
       sc.add(mesh(new THREE.TorusGeometry(1.3, 0.2, 5, 12, Math.PI), sm, { cast: false, pos: [sx * (HALL.w / 2 - 0.2), 13, -21 + i * 8.4], rot: [0, -sx * Math.PI / 2, 0] }));
     }
     // banieren en fakkels (vlam = alleen een mesh, geen licht)
     for (let i = 0; i < 6; i++) for (const sx of [-1, 1]) {
-      const b = P.banner([0x7a2fd4, 0xd8372c, 0x2f6fe0][i % 3], 6.5, 1.8); b.position.set(sx * (HALL.w / 2 - 1.2), 5.5, -17 + i * 6.8 - 1.8); b.rotation.y = -sx * Math.PI / 2; sc.add(b); (this.banners ||= []).push(b);
+      const b = P.banner(T.banner[i % 3], 6.5, 1.8); b.position.set(sx * (HALL.w / 2 - 1.2), 5.5, -17 + i * 6.8 - 1.8); b.rotation.y = -sx * Math.PI / 2; sc.add(b); (this.banners ||= []).push(b);
     }
     for (let i = 0; i < 10; i++) for (const sx of [-1, 1]) {
       const g = new THREE.Group(); g.add(mesh(new THREE.CylinderGeometry(0.07, 0.1, 1.1, 5), mat(0x5b3d24), { pos: [0, 0, 0] }));
-      const f = mesh(new THREE.ConeGeometry(0.17, 0.5, 5), new THREE.MeshBasicMaterial({ color: 0xffa030 }), { cast: false, pos: [0, 0.75, 0] }); g.add(f); this.glows.push(f);
+      const f = mesh(new THREE.ConeGeometry(0.17, 0.5, 5), new THREE.MeshBasicMaterial({ color: T.flame }), { cast: false, pos: [0, 0.75, 0] }); g.add(f); this.glows.push(f);
       g.position.set(sx * (HALL.w / 2 - 0.8), 4.3, -23 + i * 5.1); sc.add(g);
     }
     // discobal + kleurlichten
     this.disco = new THREE.Group();
     this.disco.add(mesh(new THREE.IcosahedronGeometry(0.7, 1), new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.95, roughness: 0.1, flatShading: true, emissive: 0x444466, emissiveIntensity: 0.6 }), { cast: false }));
     this.disco.position.set(0, 13, -21); sc.add(this.disco);
-    this.lights = [0xff5ad8, 0x5ad8ff, 0xffe14a].map((c, i) => { const l = new THREE.PointLight(c, S.settings.quality === 'low' ? 0 : 420, 40, 1.6); l.position.set(0, 9, 2); sc.add(l); return l; });
+    this.lights = T.lights.map((c, i) => { const l = new THREE.PointLight(c, S.settings.quality === 'low' ? 0 : 420, 40, 1.6); l.position.set(0, 9, 2); sc.add(l); return l; });
+    if (fair) {   // lichtsnoeren langs de muren
+      const bulbs = []; for (const sx of [-1, 1]) for (let i = 0; i < 26; i++) bulbs.push([sx * (HALL.w / 2 - 1.0), 12.2 - Math.sin(i / 25 * Math.PI) * 0.0 - ((i % 4) === 0 ? 0 : 0.5 * Math.sin(i * 1.7)), -HALL.d / 2 + 2 + i * 1.9]);
+      for (let i = 0; i < 34; i++) bulbs.push([-HALL.w / 2 + 2 + i * 2.1, 12.4 - 0.5 * Math.abs(Math.sin(i * 0.6)), -HALL.d / 2 + 1.0]);
+      const im = new THREE.InstancedMesh(new THREE.SphereGeometry(0.22, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffffff }), bulbs.length); const cc = new THREE.Color();
+      bulbs.forEach((b, i) => { im.setMatrixAt(i, new THREE.Matrix4().makeTranslation(b[0], b[1], b[2])); im.setColorAt(i, cc.set([0xffd23f, 0xff7ab0, 0x7be0ff, 0xffa030][i % 4])); }); im.frustumCulled = false; sc.add(im); this.bulbs = im;
+    }
+    if (neon) {   // neonbuizen langs de muren + speakers
+      for (const [y, c] of [[3, 0x00e5ff], [12, 0xff2bd6]]) { for (const sx of [-1, 1]) sc.add(mesh(new THREE.BoxGeometry(0.2, 0.25, HALL.d - 2), glow(c, 1.4), { cast: false, pos: [sx * (HALL.w / 2 - 0.15), y, 0] })); sc.add(mesh(new THREE.BoxGeometry(HALL.w - 2, 0.25, 0.2), glow(c, 1.4), { cast: false, pos: [0, y, -HALL.d / 2 + 0.15] })); }
+      for (const sx of [-1, 1]) { const sp = new THREE.Group(); sp.add(mesh(new THREE.BoxGeometry(2.4, 4.4, 2.2), mat(0x10162c), { pos: [0, 2.2, 0] })); for (const yy of [1.3, 3.2]) sp.add(mesh(new THREE.CircleGeometry(0.75, 14), glow(yy > 2 ? 0xff2bd6 : 0x00e5ff, 0.9), { cast: false, pos: [0, yy, 1.12] })); sp.position.set(sx * 27.5, 0, -HALL.d / 2 + 2); this.colliders.push({ x: sx * 27.5, z: -HALL.d / 2 + 2, r: 1.6 }); sc.add(sp); (this.speakers ||= []).push(sp); }
+    }
+  }
+  buildDoor() {
+    const sc = this.scene; const zb = -HALL.d / 2;
+    for (const d of DOORS[this.hallId]) {
+      const other = ARCADE_HALLS[d.to]; const dx = d.x; const col = [0xffd23f, 0xff2bd6, 0xffa030][d.to];
+      const g = new THREE.Group(); const fr = mat([0x7a2fd4, 0x1a2a6a, 0xb03020][d.to], { metalness: 0.5, roughness: 0.4 });
+      for (const sx of [-1, 1]) g.add(mesh(new THREE.BoxGeometry(0.7, 8, 0.8), fr, { pos: [sx * 2.1, 4, 0] }));
+      g.add(mesh(new THREE.BoxGeometry(5, 0.8, 0.8), fr, { pos: [0, 8.2, 0] }));
+      const gl = mesh(new THREE.PlaneGeometry(3.6, 7.6), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55, depthWrite: false }), { cast: false, receive: false, pos: [0, 4, 0.15] }); g.add(gl); (this.doorGlows ||= []).push(gl);
+      g.add(mesh(new THREE.TorusGeometry(2.1, 0.12, 5, 20, Math.PI), glow(col, 1.4), { cast: false, pos: [0, 7.6, 0.3] }));
+      g.position.set(dx, 0, zb + 0.5); sc.add(g);
+      const back = d.to === 0;
+      const lb = floatLabel(`${back ? '↩' : ['', '🌀', '🎪'][d.to]} ${other.name}`, back ? 'terug naar de Speelhal' : 'meer spellen!', back ? '#ffe14a' : '#ff9aef'); lb.scale.set(4.4, 1.4, 1); lb.position.set(dx, 10.2, zb + 1); sc.add(lb);
+      this.interact.push({ type: 'door', to: d.to, x: dx, z: zb + 3.8, r: 3.4, label: `Naar de ${other.name}` });
+    }
   }
 
   cabTexture(id, glitch = false) {
@@ -99,10 +145,10 @@ export class ArcadeMode {
     });
   }
   buildCabinets() {
-    const ids = ARCADE_IDS; const sc = this.scene;
+    const ids = this.hall.ids; const sc = this.scene;
     ids.forEach((id, n) => {
       const per = Math.ceil(ids.length / 2); const side = n < per ? -1 : 1; const k = n % per; const z = -17 + k * (35 / Math.max(1, per - 1)); const x = side * (HALL.w / 2 - 4.2);
-      const g = new THREE.Group(); const body = mat(0x2a1a46), trim = mat([0xff5ad8, 0x5ad8ff, 0xffe14a, 0x7bff7b, 0xb05aff, 0xff8a1c][n % 6]);
+      const g = new THREE.Group(); const body = mat(0x2a1a46), trim = mat(this.theme.trim[n % 6]);
       g.add(mesh(new THREE.BoxGeometry(3.4, 5.2, 2.6), body, { pos: [0, 2.6, 0] }));
       g.add(mesh(new THREE.BoxGeometry(3.6, 0.5, 2.8), trim, { pos: [0, 5.4, 0] }));
       g.add(mesh(new THREE.BoxGeometry(3.6, 0.3, 2.8), trim, { pos: [0, 0.15, 0] }));
@@ -122,21 +168,26 @@ export class ArcadeMode {
   }
   refreshLabels() {
     for (const c of this.cabs) {
-      const gm = S.arcade.byGame[c.id]; const sub = gm ? `${gm.wins[0]} – ${gm.wins[1]}` : (this.games.includes(c.id) ? 'NIEUW!' : 'binnenkort');
+      const gm = S.arcade.byGame[c.id]; const sub = this.isOff(c.id) ? '(uit het toernooi)' : gm ? `${gm.wins[0]} – ${gm.wins[1]}` : (this.games.includes(c.id) ? 'NIEUW!' : 'binnenkort');
       this.scene.remove(c.lbl); const lbl = floatLabel(`${this.defOf(c.id).icon || PIC[c.id]} ${this.defOf(c.id).name || NAME[c.id]}`, sub, '#ffe14a'); lbl.scale.set(4.3, 1.34, 1); lbl.position.set(c.x, 8.2, c.z); this.scene.add(lbl); c.lbl = lbl;
     }
   }
 
-  buildCenter() {
-    const sc = this.scene; const ids = ARCADE_IDS; const N = ids.length;
-    // Wiel van Gekte
-    const c = document.createElement('canvas'); c.width = c.height = 512; const g = c.getContext('2d');
+  drawWheel() {
+    const ids = this.hall.ids; const N = ids.length;
+    const c = this.wheelCanvas || (this.wheelCanvas = Object.assign(document.createElement('canvas'), { width: 512, height: 512 })); const g = c.getContext('2d');
     for (let i = 0; i < N; i++) {
-      const a0 = i / N * TAU, a1 = (i + 1) / N * TAU; g.fillStyle = `hsl(${(i * 47) % 360},75%,${i % 2 ? 48 : 58}%)`; g.beginPath(); g.moveTo(256, 256); g.arc(256, 256, 250, a0, a1); g.closePath(); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 4; g.stroke();
-      const am = (a0 + a1) / 2; g.save(); g.translate(256 + Math.cos(am) * 170, 256 + Math.sin(am) * 170); g.rotate(am + Math.PI / 2); g.font = '58px serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(PIC[ids[i]] || '🎮', 0, 0); g.restore();
+      const off = this.isOff(ids[i]);
+      const a0 = i / N * TAU, a1 = (i + 1) / N * TAU; g.fillStyle = off ? '#555' : `hsl(${(i * 47) % 360},75%,${i % 2 ? 48 : 58}%)`; g.beginPath(); g.moveTo(256, 256); g.arc(256, 256, 250, a0, a1); g.closePath(); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 4; g.stroke();
+      const am = (a0 + a1) / 2; g.save(); g.translate(256 + Math.cos(am) * 170, 256 + Math.sin(am) * 170); g.rotate(am + Math.PI / 2); g.font = (N > 16 ? 52 : 62) + 'px serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.globalAlpha = off ? 0.35 : 1; g.fillText(this.defOf(ids[i]).icon || PIC[ids[i]] || '🎮', 0, 0); g.restore();
     }
     g.fillStyle = '#ffd23f'; g.beginPath(); g.arc(256, 256, 34, 0, TAU); g.fill(); g.fillStyle = '#7a2fd4'; g.font = 'bold 30px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('?', 256, 258);
-    const wt = new THREE.CanvasTexture(c); wt.colorSpace = THREE.SRGBColorSpace;
+    if (this.wheelTex) this.wheelTex.needsUpdate = true;
+  }
+  buildCenter() {
+    const sc = this.scene;
+    this.drawWheel();
+    const wt = this.wheelTex = new THREE.CanvasTexture(this.wheelCanvas); wt.colorSpace = THREE.SRGBColorSpace;
     this.wheel = new THREE.Group(); this.wheelDisc = mesh(new THREE.CylinderGeometry(4.2, 4.2, 0.4, 36), [mat(0xffd23f, { metalness: 0.6 }), new THREE.MeshStandardMaterial({ map: wt, roughness: 0.4 }), mat(0xffd23f, { metalness: 0.6 })], { pos: [0, 1.2, 0] });
     this.wheel.add(this.wheelDisc); this.wheel.add(mesh(new THREE.CylinderGeometry(0.8, 1.6, 1.2, 10), mat(0x7a2fd4), { pos: [0, 0.6, 0] }));
     const ptr = mesh(new THREE.ConeGeometry(0.5, 1.4, 4), mat(0xd8372c), { pos: [0, 2.0, 4.6], rot: [Math.PI / 2 + 0.3, 0, 0] }); this.wheel.add(ptr);
@@ -152,11 +203,26 @@ export class ArcadeMode {
     const throne = new THREE.Group(); const gold = mat(0xe8b82a, { metalness: 0.6, roughness: 0.35 });
     throne.add(mesh(new THREE.BoxGeometry(5, 1.4, 4), mat(0x7a2fd4), { pos: [0, 0.7, 0] })); throne.add(mesh(new THREE.BoxGeometry(2.6, 0.5, 2.2), gold, { pos: [0, 1.65, 0] })); throne.add(mesh(new THREE.BoxGeometry(2.6, 4.2, 0.5), gold, { pos: [0, 3.7, -1] }));
     throne.add(mesh(new THREE.ConeGeometry(0.4, 1.0, 5), gold, { pos: [-1.1, 6.2, -1] })); throne.add(mesh(new THREE.ConeGeometry(0.4, 1.0, 5), gold, { pos: [1.1, 6.2, -1] }));
-    throne.position.set(0, 0, zb + 3.5); sc.add(throne); this.colliders.push({ x: 0, z: zb + 3.5, r: 3.2 });
-    this.king = makeNPC('captain', { hat: 'crown', hatColor: 0xffd23f, beard: 'full', hair: 0xf0f0f0, beardColor: 0xf0f0f0, cape: 0x7a2fd4, shirt: 0xd8357f, sleeve: 0xd8357f, scale: 1.25, bodyW: 1.5 });
-    this.king.group.position.set(0, 1.9, zb + 3.7); this.king.yaw = this.king.targetYaw = 0; this.king.pose = 'idle'; sc.add(this.king.group);
-    const kl = floatLabel('👑 Koning Klopper', 'toernooi & regels', '#ffe14a'); kl.position.set(0, 7.5, zb + 3.7); sc.add(kl);
-    this.interact.push({ type: 'king', x: 0, z: zb + 9.2, r: 5, label: 'Praten met Koning Klopper' });
+    if (this.hallId === 0) {
+      throne.position.set(0, 0, zb + 3.5); sc.add(throne); this.colliders.push({ x: 0, z: zb + 3.5, r: 3.2 });
+      this.king = makeNPC('captain', { hat: 'crown', hatColor: 0xffd23f, beard: 'full', hair: 0xf0f0f0, beardColor: 0xf0f0f0, cape: 0x7a2fd4, shirt: 0xd8357f, sleeve: 0xd8357f, scale: 1.25, bodyW: 1.5 });
+      this.king.group.position.set(0, 1.9, zb + 3.7);
+    } else if (this.hallId === 2) {   // kassa-kraam van Kermis-Kees
+      const booth = new THREE.Group(); booth.add(mesh(new THREE.BoxGeometry(7, 2.2, 3), mat(0xe8372c), { pos: [0, 1.1, 0] })); booth.add(mesh(new THREE.BoxGeometry(7.4, 0.3, 3.4), mat(0xf6f0e0), { pos: [0, 2.3, 0] }));
+      for (let i = 0; i < 7; i++) booth.add(mesh(new THREE.BoxGeometry(1.0, 0.12, 2.2), mat(i % 2 ? 0xf6f0e0 : 0xe8372c), { pos: [-3 + i, 5.6, 0.2], rot: [0.35, 0, 0] }));
+      for (const sx of [-1, 1]) booth.add(mesh(new THREE.CylinderGeometry(0.12, 0.12, 5.4, 6), mat(0xcfa060), { pos: [sx * 3.4, 2.7, 1.2] }));
+      booth.position.set(0, 0, zb + 3.5); sc.add(booth); this.colliders.push({ x: 0, z: zb + 3.5, r: 3.4 });
+      this.king = makeNPC('innkeeper', { scale: 1.25 }); this.king.group.position.set(0, 0.2, zb + 2.4);
+    } else {   // DJ-booth in de Neonkelder
+      const booth = new THREE.Group(); booth.add(mesh(new THREE.BoxGeometry(7, 1.8, 3), mat(0x10162c), { pos: [0, 0.9, 0] })); booth.add(mesh(new THREE.BoxGeometry(7.2, 0.15, 3.2), glow(0x00e5ff, 1.2), { cast: false, pos: [0, 1.85, 0] }));
+      for (const sx of [-1, 1]) { booth.add(mesh(new THREE.CylinderGeometry(0.9, 0.9, 0.18, 18), mat(0x222), { pos: [sx * 2, 1.95, 0.4] })); booth.add(mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.2, 12), glow(sx > 0 ? 0xff2bd6 : 0x7bff00, 1), { cast: false, pos: [sx * 2, 2.0, 0.4] })); }
+      booth.position.set(0, 0, zb + 3.5); sc.add(booth); this.colliders.push({ x: 0, z: zb + 3.5, r: 3.4 });
+      this.king = makeNPC('jester', { scale: 1.25 });
+      this.king.group.position.set(0, 0.2, zb + 2.4);
+    }
+    this.king.yaw = this.king.targetYaw = 0; this.king.pose = 'idle'; sc.add(this.king.group);
+    const kl = floatLabel(['👑 Koning Klopper', '🎧 DJ Dobber', '🎟️ Kermis-Kees'][this.hallId], 'toernooi & regels', '#ffe14a'); kl.position.set(0, 7.5, zb + 3.7); sc.add(kl);
+    this.interact.push({ type: 'king', x: 0, z: zb + 9.2, r: 5, label: `Praten met ${this.hostName}` });
     // scorebord
     this.boardTex = null; this.board = mesh(new THREE.PlaneGeometry(13, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }), { cast: false, pos: [-17, 8, zb + 0.2] }); sc.add(this.board);
     sc.add(mesh(new THREE.BoxGeometry(13.8, 8.8, 0.4), mat(0xe8b82a, { metalness: 0.6 }), { cast: false, pos: [-17, 8, zb + 0.05] }));
@@ -185,7 +251,7 @@ export class ArcadeMode {
       g.font = 'bold 190px Fredoka, sans-serif'; g.fillStyle = '#6bf09a'; g.fillText(String(A.wins[0]), 230, 360); g.fillStyle = '#7fb2ff'; g.fillText(String(A.wins[1]), 794, 360); g.fillStyle = '#fff'; g.font = 'bold 90px Fredoka'; g.fillText('–', 512, 330);
       g.font = '34px Fredoka, sans-serif'; g.fillStyle = '#d8c8ff'; g.fillText(`${A.plays} duels gespeeld · ${A.draws} gelijkspel · toernooien: ${A.tourneys[0]} – ${A.tourneys[1]}`, w / 2, 430);
       const best = Object.entries(A.byGame).sort((a, b) => b[1].plays - a[1].plays).slice(0, 3);
-      g.font = '30px Fredoka, sans-serif'; g.fillStyle = '#fff'; best.forEach(([id, v], i) => g.fillText(`${PIC[id] || ''} ${NAME[id] || id}: ${v.wins[0]} – ${v.wins[1]}`, w / 2, 490 + i * 42));
+      g.font = '30px Fredoka, sans-serif'; g.fillStyle = '#fff'; best.forEach(([id, v], i) => g.fillText(`${this.defOf(id).icon || PIC[id] || ''} ${this.defOf(id).name || NAME[id] || id}: ${v.wins[0]} – ${v.wins[1]}`, w / 2, 490 + i * 42));
       if (!best.length) g.fillText('Nog geen duels gespeeld. Kies een kast!', w / 2, 500);
     });
     this.board.material.map = t; this.board.material.needsUpdate = true;
@@ -198,11 +264,12 @@ export class ArcadeMode {
     const o = this.opts;
     if (o.result && o.result.pvp) await this.afterDuel(o.result);
     else if (o.result === null && TOURNEY) { TOURNEY = null; ui.hud.toast('Toernooi afgebroken.', 2200); }
+    else if (o.via === 'door' && !S.flags['met_hall' + this.hallId]) { this.busy = true; S.flags['met_hall' + this.hallId] = true; await ui.say(this.hallId === 1 ? [{ who: 'DJ Dobber', text: 'Welkom in de NEONKELDER! Hier draait de muziek hard en zijn de spellen nóg gekker. Bommen, ruimteschepen, flipperkasten... jullie zeggen het maar.' }, { who: 'Jor', text: 'Waar is de pauzeknop?' }, { who: 'DJ Dobber', text: 'Die is stuk. Veel plezier!' }] : [{ who: 'Kermis-Kees', text: 'Kom d\'ren, kom d\'ren! Welkom op de KERMIS! Quiz, taart, bowlen, eendjes... en geen kaartje nodig. Ik ben niet van het kaartjes.' }, { who: 'Wes', text: 'Is dat een kip in de grijpkraan?' }, { who: 'Kermis-Kees', text: 'Ja. Niet aanraken. Hij weet wat hij doet.' }]); this.busy = false; }
     else if (!S.flags.met_king) { this.busy = true; S.flags.met_king = true; await ui.say([{ who: 'Koning Klopper', text: 'WELKOM in mijn Speelhal! Hier zijn geen karweitjes en geen heitjes te verdienen... Alleen eer, glorie en een heleboel chaos.' }, { who: 'Koning Klopper', text: 'Elk duel krijgt een TWIST: soms loop je achterstevoren, soms ruil je van lichaam, en soms staat de Deurman te kijken. Wie dan beweegt, verliest.' }, { who: 'Wes', text: 'Ik ga zo hard winnen.' }, { who: 'Jor', text: 'Dat dacht je.' }]); this.busy = false; }
   }
   exit() { ui.clearScreens(); ui.activeMenus = []; ui.hudEl.innerHTML = ''; ui.setVignette(0); }
   resize(w, hh) { this.camera.aspect = w / hh; this.camera.updateProjectionMatrix(); this.fx.setViewportHeight(hh); }
-  hudSetup() { ui.hud.setHint('Loop naar een arcadekast en druk op je actieknop om te duelleren · Wiel van Gekte = verrassing · Koning Klopper = toernooi'); setTimeout(() => ui.hud.setHint(null), 14000); }
+  hudSetup() { ui.hud.setHint(`Loop naar een kast en druk op je actieknop om te duelleren · Wiel van Gekte = verrassing · ${this.hostName} = toernooi` + (this.hallId === 0 ? ' · deuren in de achtermuur = meer hallen!' : '')); setTimeout(() => ui.hud.setHint(null), 14000); }
   refreshHud() {
     const A = S.arcade; ui.hud.setScore(`Stand: ${S.names[0]} ${A.wins[0]} – ${A.wins[1]} ${S.names[1]}` + (TOURNEY ? `   ·   🏆 Toernooi ${TOURNEY.idx + 1}/${TOURNEY.queue.length}: ${TOURNEY.score[0]} – ${TOURNEY.score[1]}` : ''));
     ui.hud.setPlayerInfo(0, `Duels gewonnen: ${A.wins[0]}`); ui.hud.setPlayerInfo(1, `Duels gewonnen: ${A.wins[1]}`);
@@ -236,6 +303,7 @@ export class ArcadeMode {
       else if (it.type === 'board') { this.drawBoard(); await this.cardModal('Scorebord', h('p', { style: { textAlign: 'center', fontSize: '24px' }, html: `<b style="color:#1d9a52">${S.names[0]}</b> ${S.arcade.wins[0]} – ${S.arcade.wins[1]} <b style="color:#2f6fe0">${S.names[1]}</b><br><small>${S.arcade.plays} duels · ${S.arcade.draws} gelijkspel · toernooien ${S.arcade.tourneys[0]} – ${S.arcade.tourneys[1]}</small>` })); }
       else if (it.type === 'trophies') await this.cardModal('Trofeeënkast', h('p', { style: { textAlign: 'center' }, html: 'Win duels, speel veel verschillende spellen en win toernooien om trofeeën te verdienen.<br>Eerste Bloed (1 winst) · Duelist (5) · Meester (12) · Legende (30) · Gelijkspel-koning (4 gelijk) · Toernooi-winnaar · Allesspeler (8 spellen) · Rivaliteit (20 duels).' }));
       else if (it.type === 'exit') await this.leave();
+      else if (it.type === 'door') await this.useDoor(it);
     } finally { if (!this.leaving) { this.busy = false; input.reset(); } }
   }
   async cab(id) {
@@ -249,26 +317,82 @@ export class ArcadeMode {
   }
   async launch(id, extra = null) {
     this.leaving = true; audio.sfx('powerup'); await ui.fade(1, 450); persist();
-    this.app.playGame(id, { back: 'arcade', extra });
+    this.app.playGame(id, { back: 'arcade', extra: { ...(extra || {}), hall: this.hallId } });
     await new Promise(() => {});
+  }
+  async useDoor(it) {
+    const o = ARCADE_HALLS[it.to]; const c = await this.choose(`${it.to === 0 ? '↩' : '🚪'} ${o.name}`, [`Ja, naar de ${o.name}!`, 'Nog niet'], `${o.ids.length} spellen`); if (c !== 0) return;
+    this.leaving = true; audio.sfx('powerup'); await ui.fade(1, 450); persist(); this.app.goArcade({ extra: { hall: it.to }, via: 'door', fromHall: this.hallId }); await new Promise(() => {});
   }
   async leave() {
     const c = await this.choose('Speelhal verlaten?', ['Ja, terug naar het dorp', 'Nog niet']); if (c !== 0) return;
     this.leaving = true; TOURNEY = null; await ui.fade(1, 500); persist(); this.app.goHub({ fromArcade: true }); await new Promise(() => {});
   }
   async kingTalk() {
-    const lines = [{ who: 'Koning Klopper', text: pick(['Ha, de uitdagers! Wie van jullie durft het eerst?', 'Kom maar op met je duels. Ik heb popcorn.', 'Mijn Speelhal is de beste van het hele Koninkrijk. Ook de enige. Maar toch.']) }];
+    const H = this.hostName; const A = S.arcade; A.excluded ||= []; A.tlen ||= 5;
+    const lines = [{ who: H, text: pick(['Ha, de uitdagers! Wie van jullie durft het eerst?', 'Kom maar op met je duels. Ik heb popcorn.', 'Mijn hal is de beste van het hele Koninkrijk. Ook de enige. Maar toch.']) }];
     await this.say(lines);
-    const c = await this.choose('Koning Klopper', TOURNEY ? ['Toernooi voortzetten', 'Toernooi stoppen', 'Hoe werkt het?', 'Niets'] : ['🏆 Toernooi starten (5 duels)', 'Hoe werkt het?', 'Niets']);
-    const idx = TOURNEY ? c : c + (c >= 1 ? 1 : 0);
-    if (!TOURNEY && c === 0) { await this.startTourney(); return; }
-    if (TOURNEY && c === 0) { await this.nextTourney(); return; }
-    if (TOURNEY && c === 1) { TOURNEY = null; this.refreshHud(); ui.hud.toast('Toernooi gestopt.', 1800); return; }
-    if ((TOURNEY && c === 2) || (!TOURNEY && c === 1)) await this.say([{ who: 'Koning Klopper', text: 'Elk duel is 1 tegen 1 op hetzelfde scherm. Voor elk spel wordt een TWIST geloot: omgekeerde besturing, verwisselde knoppen, dronken kikker, reus tegen dwerg, zeepvloer, maanzwaartekracht, lichaamswissel of de Deurman die komt kijken.' }, { who: 'Koning Klopper', text: 'In een toernooi spelen jullie 5 verschillende duels. Wie de meeste wint, wordt Kampioen van de Speelhal. En ja, jullie delen de heitjes. Ik ben niet van het gokken.' }]);
+    const opts = TOURNEY ? ['Toernooi voortzetten', 'Toernooi stoppen', '⚙️ Spellen kiezen', 'Hoe werkt het?', 'Niets'] : [`🏆 Toernooi starten (${A.tlen} duels)`, '⚙️ Spellen kiezen & lengte', 'Hoe werkt het?', 'Niets'];
+    const c = await this.choose(H, opts);
+    const key = TOURNEY ? ['go', 'stop', 'pick', 'how', 'none'][c] : ['start', 'pick', 'how', 'none'][c];
+    if (key === 'start') { await this.startTourney(); return; }
+    if (key === 'go') { await this.nextTourney(); return; }
+    if (key === 'stop') { TOURNEY = null; this.refreshHud(); ui.hud.toast('Toernooi gestopt.', 1800); return; }
+    if (key === 'pick') { await this.pickGames(); return this.kingTalk(); }
+    if (key === 'how') await this.say([{ who: H, text: 'Elk duel is 1 tegen 1 op hetzelfde scherm. Voor elk spel wordt een TWIST geloot: omgekeerde besturing, verwisselde knoppen, dronken kikker, reus tegen dwerg, zeepvloer, maanzwaartekracht, lichaamswissel of de Deurman die komt kijken.' }, { who: H, text: `In een toernooi spelen jullie ${A.tlen} verschillende duels uit álle hallen. Spellen die jullie niet leuk vinden kun je uitzetten bij "Spellen kiezen". Wie de meeste wint, wordt Kampioen. En ja, jullie delen de heitjes.` }]);
+  }
+  // Keuzescherm: welke spellen doen mee aan toernooi en wiel + toernooilengte
+  pickGames() {
+    return new Promise((resolve) => {
+      const A = S.arcade; A.excluded ||= []; A.tlen ||= 5; const LENS = [3, 5, 8, 10, 15];
+      const ids = this.allLoaded(); const total = ids.length;
+      const entries = [{ k: 'len' }, { k: 'all' }, { k: 'none' }, { k: 'done' }];
+      for (const hl of ARCADE_HALLS) for (const id of hl.ids) if (ids.includes(id)) entries.push({ k: 'game', id, hall: hl.name });
+      let sel = 0; const head = h('p', { style: { textAlign: 'center', margin: '4px 0' } }); const grid = h('div', { class: 'pickgrid' });
+      const card = h('div', { class: 'card', style: { width: 'min(900px,96vw)', maxHeight: '90vh', overflow: 'auto' } }, h('h2', {}, 'Spellen kiezen'), head, grid, h('div', { class: 'small-note' }, 'Pijltjes = kiezen · actieknop = aan/uit · Esc = klaar'));
+      const on = (id) => !A.excluded.includes(id);
+      const tiles = [];
+      const act = (e) => {
+        if (e.k === 'len') { A.tlen = LENS[(LENS.indexOf(A.tlen) + 1) % LENS.length]; }
+        else if (e.k === 'all') A.excluded = [];
+        else if (e.k === 'none') A.excluded = ids.slice();
+        else if (e.k === 'game') { A.excluded = on(e.id) ? [...A.excluded, e.id] : A.excluded.filter((x) => x !== e.id); }
+        else if (e.k === 'done') { close(); return; }
+        audio.sfx('select'); draw();
+      };
+      const draw = () => {
+        const n = ids.filter(on).length; head.innerHTML = `Doen mee: <b>${n}</b> van ${total} spellen · Toernooi: <b>${Math.min(A.tlen, Math.max(n, 0))}</b> duels`;
+        tiles.forEach((t, i) => { const e = entries[i]; t.className = 'pick' + (i === sel ? ' sel' : '') + (e.k === 'game' && !on(e.id) ? ' off' : '') + (e.k === 'game' ? '' : ' ctl'); });
+        if (tiles[sel]) tiles[sel].scrollIntoView({ block: 'nearest' });
+      };
+      entries.forEach((e, i) => {
+        const label = e.k === 'len' ? () => `🎯 Lengte: ${A.tlen}` : e.k === 'all' ? () => '✅ Alles aan' : e.k === 'none' ? () => '⛔ Alles uit' : e.k === 'done' ? () => '👍 Klaar' : () => `${on(e.id) ? '✔' : '✖'} ${this.defOf(e.id).icon || PIC[e.id] || ''} ${this.defOf(e.id).name || NAME[e.id]}`;
+        const t = h('div', { onClick: () => { sel = i; act(e); } }); tiles.push(t); grid.append(t); t._label = label;
+      });
+      const origDraw = draw; const draw2 = () => { origDraw(); tiles.forEach((t) => { t.textContent = t._label(); }); };
+      const el = ui.overlay(card); el.style.overflow = 'auto';
+      let closed = false; const close = () => { if (closed) return; closed = true; persist(); this.refreshLabels(); this.drawWheel(); el.remove(); this.picker = null; input.reset(); resolve(); };
+      // eerste tekening
+      const redraw = () => draw2(); redraw();
+      const COLS = 4;
+      this.picker = { t: 0.3, update: (dt) => {
+        this.picker.t -= dt; if (this.picker.t > 0) return;
+        let moved = false;
+        for (const p of input.p) {
+          if (p.leftP) { sel = Math.max(0, sel - 1); moved = true; } if (p.rightP) { sel = Math.min(entries.length - 1, sel + 1); moved = true; }
+          if (p.upP) { sel = Math.max(0, sel - COLS); moved = true; } if (p.downP) { sel = Math.min(entries.length - 1, sel + COLS); moved = true; }
+          if (p.aP) { act(entries[sel]); redraw(); }
+        }
+        if (moved) { audio.sfx('click'); redraw(); }
+        if (input.pressed('Escape')) close();
+      } };
+      // klik-act ook opnieuw tekenen
+      tiles.forEach((t, i) => t.addEventListener('click', () => redraw()));
+    });
   }
   async wheelSpin() {
-    const ids = ARCADE_IDS.filter((id) => this.games.includes(id)); if (!ids.length) { await this.say([{ text: 'Het wiel is nog kapot.' }]); return; }
-    const N = ARCADE_IDS.length; const pickId = pick(ids); const i = ARCADE_IDS.indexOf(pickId);
+    const hall = this.hall.ids; const ids = hall.filter((id) => this.games.includes(id) && !this.isOff(id)); if (!ids.length) { await this.say([{ text: 'Het wiel heeft geen spellen om uit te kiezen (alles staat uit!).' }]); return; }
+    const N = hall.length; const pickId = pick(ids); const i = hall.indexOf(pickId);
     const alpha = ((i + 0.5) / N) * TAU;             // hoek in de canvas
     const cur = this.wheelDisc.rotation.y; let target = alpha; while (target < cur + TAU * 4) target += TAU;
     this.spin = { from: cur, to: target, t: 0, dur: 4.2, lastTick: 0 };
@@ -281,15 +405,16 @@ export class ArcadeMode {
 
   // ------------------------------------------------------------------ toernooi
   async startTourney() {
-    const ids = shuffle(ARCADE_IDS.filter((id) => this.games.includes(id)).slice()).slice(0, 5);
-    if (ids.length < 2) { await this.say([{ who: 'Koning Klopper', text: 'Er zijn nog te weinig werkende kasten voor een toernooi.' }]); return; }
-    TOURNEY = { queue: ids, idx: 0, score: [0, 0], log: [] };
-    await this.say([{ who: 'Koning Klopper', text: `Het TOERNOOI begint! ${ids.length} duels: ${ids.map((id) => this.defOf(id).icon).join(' ')}. Wie de meeste wint, is Kampioen. En de winnaar mag een fanfare kiezen.` }]);
+    const A = S.arcade; const pool = this.allLoaded().filter((id) => !this.isOff(id));
+    if (pool.length < 2) { await this.say([{ who: this.hostName, text: 'Er zijn te weinig spellen aangezet voor een toernooi. Kies er meer bij "Spellen kiezen".' }]); return; }
+    const n = Math.min(A.tlen || 5, pool.length); const ids = shuffle(pool.slice()).slice(0, n);
+    TOURNEY = { queue: ids, idx: 0, score: [0, 0], hall: this.hallId };
+    await this.say([{ who: this.hostName, text: `Het TOERNOOI begint! ${ids.length} duels: ${ids.map((id) => this.defOf(id).icon).join(' ')}. Wie de meeste wint, is Kampioen. En de winnaar mag een fanfare kiezen.` }]);
     await this.nextTourney();
   }
   async nextTourney() {
     const T = TOURNEY; const id = T.queue[T.idx]; const def = this.defOf(id);
-    await this.say([{ who: 'Koning Klopper', text: `Duel ${T.idx + 1} van ${T.queue.length}: ${def.icon} ${def.name}! Stand: ${S.names[0]} ${T.score[0]} – ${T.score[1]} ${S.names[1]}.` }]);
+    await this.say([{ who: this.hostName, text: `Duel ${T.idx + 1} van ${T.queue.length}: ${def.icon} ${def.name}! Stand: ${S.names[0]} ${T.score[0]} – ${T.score[1]} ${S.names[1]}.` }]);
     await this.launch(id, { tourney: true });
   }
   async afterDuel(r) {
@@ -298,7 +423,7 @@ export class ArcadeMode {
     const line = w == null ? pick(KING_DRAW) : pick(KING_WINS).replace(/\{w\}/g, names[w]).replace(/\{l\}/g, names[1 - w]);
     if (w != null) { this.players[w].c.pose = 'cheer'; this.players[1 - w].c.pose = 'sad'; }
     await new Promise((res) => setTimeout(res, 500));
-    await this.say([{ who: 'Koning Klopper', text: line }]);
+    await this.say([{ who: this.hostName, text: line }]);
     this.players.forEach((p) => (p.c.pose = 'idle'));
     if (TOURNEY) {
       const T = TOURNEY; if (w != null) T.score[w]++; else { T.score[0] += 0.5; T.score[1] += 0.5; }
@@ -315,7 +440,7 @@ export class ArcadeMode {
     audio.sfx('win'); ui.flash('#fff', 400);
     for (let i = 0; i < 6; i++) setTimeout(() => this.fx.burst(rand(-8, 8), 7 + rand(0, 4), rand(0, 10), { count: 40, colors: [0xff5ad8, 0xffe14a, 0x5ad8ff, 0x7bff7b], speed: 8, size: 0.45, life: 1.4, gravity: 3 }), i * 260);
     if (win != null) { this.players[win].c.pose = 'cheer'; this.players[1 - win].c.pose = 'sad'; }
-    await this.say([{ who: 'Koning Klopper', text: win == null ? 'Het toernooi eindigt in een GELIJKSPEL! Dat is zo zeldzaam als een stille kip. Jullie zijn allebei Kampioen. En allebei een beetje verliezer.' : `${names[win]} is KAMPIOEN van de Speelhal! ${names[1 - win]}, jij krijgt een applausje. Hier, ik klap voor je. Klap klap.` }, { who: 'Koning Klopper', text: 'Als beloning voor jullie moed krijgen jullie samen 50 heitjes van mijn schatkist. Gebruik ze verstandig. Of niet.' }]);
+    await this.say([{ who: this.hostName, text: win == null ? 'Het toernooi eindigt in een GELIJKSPEL! Dat is zo zeldzaam als een stille kip. Jullie zijn allebei Kampioen. En allebei een beetje verliezer.' : `${names[win]} is KAMPIOEN van de Speelhallen! ${names[1 - win]}, jij krijgt een applausje. Hier, ik klap voor je. Klap klap.` }, { who: this.hostName, text: 'Als beloning voor jullie moed krijgen jullie samen 50 heitjes van mijn schatkist. Gebruik ze verstandig. Of niet.' }]);
     this.players.forEach((p) => (p.c.pose = 'idle'));
   }
 
@@ -338,6 +463,7 @@ export class ArcadeMode {
     this.t += dt; const t = this.t;
     if (this.modal) { this.modal.t -= dt; if (this.modal.t <= 0 && (input.p[0].aP || input.p[1].aP || input.pressed('Escape'))) { this.modal.el.remove(); const r = this.modal.resolve; this.modal = null; r(); input.reset(); } }
     if (this.menu) this.menu.update();
+    if (this.picker) this.picker.update(dt);
     const frozen = this.busy || scare.active;
     for (const p of this.players) {
       if (!frozen && input.p[p.i].aP) { const it = this.nearest(p); if (it) this.doInteract(it, p); else if (p.grounded) { p.vy = 8; p.grounded = false; p.c.air = true; p.c.jump(); audio.sfx('jump', { vol: 0.5 }); } }
@@ -359,7 +485,7 @@ export class ArcadeMode {
     if (this.spin) {
       const s = this.spin; s.t += dt; const k2 = Math.min(1, s.t / s.dur); const e = 1 - Math.pow(1 - k2, 3);
       const prev = this.wheelDisc.rotation.y; this.wheelDisc.rotation.y = lerp(s.from, s.to, e);
-      const seg = TAU / ARCADE_IDS.length; if (Math.floor(prev / seg) !== Math.floor(this.wheelDisc.rotation.y / seg)) { audio.sfx('tick', { rate: 1 + (1 - k2) * 0.5, vol: 0.7 }); this.wheel.scale.setScalar(1.01); }
+      const seg = TAU / this.hall.ids.length; if (Math.floor(prev / seg) !== Math.floor(this.wheelDisc.rotation.y / seg)) { audio.sfx('tick', { rate: 1 + (1 - k2) * 0.5, vol: 0.7 }); this.wheel.scale.setScalar(1.01); }
       this.wheel.scale.setScalar(damp(this.wheel.scale.x, 1, 14, dt));
       if (k2 >= 1) { const done = s.done; this.spin = null; done && done(); }
     }

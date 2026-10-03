@@ -12,6 +12,7 @@ await page.waitForFunction(() => window.__app && window.__app.games, null, { tim
 await page.waitForTimeout(1500);
 await page.evaluate(() => window.__app.goArcade({}));
 await page.waitForFunction(() => window.__app.mode && window.__app.mode.cabs, null, { timeout: 60000 });
+if (process.env.EXCL) await page.evaluate(async () => { const { S } = await import('/src/save.js'); const ids = Object.keys(window.__app.games).filter((id) => window.__app.mode.hall.ids.includes(id)); S.arcade.excluded = ids.slice(3); S.arcade.tlen = 8; window.__allowed = ids.slice(0, 3); });
 const c0 = await page.evaluate(async () => { const { S } = await import('/src/save.js'); return { coins: S.coins, t: [...S.arcade.tourneys], plays: S.arcade.plays }; });
 await page.evaluate(() => { const m = window.__app.mode; for (const p of m.players) { p.x = 12; p.z = -2; } window.__t = m.startTourney(); });
 let duels = 0, done = false;
@@ -42,12 +43,12 @@ for (let i = 0; i < 400 && !done; i++) {
   if (r !== 'dialog' && r !== 'wait' && r !== 'idle' && r !== 'close') console.log(i, r);
   if (r === 'close') duels++;
   const s = await page.evaluate(async () => { const { S } = await import('/src/save.js'); return { coins: S.coins, t: [...S.arcade.tourneys], plays: S.arcade.plays }; });
-  if (s.plays >= c0.plays + 5 && s.coins >= c0.coins + 150) { done = true; console.log('toernooi klaar', JSON.stringify({ c0, s })); }
+  if (s.plays >= c0.plays + (process.env.EXCL ? 3 : 5) && s.coins >= c0.coins + (process.env.EXCL ? 110 : 150)) { done = true; console.log('toernooi klaar', JSON.stringify({ c0, s })); }
   await page.waitForTimeout(250);
 }
 await page.waitForTimeout(3000);
 const fin = await page.evaluate(async () => { const { S } = await import('/src/save.js'); return { by: Object.keys(S.arcade.byGame).join(','), coins: S.coins, t: [...S.arcade.tourneys], plays: S.arcade.plays }; });
-console.log('duels gespeeld:', duels, 'eind:', JSON.stringify(fin), 'start:', JSON.stringify(c0));
+console.log('toegestaan:', await page.evaluate(() => window.__allowed), 'duels gespeeld:', duels, 'eind:', JSON.stringify(fin), 'start:', JSON.stringify(c0));
 await page.screenshot({ path: '/tmp/tourney_end.png' });
 console.log(errors.length ? 'ERRORS ' + errors.join(' | ') : 'NO ERRORS');
 await b.close(); server.close();

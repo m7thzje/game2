@@ -4,12 +4,23 @@ export const GAME_IDS = [
   'kitchen', 'hotbomb', 'goblins', 'rhythm', 'sweeper', 'breakout', 'sumo',
 ];
 
-// Duel-spellen voor de Speelhal (1 tegen 1, met een willekeurige twist)
-export const ARCADE_IDS = [
-  'dodgeball', 'cakefight', 'tugwar', 'airhockey', 'quickdraw', 'memory',
-  'paint', 'duckshoot', 'karts', 'climb', 'tanks', 'chairs',
-  'ticktock', 'minecart', 'buttons', 'vines', 'screws', 'chop',
+// Duel-spellen voor de Speelhal (1 tegen 1, met een willekeurige twist), verdeeld over twee hallen
+export const ARCADE_HALLS = [
+  { id: 0, name: 'Speelhal', ids: [
+    'dodgeball', 'cakefight', 'tugwar', 'airhockey', 'quickdraw', 'memory',
+    'paint', 'duckshoot', 'karts', 'climb', 'tanks', 'chairs',
+    'ticktock', 'minecart', 'buttons', 'vines', 'screws', 'chop',
+  ] },
+  { id: 1, name: 'Neonkelder', ids: [
+    'bomber', 'tron', 'hexagone', 'tag', 'brawl', 'spacewar', 'volley',
+    'soccer', 'pacduel', 'golf', 'stack', 'blocks', 'connect4', 'dance',
+  ] },
+  { id: 2, name: 'Kermis', ids: [
+    'quiz', 'code', 'bake', 'claw', 'kalaha', 'bowling',
+    'ducks', 'flappy', 'pinball', 'hide', 'heist', 'catapult',
+  ] },
 ];
+export const ARCADE_IDS = ARCADE_HALLS.flatMap((h) => h.ids);
 
 const cache = {};
 export async function loadGame(id) {

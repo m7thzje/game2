@@ -99,3 +99,11 @@ kbd{display:inline-block;min-width:24px;padding:0 6px;text-align:center;border-r
 .twist{margin:10px 0;padding:10px 16px;border-radius:14px;background:linear-gradient(90deg,#ffe14a,#ff9a3a);color:#3a1a00;text-align:center;border:3px solid #7a3a00;animation:pop .5s}
 .twist b{display:block;font-size:20px}.twist span{font-size:16px}
 .card.pvp .vs{display:flex;justify-content:center;gap:22px;font-size:34px;font-weight:700;margin:6px 0 10px}
+
+/* Speelhal: spellen kiezen */
+.pickgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin:8px 0}
+.pick{padding:8px 6px;border-radius:12px;border:3px solid var(--wood-d);background:linear-gradient(180deg,#8a5a2b,#6b4226);color:#ffe9b0;font-family:'Fredoka',sans-serif;font-size:15px;text-align:center;cursor:pointer;line-height:1.15}
+.pick.ctl{background:linear-gradient(180deg,#5b7a3b,#3f5a28)}
+.pick.off{opacity:.45;filter:grayscale(.7)}
+.pick.sel{background:linear-gradient(180deg,#ffd45a,#e0a020);color:#3a2412;border-color:#fff;transform:scale(1.04)}
+@media (max-width:700px){.pickgrid{grid-template-columns:repeat(2,1fr)}}
