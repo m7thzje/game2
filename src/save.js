@@ -10,7 +10,8 @@ const defaults = () => ({
   sightings: 0,        // aantal keer dat de Deurman gezien is
   scared: 0,           // aantal keer geschrokken
   ticket: false, vip: false, ending: false,
-  arcade: { wins: [0, 0], draws: 0, plays: 0, byGame: {}, tourneys: [0, 0] },
+  arcade: { wins: [0, 0], draws: 0, plays: 0, byGame: {}, tourneys: [0, 0], unlocked: [0] },
+  deur: { stickers: [], cameos: 0 },   // Deurman-vriendenboek
   // hoedjes en kleuren per broer (zie engine/cosmetics.js); 'std' = standaard
   cosmetics: { owned: [{ hat: ['std'], shirt: ['std'], hair: ['std'], cape: ['std'] }, { hat: ['std'], shirt: ['std'], hair: ['std'], cape: ['std'] }], equipped: [{ hat: 'std', shirt: 'std', hair: 'std', cape: 'std' }, { hat: 'std', shirt: 'std', hair: 'std', cape: 'std' }] },
   playTime: 0, tod: 0.1, hubPos: null, banished: 0,

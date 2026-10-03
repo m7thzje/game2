@@ -28,6 +28,8 @@ export const app = {
   },
   async goMenu() { const { MenuMode } = await import('./world/menu.js'); app.setMode(null); app.setMode(new MenuMode(app)); },
   async goHub(opts = {}) { const { HubMode } = await import('./world/hub.js'); app.setMode(null); app.setMode(await HubMode.create(app, opts)); },
+  async goBoard(opts = {}) { const { BoardMode } = await import('./world/board.js'); app.setMode(null); app.setMode(await BoardMode.create(app, opts)); },
+  async goOpening(opts = {}) { const { OpeningMode } = await import('./world/opening.js'); app.setMode(null); app.setMode(new OpeningMode(app, opts)); },
   async goArcade(opts = {}) { const { ArcadeMode } = await import('./world/arcade.js'); app.setMode(null); app.setMode(await ArcadeMode.create(app, opts)); },
   async playGame(id, { practice = false, back = 'hub', twist = null, extra = null } = {}) {
     const def = await loadGame(id);
@@ -35,7 +37,7 @@ export const app = {
     ui.fade(0, 500);   // kwam uit het dorp met een zwart scherm: nu weer zichtbaar maken
     app.setMode(new MinigameMode(app, def, {
       practice, twist, extra,
-      onDone: async (res) => { await ui.fade(1, 300); if (back === 'hub') await app.goHub({ result: res, from: id }); else if (back === 'arcade') await app.goArcade({ result: res, from: id, extra }); else if (back === 'menu') await app.goMenu(); ui.fade(0, 500); },
+      onDone: async (res) => { await ui.fade(1, 300); if (back === 'hub') await app.goHub({ result: res, from: id }); else if (back === 'arcade') await app.goArcade({ result: res, from: id, extra }); else if (back === 'board') await app.goBoard({ result: res, from: id, extra }); else if (back === 'menu') await app.goMenu(); ui.fade(0, 500); },
     }));
   },
 };
