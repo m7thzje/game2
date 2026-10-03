@@ -8,7 +8,7 @@ import { mergeStatic } from './quickdraw_merge.js';
 
 export const HX = { S: 1.2, COLS: 12, ROWS: 8, Y: [0, -3.2, -6.4], TH: 0.9, LAVA: -14.5 };
 const SQ3 = Math.sqrt(3);
-const LAYER_COL = [[0.35, 0.82, 0.9], [0.72, 0.5, 1.0], [1.0, 0.72, 0.28]];   // cyaan, paars, amber
+const LAYER_COL = [[0.22, 0.92, 0.98], [0.9, 0.42, 1.0], [1.0, 0.68, 0.16]];   // cyaan, paars, amber
 const HOT = [1.9, 0.45, 0.12], FIRE = [2.2, 1.1, 0.2];
 
 function tileTexture() {
@@ -32,6 +32,21 @@ function rockTexture() {
     g.fillStyle = '#3a2430'; g.fillRect(0, 0, w, h);
     for (let i = 0; i < 170; i++) { const l = 30 + r() * 45; g.fillStyle = `rgba(${l + 25},${l},${l + 10},${0.25 + r() * 0.3})`; g.beginPath(); g.ellipse(r() * w, r() * h, 8 + r() * 30, 4 + r() * 16, r() * 3, 0, TAU); g.fill(); }
     for (let i = 0; i < 26; i++) { g.strokeStyle = 'rgba(255,120,40,.22)'; g.lineWidth = 1.5; let x = r() * w, y = r() * h; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 4; k++) { x += (r() - 0.5) * 60; y += (r() - 0.5) * 60; g.lineTo(x, y); } g.stroke(); }
+  });
+}
+function lavaTexture() {
+  return canvasTex(512, 512, (g, w, h) => {
+    const r = mulberry32(31);
+    g.fillStyle = '#ff6a12'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 40; i++) { const x = r() * w, y = r() * h, R = 30 + r() * 70; const gr = g.createRadialGradient(x, y, 2, x, y, R); gr.addColorStop(0, 'rgba(255,200,60,.55)'); gr.addColorStop(1, 'rgba(255,120,20,0)'); g.fillStyle = gr; g.beginPath(); g.arc(x, y, R, 0, TAU); g.fill(); }
+    // donkere korstplaten met gloeiende randen
+    for (let i = 0; i < 46; i++) {
+      const x = r() * w, y = r() * h, R = 26 + r() * 60, n = 6 + Math.floor(r() * 3);
+      for (const [ox, oy] of [[0, 0], [w, 0], [-w, 0], [0, h], [0, -h]]) {
+        g.beginPath(); for (let k = 0; k < n; k++) { const a = k / n * TAU, rr = R * (0.7 + r() * 0.5 * 0 + 0.3 * Math.sin(k * 2.3 + i)); g.lineTo(x + ox + Math.cos(a) * rr, y + oy + Math.sin(a) * rr * 0.8); } g.closePath();
+        g.fillStyle = 'rgba(96,22,8,.82)'; g.fill(); g.strokeStyle = 'rgba(255,170,40,.85)'; g.lineWidth = 4; g.lineJoin = 'round'; g.stroke();
+      }
+    }
   });
 }
 function glowTex() { return canvasTex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 1, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); }); }
@@ -65,6 +80,10 @@ export class TileField {
     this.mesh = new THREE.InstancedMesh(geo, m, n); this.mesh.castShadow = shadows; this.mesh.receiveShadow = shadows; this.mesh.frustumCulled = false;
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(this.mesh);
+    // doorzichtige 'spooktegels': tegels in een hogere laag boven een speler worden glazig zodat je hem ziet
+    const gm = new THREE.MeshStandardMaterial({ map: m.map, vertexColors: true, roughness: 0.4, transparent: true, opacity: 0.26, depthWrite: false });
+    this.ghost = new THREE.InstancedMesh(geo, gm, 120); this.ghost.count = 0; this.ghost.frustumCulled = false; this.ghost.renderOrder = 3; scene.add(this.ghost);
+    this.gflag = new Uint8Array(n); this.ghostSet = new Set();
     const rng = mulberry32(5), c = new THREE.Color();
     for (let l = 0; l < this.L; l++) for (let k = 0; k < this.K; k++) {
       const i = l * this.K + k, v = 0.9 + rng() * 0.2, b = LAYER_COL[l];
@@ -132,15 +151,29 @@ export class TileField {
     for (let tries = 0; tries < 40; tries++) { const l = layer >= 0 ? layer : Math.floor(Math.random() * this.L), k = Math.floor(Math.random() * this.K); if (this.st[l * this.K + k] === 0) return [l, k]; }
     return null;
   }
-  _write(i) {
+  _mat(i, hide = false) {
     const k = i % this.K, l = (i / this.K) | 0, t = this.list[k], o = this._o, st = this.st[i];
     let sc = 1, sx = 0, sy = 0, sz = 0;
-    if (st === 3) sc = 0.0001;
+    if (st === 3 || hide) sc = 0.0001;
     else if (st === 4) { const u = clamp(this.tm[i] / 0.5, 0, 1); sc = this.tm[i] < 0 ? 0.0001 : Math.max(0.0001, 1 + 2.7 * Math.pow(u - 1, 3) + 1.7 * Math.pow(u - 1, 2)); }
     else if (st === 1) { const a = 0.04 + 0.1 * (1 - this.tm[i] / this.tmax[i]); const s = this.seed[i], tt = performance.now() * 0.001; sx = Math.sin(tt * 53 + s) * a; sz = Math.cos(tt * 47 + s * 2) * a; sy = Math.sin(tt * 61 + s) * a * 0.5; }
     o.position.set(t.x + sx, HX.Y[l] + this.oy[i] + sy, t.z + sz);
     o.rotation.set(this.rot[i * 3], this.rot[i * 3 + 1], this.rot[i * 3 + 2]); o.scale.setScalar(sc);
-    o.updateMatrix(); this.mesh.setMatrixAt(i, o.matrix);
+    o.updateMatrix(); return o.matrix;
+  }
+  _write(i) { this.mesh.setMatrixAt(i, this._mat(i, this.gflag[i] === 1)); }
+  // zet de lijst tegels die glazig getekend moeten worden (elke frame aanroepen)
+  setGhosts(arr) {
+    const next = new Set(arr); let dirty = false;
+    for (const i of this.ghostSet) if (!next.has(i)) { this.gflag[i] = 0; this._write(i); dirty = true; }
+    let j = 0; const ca = this.mesh.instanceColor.array;
+    for (const i of next) {
+      if (j >= 120) break;
+      if (!this.gflag[i]) { this.gflag[i] = 1; this._write(i); dirty = true; }
+      this.ghost.setMatrixAt(j, this._mat(i)); this._c.setRGB(ca[i * 3], ca[i * 3 + 1], ca[i * 3 + 2]); this.ghost.setColorAt(j, this._c); j++;
+    }
+    this.ghostSet = next; this.ghost.count = j;
+    if (j || dirty) { this.ghost.instanceMatrix.needsUpdate = true; if (this.ghost.instanceColor) this.ghost.instanceColor.needsUpdate = true; this.mesh.instanceMatrix.needsUpdate = true; }
   }
   update(dt) {
     if (!this.active.size) return;
@@ -190,7 +223,7 @@ export function buildWorld(ctx, colors) {
   const shell = new THREE.Mesh(sg, new THREE.MeshStandardMaterial({ map: rockT, vertexColors: true, side: THREE.BackSide, roughness: 1, flatShading: true })); shell.position.y = -14; scene.add(shell);
 
   // lavameer
-  const lavaT = tex.lava(7, 7);
+  const lavaT = lavaTexture(); lavaT.wrapS = lavaT.wrapT = THREE.RepeatWrapping; lavaT.repeat.set(4, 4);
   const lavaM = new THREE.MeshStandardMaterial({ map: lavaT, emissive: 0xff5a14, emissiveMap: lavaT, emissiveIntensity: 1.15, roughness: 0.5 });
   const lava = mesh(new THREE.PlaneGeometry(130, 130), lavaM, { cast: false, receive: false, pos: [0, HX.LAVA, 0], rot: [-Math.PI / 2, 0, 0] }); scene.add(lava); W.lava = lava; W.lavaT = lavaT;
   const glowDisc = new THREE.Mesh(new THREE.CircleGeometry(30, 32), new THREE.MeshBasicMaterial({ color: 0xff7a20, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
@@ -198,14 +231,14 @@ export function buildWorld(ctx, colors) {
 
   const root = new THREE.Group(); scene.add(root);
   const stoneM = new THREE.MeshStandardMaterial({ map: tex.stone(2, 6), color: 0xb8a8c0, roughness: 0.95, flatShading: true });
-  const darkM = mat(0x2a1a22, { roughness: 1 }), bowlM = mat(0x2a2a34, { metalness: 0.5, roughness: 0.5 });
+  const darkM = mat(0x4a2226, { roughness: 1 }), bowlM = mat(0x2a2a34, { metalness: 0.5, roughness: 0.5 });
   // zuilen rondom met vuurschalen
   const flames = [];
-  const nP = 12;
+  const nP = 10;
   for (let k = 0; k < nP; k++) {
-    const a = k / nP * TAU + 0.26, rr = 19.5 + (k % 3) * 2.3, top = 2.2 + (k % 4) * 1.6 - (k % 3 === 0 ? 1.5 : 0), h = top - HX.LAVA;
-    const x = Math.cos(a) * rr, z = Math.sin(a) * rr * 0.8 - 1;
-    root.add(mesh(new THREE.CylinderGeometry(1.15, 1.6, h, 8), stoneM, { cast: false, receive: false, pos: [x, HX.LAVA + h / 2, z] }));
+    const a = k / nP * TAU + 0.3, rr = 23 + (k % 3) * 2.5, top = -3.5 + (k % 4) * 0.9, h = top - HX.LAVA;
+    const x = Math.cos(a) * rr * 1.15, z = Math.sin(a) * rr * 0.75 - 1;
+    root.add(mesh(new THREE.CylinderGeometry(0.95, 1.35, h, 8), stoneM, { cast: false, receive: false, pos: [x, HX.LAVA + h / 2, z] }));
     root.add(mesh(new THREE.CylinderGeometry(1.5, 1.2, 0.5, 8), stoneM, { cast: false, receive: false, pos: [x, top + 0.2, z] }));
     root.add(mesh(new THREE.CylinderGeometry(1.1, 0.6, 0.55, 8), bowlM, { cast: false, receive: false, pos: [x, top + 0.75, z] }));
     flames.push([x, top + 1.25, z]);
@@ -213,8 +246,8 @@ export function buildWorld(ctx, colors) {
     root.add(mesh(new THREE.TorusGeometry(1.32, 0.12, 5, 14), mat(0xd8a830, { metalness: 0.6, roughness: 0.4 }), { cast: false, receive: false, pos: [x, top - 0.6, z], rot: [Math.PI / 2, 0, 0] }));
   }
   // spitse rotsen in de lava
-  for (let i = 0; i < 28; i++) {
-    const a = rng() * TAU, rr = 14 + rng() * 34, hh = 2 + rng() * 9, rd = 0.9 + rng() * 1.8;
+  for (let i = 0; i < 16; i++) {
+    const a = rng() * TAU, rr = 16 + rng() * 34, hh = 2 + rng() * 9, rd = 0.9 + rng() * 1.8;
     root.add(mesh(new THREE.ConeGeometry(rd, hh, 5), darkM, { cast: false, receive: false, pos: [Math.cos(a) * rr, HX.LAVA + hh / 2 - 0.4, Math.sin(a) * rr * 0.85 - 2], rot: [0, rng() * 6, (rng() - 0.5) * 0.25] }));
   }
   // kasteelmuur in de verte met verlichte raampjes
@@ -231,7 +264,7 @@ export function buildWorld(ctx, colors) {
 
   // vuur in de schalen (instanced) + banieren in spelerskleur aan de zijkanten
   const fm = new THREE.InstancedMesh(new THREE.ConeGeometry(0.55, 1.5, 6), new THREE.MeshBasicMaterial({ color: 0xffa030 }), flames.length); fm.frustumCulled = false; scene.add(fm);
-  W.flames = { mesh: fm, pos: flames }; for (const f of flames) scene.add(Object.assign(glowSprite(0xff8a30, 6, 0.45), { position: new THREE.Vector3(f[0], f[1] + 0.2, f[2]) }));
+  W.flames = { mesh: fm, pos: flames }; for (const f of flames) { const gs = glowSprite(0xff8a30, 6, 0.45); gs.position.set(f[0], f[1] + 0.2, f[2]); scene.add(gs); }
   [-1, 1].forEach((sd, i) => {
     for (const zz of [-5, 5]) {
       const g = new THREE.Group(); g.position.set(sd * 14.4, -1.2, zz * 1.1);

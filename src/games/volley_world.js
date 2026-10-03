@@ -110,8 +110,8 @@ export function buildBeach(ctx, L, colorsCss) {
   for (const sx of [-1, 1]) {
     const col = sx < 0 ? 0x35c46f : 0x4a8cff;
     const stp = stripeTex('#' + col.toString(16).padStart(6, '0'), '#ffffff', 8, true);
-    for (const z of [-2.4, 2.4]) scene.add(mesh(new THREE.CylinderGeometry(0.55, 0.62, 15, 12), new THREE.MeshStandardMaterial({ map: stp, roughness: 0.4 }), { cast: false, pos: [sx * (W + 0.55), 7.5, z] }));
-    for (const z of [-2.4, 2.4]) { scene.add(mesh(new THREE.SphereGeometry(0.75, 10, 8), mat(col, { flatShading: false, roughness: 0.3 }), { cast: false, pos: [sx * (W + 0.55), 15.1, z] })); }
+    for (const z of [-2.4, 2.4]) scene.add(mesh(new THREE.CylinderGeometry(0.36, 0.42, 15, 10), new THREE.MeshStandardMaterial({ map: stp, roughness: 0.4 }), { cast: false, pos: [sx * (W + 0.45), 7.5, z] }));
+    for (const z of [-2.4, 2.4]) { scene.add(mesh(new THREE.SphereGeometry(0.5, 10, 8), mat(col, { flatShading: false, roughness: 0.3 }), { cast: false, pos: [sx * (W + 0.45), 15.1, z] })); }
     const fl = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 15), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); fl.rotation.y = Math.PI / 2; fl.position.set(sx * (W + 0.1), 7.5, 0); scene.add(fl); B.walls.push(fl);
   }
   // netpaal
@@ -191,7 +191,7 @@ export function buildBeach(ctx, L, colorsCss) {
   // scorebord (houten bord, midden achter)
   const sbC = document.createElement('canvas'); sbC.width = 512; sbC.height = 192; const sbG = sbC.getContext('2d');
   const sbT = new THREE.CanvasTexture(sbC); sbT.colorSpace = THREE.SRGBColorSpace;
-  const sb = new THREE.Group(); sb.position.set(0, 10.2, -5.5); scene.add(sb);
+  const sb = new THREE.Group(); sb.position.set(0, 9.6, -5.5); sb.scale.setScalar(0.9); scene.add(sb);
   sb.add(mesh(new THREE.BoxGeometry(8.6, 3.3, 0.4), mat(0x6a3a1c, { flatShading: false }), { cast: false }));
   sb.add(mesh(new THREE.PlaneGeometry(8.1, 2.8), new THREE.MeshBasicMaterial({ map: sbT, toneMapped: false }), { cast: false, receive: false, pos: [0, 0, 0.21] }));
   for (const sx of [-1, 1]) sb.add(mesh(new THREE.CylinderGeometry(0.1, 0.1, 10, 5), mat(0x6a3a1c), { cast: false, pos: [sx * 3.6, -6.2, -0.1] }));

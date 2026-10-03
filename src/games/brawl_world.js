@@ -90,14 +90,12 @@ export function buildStage(ctx) {
   // ---- hoofdeiland ----
   const isle = new THREE.Group(); scene.add(isle);
   const R = ST.HW + 0.6;
-  const topProf = [[0, 0], [R, 0], [R, -0.6]].map(([x, y]) => new THREE.Vector2(x, y));
+  const topProf = [[R, -0.6], [R, 0], [0, 0]].map(([x, y]) => new THREE.Vector2(x, y));
   const rockProf = [[R, -0.6], [R * 0.99, -1.4], [R * 0.9, -3.5], [R * 0.62, -6.2], [R * 0.3, -8.6], [0, -10.5]].map(([x, y]) => new THREE.Vector2(x, y));
-  const grassM = new THREE.MeshStandardMaterial({ map: tex.grass(6, 2), roughness: 1, flatShading: true });
+  const grassM = new THREE.MeshStandardMaterial({ map: tex.grass(6, 2), roughness: 1, flatShading: true, side: THREE.DoubleSide });
   const topM = mesh(new THREE.LatheGeometry(topProf, 28), grassM, { cast: false, receive: true, scale: [1, 1, 0.42] }); isle.add(topM);
   const rockT = tex.stone(5, 2);
-  isle.add(mesh(new THREE.LatheGeometry(rockProf, 20), new THREE.MeshStandardMaterial({ map: rockT, color: 0xb8a4d8, roughness: 1, flatShading: true }), { cast: false, receive: true, scale: [1, 1, 0.42] }));
-  // gouden rand-stenen voorop
-  for (let i = 0; i < 14; i++) { const a = (i / 14) * TAU; const x = Math.cos(a) * (R - 0.15), z = Math.sin(a) * (R - 0.15) * 0.42; if (z < -0.1) continue; isle.add(mesh(new THREE.BoxGeometry(0.9, 0.5, 0.5), mat(i % 2 ? 0xe8c24a : 0xd8a830, { metalness: 0.5, roughness: 0.4 }), { cast: false, pos: [x, -0.2, z], rot: [0, -a, 0] })); }
+  isle.add(mesh(new THREE.LatheGeometry(rockProf, 20), new THREE.MeshStandardMaterial({ map: rockT, color: 0xb8a4d8, roughness: 1, flatShading: true, side: THREE.DoubleSide }), { cast: false, receive: true, scale: [1, 1, 0.42] }));
   // kristallen onder het eiland
   const cs = crystalSpikes(rng, 9, R * 1.2); cs.position.set(0, -3.8, 1.2); isle.add(cs);
   const cs2 = crystalSpikes(rng, 6, R * 0.8); cs2.position.set(0, -7.2, 0.3); isle.add(cs2);
@@ -132,12 +130,12 @@ export function buildStage(ctx) {
   // ---- wolken (1 draw call, geinstantieerd) ----
   {
     const N = 16, PUF = 5, geo = new THREE.IcosahedronGeometry(1, 1);
-    const im = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, opacity: 0.93 }), N * PUF);
+    const im = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false, transparent: true, opacity: 0.86 }), N * PUF);
     im.frustumCulled = false; im.renderOrder = -1;
     const cl = [], col = new THREE.Color();
     for (let i = 0; i < N; i++) {
-      const near = i % 4 === 0, z = near ? -9 - rng() * 6 : -22 - rng() * 60, sc = near ? 2.6 + rng() * 1.5 : 5 + rng() * 6;
-      cl.push({ x: (rng() - 0.5) * 150, y: near ? -9 - rng() * 5 : -14 + rng() * 40, z, sc, sp: (0.25 + rng() * 0.5) * (near ? 1.4 : 1), ph: rng() * 6 });
+      const near = i % 4 === 0, z = near ? -8 - rng() * 5 : -24 - rng() * 50, sc = near ? 1.5 + rng() * 0.9 : 2.4 + rng() * 3.2;
+      cl.push({ x: (rng() - 0.5) * 150, y: near ? -12 - rng() * 5 : (i % 2 ? -17 + rng() * 15 : 17 + rng() * 12), z, sc, sp: (0.25 + rng() * 0.5) * (near ? 1.4 : 1), ph: rng() * 6 });
       for (let k = 0; k < PUF; k++) { col.set(near ? 0xfff2f6 : [0xffd0dc, 0xffe6c8, 0xe8c0ff][i % 3]); im.setColorAt(i * PUF + k, col); }
     }
     scene.add(im); W.clouds = { im, cl, PUF, d: new THREE.Object3D() };

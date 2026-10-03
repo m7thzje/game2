@@ -87,11 +87,11 @@ export function itemTexture(type) {
 export function buildWorld(ctx, L) {
   const { scene } = ctx;
   const rng = mulberry32(4242);
-  const W = { t: 0, cheerT: 0, spect: [], bats: [], flames: [] };
+  const W = { t: 0, cheerT: 0, emberT: 0, spect: [], bats: [], flames: [] };
   scene.background = skyTexture('#14060c', '#4a1a14');
   scene.fog = new THREE.Fog(0x2a0e10, 46, 120);
-  L.hemi.color.set(0xffd8b0); L.hemi.groundColor.set(0xff5a1a); L.hemi.intensity = 1.25;
-  L.sun.color.set(0xffe2c0); L.sun.intensity = 1.55; L.sun.position.set(-10, 34, 14);
+  L.hemi.color.set(0xdcd4ff); L.hemi.groundColor.set(0xff6a30); L.hemi.intensity = 1.2;
+  L.sun.color.set(0xfff4e8); L.sun.intensity = 1.5; L.sun.position.set(-10, 34, 14);
   const AX = B.COLS * B.CELL, AZ = B.ROWS * B.CELL;       // 26 x 22
 
   // ---------------- grot + lava ----------------
@@ -112,32 +112,32 @@ export function buildWorld(ctx, L) {
   const floor = mesh(new THREE.PlaneGeometry(AX, AZ), floorMat, { cast: false, pos: [0, 0, 0], rot: [-Math.PI / 2, 0, 0] }); scene.add(floor);
   const baseM = new THREE.MeshStandardMaterial({ map: tex.stone(8, 2), color: 0x9a8aa8, roughness: 0.95, flatShading: true });
   scene.add(mesh(new THREE.BoxGeometry(AX + 3, 3.4, AZ + 3), baseM, { cast: false, pos: [0, -1.72, 0] }));
-  scene.add(mesh(new THREE.BoxGeometry(AX + 3.3, 0.18, AZ + 3.3), mat(0xe8c24a, { metalness: 0.7, roughness: 0.35 }), { cast: false, pos: [0, -0.02, 0] }));
+  scene.add(mesh(new THREE.BoxGeometry(AX + 3.3, 0.18, AZ + 3.3), mat(0xe8c24a, { metalness: 0.7, roughness: 0.35 }), { cast: false, pos: [0, -0.2, 0] }));
   // steunpilaren onder het platform
   for (const [x, z] of [[-10, -8], [10, -8], [-10, 8], [10, 8], [0, 0]]) scene.add(mesh(new THREE.CylinderGeometry(1.6, 2.1, 6, 8), baseM, { cast: false, pos: [x, -6.2, z] }));
   // lage muur + kantelen rondom (samengevoegd tot één mesh)
   {
     const geos = []; const addBox = (w, h, d, x, y, z) => { const gg = new THREE.BoxGeometry(w, h, d); gg.translate(x, y, z); geos.push(gg); };
     const ex = AX / 2 + 0.6, ez = AZ / 2 + 0.6;
-    addBox(AX + 2.4, 1.6, 1.2, 0, 0.8, -ez); addBox(AX + 2.4, 1.6, 1.2, 0, 0.8, ez); addBox(1.2, 1.6, AZ + 1.2, -ex, 0.8, 0); addBox(1.2, 1.6, AZ + 1.2, ex, 0.8, 0);
-    for (let i = -6; i <= 6; i++) { addBox(1.3, 0.7, 1.2, i * 2, 1.9, -ez); addBox(1.3, 0.7, 1.2, i * 2, 1.9, ez); }
-    for (let i = -5; i <= 5; i++) { addBox(1.2, 0.7, 1.3, -ex, 1.9, i * 2); addBox(1.2, 0.7, 1.3, ex, 1.9, i * 2); }
+    addBox(AX + 2.4, 0.9, 1.2, 0, 0.45, -ez); addBox(AX + 2.4, 0.9, 1.2, 0, 0.45, ez); addBox(1.2, 0.9, AZ + 1.2, -ex, 0.45, 0); addBox(1.2, 0.9, AZ + 1.2, ex, 0.45, 0);
+    for (let i = -6; i <= 6; i++) { addBox(1.3, 0.45, 1.2, i * 2, 1.1, -ez); addBox(1.3, 0.45, 1.2, i * 2, 1.1, ez); }
+    for (let i = -5; i <= 5; i++) { addBox(1.2, 0.45, 1.3, -ex, 1.1, i * 2); addBox(1.2, 0.45, 1.3, ex, 1.1, i * 2); }
     const merged = mergeGeos(geos);
     scene.add(mesh(merged, new THREE.MeshStandardMaterial({ map: tex.stone(1, 1), color: 0xa89ab8, roughness: 0.9, flatShading: true }), { cast: false }));
   }
 
   // ---------------- pilaren, kratten, stenen, vlammen ----------------
-  const pillarGeo = new THREE.BoxGeometry(1.92, 2.6, 1.92), capGeo = new THREE.BoxGeometry(2.08, 0.4, 2.08);
+  const pillarGeo = new THREE.BoxGeometry(1.92, 1.7, 1.92), capGeo = new THREE.BoxGeometry(2.0, 0.28, 2.0);
   const pc = []; for (let r = 0; r < B.ROWS; r++) for (let c = 0; c < B.COLS; c++) if (c % 2 === 1 && r % 2 === 1) pc.push([c, r]);
   const pil = inst(pillarGeo, new THREE.MeshStandardMaterial({ map: pillarTexture(), roughness: 0.9, flatShading: true }), pc.length);
-  const cap = inst(capGeo, mat(0x5a4a78), pc.length);
-  pc.forEach(([c, r], i) => { setI(pil, i, cx(c), 1.3, cz(r)); setI(cap, i, cx(c), 2.75, cz(r)); });
+  const cap = inst(capGeo, mat(0x7a6a98), pc.length);
+  pc.forEach(([c, r], i) => { setI(pil, i, cx(c), 0.85, cz(r)); setI(cap, i, cx(c), 1.84, cz(r)); });
   scene.add(pil, cap);
   const N = B.COLS * B.ROWS;
-  W.crates = inst(new THREE.BoxGeometry(1.74, 1.74, 1.74), new THREE.MeshStandardMaterial({ map: crateTexture(), roughness: 0.9 }), N, { dyn: true }); scene.add(W.crates);
-  W.stones = inst(new THREE.BoxGeometry(1.98, 2.0, 1.98), new THREE.MeshStandardMaterial({ map: tex.stone(1, 1), color: 0x8a7a9a, roughness: 0.95, flatShading: true }), N, { dyn: true }); scene.add(W.stones);
-  W.flameO = inst(new THREE.SphereGeometry(1, 10, 8), new THREE.MeshBasicMaterial({ color: 0xff7a1a, fog: false }), N, { cast: false, receive: false, dyn: true });
-  W.flameI = inst(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe880, fog: false }), N, { cast: false, receive: false, dyn: true });
+  W.crates = inst(new THREE.BoxGeometry(1.7, 1.55, 1.7), new THREE.MeshStandardMaterial({ map: crateTexture(), roughness: 0.9 }), N, { dyn: true }); scene.add(W.crates);
+  W.stones = inst(new THREE.BoxGeometry(1.98, 1.7, 1.98), new THREE.MeshStandardMaterial({ map: tex.stone(1, 1), color: 0xb07058, emissive: 0x401408, emissiveIntensity: 0.6, roughness: 0.95, flatShading: true }), N, { dyn: true }); scene.add(W.stones);
+  W.flameO = inst(new THREE.ConeGeometry(0.95, 2.2, 9), new THREE.MeshBasicMaterial({ color: 0xff7a1a, fog: false }), N, { cast: false, receive: false, dyn: true });
+  W.flameI = inst(new THREE.ConeGeometry(0.6, 1.6, 7), new THREE.MeshBasicMaterial({ color: 0xffe880, fog: false }), N, { cast: false, receive: false, dyn: true });
   scene.add(W.flameO, W.flameI);
   // waarschuwingsvlakken voor vallende stenen
   W.warn = inst(new THREE.PlaneGeometry(1.8, 1.8), new THREE.MeshBasicMaterial({ color: 0xff3a2a, transparent: true, opacity: 0.55, depthWrite: false, fog: false }), 24, { cast: false, receive: false, dyn: true });
@@ -191,7 +191,7 @@ export function buildWorld(ctx, L) {
     W.spect.push({ c, base: y, ph: rng() * 6 });
   }
   // vleermuizen
-  for (let i = 0; i < 6; i++) { const b = new Butterfly(0x2a1428); b.group.scale.setScalar(4); scene.add(b.group); W.bats.push({ b, r: 14 + rng() * 14, a: rng() * TAU, h: 6 + rng() * 8, sp: 0.25 + rng() * 0.3 }); }
+  for (let i = 0; i < 5; i++) { const b = new Butterfly(0x3a2040); b.group.scale.setScalar(3); scene.add(b.group); W.bats.push({ b, r: 27 + rng() * 10, a: rng() * TAU, h: 5 + rng() * 9, sp: 0.2 + rng() * 0.25 }); }
   // draak (gimmick): hangt buiten beeld tot hij vliegt
   W.update = (dt, flameCtl) => {
     W.t += dt; const t = W.t;
@@ -200,6 +200,8 @@ export function buildWorld(ctx, L) {
     W.torchPos.forEach(([x, y, z], i) => { const f = 1 + Math.sin(t * 11 + i * 2.1) * 0.15 + Math.sin(t * 23 + i) * 0.08; setI(W.torchFlame, i, x, y + 1.1, z, 0.9 * f, 1.15 * f, 0.9 * f, t + i); W.torchGlow[i].material.opacity = 0.55 + Math.sin(t * 9 + i) * 0.15; });
     W.torchFlame.instanceMatrix.needsUpdate = true;
     for (const bn of W.banners) { const p = bn.geometry.attributes.position, b0 = bn.userData.base; for (let k = 0; k < p.count; k++) { const yy = b0[k * 3 + 1]; p.setZ(k, Math.sin(t * 2.2 + yy * 0.7 + bn.position.x) * 0.18 * (1 - (yy + 3) / 6)); } p.needsUpdate = true; }
+    // lava-bellen en vonken
+    W.emberT -= dt; if (W.emberT <= 0) { W.emberT = 0.07; const a = Math.random() * TAU, rr = 15 + Math.random() * 30; ctx.fx.particles.emit(Math.cos(a) * rr, -3.8, Math.sin(a) * rr * 0.8, (Math.random() - 0.5) * 0.6, 2 + Math.random() * 3, (Math.random() - 0.5) * 0.6, { life: 1.6, size: 0.45, color: Math.random() < 0.5 ? 0xff8a1c : 0xffd23f, gravity: -0.4 }); }
     W.cheerT = Math.max(0, W.cheerT - dt);
     for (const s of W.spect) { s.c.pose = W.cheerT > 0 ? 'cheer' : 'idle'; s.c.update(dt); }
     for (const o of W.bats) { o.a += dt * o.sp; o.b.group.position.set(Math.cos(o.a) * o.r, o.h + Math.sin(o.a * 3) * 1.2, Math.sin(o.a) * o.r * 0.8 - 6); o.b.group.rotation.y = -o.a; o.b.update(dt); }

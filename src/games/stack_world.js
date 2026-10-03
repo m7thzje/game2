@@ -5,7 +5,7 @@ import * as P from '../engine/props.js';
 import { mergeStatic } from '../world/merge.js';
 
 // Omgeving en bouwstenen van "Torenbouw-Duel": een bouwplaats voor een kasteel in de bergen, met kranen, wolken, bergen en een half afgebouwd kasteel.
-export const SX = { TX: 8.2, BH: 1.0, DZ: 3.2 };
+export const SX = { TX: 7.6, BH: 1.0, DZ: 3.2 };
 
 // Voegt dozen [x,y,z, w,h,d, rotZ?] samen tot één geometrie (voor kraanmasten en bogen)
 export function boxGeo(list) {
@@ -56,7 +56,7 @@ export function jibGeo() {
   return boxGeo(L);
 }
 
-// Gezicht (cartoon-meeuw) voor de gimmick: wit lijf, gele snavel, flapperende vleugels
+// Cartoon-meeuw voor de gimmick: wit lijf, gele snavel, flapperende vleugels
 export function makeGull() {
   const g = new THREE.Group(); g.userData.dynamic = true;
   const white = new THREE.MeshStandardMaterial({ color: 0xf8f8ff, roughness: 0.8 }), gray = new THREE.MeshStandardMaterial({ color: 0xaab4c8, roughness: 0.8 });
@@ -87,7 +87,7 @@ export function buildWorld(ctx) {
   // ---------- grond ----------
   const ground = mesh(new THREE.PlaneGeometry(520, 360), new THREE.MeshStandardMaterial({ map: tex.grass(70, 50), roughness: 1 }), { cast: false, pos: [0, 0, -60], rot: [-Math.PI / 2, 0, 0] }); scene.add(ground);
   for (const sx of [-1, 1]) {   // aangestampte bouwplaats rond elke toren
-    scene.add(mesh(new THREE.PlaneGeometry(15, 11), new THREE.MeshStandardMaterial({ map: tex.dirt(4, 3), roughness: 1 }), { cast: false, pos: [sx * 9.2, 0.02, 0.5], rot: [-Math.PI / 2, 0, 0] }));
+    scene.add(mesh(new THREE.PlaneGeometry(15, 11), new THREE.MeshStandardMaterial({ map: tex.dirt(4, 3), roughness: 1 }), { cast: false, pos: [sx * 8.6, 0.02, 0.5], rot: [-Math.PI / 2, 0, 0] }));
   }
   scene.add(mesh(new THREE.PlaneGeometry(9, 70), new THREE.MeshStandardMaterial({ map: tex.dirt(2, 14), roughness: 1 }), { cast: false, pos: [0, 0.015, -12], rot: [-Math.PI / 2, 0, 0] }));
   // heuvels
@@ -127,11 +127,11 @@ export function buildWorld(ctx) {
   for (let i = 0; i < 8; i++) { const r = P.rock(1 + rng() * 2); r.position.set((rng() - 0.5) * 120, 0, -6 - rng() * 30); scene.add(r); }
   // bouwplaats-rekwisieten
   for (const sx of [-1, 1]) {
-    const cr = [[sx * 13.4, 2.6, 0.9], [sx * 12.2, 3.3, 0.8], [sx * 4.0, 3.2, 1.0]];
+    const cr = [[sx * 12.6, 2.6, 0.9], [sx * 11.4, 3.3, 0.8], [sx * 3.6, 3.2, 1.0]];
     for (const [x, z, s] of cr) { const c = P.crate(s); c.position.set(x, 0, z); c.rotation.y = rng(); scene.add(c); }
-    const b = P.barrel(1); b.position.set(sx * 3.6, 0, 4.3); scene.add(b);
-    const s = P.sack(1); s.position.set(sx * 14.4, 0, 4.1); scene.add(s);
-    const f = P.fence(7); f.position.set(sx * 9.2, 0, 5.8); scene.add(f);
+    const b = P.barrel(1); b.position.set(sx * 3.4, 0, 4.3); scene.add(b);
+    const s = P.sack(1); s.position.set(sx * 13.6, 0, 4.1); scene.add(s);
+    const f = P.fence(7); f.position.set(sx * 8.6, 0, 5.8); scene.add(f);
   }
   mergeStatic(scene, idx0);
 
