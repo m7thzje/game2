@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { mat, mesh, canvasTex, mulberry32, TAU, clamp } from '../engine/util.js';
+import { mat, mesh, canvasTex, mulberry32, TAU } from '../engine/util.js';
 import { tex } from '../engine/textures.js';
 import * as P from '../engine/props.js';
 import { mergeStatic } from './quickdraw_merge.js';
@@ -150,6 +150,7 @@ export function buildStage(ctx) {
     scene.add(im); W.lanterns = { im, ls, d: new THREE.Object3D() };
   }
 
+  W.isle = isle;
   W.update = (t, dt) => {
     const c = W.clouds, d = c.d;
     for (let i = 0; i < c.cl.length; i++) {
@@ -168,4 +169,3 @@ export function buildStage(ctx) {
   return W;
 }
 
-export const clampX = clamp;

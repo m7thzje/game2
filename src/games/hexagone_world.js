@@ -6,9 +6,8 @@ import { mergeStatic } from './quickdraw_merge.js';
 
 // Omgeving + tegelvloer van "Zinkende Vloer": een vulkaangrot onder het kasteel met drie lagen zeshoekige tegels boven de lava.
 
-export const HX = { S: 1.2, N: 5, Y: [0, -4.4, -8.8], TH: 0.9, LAVA: -17 };
+export const HX = { S: 1.2, COLS: 12, ROWS: 8, Y: [0, -3.2, -6.4], TH: 0.9, LAVA: -14.5 };
 const SQ3 = Math.sqrt(3);
-export const hexXZ = (q, r) => [HX.S * SQ3 * (q + r / 2), HX.S * 1.5 * r];
 const LAYER_COL = [[0.35, 0.82, 0.9], [0.72, 0.5, 1.0], [1.0, 0.72, 0.28]];   // cyaan, paars, amber
 const HOT = [1.9, 0.45, 0.12], FIRE = [2.2, 1.1, 0.2];
 
@@ -44,14 +43,13 @@ export const glowSprite = (color, size, op = 0.8) => { const s = new THREE.Sprit
 // ---------------------------------------------------------------------------
 export class TileField {
   constructor(scene, shadows) {
-    const N = HX.N, W = 2 * N + 1;
-    this.N = N; this.W = W; this.list = []; this.map = new Int16Array(W * W).fill(-1);
-    for (let q = -N; q <= N; q++) for (let r = -N; r <= N; r++) {
-      if (Math.abs(q + r) > N) continue;
-      const [x, z] = hexXZ(q, r);
-      this.map[(q + N) * W + r + N] = this.list.length;
-      this.list.push({ q, r, x, z, d: Math.max(Math.abs(q), Math.abs(r), Math.abs(q + r)) });
+    // rechthoekig rooster van zeshoeken: even rijen 12 tegels, oneven rijen 11 (volledig spiegelsymmetrisch)
+    this.list = [];
+    for (let r = 0; r < HX.ROWS; r++) {
+      const n = r % 2 ? HX.COLS - 1 : HX.COLS;
+      for (let c = 0; c < n; c++) { const x = HX.S * SQ3 * (c - (n - 1) / 2), z = HX.S * 1.5 * (r - (HX.ROWS - 1) / 2); this.list.push({ r, c, x, z, d: Math.hypot(x, z) / 2.1 }); }
     }
+    this.rowStart = []; { let o = 0; for (let r = 0; r < HX.ROWS; r++) { this.rowStart.push(o); o += r % 2 ? HX.COLS - 1 : HX.COLS; } }
     this.K = this.list.length; this.L = HX.Y.length; this.n = this.K * this.L;
     const n = this.n;
     this.st = new Uint8Array(n); this.tm = new Float32Array(n); this.tmax = new Float32Array(n); this.vy = new Float32Array(n); this.oy = new Float32Array(n);
@@ -79,17 +77,23 @@ export class TileField {
     this.mesh.instanceMatrix.needsUpdate = true; this.mesh.instanceColor.needsUpdate = true;
     this.stats = { fallen: 0 };
   }
-  // axiale tegel onder (x,z) of -1
+  // tegel onder (x,z) of -1
   kAt(x, z) {
-    const S = HX.S, N = this.N;
-    let q = (SQ3 / 3 * x - z / 3) / S, r = (2 / 3 * z) / S, s = -q - r;
-    let rq = Math.round(q), rr = Math.round(r), rs = Math.round(s);
-    const dq = Math.abs(rq - q), dr = Math.abs(rr - r), ds = Math.abs(rs - s);
-    if (dq > dr && dq > ds) rq = -rr - rs; else if (dr > ds) rr = -rq - rs;
-    if (Math.abs(rq) > N || Math.abs(rr) > N || Math.abs(rq + rr) > N) return -1;
-    return this.map[(rq + N) * this.W + rr + N];
+    const S = HX.S, row = Math.round(z / (1.5 * S) + (HX.ROWS - 1) / 2);
+    let best = -1, bd = 1e9;
+    for (let r = row - 1; r <= row + 1; r++) {
+      if (r < 0 || r >= HX.ROWS) continue;
+      const n = r % 2 ? HX.COLS - 1 : HX.COLS, cf = x / (S * SQ3) + (n - 1) / 2;
+      for (let c = Math.floor(cf); c <= Math.floor(cf) + 1; c++) {
+        if (c < 0 || c >= n) continue;
+        const k = this.rowStart[r] + c, t = this.list[k], d = (t.x - x) * (t.x - x) + (t.z - z) * (t.z - z);
+        if (d < bd) { bd = d; best = k; }
+      }
+    }
+    if (best < 0) return -1;
+    const t = this.list[best], dx = Math.abs(x - t.x), dz = Math.abs(z - t.z);
+    return dx <= S * SQ3 / 2 && dz <= S - dx / SQ3 ? best : -1;
   }
-  kOf(q, r) { const N = this.N; if (Math.abs(q) > N || Math.abs(r) > N || Math.abs(q + r) > N) return -1; return this.map[(q + N) * this.W + r + N]; }
   solid(l, k) { const s = this.st[l * this.K + k]; return s === 0 || s === 1; }
   // hoogste draagvlak onder (x,z) dat niet hoger ligt dan y+tol; retourneert laagindex of -1
   support(x, z, y, tol = 0.35) {
@@ -230,7 +234,7 @@ export function buildWorld(ctx, colors) {
   W.flames = { mesh: fm, pos: flames }; for (const f of flames) scene.add(Object.assign(glowSprite(0xff8a30, 6, 0.45), { position: new THREE.Vector3(f[0], f[1] + 0.2, f[2]) }));
   [-1, 1].forEach((sd, i) => {
     for (const zz of [-5, 5]) {
-      const g = new THREE.Group(); g.position.set(sd * 13.6, -1.6, zz * 1.1);
+      const g = new THREE.Group(); g.position.set(sd * 14.4, -1.2, zz * 1.1);
       g.add(mesh(new THREE.CylinderGeometry(0.1, 0.12, 5, 6), mat(0x4a3322), { cast: false, pos: [0, 2.5, 0] }));
       g.add(mesh(new THREE.SphereGeometry(0.22, 8, 6), mat(0xe8c24a, { metalness: 0.6 }), { cast: false, pos: [0, 5.1, 0] }));
       const cl = mesh(new THREE.PlaneGeometry(1.7, 2.7, 4, 6), new THREE.MeshStandardMaterial({ color: colors[i], side: THREE.DoubleSide, roughness: 0.8 }), { cast: false, pos: [sd * -0.9, 3.5, 0] });

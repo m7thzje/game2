@@ -103,9 +103,9 @@ export function buildWorld(ctx, L) {
   const glow = new THREE.Mesh(new THREE.PlaneGeometry(70, 60), new THREE.MeshBasicMaterial({ map: glowTex(), color: 0xff6a20, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })); glow.rotation.x = -Math.PI / 2; glow.position.y = -3.6; scene.add(glow);
   // stalactieten (plafond) + stenen pilaren in de lava
   const stalM = new THREE.MeshStandardMaterial({ color: 0x4a2a30, roughness: 0.9, flatShading: true });
-  const stal = inst(new THREE.ConeGeometry(1, 1, 6), stalM, 40, { cast: false });
+  const stal = inst(new THREE.ConeGeometry(1, 1, 6).rotateX(Math.PI), stalM, 40, { cast: false });
   for (let i = 0; i < 40; i++) { const a = rng() * TAU, rr = 26 + rng() * 40, len = 6 + rng() * 14, r = 0.9 + rng() * 1.8; setI(stal, i, Math.cos(a) * rr, 40 - len / 2, Math.sin(a) * rr - 6, r, len, r); }
-  stal.rotation.x = Math.PI; scene.add(stal);
+  scene.add(stal);
 
   // ---------------- platform ----------------
   const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture(), roughness: 0.85 });
