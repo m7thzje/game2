@@ -143,7 +143,7 @@ for (const name of scen) {
       reset(); const a2 = d.bikes[0]; for (let k = 2; k <= 7; k++) d.occ[a2.r0 * W + a2.c0 + k] = 4; a2.jumpCd = 0; inp.virtual[0].b = true; step(2); inp.virtual[0].b = false; step(60 * 1.5);
       out.landCrash = !a2.alive;
       // 4) wisser
-      reset(); for (let k = 0; k < 30; k++) d.occ[(10 + (k % 3)) * W + 10 + k % 20] = 4; d.give(0, 'eraser'); out.erasedLeft = d.occ.filter((o) => o === 4).length;
+      reset(); { const a3 = d.bikes[0]; for (let k = 0; k < 30; k++) d.occ[(a3.r0 - 2 + (k % 5)) * W + a3.c0 + 2 + (k % 6)] = 4; } d.give(0, 'eraser'); out.erasedLeft = d.occ.filter((o) => o === 4).length;
       // 5) draak veegt en verbrandt
       reset(); step(30); for (let k = 5; k < 35; k++) d.occ[8 * W + k] = 3; d.forceDragon(); step(60 * 5); out.dragonStats = d.state().stats.dragons;
       return out;

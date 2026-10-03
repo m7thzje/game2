@@ -53,7 +53,7 @@ export default {
   time: 75,
   music: 'game_fast',
   blurb: 'Eén <b>grijpkast</b>, twee wiebelige klauwen! Laat <b>knuffels, kisten en gouden kippen</b> in <b>jouw gat</b> vallen. Pas op voor <b>bommen</b> (tikken!) en de <b>Deurman-pop</b> (min punten). Meeste punten na 75 s wint.',
-  controls: ['{move} klauw sturen', '{a} zakken (nog eens op tijd = sterker)', '{a} met prijs = loslaten', '{b} RUK je broer / KRACHTGRIP'],
+  controls: ['{move} klauw sturen', '{a} zakken (2e keer = sterker)', '{a} met prijs = loslaten', '{b} RUK je broer / KRACHTGRIP'],
   tip: 'Een bom naar het gat van je broer slepen? Hij tikt!',
 
   create(ctx) {

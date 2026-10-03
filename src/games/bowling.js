@@ -24,9 +24,9 @@ export default {
   mode: 'pvp',
   time: 90,
   music: 'game_fast',
-  blurb: 'Reuzen-bowling met <b>kabouters, kippen en knuffelmonsters</b> als kegels! Jullie bowlen <b>tegelijk</b>, 5 rondes van 2 worpen. Strike = +10, spare = +5, <b>gouden kegel</b> telt dubbel. Let op de <b>bumper-kussens</b> en de <b>draak</b>!',
-  controls: ['{move} richting (de pijl slingert)', '{a} houd vast = kracht, los = gooien', '{b} bom-bal (1x) · tijdens rollen: {b}+{move} bijsturen'],
-  tip: 'Niet te hard gooien: een volle kracht laat de pijl wild trillen. Rond 3/4 van de meter is het best!',
+  blurb: 'Reuzen-bowling met <b>kabouters, kippen en knuffelmonsters</b> als kegels! Jullie bowlen <b>tegelijk</b>: 5 rondes van 2 worpen. Strike +10, spare +5, <b>gouden kegel</b> telt dubbel. Pas op voor <b>bumpers</b> en de <b>draak</b>!',
+  controls: ['{move} richting (pijl slingert)', '{a} vasthouden = kracht, los = gooien', '{b} bom-bal (1x) · rollen: sturen'],
+  tip: 'Niet vol gas: dan trilt de pijl wild. B + links/rechts stuurt de rollende bal bij.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
