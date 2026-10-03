@@ -7,7 +7,7 @@ import { TILE, W, H, OX, OZ, tx, tz, isSolidC, rayDist } from './heist_map.js';
 
 // Visuele bouwstenen voor "Schatkamer-Overval": kasteelvloer (één canvas-tekening), instanced muren, kisten, wachters, kegels.
 
-export const WALL_H = 2.7;
+export const WALL_H = 1.9;
 
 // ---------------- kleine hulpjes ----------------
 const glowTex = () => glowTex.t || (glowTex.t = canvasTex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 1, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.35, 'rgba(255,255,255,.45)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); }));
@@ -41,7 +41,7 @@ function floorTexture(M) {
     for (let rr = 0; rr < H; rr++) for (let c = 0; c < W; c++) {
       if (M.ch[rr][c] === '#') continue;
       const z = zone(c, rr), x0 = c * PX, y0 = rr * PX, hatchRoom = (c >= 1 && c <= 3 && rr >= 5 && rr <= 7) ? 'hatchL' : (c >= 21 && c <= 23 && rr >= 5 && rr <= 7) ? 'hatchR' : null;
-      const pal = hatchRoom === 'hatchL' ? ['#2d4a3c', '#27423a'] : hatchRoom === 'hatchR' ? ['#2b3d5e', '#25365a'] : z === 'lair' ? ['#4a2c28', '#412622'] : z === 'vault' ? ['#4d2442', '#431e3a'] : z === 'gallery' ? ['#26404c', '#213a46'] : ['#3c3a4a', '#35333f'];
+      const pal = hatchRoom === 'hatchL' ? ['#3d6a52', '#37604a'] : hatchRoom === 'hatchR' ? ['#3a558a', '#34508a'] : z === 'lair' ? ['#6a403a', '#5e3832'] : z === 'vault' ? ['#702f60', '#64295a'] : z === 'gallery' ? ['#35596a', '#305366'] : ['#58566c', '#4e4c62'];
       g.fillStyle = pal[(c + rr) % 2]; g.fillRect(x0, y0, PX, PX);
       // stenen/tegelrandjes en vlekjes
       g.strokeStyle = 'rgba(0,0,0,.35)'; g.lineWidth = 2; g.strokeRect(x0 + 1, y0 + 1, PX - 2, PX - 2);
@@ -99,8 +99,8 @@ export function buildCastleScene(ctx, M, L) {
     let vis = false; for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) { const ch = M.ch[r + dr] && M.ch[r + dr][c + dc]; if (ch && ch !== '#') vis = true; }
     if (vis) walls.push([c, r]);
   }
-  const side = new THREE.MeshStandardMaterial({ map: tex.bricks(1, 1.3), color: 0xb0aab8, roughness: 0.95, flatShading: true });
-  const top = new THREE.MeshStandardMaterial({ color: 0x9a94a8, roughness: 0.9, flatShading: true });
+  const side = new THREE.MeshStandardMaterial({ map: tex.bricks(1, 1.3), color: 0xd8d0e0, roughness: 0.95, flatShading: true });
+  const top = new THREE.MeshStandardMaterial({ color: 0xc4bcd4, roughness: 0.9, flatShading: true });
   const wm = new THREE.InstancedMesh(new THREE.BoxGeometry(TILE, WALL_H, TILE), [side, side, top, side, side, side], walls.length);
   const m4 = new THREE.Matrix4();
   walls.forEach(([c, r], k) => { m4.makeTranslation(tx(c), WALL_H / 2, tz(r)); wm.setMatrixAt(k, m4); });
@@ -205,7 +205,7 @@ export function makeDog() {
   const tail = mesh(new THREE.BoxGeometry(0.1, 0.1, 0.5), body, { pos: [0, 0.82, -0.75], rot: [0.7, 0, 0] }); g.add(tail);
   const legs = [[0.2, 0.45], [-0.2, 0.45], [0.2, -0.45], [-0.2, -0.45]].map(([x, z]) => { const l = mesh(new THREE.BoxGeometry(0.13, 0.42, 0.13), dark, { pos: [x, 0.21, z] }); g.add(l); return l; });
   g.userData = { head, tail, legs }; g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-  g.scale.setScalar(1.35); return g;
+  g.scale.setScalar(1.7); return g;
 }
 export function makeDisguiseHat() {
   const h = new THREE.Group();

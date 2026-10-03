@@ -1,3 +1,4 @@
+// ONLY=a,b beperkt het twists-scenario tot die twists.
 // Gebruik: node tools/test_hide.mjs [scenario...]   scenario: bots | twists | idle | timeout | deur | shots
 //   TW=<twist-id> kiest een twist. Q=low|high kwaliteit.
 // Bots spelen versneld hele potjes. Controleert: finishPvp precies 1x, beide spelers kunnen winnen, geen console-errors, elke twist werkt.
@@ -115,7 +116,8 @@ const wins = [0, 0, 0];
 for (const name of scen) {
   if (['bots', 'twists', 'timeout', 'idle', 'deur'].includes(name)) {
     const mk = (a, b, ha, hb) => [{ seek: a, know: a === 'smart' ? 3 : 0, hide: ha }, { seek: b, know: b === 'smart' ? 3 : 0, hide: hb }];
-    const list = name === 'twists' ? TWISTS.map((t) => [t, mk('smart', 'smart', 'wander', 'still')])
+    const TW_LIST = process.env.ONLY ? process.env.ONLY.split(',') : TWISTS;
+    const list = name === 'twists' ? TW_LIST.map((t) => [t, mk('smart', 'smart', 'wander', 'still')])
       : name === 'idle' ? [['none', mk('idle', 'idle', 'idle', 'idle')]]
         : name === 'timeout' ? [['none', mk('dumb', 'dumb', 'still', 'still')]]
           : name === 'deur' ? [['deurman', mk('smart', 'dumb', 'wander', 'wander')]]

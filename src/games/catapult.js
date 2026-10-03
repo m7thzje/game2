@@ -127,7 +127,7 @@ export default {
       ctx.shake(u.mat === 'stone' ? 0.3 : 0.18);
     }
     function dmgBlock(b, d) {
-      if (!b.alive || d <= 0.5) return;
+      if (!b.alive || d <= 0) return;
       const u = b.user; if (u.kind === 'king') { u.hp -= d; return; }
       u.hp -= d; if (u.hp <= 0) breakBlock(b);
     }

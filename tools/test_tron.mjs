@@ -47,6 +47,7 @@ async function installBots(page, cfg) {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input, d = inst.dbg;
     let s = 1234; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
     const W = d.W, H = d.H, DX = [1, 0, -1, 0], DZ = [0, 1, 0, -1];
+    const V = (b) => ({ alive: b.alive, c: b.c0, r: b.r0, dir: b.dir, meter: b.meter, jumpCd: b.jumpCd, jumpLeft: b.jumpLeft });
     const B = [0, 1].map(() => ({ cool: 0, pulse: 0, pdir: 0, holdA: 0, lastKey: '' }));
     window.__cfg = cfg;
     const free = (c, r, flying) => { if (d.solid(c, r)) return false; const o = d.occ[r * W + c]; return o === 0 || (flying && (o === 3 || o === 4)); };
@@ -56,7 +57,7 @@ async function installBots(page, cfg) {
       for (let k = 0; k < n && !m.finished; k++) {
         if (stop && stop(d.state())) { m.paused = true; return true; }
         if (d.G.state === 'play') for (const i of [0, 1]) {
-          const v = inp.virtual[i], b = B[i], c = window.__cfg[i], me = d.bikes[i], o = d.bikes[1 - i]; v.a = false; v.b = false;
+          const v = inp.virtual[i], b = B[i], c = window.__cfg[i], me = V(d.bikes[i]), o = V(d.bikes[1 - i]); v.a = false; v.b = false;
           if (b.pulse > 0) { b.pulse--; if (b.pulse === 0) { v.x = 0; v.y = 0; } continue; }
           v.x = 0; v.y = 0;
           if (!me.alive || c.style === 'idle') continue;
@@ -136,10 +137,10 @@ for (const name of scen) {
       reset(); step(60 * 6);
       out.wallCrash = d.state().gstate !== 'play' || !d.bikes[0].alive || !d.bikes[1].alive; out.trailCells = d.occ.filter((o) => o === 3).length;
       // 2) sprong over een spoor
-      reset(); const a = d.bikes[0]; d.occ[a.r * W + a.c + 3] = 4; step(1); a.jumpCd = 0; inp.virtual[0].b = true; step(2); inp.virtual[0].b = false; step(60 * 1.6);
+      reset(); const a = d.bikes[0]; d.occ[a.r0 * W + a.c0 + 3] = 4; step(1); a.jumpCd = 0; inp.virtual[0].b = true; step(2); inp.virtual[0].b = false; step(60 * 1.6);
       out.jumpAlive = a.alive; out.jumpCount = d.state().stats.jumps;
       // 3) landen op een spoor = crash
-      reset(); const a2 = d.bikes[0]; for (let k = 2; k <= 7; k++) d.occ[a2.r * W + a2.c + k] = 4; a2.jumpCd = 0; inp.virtual[0].b = true; step(2); inp.virtual[0].b = false; step(60 * 1.5);
+      reset(); const a2 = d.bikes[0]; for (let k = 2; k <= 7; k++) d.occ[a2.r0 * W + a2.c0 + k] = 4; a2.jumpCd = 0; inp.virtual[0].b = true; step(2); inp.virtual[0].b = false; step(60 * 1.5);
       out.landCrash = !a2.alive;
       // 4) wisser
       reset(); for (let k = 0; k < 30; k++) d.occ[(10 + (k % 3)) * W + 10 + k % 20] = 4; d.give(0, 'eraser'); out.erasedLeft = d.occ.filter((o) => o === 4).length;

@@ -51,8 +51,8 @@ export default {
   time: 100,
   music: 'game_fast',
   blurb: 'Meppen op een <b>zwevend eiland</b>! Geen hartjes maar een <b>schade-%</b>: hoe hoger, hoe verder je wegvliegt. Wie van het scherm vliegt verliest een <b>leven</b> (3 elk). Pak <b>ballon-items</b> en pas op voor de <b>draak</b>!',
-  controls: ['{move} lopen, omhoog = springen (2x)', '{a} slaan (+ richting = smash)', '{b} schild (+ richting = roll/raket)'],
-  tip: 'Tik 3x voor een combo. Omhoog + A-knop slaat je broer de lucht in. Bevroren? Beuk op alle knoppen!',
+  controls: ['{move} lopen, omhoog = springen', '{a} slaan (+ richting = smash)', '{b} schild (+ richting = roll)'],
+  tip: 'Tik 3x voor een combo. Bevroren? Beuk op alle knoppen!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;

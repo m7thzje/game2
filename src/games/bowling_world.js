@@ -155,7 +155,7 @@ export function buildWorld(ctx) {
 
   // gordijn + clown-boog
   const curt = new THREE.Mesh(new THREE.PlaneGeometry(36, 14), new THREE.MeshStandardMaterial({ map: curtainTex(), roughness: 1 })); curt.position.set(0, 7, -20.5); scene.add(curt);
-  const sign = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.75), new THREE.MeshBasicMaterial({ map: bannerTex('REUZEN-BOWLING', '#2f6fe0', '#1a3a94'), transparent: true, fog: false })); sign.position.set(0, 9.6, -20.3); scene.add(sign);
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.75), new THREE.MeshBasicMaterial({ map: bannerTex('REUZEN-BOWLING', '#2f6fe0', '#1a3a94'), transparent: true, fog: false })); sign.position.set(0, 8.6, -20.3); scene.add(sign);
   // marquee: lampjes boven elke baan
   const bulbs = [];
   for (const cx of CX) for (let k = 0; k <= 20; k++) { const a = Math.PI * k / 20; bulbs.push([cx + Math.cos(a) * 3.4, 1.0 + Math.sin(a) * 3.6, -19.7]); }
@@ -174,8 +174,8 @@ export function buildWorld(ctx) {
   // scorebord boven het midden
   W.sbCanvas = document.createElement('canvas'); W.sbCanvas.width = 1024; W.sbCanvas.height = 320;
   W.sbTex = new THREE.CanvasTexture(W.sbCanvas); W.sbTex.colorSpace = THREE.SRGBColorSpace;
-  const sb = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 3.0), new THREE.MeshBasicMaterial({ map: W.sbTex, fog: false })); sb.position.set(0, 6.3, -19.9); scene.add(sb);
-  scene.add(mesh(new THREE.BoxGeometry(10.0, 3.4, 0.2), mat(0x2a1a10), { cast: false, pos: [0, 6.3, -20.05] }));
+  const sb = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 3.0), new THREE.MeshBasicMaterial({ map: W.sbTex, fog: false })); sb.position.set(0, 5.7, -19.9); scene.add(sb);
+  scene.add(mesh(new THREE.BoxGeometry(10.0, 3.4, 0.2), mat(0x2a1a10), { cast: false, pos: [0, 5.7, -20.05] }));
 
   W.update = (t, dt) => {
     W.t = t;

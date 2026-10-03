@@ -26,8 +26,8 @@ function floorTexture() {
     // startzones in spelerskleur
     for (const [x0, col] of [[0, '61,255,143'], [w, '58,180,255']]) { const gr = g.createLinearGradient(x0, 0, x0 === 0 ? w * 0.3 : w * 0.7, 0); gr.addColorStop(0, `rgba(${col},.28)`); gr.addColorStop(1, `rgba(${col},0)`); g.fillStyle = gr; g.fillRect(x0 === 0 ? 0 : w * 0.7, 0, w * 0.3, h); }
     g.lineWidth = 1.5;
-    for (let c = 0; c <= T.W; c++) { g.strokeStyle = c % 5 === 0 ? 'rgba(190,90,255,.55)' : 'rgba(150,70,230,.2)'; g.beginPath(); g.moveTo(c * S, 0); g.lineTo(c * S, h); g.stroke(); }
-    for (let r = 0; r <= T.H; r++) { g.strokeStyle = r % 5 === 0 ? 'rgba(190,90,255,.55)' : 'rgba(150,70,230,.2)'; g.beginPath(); g.moveTo(0, r * S); g.lineTo(w, r * S); g.stroke(); }
+    for (let c = 0; c <= T.W; c++) { g.strokeStyle = c % 5 === 0 ? 'rgba(200,110,255,.8)' : 'rgba(150,80,240,.38)'; g.beginPath(); g.moveTo(c * S, 0); g.lineTo(c * S, h); g.stroke(); }
+    for (let r = 0; r <= T.H; r++) { g.strokeStyle = r % 5 === 0 ? 'rgba(200,110,255,.8)' : 'rgba(150,80,240,.38)'; g.beginPath(); g.moveTo(0, r * S); g.lineTo(w, r * S); g.stroke(); }
     // middencirkel + chevrons
     g.strokeStyle = 'rgba(255,120,220,.65)'; g.lineWidth = 5; g.beginPath(); g.arc(w / 2, h / 2, 5 * S, 0, TAU); g.stroke(); g.lineWidth = 3; g.beginPath(); g.arc(w / 2, h / 2, 5.6 * S, 0, TAU); g.stroke();
     g.fillStyle = 'rgba(255,120,220,.5)'; for (let k = 0; k < 8; k++) { g.save(); g.translate(w / 2, h / 2); g.rotate(k / 8 * TAU); g.fillRect(5.9 * S, -4, 22, 8); g.restore(); }
@@ -76,11 +76,11 @@ export function buildWorld(ctx, L) {
 
   // ---------------- barrière (krimpt): 4 dozen ----------------
   const barT = barrierTexture(); barT.wrapS = barT.wrapT = THREE.RepeatWrapping;
-  const barM = new THREE.MeshStandardMaterial({ map: barT, emissive: 0xff3a10, emissiveIntensity: 0.9, roughness: 0.5 });
-  W.bars = [0, 1, 2, 3].map(() => { const b = mesh(new THREE.BoxGeometry(1, 1.5, 1), barM, { cast: false }); scene.add(b); return b; });
+  const barM = new THREE.MeshStandardMaterial({ map: barT, emissive: 0xff3a10, emissiveIntensity: 0.4, color: 0x907070, roughness: 0.5 });
+  W.bars = [0, 1, 2, 3].map(() => { const b = mesh(new THREE.BoxGeometry(1, 0.9, 1), barM, { cast: false }); scene.add(b); return b; });
   W.barT = barT;
   W.setBounds = (x0, x1, z0, z1) => {          // wereldcoördinaten van het speelveld
-    const E = 8, h = 0.75;
+    const E = 8, h = 0.45;
     W.bars[0].position.set((x0 - E / 2 - 0.0), h, 0); W.bars[0].scale.set(E, 1, AZ + 2 * E + 4);
     W.bars[1].position.set((x1 + E / 2), h, 0); W.bars[1].scale.set(E, 1, AZ + 2 * E + 4);
     W.bars[2].position.set(0, h, z0 - E / 2); W.bars[2].scale.set(AX + 2 * E + 4, 1, E);
@@ -100,7 +100,7 @@ export function buildWorld(ctx, L) {
   W.setEdge(-AX / 2, AX / 2, -AZ / 2, AZ / 2, 0);
 
   // ---------------- obstakels, sporen, vuur ----------------
-  W.obst = inst(new THREE.BoxGeometry(0.96, 1.5, 0.96), new THREE.MeshStandardMaterial({ map: obstTexture(), emissive: 0xff7a1a, emissiveIntensity: 0.25, roughness: 0.5, metalness: 0.3 }), 480, { cast: true }); scene.add(W.obst);
+  W.obst = inst(new THREE.BoxGeometry(0.96, 1.5, 0.96), new THREE.MeshStandardMaterial({ map: obstTexture(), emissive: 0x2a1060, emissiveIntensity: 0.6, color: 0x7a5ab8, roughness: 0.5, metalness: 0.3 }), 480, { cast: true }); scene.add(W.obst);
   W.obstTop = inst(new THREE.BoxGeometry(0.98, 0.08, 0.98), new THREE.MeshBasicMaterial({ color: 0xffb040 }), 480); scene.add(W.obstTop);
   W.trail = [0, 1].map((i) => {
     const wall = inst(new THREE.BoxGeometry(1.0, 0.8, 0.22), new THREE.MeshBasicMaterial({ color: new THREE.Color(NEON[i]).multiplyScalar(0.55), transparent: true, opacity: 0.8 }), T.CAP);

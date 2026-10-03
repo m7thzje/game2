@@ -65,7 +65,7 @@ export default {
     const glowTex = canvasTex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 1, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.4)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
     const bikes = players.map((pp, i) => {
       const col = NEON[i]; const grp = new THREE.Group(); scene.add(grp); const sz = pv.size(i); const bs = 1.45 * lerp(1, sz, 0.75); grp.scale.setScalar(bs);
-      const dark = new THREE.MeshStandardMaterial({ color: 0x1e1838, metalness: 0.65, roughness: 0.3 }), glow = new THREE.MeshBasicMaterial({ color: col });
+      const dark = new THREE.MeshStandardMaterial({ color: 0x5a4c9a, metalness: 0.5, roughness: 0.35 }), glow = new THREE.MeshBasicMaterial({ color: col });
       grp.add(mesh(new THREE.BoxGeometry(0.78, 0.16, 1.7), dark, { pos: [0, 0.3, 0] }));
       grp.add(mesh(new THREE.ConeGeometry(0.46, 0.8, 4), dark, { pos: [0, 0.3, 1.2], rot: [Math.PI / 2, Math.PI / 4, 0], scale: [1, 1, 0.45] }));
       for (const sx of [-1, 1]) grp.add(mesh(new THREE.BoxGeometry(0.07, 0.1, 1.9), glow, { cast: false, pos: [sx * 0.4, 0.3, 0.05] }));
@@ -376,7 +376,7 @@ export default {
     const camP = new THREE.Vector3(), camL = new THREE.Vector3(); let camX = 0, camZ = 0;
     function updateCamera(dt) {
       const asp = camera.aspect || 1.7, tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), tanH = tanV * asp;
-      const dist = clamp(Math.max(23 / tanH, 15.5 / tanV) * 1.04, 30, 90);
+      const dist = clamp(Math.max(20.8 / tanH, 14.0 / tanV) * 1.04, 30, 90);
       G.camPunch = Math.max(0, G.camPunch - dt * 1.5);
       const sMid = G.sx + G.sz > 0 ? 0 : 0; camX = damp(camX, 0, 2, dt);
       const el = 1.1, d = dist * (1 - G.camPunch * 0.03);

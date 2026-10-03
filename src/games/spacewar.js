@@ -257,7 +257,7 @@ export default {
       if (!s.alive || over) return false;
       if (s.shield > 0 && !force) return false;
       if (s.inv > 0 || s.warp > 0.15) return false;
-      s.alive = false; s.respT = 1.8; s.deaths++; s.g.visible = false; s.bubble.visible = false; s.mark.visible = false; s.ghosts.forEach((o) => (o.gh.visible = false)); s.holder.visible = false;
+      s.alive = false; s.respT = 2.2; s.deaths++; s.g.visible = false; s.bubble.visible = false; s.mark.visible = false; s.ghosts.forEach((o) => (o.gh.visible = false)); s.holder.visible = false;
       s.triple = 0; s.missiles = 0; s.mineT = 0; s.shield = 0;
       const col = s.col, k = 1 - s.i;
       burst(s.x, s.z, [col, 0xffffff, 0xffe14a, 0xff7a4a], 60, 12, 0.7, 1.1); ring(s.x, s.z, col, 6, 0.6); ring(s.x, s.z, 0xffffff, 3.5, 0.35);
@@ -274,7 +274,7 @@ export default {
       return true;
     }
     function respawn(s) {
-      s.alive = true; const dir = s.i ? 1 : -1; s.x = dir * AX * 0.72; s.z = -dir * 6; s.vx = s.vz = 0; s.a = s.i ? Math.PI : 0; s.inv = 2.2; s.shield = 0; s.cd = 0; s.ammo = AMMO; s.fireCd = 0.3;
+      s.alive = true; const dir = s.i ? 1 : -1; s.x = dir * AX * 0.72; s.z = -dir * 6; s.vx = s.vz = 0; s.a = s.i ? Math.PI : 0; s.inv = 2.6; s.shield = 0; s.cd = 0; s.ammo = AMMO; s.fireCd = 0.3;
       s.g.visible = true; s.holder.visible = true; s.mark.visible = true;
       if (trailing2(s)) { s.gold = 4.2; say('GOUDEN SCHILD!', s.x, s.z - 2.5, '#ffd23f', 1.4); audio.sfx('sparkle', { vol: 0.7 }); }
       ring(s.x, s.z, s.col, 4, 0.5); burst(s.x, s.z, [s.col, 0xffffff], 20, 6, 0.4, 0.6); audio.sfx('go', { vol: 0.3, rate: 1.3 });

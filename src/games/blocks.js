@@ -53,9 +53,9 @@ export default {
   time: 100,
   twists: ['invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'slippery', 'lowgrav', 'bodyswap', 'deurman'],
   music: 'game_fast',
-  blurb: 'Een <b>blokkenduel</b> in de Neonkelder! Vul rijen zodat ze verdwijnen: <b>2 rijen of meer</b> tegelijk sturen rommelrijen naar je broer. Pak de <b>bom</b>, de <b>bevriezer</b> en de <b>regenboog</b>, en pas op voor het <b>kippenblok</b>! Wie als eerste vol zit, verliest.',
-  controls: ['{move} schuiven, omlaag = sneller vallen', '{a} draaien', '{b} meteen laten vallen'],
-  tip: 'Wie achterstaat krijgt een makkelijke I-balk. Een regenboog-blok vult ook het gat van een rommelrij!',
+  blurb: 'Blokkenduel in de Neonkelder! Vul rijen: <b>2 of meer tegelijk</b> sturen rommelrijen naar je broer. Pak <b>bom</b>, <b>bevriezer</b> en <b>regenboog</b>, en pas op voor het <b>kippenblok</b>! Wie als eerste vol zit, verliest.',
+  controls: ['{move} schuiven / omlaag = sneller', '{a} draaien', '{b} meteen vallen'],
+  tip: 'Wie achterstaat krijgt een makkelijke I-balk!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;

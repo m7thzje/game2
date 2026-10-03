@@ -116,6 +116,8 @@ for (const name of scen) {
     for (const c of cfgs) { const w = await playMatch('bots', process.env.TW || 'none', c); wins[w == null ? 2 : w]++; }
     console.log('winnaars (Wes, Jor, gelijk):', wins);
     if (!wins[0] || !wins[1]) FAIL('bots: niet beide spelers wonnen');
+  } else if (name === 'skill') {
+    for (const sk of [1, 0.6, 0.2]) await playMatch('skill=' + sk, 'none', [{ skill: sk, think: 0.3, bomb: 0, steer: 0 }, { skill: sk, think: 0.3, bomb: 0, steer: 0 }]);
   } else if (name === 'twists') {
     for (const t of TWISTS) await playMatch('twists', t, [{ skill: 0.8, think: 1, bomb: 0.3 }, { skill: 0.6, think: 1.5, bomb: 0.3 }]);
   } else if (name === 'idle') {

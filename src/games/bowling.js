@@ -12,7 +12,7 @@ import { buildWorld, LW, GUT, CX, HEAD, PIT_Z, PIN_HOME, PIN_TYPES, pinGeo, crow
 //  * chaos: bumper-kussens in sommige rondes (vaak voor wie achterstaat), een gouden kegel, een draak die op de baan van de leider landt
 
 const FRAMES = 5, MATCH_TIME = 100, AIM_T = 6.5, SD_MAX = 3;
-const BALL_R = 0.55, BALL_M = 14, PIN_R = 0.4, PIN_M = 1, FALL_R = 0.44;
+const BALL_R = 0.55, BALL_M = 9, PIN_R = 0.4, PIN_M = 1.6, FALL_R = 0.44;
 const STEP = 1 / 120, D2R = Math.PI / 180, MAX_ANG = 11 * D2R;
 const SAYS = { kabouter: ['HIHI!', 'AU!', 'OEPS!'], kip: ['KOEKOEK!', 'BOK!', 'KIP-KIP!'], monster: ['ROAR!', 'OEF!', 'GRRR!'] };
 
@@ -36,7 +36,7 @@ export default {
     const L0 = ctx.lights('indoor', { shadow: 17, center: [0, 0, -8], fogNear: 55, fogFar: 120 });
     L0.hemi.intensity = 1.45; L0.hemi.color.set(0xfff0e0); L0.hemi.groundColor.set(0x6a4a5a);
     L0.sun.color.set(0xffe8c8); L0.sun.intensity = 1.7; L0.sun.position.set(-6, 26, 6);
-    camera.fov = 44; camera.updateProjectionMatrix();
+    camera.fov = 36; camera.updateProjectionMatrix();
     const W = buildWorld(ctx);
     const rng = ctx.rng;
 
@@ -65,7 +65,7 @@ export default {
       L.pins = PIN_HOME.map((h, i) => {
         const type = i % 3; const g = new THREE.Group(); const body = new THREE.Mesh(geos[type][0], pinMat); body.castShadow = true;
         const crown = new THREE.Mesh(crownG, crownMat); crown.position.y = 2.0; crown.visible = false; g.add(body, crown); g.visible = false; scene.add(g);
-        return { i, type, gold: false, x: cx + h.x, z: h.z, vx: 0, vz: 0, hx: cx + h.x, hz: h.z, state: 'stand', f: 0, tdx: 0, tdz: -1, wob: 0, wobT: 0, s: 0, y: 0, vy: 0, on: false, counted: false, popD: 0, thr: 1.3, g, body, crown, gT: 0 };
+        return { i, type, gold: false, x: cx + h.x, z: h.z, vx: 0, vz: 0, hx: cx + h.x, hz: h.z, state: 'stand', f: 0, tdx: 0, tdz: -1, wob: 0, wobT: 0, s: 0, y: 0, vy: 0, on: false, counted: false, popD: 0, thr: 1.8, g, body, crown, gT: 0 };
       });
       // bal
       const bt = ballTexture(colorsCss[p][0], colorsCss[p][1]);
@@ -80,10 +80,10 @@ export default {
       // richtingspijl: stippen + pijlkop, kracht-meter
       const dots = new THREE.InstancedMesh(dotGeo, new THREE.MeshBasicMaterial({ color: p ? 0x9fc6ff : 0x9fffc0, transparent: true, opacity: 0.85, depthWrite: false }), 12); dots.frustumCulled = false; scene.add(dots); L.dots = dots;
       const head = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.9, 3), new THREE.MeshBasicMaterial({ color: p ? 0x4a8cff : 0x35e27a })); head.rotation.x = -Math.PI / 2; scene.add(head); L.head = head;
-      const mbg = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 0.62), new THREE.MeshBasicMaterial({ color: 0x1a1020, transparent: true, opacity: 0.85 })); mbg.rotation.x = -Math.PI / 2; mbg.position.set(cx, 0.06, 3.0); scene.add(mbg);
-      const fg = new THREE.PlaneGeometry(1, 0.42); fg.translate(0.5, 0, 0); const mfill = new THREE.Mesh(fg, new THREE.MeshBasicMaterial({ color: 0x35e27a })); mfill.rotation.x = -Math.PI / 2; mfill.position.set(cx - 2.0, 0.08, 3.0); scene.add(mfill);
-      const sweet = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.62), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.5 })); sweet.rotation.x = -Math.PI / 2; sweet.position.set(cx - 2.0 + 0.78 * 4.0, 0.07, 3.0); scene.add(sweet);
-      const steerBar = new THREE.Mesh(fg.clone(), new THREE.MeshBasicMaterial({ color: 0xff9ad0 })); steerBar.rotation.x = -Math.PI / 2; steerBar.position.set(cx - 2.0, 0.08, 3.65); steerBar.scale.y = 0.6; scene.add(steerBar);
+      const mbg = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 0.62), new THREE.MeshBasicMaterial({ color: 0x1a1020, transparent: true, opacity: 0.85 })); mbg.rotation.x = -Math.PI / 2; mbg.position.set(cx, 0.06, 1.2); scene.add(mbg);
+      const fg = new THREE.PlaneGeometry(1, 0.42); fg.translate(0.5, 0, 0); const mfill = new THREE.Mesh(fg, new THREE.MeshBasicMaterial({ color: 0x35e27a })); mfill.rotation.x = -Math.PI / 2; mfill.position.set(cx - 2.0, 0.08, 1.2); scene.add(mfill);
+      const sweet = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.62), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.5 })); sweet.rotation.x = -Math.PI / 2; sweet.position.set(cx - 2.0 + 0.78 * 4.0, 0.07, 1.2); scene.add(sweet);
+      const steerBar = new THREE.Mesh(fg.clone(), new THREE.MeshBasicMaterial({ color: 0xff9ad0 })); steerBar.rotation.x = -Math.PI / 2; steerBar.position.set(cx - 2.0, 0.08, 1.85); steerBar.scale.y = 0.6; scene.add(steerBar);
       L.meter = { bg: mbg, fill: mfill, sweet, steer: steerBar };
       // bumper-kussens
       L.bumpers = [-1, 1].map((s) => { const m = new THREE.Mesh(bumpGeo, bumpMat); m.position.set(cx + s * (LW + 0.2), 0.25, -7.7); m.visible = false; m.castShadow = true; scene.add(m); return m; });
@@ -97,7 +97,7 @@ export default {
       c.faceDir(-sx * 0.55, 1); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
       return { c, holder, i, sx, cheerT: 0, sadT: 0, scareT: 0 };
     });
-    const dragon = new Dragon(0x7a2fd4, 1); dragon.group.scale.setScalar(0.62); dragon.group.visible = false; scene.add(dragon.group);
+    const dragon = new Dragon(0x7a2fd4, 1); dragon.group.scale.setScalar(0.8); dragon.group.visible = false; scene.add(dragon.group);
 
     // ---------------- hulp ----------------
     const text = (t, x, y, z, col, s = 1) => fx.texts.add(t, x, y, z, col, s);
@@ -109,7 +109,7 @@ export default {
       b.mode = 'hold'; b.x = L.cx; b.z = -0.5; b.y = r; b.vx = b.vz = 0; b.bomb = false; b.gT = 0; b.steered = 0; b.mesh.material = b.bm; b.fuse.visible = false; b.grp.visible = true; b.shadow.visible = true; b.mesh.scale.setScalar(r); b.rotQ.identity(); b.grp.quaternion.identity();
     }
     function rack(L, withGold) {
-      L.pins.forEach((pn, i) => { Object.assign(pn, { x: pn.hx, z: pn.hz, vx: 0, vz: 0, state: 'stand', f: 0, wob: 0, s: 0, y: 0, vy: 0, on: true, counted: false, popD: i * 0.05, gT: 0, thr: 1.15 + rng() * 0.9 }); setPinKind(pn, withGold && i === gold); pn.g.visible = true; pn.g.scale.setScalar(0.001); pn.g.quaternion.identity(); });
+      L.pins.forEach((pn, i) => { Object.assign(pn, { x: pn.hx, z: pn.hz, vx: 0, vz: 0, state: 'stand', f: 0, wob: 0, s: 0, y: 0, vy: 0, on: true, counted: false, popD: i * 0.05, gT: 0, thr: 1.9 + rng() * 1.8 }); setPinKind(pn, withGold && i === gold); pn.g.visible = true; pn.g.scale.setScalar(0.001); pn.g.quaternion.identity(); });
     }
     const lead = (p) => score[p] - score[1 - p];
     function drawBoard() {
@@ -144,7 +144,7 @@ export default {
         L.throwNo = 0; L.k = [0, 0]; L.cnt = [0, 0]; L.armed = false; L.steer = 1; L.single = false; L.st = 'rack'; L.stT = 0; L.fp = 0; L.strikeNow = L.spareNow = false;
         const trailing = lead(L.p) <= -12; const chance = trailing ? 0.8 : f === 0 ? 0.2 : 0.32;
         L.bump.on = rng() < chance; if (L.bump.on) stats.bumperFrames++;
-        L.drag.on = L.p === dragonLane; if (L.drag.on) { stats.dragons++; L.drag.side = rng() < 0.5 ? -1 : 1; L.drag.t = 0; L.drag.leaving = 0; L.drag.circles = [0, 1, 2].map((k) => ({ x: L.cx + L.drag.side * 1.1, z: -5.9 - k * 1.15, r: 0.85 })); }
+        L.drag.on = L.p === dragonLane; if (L.drag.on) { stats.dragons++; L.drag.side = rng() < 0.5 ? -1 : 1; L.drag.t = 0; L.drag.leaving = 0; L.drag.circles = [1.55, 0.85, 0.2].map((o) => ({ x: L.cx + L.drag.side * o, z: -7.0, r: 0.72 })); }
         rack(L, true); resetBall(L);
         if (trailing && L.bombs < 1 && rng() < 0.7) { L.bombs++; text('EXTRA BOM!', L.cx, 3.2, -1, '#ff9a6a', 1.2); }
       }
@@ -212,7 +212,7 @@ export default {
             if (!pn.on || pn.state === 'gone' || pn.s < 0.6) continue;
             const rr = pn.state === 'stand' ? PIN_R : FALL_R;
             const dd = Math.hypot(pn.x - b.x, pn.z - b.z); if (dd < rr + b.r) { if (b.bomb && pn.state === 'stand') { explode(L, b.x, b.z); break; } }
-            const imp = collide(b, b.r, b.m, pn, rr, PIN_M, 0.5);
+            const imp = collide(b, b.r, b.m, pn, rr, PIN_M, 0.4);
             if (imp > 0) { const nx = pn.vx, nz = pn.vz; const sp = Math.hypot(nx, nz) || 1; hitPin(L, pn, imp, nx / sp, nz / sp); if (imp > 2.5 && T - (L.hitSfxT || 0) > 0.05) { L.hitSfxT = T; sfx('hit', { vol: 0.6, rate: 0.8 + rng() * 0.4 }); } if (!b.hit) { b.hit = true; ctx.shake(0.15); } }
           }
           const sp = Math.hypot(b.vx, b.vz); if (sp < 2.6 && sp > 0) { const k = 2.6 / sp; b.vx *= k; b.vz *= k; }
@@ -223,11 +223,11 @@ export default {
         b.z += b.vz * h; if (b.z < PIT_Z - 1.0) { b.mode = 'gone'; b.gT = 0; }
       }
       // kegels
-      const kf = Math.exp(-lerp(2.2, 0.35, SLIP) * h), kd = Math.exp(-lerp(3.2, 0.5, SLIP) * h);
+      const kf = Math.exp(-lerp(3.2, 0.5, SLIP) * h), kd = Math.exp(-lerp(4.0, 0.7, SLIP) * h);
       for (const pn of pins) {
         if (!pn.on || pn.state === 'gone') continue;
         const sp2 = pn.vx * pn.vx + pn.vz * pn.vz;
-        if (sp2 > 0.0004) { pn.x += pn.vx * h; pn.z += pn.vz * h; const k = pn.state === 'stand' ? kf : kd; pn.vx *= k; pn.vz *= k; if (sp2 > 22 * 22) { const c = 22 / Math.sqrt(sp2); pn.vx *= c; pn.vz *= c; } }
+        if (sp2 > 0.0004) { pn.x += pn.vx * h; pn.z += pn.vz * h; const k = pn.state === 'stand' ? kf : kd; pn.vx *= k; pn.vz *= k; if (sp2 > 15 * 15) { const c = 15 / Math.sqrt(sp2); pn.vx *= c; pn.vz *= c; } }
         else { pn.vx = pn.vz = 0; }
         const dx = pn.x - L.cx;
         if (L.bump.on && Math.abs(dx) > LW - PIN_R && pn.z > PIT_Z + 0.5) { const s = Math.sign(dx); pn.x = L.cx + s * (LW - PIN_R); if (pn.vx * s > 0) pn.vx = -pn.vx * 0.5; }
@@ -240,7 +240,7 @@ export default {
           const ra = A.state === 'stand' ? PIN_R : FALL_R, rb = B.state === 'stand' ? PIN_R : FALL_R;
           const dx = B.x - A.x, dz = B.z - A.z; if (dx * dx + dz * dz > (ra + rb) * (ra + rb)) continue;
           const sa = Math.hypot(A.vx, A.vz), sb = Math.hypot(B.vx, B.vz);
-          const imp = collide(A, ra, PIN_M, B, rb, PIN_M, 0.55);
+          const imp = collide(A, ra, PIN_M, B, rb, PIN_M, 0.4);
           if (imp > 0) { const d = Math.hypot(dx, dz) || 1; hitPin(L, A, imp, -dx / d, -dz / d); hitPin(L, B, imp, dx / d, dz / d); if (imp > 1.5 && T - (L.pinSfxT || 0) > 0.07) { L.pinSfxT = T; sfx('wood', { vol: 0.5, rate: 0.9 + rng() * 0.6 }); } }
         }
       }
@@ -389,8 +389,8 @@ export default {
     const camLook = new THREE.Vector3(), camPos = new THREE.Vector3(); let camShift = 0;
     function updateCamera(dt) {
       const asp = camera.aspect || 1.7, tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-      const dist = clamp(8.2 / (tanH * asp), 12.5, 30);
-      const rolling = lanes.some((L) => L.st === 'roll'); const tz = rolling ? -10 : -9.2; camShift = damp(camShift, tz, 1.5, dt);
+      const dist = clamp(7.6 / (tanH * asp), 15, 36);
+      const rolling = lanes.some((L) => L.st === 'roll'); const tz = rolling ? -8.8 : -8.0; camShift = damp(camShift, tz, 1.5, dt);
       const sway = Math.sin((T + introT) * 0.3) * 0.35;
       camPos.set(sway, 4.4 + dist * 0.5, 4.2 + dist * 0.62); camLook.set(0, 0.3, camShift);
       camera.position.copy(camPos); camera.lookAt(camLook);
@@ -436,8 +436,8 @@ export default {
         if (D.on) { D.t += dt; if (!D.g) { D.g = true; dragon.group.visible = true; dragon.group.userData.lane = p; sfx('thud', { vol: 0.8, rate: 0.7 }); ctx.shake(0.4); } }
         if (D.on && D.g) {
           const k = smoothstep(0, 0.9, D.t); const sd = D.side;
-          dragon.group.position.set(L.cx + sd * 1.15 - 0.0, 0.2 + (1 - k) * 9 + Math.sin(tt * 3) * 0.04, -7.0);
-          dragon.group.rotation.y = 0; dragon.update(dt); dragon.group.visible = true;
+          dragon.group.position.set(L.cx + sd * 2.0, 0.2 + (1 - k) * 9 + Math.sin(tt * 3) * 0.04, -7.0);
+          dragon.group.rotation.y = -sd * Math.PI / 2; dragon.update(dt); dragon.group.visible = true;
           if (D.t < 0.95 && D.t - dt <= 0.9 && D.t >= 0.9) { fx.particles.burst(L.cx + sd * 1.1, 0.6, -7, { count: 24, speed: 4, up: 1, life: 0.7, size: 0.7, colors: [0xcfc0e0, 0xffffff], gravity: -0.5 }); sfx('thud', { vol: 0.9 }); ctx.shake(0.45); }
           if (Math.random() < dt * 4) fx.particles.emit(L.cx + sd * 1.1, 1.8, -5.6, 0, 1.2, 0, { life: 0.8, size: 0.4, color: 0xd0d0e0, gravity: -0.4 });
         }

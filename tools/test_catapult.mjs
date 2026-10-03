@@ -124,6 +124,25 @@ for (const name of scen) {
     }
     continue;
   }
+  if (name === 'features') {
+    // forceert gimmicks: ballonkist, draak, vuur, taart, reparatie, koning-dood
+    const { browser, page, errors } = await open('none');
+    await installBots(page, [{ skill: 0.9, style: 'idle' }, { skill: 0.9, style: 'idle' }]);
+    const r = await page.evaluate(() => {
+      const m = window.__app.mode, d = m.instance.dbg; const out = {}; const run = (n) => window.__bot(n);
+      d.startBalloon(); const b = d.balloon.mesh.position; d.balloonPop(0); out.balloon = d.state().balloon === null && d.stats.balloons === 1;
+      d.startDragon(); run(60 * 4); out.dragon = d.stats.dragons === 1;
+      const wood = d.entries.find((e) => e.side === 1 && e.mat === 'wood' && e.body); d.ignite(wood.body); run(60 * 9); out.fireBurns = !wood.body || wood.body.user.hp < 80;
+      d.damageSide(0, 0.8); run(30); const lost = d.entries.filter((e) => e.side === 0 && !e.body).length; d.giveTokens(0, 1); d.repair(0); run(20); out.repair = lost > 0 && d.entries.filter((e) => e.side === 0 && !e.body).length < lost;
+      d.splat(24, 4); run(10); out.splat = d.world.bodies.some((b) => b.user && b.user.slick > 0);
+      const x0 = d.fire(0, 0.7, 0.8, 0); run(60 * 5); out.shotFlies = d.stats.shots[0] === 1;
+      d.killKing(1); run(10); out.kingEnd = d.state().ended && d.state().result.winner !== undefined;
+      run(60 * 5); out.finished = m.finished && window.__fin.length === 1;
+      return out;
+    });
+    console.log('FEATURES', JSON.stringify(r)); console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS');
+    await browser.close(); continue;
+  }
   if (name === 'shots') {
     const { browser, page, errors } = await open(process.env.TW || 'none');
     await installBots(page, [{ skill: 0.85, style: 'aim' }, { skill: 0.8, style: 'aim' }]);

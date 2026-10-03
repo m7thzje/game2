@@ -195,7 +195,7 @@ export function collideBalls(a, b) {
 export function simulateShot(C, start, ang, v0, o = {}) {
   const b = makeBall(start.x, start.z, start.r || BALL_R); b.vx = Math.cos(ang) * v0; b.vz = Math.sin(ang) * v0;
   const h = 1 / 240, millAng0 = C.mill ? C.mill.ang : 0; let t = 0, ev = null, still = 0;
-  while (t < 14) {
+  while (t < (o.maxT || 14)) {
     if (C.mill) C.mill.ang += C.mill.w2 * h;
     ev = stepBall(C, b, h, o); t += h;
     if (ev) break;

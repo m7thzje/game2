@@ -1,3 +1,4 @@
+// ONLY=a,b beperkt het twists-scenario tot die twists.
 // Gebruik: node tools/test_pinball.mjs [scenario...]   scenario: bots | twists | idle | timeout | physics | shots
 //   TW=<twist-id> kiest een twist. Q=low|high kwaliteit.
 // Bots spelen versneld hele potjes. Controleert: finishPvp precies 1x, beide spelers kunnen winnen, geen console-errors, elke twist werkt.
@@ -110,7 +111,8 @@ for (const name of scen) {
   }
   if (['bots', 'twists', 'timeout', 'idle'].includes(name)) {
     const mk = (a, b, n) => [{ skill: a, nudge: n, style: 'play' }, { skill: b, nudge: n, style: 'play' }];
-    const list = name === 'twists' ? TWISTS.map((t) => [t, mk(0.9, 0.7, 0.1)])
+    const TW_LIST = process.env.ONLY ? process.env.ONLY.split(',') : TWISTS;
+    const list = name === 'twists' ? TW_LIST.map((t) => [t, mk(0.9, 0.7, 0.1)])
       : name === 'idle' ? [['none', [{ style: 'idle' }, { style: 'idle' }]]]
         : name === 'timeout' ? [['none', mk(0.9, 0.9, 0.0)]]
           : [[process.env.TW || 'none', mk(0.95, 0.5, 0.1)], [process.env.TW || 'none', mk(0.5, 0.95, 0.1)], [process.env.TW || 'none', mk(0.8, 0.8, 0.15)]];
