@@ -299,21 +299,21 @@ export default {
         const lowCount = obst.length < 9; U.count++;
         if (lowCount || Math.random() < 0.25) { const sp = freeSpot(4.5, 2.6); if (!sp) { U.t = 3; return; } U.mode = 'deliver'; U.nx = sp[0]; U.nz = sp[1]; U.ob = null; U.newKind = pick(OBST_KINDS); }
         else { const cand = obst.filter((o) => solid(o) && o.kind !== 'fountain' && pl.every((p) => Math.hypot(p.x - o.x, p.z - o.z) > 3.5)); if (!cand.length) { U.t = 3; return; } U.mode = 'move'; U.ob = pick(cand); const sp = freeSpot(4.5, 2.8); if (!sp) { U.t = 3; return; } U.nx = sp[0]; U.nz = sp[1]; }
-        U.state = 'in'; U.x = (Math.random() < 0.5 ? -1 : 1) * (AX + 12); U.z = rand(-6, 6); U.y = 11; stats.ufo++;
+        U.state = 'in'; U.x = (Math.random() < 0.5 ? -1 : 1) * (AX + 12); U.z = rand(-6, 6); U.y = 8; stats.ufo++;
         hud.toast('🛸 Een ufo! Hij verplaatst obstakels.', 1800); audio.tone(300, 1.0, { type: 'sine', vol: 0.12, slide: 700 }); audio.tone(310, 1.0, { type: 'sine', vol: 0.1, slide: 720, vib: 0.05 });
       } }
       else if (U.state === 'in') {
         const tx = U.mode === 'move' ? U.ob.x : U.nx, tz = U.mode === 'move' ? U.ob.z : U.nz;
-        if (fly(tx, tz, 8, 16)) { if (U.mode === 'move') { U.state = 'lift'; U.wait = 0; U.ob.state = 'lifted'; ud.beam.visible = true; audio.sfx('whoosh', { vol: 0.5, rate: 0.6 }); } else { U.state = 'deliver'; U.wait = 0; ud.beam.visible = true; ufoWarn.visible = true; ufoWarn.position.set(U.nx, 0.07, U.nz); } }
+        if (fly(tx, tz, 5.6, 16)) { if (U.mode === 'move') { U.state = 'lift'; U.wait = 0; U.ob.state = 'lifted'; ud.beam.visible = true; audio.sfx('whoosh', { vol: 0.5, rate: 0.6 }); } else { U.state = 'deliver'; U.wait = 0; ud.beam.visible = true; ufoWarn.visible = true; ufoWarn.position.set(U.nx, 0.07, U.nz); } }
       } else if (U.state === 'lift') {
-        U.wait += dt; const o = U.ob; o.y = Math.min(6.5, o.y + dt * 6); o.m.position.set(o.x, o.y, o.z); o.m.rotation.y += dt * 3;
-        if (o.y >= 6.4) { U.state = 'carry'; ufoWarn.visible = true; }
+        U.wait += dt; const o = U.ob; o.y = Math.min(4.3, o.y + dt * 6); o.m.position.set(o.x, o.y, o.z); o.m.rotation.y += dt * 3;
+        if (o.y >= 4.2) { U.state = 'carry'; ufoWarn.visible = true; }
       } else if (U.state === 'carry') {
         const o = U.ob; ufoWarn.position.set(U.nx, 0.07, U.nz);
-        if (fly(U.nx, U.nz, 8, 11)) { U.state = 'drop'; U.wait = 0; ud.beam.visible = false; } o.x = U.x; o.z = U.z; o.m.position.set(o.x, o.y, o.z); o.m.rotation.y += dt * 3;
+        if (fly(U.nx, U.nz, 5.6, 11)) { U.state = 'drop'; U.wait = 0; ud.beam.visible = false; } o.x = U.x; o.z = U.z; o.m.position.set(o.x, o.y, o.z); o.m.rotation.y += dt * 3;
       } else if (U.state === 'deliver') {
         U.wait += dt; ufoWarn.position.set(U.nx, 0.07, U.nz);
-        if (U.wait > 1.0) { const o = addObstacle(U.newKind, U.nx, U.nz, 6.4); o.state = 'falling'; o.vy = 0; U.ob = o; U.state = 'drop'; U.wait = 0; ud.beam.visible = false; o.m.scale.setScalar(0.1); }
+        if (U.wait > 1.0) { const o = addObstacle(U.newKind, U.nx, U.nz, 4.4); o.state = 'falling'; o.vy = 0; U.ob = o; U.state = 'drop'; U.wait = 0; ud.beam.visible = false; o.m.scale.setScalar(0.1); }
       } else if (U.state === 'drop') {
         const o = U.ob; ufoWarn.position.set(U.nx, 0.07, U.nz);
         if (o.state !== 'falling') { o.state = 'falling'; o.vy = 0; o.x = U.nx; o.z = U.nz; }
