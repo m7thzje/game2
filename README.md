@@ -80,6 +80,10 @@ het ritmespel is daardoor wat lastiger. Lukt de verbinding niet (strenge netwerk
 
 * **Hoedenmaker Hettie** (kraam op het plein, ook via `Esc` → *Hoeden & kleuren*): 18 hoeden en 12 kleuren per categorie (shirt, haar, sjaal/cape, o.a. goud en regenboog) voor Wes én Jor, elk met de eigen toetsen. Je betaalt met de gedeelde heitjes (die zijn dan niet meer voor het concert!). Wat je aantrekt zie je overal terug: dorp, Speelhal en minigames. Code: `src/world/shop.js` (`openShop(app, { onClose })`), `src/engine/cosmetics.js`, opslag in `S.cosmetics`.
 * De weg naar de Speelhal: gloeiende lichtzuil boven de poort, een pad van pijlen vanaf de spawn, wegwijzers, een pijl aan de rand van het scherm en **Heraut Hans** bij het huisje van de broers.
+* **Meer in de Speelhal:** een 🔁 *Revanche*-knop met reeks-teller na elk duel, een **Uitdaging van de dag** (vast duel + twist, bonus-heitjes en een reeks), een **ranglijst per spel** (👑 koning per duel),
+  **twists aan/uit zetten** en het aantal **minigolf-holes** (3/6/9/12 uit een pool van 17) instellen bij *Spellen & twists kiezen*, en **Smash-Arena** met 4 vechters, 3 podia en een super-meter.
+  Soms neemt **de Deurman een hal over**: de lichten flikkeren, een deur gaat open en hij sluipt naar jullie toe. Verjaag hem met je lantaarn (G / Shift vasthouden), of speel één spookduel om de hal terug te winnen.
+  In het dorp koop je bij **Hoedenmaker Hettie** hoedjes en kleuren voor Wes en Jor; **Heraut Hans** wijst de weg naar de Speelhal.
 * Elke klus betaalt 0-3 sterren. Spaar **600 heitjes**, koop kaartjes bij het loket, en ga 's avonds naar de kasteelpoort.
 * Verzamel muntjes, schatkisten en de **8 gouden deurknoppen** van de Deurman.
 * **De Deurman** (creepypasta-stijl): deuren kraken open, hij staat in de opening, en tijdens klusjes moet je *stil blijven staan*
