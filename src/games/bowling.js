@@ -11,7 +11,7 @@ import { buildWorld, LW, GUT, CX, HEAD, PIT_Z, PIN_HOME, PIN_TYPES, pinGeo, crow
 //  * punten: elke kegel 1 (gouden kegel 2), strike +10, spare +5; laatste ronde dubbel. Gelijk = beslissende worp.
 //  * chaos: bumper-kussens in sommige rondes (vaak voor wie achterstaat), een gouden kegel, een draak die op de baan van de leider landt
 
-const FRAMES = 5, MATCH_TIME = 100, AIM_T = 6.5, SD_MAX = 3;
+const FRAMES = 5, MATCH_TIME = 100, AIM_T = 5.5, SD_MAX = 3;
 const BALL_R = 0.55, BALL_M = 9, PIN_R = 0.4, PIN_M = 1.6, FALL_R = 0.44;
 const STEP = 1 / 120, D2R = Math.PI / 180, MAX_ANG = 11 * D2R;
 const SAYS = { kabouter: ['HIHI!', 'AU!', 'OEPS!'], kip: ['KOEKOEK!', 'BOK!', 'KIP-KIP!'], monster: ['ROAR!', 'OEF!', 'GRRR!'] };

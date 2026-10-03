@@ -391,7 +391,7 @@ export default {
     let lastSb = -1;
     function update(dt) {
       dt = Math.min(dt, 0.05); T += dt;
-      if (!started) { started = true; resetKickoff(); hud.toast('Eerste tot 5 goals! Turbo met A, schieten met B', 2200); refreshHud(); }
+      if (!started) { started = true; resetKickoff(); hud.toast('Eerste tot 5 goals!', 1800); refreshHud(); }
       if (T > 330 && !finished && G.state !== 'end') endMatch(score[0] === score[1] ? decideByCloseness() : (score[0] > score[1] ? 0 : 1));
       if (slowHold > 0) slowHold -= dt; else slow = damp(slow, 1, 3, dt);
       const sdt = dt * slow * PHYS_T;

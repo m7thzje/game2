@@ -18,9 +18,9 @@ const PNAME = ['Wes', 'Jor'];
 
 export default {
   id: 'flappy', name: 'Wolkenrace', giver: 'Wolkenwachter Wim', icon: '🐉', mode: 'pvp', time: 85, music: 'game_fast',
-  blurb: 'Draken-race door de wolken! Jullie vliegen <b>boven elkaar</b> door hetzelfde parcours. <b>Klapwiek</b> om te stijgen, <b>vang munten</b> en vlieg door de gaten tussen de wolken-pilaren. Met <b>vuur</b> sloop je roze breekwolken en braad je vogels. Eerste over de finish krijgt een bonus; de meeste <b>punten</b> winnen!',
+  blurb: 'Draken-race door de wolken! Jullie vliegen <b>boven elkaar</b> door hetzelfde parcours. <b>Klapwiek</b> om te stijgen, <b>vang munten</b> en vlieg door de gaten tussen de wolken-pilaren. Met <b>vuur</b> sloop je roze breekwolken en braad je vogels. Eerste over de finish krijgt bonus; de meeste <b>punten</b> winnen!',
   controls: ['{a} KLAPWIEK (tikken = omhoog)', '{move} links/rechts = trager/sneller vliegen', '{b} VUURSPUW (of BLIKSEM als je die hebt)'],
-  tip: 'Botsen kost tijd maar je gaat niet af. Wie achterligt vliegt in de zuiging van de leider en gaat sneller. Een bliksem-power-up laat je broer duizelen!',
+  tip: 'Botsen kost alleen tijd. Wie achterligt vliegt in de zuiging en gaat sneller. Bliksem = broer duizelig!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;

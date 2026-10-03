@@ -21,9 +21,9 @@ export default {
   mode: 'pvp',
   time: 90,
   music: 'game_fast',
-  blurb: 'Een <b>flipperkast in het Drakenkasteel</b>! Wes bedient de <b>linker</b>, Jor de <b>rechter</b> flippers. De bal is van wie hem <b>als laatste raakte</b> (kleurgloed): alle torens, de draak en de kip tellen voor de eigenaar. <b>Steel de bal</b> van je broer! 3 ballen of 84 seconden.',
-  controls: ['{a} flippers omhoog (Wes links, Jor rechts)', '{b} STOOT de kast (+ ← → richting)', 'Te veel stoten = TILT!'],
-  tip: 'Schilden rechts = jackpot, links = multiball. Pak de gloeiende power-ups. De laatste 15 seconden tellen dubbel!',
+  blurb: 'Flipperkast in het <b>Drakenkasteel</b>! Wes: <b>linker</b>, Jor: <b>rechter</b> flippers. De bal is van wie hem <b>als laatste raakte</b> (kleurgloed) en alle punten gaan naar de eigenaar. <b>Steel de bal!</b> 3 ballen of 84 s.',
+  controls: ['{a} flippers omhoog', '{b} stoot (+ ← →), niet te veel: TILT!'],
+  tip: 'Schilden rechts = jackpot, links = multiball. Laatste 15 s dubbel!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;

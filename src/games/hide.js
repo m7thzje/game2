@@ -25,9 +25,9 @@ export default {
   mode: 'pvp',
   time: 75,
   music: 'tense',
-  blurb: 'Nacht op de <b>kermis</b>! Eén broer is de <b>verstopper</b> en verkleedt zich als voorwerp (ton, kist, kip...) terwijl de zoeker zijn <b>ogen dicht</b> heeft. De ander is de <b>zoeker</b> met een lantaarn. Na 28 seconden wisselen jullie! Punten: seconden ongezien (verstopper) of snel vinden (zoeker).',
-  controls: ['{move} lopen (als voorwerp: schuifelen)', 'Zoeker: {a} TIK op een voorwerp · {b} SCAN-flits', 'Verstopper: {a} ontkleden/verkleden · {b} afleiding'],
-  tip: 'Fout getikt = tijdverlies en een kans minder. Pas op voor de verraderkip en de Deurman: niet bewegen als de poort opengaat!',
+  blurb: 'Nacht op de <b>kermis</b>! De <b>verstopper</b> verkleedt zich als voorwerp terwijl de zoeker <b>ogen dicht</b> heeft. De <b>zoeker</b> heeft een lantaarn. Na 28 s wisselen jullie! Punten: ongezien blijven of snel vinden.',
+  controls: ['{move} lopen (als voorwerp: schuifelen)', 'Zoeker: {a} tik · {b} scan', 'Verstopper: {a} ontkleden · {b} afleiding'],
+  tip: 'Pas op voor de verraderkip en de Deurman: stil staan!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud, renderer } = ctx;

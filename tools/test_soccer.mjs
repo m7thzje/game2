@@ -1,4 +1,4 @@
-// Gebruik: node tools/test_soccer.mjs [scenario...]   scenario: bots | twists | timeout | idle | events | physics | shots
+// Gebruik: node tools/test_soccer.mjs [scenario...]   scenario: bots | twists | timeout | idle | events | physics | shots | ufo
 //   TW=<twist-id> kiest een twist (anders "none"). Q=low|high kwaliteit.
 // Bots spelen versneld (zonder renderen) hele potjes; rapporteert winnaar, aantal finishPvp-aanroepen (moet precies 1 zijn), fouten.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
@@ -158,6 +158,16 @@ for (const name of scen) {
       await browser.close();
     }
     continue;
+  }
+  if (name === 'ufo') {
+    const { browser, page, errors } = await open('none');
+    await installBots(page, [{ style: 'idle' }, { style: 'idle' }]);
+    await page.evaluate(() => { window.__bot(150); window.__app.mode.instance.dbg.ufo(); });
+    await page.evaluate(() => window.__bot(60 * 4, (s) => s.ufo === 'beam'));
+    await page.evaluate(() => window.__bot(40));
+    await page.screenshot({ path: '/tmp/sc_ufo.png', timeout: 240000 });
+    console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'NO ERRORS'); if (errors.length) fail('console-errors');
+    await browser.close(); continue;
   }
   if (name === 'shots') {
     const { browser, page, errors } = await open(process.env.TW || 'none');

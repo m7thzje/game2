@@ -9,7 +9,7 @@ import { buildStage, KINDS, KIND, ST, itemGeo, layerGeo, sprinkleGeo, drawIcon, 
 //  * Koning Klopper geeft sterren (nauwkeurigheid, versiering, bakstand) + tempo. 3 bestellingen, de laatste telt dubbel.
 //  * gimmicks: een kip springt in je taart, een draak stookt de oven op, een gouden ster op de bank
 
-const R_TIME = [26, 30, 34], N_LAY = [4, 5, 6], ROUNDS = 3;
+const R_TIME = [24, 27, 30], N_LAY = [4, 5, 6], ROUNDS = 3;
 const BAKE_MAX = 6.0, HEAT_T = 9, HEAT_MUL = 2.2, FLOUR_T = 3.4;
 const SP = 6.4;
 const CUSTOMERS = ['farmer', 'witch', 'princess', 'guard', 'dwarf', 'elder', 'jester', 'kid', 'fisher', 'bard'];
