@@ -556,7 +556,7 @@ export default {
       if (finishT > 0.5 && !trophy && winnerK) trophy = makeTrophy();
       if (trophy) { const w = winnerK; const u = clamp((finishT - 0.5) / 0.5, 0, 1); trophy.position.set(w.x, 3.2 + Math.sin(finishT * 3) * 0.2 + (1 - u) * 4, w.z); trophy.rotation.y = finishT * 2.2; trophy.scale.setScalar(1.25 * u); }
       if (finishT > 1.2 && !photoDone) { photoDone = true; makePhoto(); audio.sfx('sparkle', { vol: 0.8 }); audio.sfx('bell', { vol: 0.5 }); ctx.shake(0.2); }
-      if (finishT > 0.4) { confettiT -= dt; if (confettiT <= 0) { confettiT = 0.14; const w = winnerK; for (let q = 0; q < 2; q++) fx.particles.burst(w.x + rand(-3, 3), 7 + rand(0, 3), w.z + rand(-3, 3), { count: 14, speed: 3, up: 0.2, spread: 1.2, life: 2.0, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff, 0xff8a3a], gravity: 3.5 }); } }
+      if (finishT > 0.4 && winnerK) { confettiT -= dt; if (confettiT <= 0) { confettiT = 0.14; const w = winnerK; for (let q = 0; q < 2; q++) fx.particles.burst(w.x + rand(-3, 3), 7 + rand(0, 3), w.z + rand(-3, 3), { count: 14, speed: 3, up: 0.2, spread: 1.2, life: 2.0, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff, 0xff8a3a], gravity: 3.5 }); } }
       world.cheerCrowd();
     }
     function postUpdate(dt) { T += dt; finishStep(dt); visuals(dt, true); world.update(T, dt); cam(dt); for (const cw of cows) if (cw.state === 'cross' || cw.state === 'fly') cowStep(cw, dt); dragonStep(dt); bombStep(dt); }
