@@ -33,9 +33,9 @@ export default {
   mode: 'pvp',
   time: 90,
   music: 'game',
-  blurb: 'Bake Off op de kermis! Jullie krijgen <b>hetzelfde bonnetje</b>: bak de <b>bodem</b> in de oven, stapel de lagen in de goede volgorde en <b>bel</b>. Koning Klopper geeft sterren. 3 bestellingen, de laatste telt <b>dubbel</b>.',
-  controls: ['{move} lopen', '{a} pakken / neerleggen / strooien', '{b} oven leeg / BEL / (bij de bank) bloemzak'],
-  tip: 'Bij de bank in het midden pak je met {a} de gouden ster of steel je een ingrediënt!',
+  blurb: 'Bake Off op de kermis! Jullie krijgen <b>hetzelfde bonnetje</b>: bak de <b>bodem</b>, stapel de lagen in de goede volgorde en <b>bel</b>. De Koning geeft sterren. De laatste bestelling telt <b>dubbel</b>.',
+  controls: ['{move} lopen', '{a} pakken / leggen / strooien', '{b} oven leeg / BEL / bloemzak'],
+  tip: 'Bij de bank in het midden: gouden ster pakken, stelen of bloemzak gooien!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
