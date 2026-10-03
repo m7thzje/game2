@@ -20,6 +20,7 @@ import { JOBS, JOB_BY_ID, ARCADE, HOME, SPAWN, BOOTH, BOARD, CONCERT_GATE, PATHS
 import * as STORY from './story.js';
 import { openSettings, openOnline } from './menu.js';
 import { mergeStatic } from './merge.js';
+import { openShop } from './shop.js';
 
 const ICONS = { catch: '🥖', kitchen: '🍲', rhythm: '🎸', hotbomb: '💣', sokoban: '📦', whack: '🔨', mudcart: '🛒', goblins: '🐑', fishing: '🎣', potion: '🧪', plates: '🐉', sweeper: '🏰', breakout: '🧱', sumo: '🤼' };
 const NAMES = { catch: 'Broodjes Vangen', kitchen: 'Taverne-keuken', rhythm: 'Straatmuzikant', hotbomb: 'Hete Aardappel', sokoban: 'Kratten Schuiven', whack: 'Mollen Meppen', mudcart: 'Karretje uit de Modder', goblins: 'Goblin-jacht', fishing: 'Samen Vissen', potion: 'Toverdrank', plates: 'Drakengrot', sweeper: 'Zwaaibalk', breakout: 'Muur Slopen', sumo: 'IJs-Sumo' };
@@ -92,7 +93,7 @@ export class HubMode {
   }
   constructor(app, opts) {
     this.app = app; this.opts = opts; Object.assign(this, { scene: WS.scene, camera: WS.camera, sky: WS.sky, W: WS.W, life: WS.life, players: WS.players, fx: WS.fx });
-    this.mid = new THREE.Vector3(); this.focus = new THREE.Vector3(); this.busy = false; this.cinematic = false; this.t = 0; this.hudT = 0; this.modal = null; this.chaseLight = false;
+    this.W.camera = this.camera; this.mid = new THREE.Vector3(); this.focus = new THREE.Vector3(); this.busy = false; this.cinematic = false; this.t = 0; this.hudT = 0; this.modal = null; this.chaseLight = false;
     this.camPos = new THREE.Vector3(); this.camLook = new THREE.Vector3(); this.promptItems = [null, null]; this.floatT = 0; this.hintT = 18;
     if (WS.pickups) { WS.pickups.onCollect = (...a) => this.onCollect(...a); } else { WS.pickups = new Pickups(this.scene, this.fx, (...a) => this.onCollect(...a)); }
     this.pickups = WS.pickups; this.pickups.fx = this.fx;
@@ -120,7 +121,7 @@ export class HubMode {
   // ---------------------------------------------------------------- start / stop
   async enter() {
     const o = this.opts;
-    this.hudSetup();
+    this.hudSetup(); this.refreshLooks();
     this.sky.setViewportHeight(innerHeight);
     if (S.tod == null) S.tod = 0.1;
     this.sky.setTime(S.tod);
@@ -155,8 +156,20 @@ export class HubMode {
     this.questEl = h('div', { class: 'hud-quest' }); ui.hudEl.append(this.questEl);
     this.miniEl = h('div', { class: 'hud-mini' }); this.miniCanvas = h('canvas', { width: 320, height: 320 }); this.miniEl.append(this.miniCanvas); ui.hudEl.append(this.miniEl);
     this.hintEl = h('div', { class: 'hud-hint' }); ui.hudEl.append(this.hintEl);
+    this.arcEl = h('div', { class: 'hud-arcade', style: { display: 'none' } }); ui.hudEl.append(this.arcEl); this._arcTxt = '';
     this.hudEl = true;
     this.refreshQuest();
+  }
+  // Wijzer aan de rand van het scherm naar de Speelhal, zolang je er nog niet geweest bent (de camera kijkt alleen dichtbij)
+  updateArcadeHint() {
+    const el = this.arcEl; if (!el) return;
+    const dx = ARCADE.x - this.mid.x, dz = ARCADE.z - this.mid.z, d = Math.hypot(dx, dz);
+    if (S.flags.met_king || this.busy || this.cinematic || d < 26) { if (el.style.display !== 'none') el.style.display = 'none'; return; }
+    const ang = Math.atan2(dz, dx), ca = Math.cos(ang), sa = Math.sin(ang), Wd = innerWidth, Hh = innerHeight;
+    const k = Math.min((Wd / 2 - 130) / (Math.abs(ca) || 1e-6), (Hh / 2 - 110) / (Math.abs(sa) || 1e-6));
+    el.style.display = 'block'; el.style.left = (Wd / 2 + ca * k) + 'px'; el.style.top = (Hh / 2 + sa * k + (sa < 0 ? 22 : 0)) + 'px';
+    const txt = `<span class="ar" style="transform:rotate(${ang}rad)">➤</span> 🎮 Speelhal · ${Math.round(d / 5) * 5} m`;
+    if (txt !== this._arcTxt) { this._arcTxt = txt; el.innerHTML = txt; }
   }
   onCoinsChanged() {
     const goal = !S.ticket ? TICKET_PRICE : (!S.vip ? 0 : 0);
@@ -171,6 +184,7 @@ export class HubMode {
     let obj;
     if (!S.ticket) obj = S.coins >= TICKET_PRICE ? `Je hebt genoeg heitjes! Koop kaartjes bij het <b>loket</b> op het plein.` : `Spaar <b>${TICKET_PRICE}</b> heitjes voor 2 kaartjes. Doe karweitjes!`;
     else obj = this.sky.isNight() ? `Het is donker: ga naar de <b>poort van het kasteel</b> voor het concert!` : `Kaartjes gekocht! Wacht tot het donker is en ga naar de <b>kasteelpoort</b> (noorden).`;
+    if (!S.flags.met_king) obj += `<br><b>🎮 Ontdek de Speelhal (noordwesten) — duel tegen elkaar!</b>`;
     this.questEl.innerHTML = `<h4>Doel</h4>${obj}<br><small>Klussen: ${done}/${JOBS.length} · Gouden deurknoppen: ${knobs}/${DOORKNOBS.length}</small>`;
   }
   onCollect(type, v, x, y, z, p) {
@@ -188,7 +202,15 @@ export class HubMode {
     const toS = (wx, wz) => [N / 2 + (wx - this.mid.x) * z, N / 2 + (wz - this.mid.z) * z];
     const night = this.sky.isNight();
     for (const j of JOBS) { const [x, y] = toS(j.x, j.z); const d = S.jobs[j.id]; g.fillStyle = d ? '#7bd88f' : (j.when === 'nacht' && !night ? '#6a6a8a' : '#ffd23f'); g.strokeStyle = '#2a1a0a'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, d ? 6 : 9, 0, TAU); g.fill(); g.stroke(); if (!d) { g.fillStyle = '#2a1a0a'; g.font = 'bold 14px sans-serif'; g.textAlign = 'center'; g.fillText('!', x, y + 5); } }
-    { const [ax, ay] = toS(ARCADE.x, ARCADE.z); g.font = '18px sans-serif'; g.textAlign = 'center'; g.fillText('🎮', ax, ay + 6); const [x, y] = toS(BOOTH.x, BOOTH.z); g.font = '18px sans-serif'; g.textAlign = 'center'; g.fillText('🎟️', x, y + 6); const [gx, gy] = toS(CONCERT_GATE.x, CONCERT_GATE.z); g.fillText(S.ticket ? '🎤' : '🏰', gx, gy + 6); }
+    { let [ax, ay] = toS(ARCADE.x, ARCADE.z); g.font = '18px sans-serif'; g.textAlign = 'center';
+      if (!S.flags.met_king) {   // nog niet bezocht: knipperende, pulserende marker die aan de rand van de kaart blijft kleven
+        const dx = ax - N / 2, dy = ay - N / 2, dd = Math.hypot(dx, dy), lim = N / 2 - 22; if (dd > lim) { ax = N / 2 + dx / dd * lim; ay = N / 2 + dy / dd * lim; }
+        const ph = this.t * 5, pr = 16 + Math.sin(ph) * 5; g.save(); g.globalAlpha = 0.45 + 0.35 * Math.sin(ph); g.fillStyle = '#ff2bd6'; g.beginPath(); g.arc(ax, ay, pr + 6, 0, TAU); g.fill(); g.globalAlpha = 1; g.fillStyle = '#2a0a4a'; g.strokeStyle = '#ffe14a'; g.lineWidth = 3; g.beginPath(); g.arc(ax, ay, pr, 0, TAU); g.fill(); g.stroke();
+        if (Math.sin(ph * 0.8) > -0.3) { g.font = '22px sans-serif'; g.fillStyle = '#fff'; g.fillText('🎮', ax, ay + 8); } g.restore();
+        if (dd > lim) { g.save(); g.translate(ax, ay); g.rotate(Math.atan2(dy, dx)); g.fillStyle = '#ffe14a'; g.beginPath(); g.moveTo(pr + 18, 0); g.lineTo(pr + 6, -8); g.lineTo(pr + 6, 8); g.fill(); g.restore(); }
+        g.font = '18px sans-serif'; g.fillStyle = '#000';
+      } else g.fillText('🎮', ax, ay + 6);
+      const [x, y] = toS(BOOTH.x, BOOTH.z); g.font = '18px sans-serif'; g.textAlign = 'center'; g.fillText('🎟️', x, y + 6); const [gx, gy] = toS(CONCERT_GATE.x, CONCERT_GATE.z); g.fillText(S.ticket ? '🎤' : '🏰', gx, gy + 6); }
     this.players.forEach((p, i) => { const [x, y] = toS(p.x, p.z); g.fillStyle = PLAYER_CSS[i]; g.strokeStyle = '#fff'; g.lineWidth = 3; g.beginPath(); g.arc(x, y, 8, 0, TAU); g.fill(); g.stroke(); g.fillStyle = '#fff'; g.beginPath(); g.moveTo(x + Math.sin(p.yaw) * 14, y + Math.cos(p.yaw) * 14); g.lineTo(x + Math.sin(p.yaw + 2.6) * 8, y + Math.cos(p.yaw + 2.6) * 8); g.lineTo(x + Math.sin(p.yaw - 2.6) * 8, y + Math.cos(p.yaw - 2.6) * 8); g.fill(); });
     if (this.deur.state === 'chase' || this.deur.state === 'door') { const [x, y] = toS(this.deur.m.group.position.x, this.deur.m.group.position.z); g.fillStyle = '#ff2a2a'; g.beginPath(); g.arc(x, y, 7, 0, TAU); g.fill(); }
     g.restore();
@@ -298,7 +320,9 @@ export class HubMode {
       else if (it.type === 'fountain') await this.fountain();
       else if (it.type === 'gate') await this.gate();
       else if (it.type === 'arcade') await this.arcadeGate();
-    } finally { this.busy = false; input.reset(); }
+      else if (it.type === 'shop') await this.shop();
+      else if (it.type === 'herald') await this.herald();
+    } finally { this.busy = false; this.peek = null; input.reset(); }
   }
   async talkJob(it, p) {
     const j = JOB_BY_ID[it.id]; const T = STORY.NPC[it.id]; const def = this.app.games[it.id];
@@ -406,6 +430,28 @@ export class HubMode {
     this.busy = false; this.app.goArcade({});
     await new Promise(() => {});
   }
+  // Heraut Hans nodigt uit voor de Speelhal
+  async herald() {
+    const H = 'Heraut Hans'; const n = this.W.heraldNpc; if (n) n.faceTowards(this.mid.x, this.mid.z);
+    const first = !S.flags.met_herald; S.flags.met_herald = true;
+    if (n && n.userData.mark) { n.group.remove(n.userData.mark); n.userData.mark = null; }
+    if (first) { await this.say([{ who: H, text: '*TOETERTOET!* Hoor ye, hoor ye! Koning Klopper nodigt jullie uit in de Speelhal!' }, { who: H, text: '44 spelletjes, een toernooi en... een winkel voor hoedjes!' }, { who: 'Jor', text: 'Een winkel voor HOEDJES?! Wes, ik wil een tovenaarshoed!' }, { who: H, text: 'Volg de gloeiende pijlen op de grond: over het plein, over de brug en dan het noordwesten in. Je ziet de lichtzuil al van ver.', onShow: () => this.peekArcade(true) }, { who: 'Wes', text: 'Die roze kolom die tot in de wolken schiet?' }, { who: H, text: 'Precies die. Hij is helemaal niet opvallend. Succes!' }]); this.peekArcade(false); }
+    else await this.say([{ who: H, text: S.flags.met_king ? 'Welkom terug! De koning vraagt elke dag naar jullie. Meestal als hij zich verveelt.' : 'De Speelhal? Gewoon de gloeiende pijlen volgen: plein, brug, noordwesten. Je kunt er niet naast kijken!' }]);
+    if (!S.flags.met_king) ui.hud.toast('🎮 Volg de gloeiende pijlen naar de Speelhal (noordwesten)', 3500);
+  }
+  // camera kijkt even naar de Speelhal-lichtzuil (tijdens het gesprek met de heraut)
+  peekArcade(on) { this.peek = on ? { x: ARCADE.x, z: ARCADE.z, y: groundY(ARCADE.x, ARCADE.z) } : null; if (on) audio.sfx('sparkle'); }
+  // Hoedenmaker Hettie
+  async shop() {
+    const H = 'Hoedenmaker Hettie'; const first = !S.flags.met_hettie; S.flags.met_hettie = true;
+    if (this.W.hettie) this.W.hettie.faceTowards(this.mid.x, this.mid.z);
+    if (first) await this.say([{ who: H, text: 'Welkom bij Hettie! Hoeden voor hoofden van elke maat. Ook voor hoofden zonder maat.' }, { who: 'Jor', text: 'Mag ik die met de kip erop?' }, { who: H, text: 'Alles wat je maar wilt, als je maar heitjes hebt. En shirts, haarverf en capes heb ik ook!' }]);
+    else await this.say([{ who: H, text: pick(['Een mooie hoed maakt van elke dag een feestdag.', 'Een hoed zegt: ik ben hier, en ik heb stijl.', 'Dit seizoen is de bloempot helemaal in.']) }]);
+    const c = await this.choose('👒 Hoeden & kleuren', ['Winkel bekijken', 'Nu even niet'], `Heitjes: ${S.coins} · de kaartjes kosten ${TICKET_PRICE}`);
+    if (c === 0) await this.openShop();
+  }
+  async openShop() { await openShop(this.app, { onClose: () => { this.refreshLooks(); this.onCoinsChanged(); } }); }
+  refreshLooks() { for (const p of this.players) p.c.refreshBrother(); }
   async gate() {
     if (!S.ticket) { await this.say([{ who: 'Wachter', text: 'Alleen met kaartje! Ga naar het loket op het plein.' }]); return; }
     if (!this.sky.isNight() && this.sky.phase() !== 'avond') { await this.say([{ who: 'Wachter', text: 'Het concert begint pas als het donker is. Kom terug in de avond. (Je kunt thuis slapen tot de avond.)' }]); return; }
@@ -420,11 +466,12 @@ export class HubMode {
   // ---------------------------------------------------------------- pauze
   async pauseMenu() {
     if (this.busy) return; this.busy = true;
-    const c = await this.choose('Pauze', ['Doorgaan', 'Dagboek', 'Instellingen', '🌐 Online spelen', 'Terug naar het titelscherm']);
+    const c = await this.choose('Pauze', ['Doorgaan', 'Dagboek', '👒 Hoeden & kleuren', 'Instellingen', '🌐 Online spelen', 'Terug naar het titelscherm']);
     if (c === 1) await this.journal();
-    else if (c === 2) await new Promise((r) => openSettings(r));
-    else if (c === 3) await new Promise((r) => openOnline(this.app, r));
-    else if (c === 4) { persist(); await ui.fade(1, 400); this.busy = false; await this.app.goMenu(); ui.fade(0, 500); await new Promise(() => {}); }
+    else if (c === 2) await this.openShop();
+    else if (c === 3) await new Promise((r) => openSettings(r));
+    else if (c === 4) await new Promise((r) => openOnline(this.app, r));
+    else if (c === 5) { persist(); await ui.fade(1, 400); this.busy = false; await this.app.goMenu(); ui.fade(0, 500); await new Promise(() => {}); }
     this.busy = false; input.reset();
   }
 
@@ -473,7 +520,7 @@ export class HubMode {
     // scripted
     if (this.scriptedFirstDoor && this.deur.state === 'idle' && !this.busy) { this.scriptedFirstDoor = false; this.firstDoor(); }
     // HUD
-    this.hudT -= dt; if (this.hudT <= 0) { this.hudT = 0.12; this.drawMini(); }
+    this.hudT -= dt; if (this.hudT <= 0) { this.hudT = 0.12; this.drawMini(); this.updateArcadeHint(); }
     this.hintT -= dt; this.hintEl.innerHTML = this.hintT > 0 && !this.busy ? `<span>Lopen: <kbd>WASD</kbd>/<kbd>Pijltjes</kbd> · <kbd>F</kbd>/<kbd>Enter</kbd> praten of springen · <kbd>G</kbd>/<kbd>Shift</kbd> lantaarn · <kbd>Esc</kbd> menu · <kbd>Tab</kbd> dagboek</span>` : '';
     if (!this._lastPh || this._lastPh !== this.sky.phase()) { this._lastPh = this.sky.phase(); if (this.deur.state === 'idle') audio.music(this.musicName()); this.onCoinsChanged(); }
     this.updateCamera(dt);
@@ -519,10 +566,11 @@ export class HubMode {
     const [a, b] = this.players; const sep = Math.hypot(a.x - b.x, a.z - b.z);
     const k = clamp((sep - 6) / 28, 0, 1);
     const hgt = lerp(17, 33, k), back = lerp(14.5, 32, k);
-    let tx = this.mid.x, ty = Math.max(this.mid.y, groundY(this.mid.x, this.mid.z)) + hgt, tz = this.mid.z + back;
+    let tx = this.mid.x, ty = Math.max(this.mid.y, groundY(this.mid.x, this.mid.z)) + hgt, tz = this.mid.z + back, lx = this.mid.x, ly = this.mid.y + 1.5, lz = this.mid.z - 1;
     if (this.deur.state === 'chase') { tz += 2; }
+    if (this.peek) { const q = this.peek; tx = q.x + Math.sin(ARCADE.yaw) * 92; tz = q.z + Math.cos(ARCADE.yaw) * 92; ty = q.y + 52; lx = q.x; lz = q.z; ly = q.y + 27; }
     this.camPos.x = damp(this.camPos.x, tx, 4.5, dt); this.camPos.y = damp(this.camPos.y, ty, 3.5, dt); this.camPos.z = damp(this.camPos.z, tz, 4.5, dt);
-    this.camLook.x = damp(this.camLook.x, this.mid.x, 6, dt); this.camLook.y = damp(this.camLook.y, this.mid.y + 1.5, 4, dt); this.camLook.z = damp(this.camLook.z, this.mid.z - 1, 6, dt);
+    this.camLook.x = damp(this.camLook.x, lx, 6, dt); this.camLook.y = damp(this.camLook.y, ly, 4, dt); this.camLook.z = damp(this.camLook.z, lz, 6, dt);
     this.camera.position.copy(this.camPos); this.camera.lookAt(this.camLook);
     // schaduwen
     this.sky.sun.shadow.camera.left = this.sky.sun.shadow.camera.bottom = -34 - k * 20; this.sky.sun.shadow.camera.right = this.sky.sun.shadow.camera.top = 34 + k * 20; this.sky.sun.shadow.camera.updateProjectionMatrix();

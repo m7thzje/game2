@@ -1,17 +1,18 @@
 import * as THREE from 'three';
-import { mat, glow, mesh, canvasTex, TAU, rand } from '../engine/util.js';
+import { mat, glow, mesh, canvasTex, TAU, rand, smoothstep } from '../engine/util.js';
 import { tex } from '../engine/textures.js';
 import * as P from '../engine/props.js';
-import { Animal, makeNPC } from '../engine/chars.js';
-import { groundY } from './terrain.js';
-import { JOBS, JOB_BY_ID, ARCADE, HOME, PLAZA, BOOTH, BOARD, CAVE, CASTLE, CONCERT_GATE, ICE, SWAMP, FARM, PASTURE, BRIDGE, riverX } from './layout.js';
-import { stall, tent, bench, table, mug, cart, milkCan, scarecrow, dummy, target, wheelbarrow, snowman, brazier, cabbageRows, stripedTex } from './build.js';
+import { Animal, makeNPC, makeHatMesh } from '../engine/chars.js';
+import { S } from '../save.js';
+import { groundY, isWater, onBridge } from './terrain.js';
+import { JOBS, JOB_BY_ID, ARCADE, HOME, PLAZA, BOOTH, BOARD, CAVE, CASTLE, CONCERT_GATE, ICE, SWAMP, FARM, PASTURE, BRIDGE, riverX, ARCADE_TRAIL, HERALD, HAT_SHOP } from './layout.js';
+import { stall, tent, bench, table, mug, cart, milkCan, scarecrow, dummy, target, wheelbarrow, snowman, brazier, cabbageRows, stripedTex, floatLabel, questMark } from './build.js';
 
 const PI = Math.PI;
 
 export function buildVillage(W) {
   buildPlaza(W); buildHome(W); buildBakery(W); buildTavern(W); buildWarehouse(W); buildFarm(W); buildMud(W); buildPasture(W);
-  buildPier(W); buildArcadeGate(W); buildWitch(W); buildCave(W); buildCastleYard(W); buildCastle(W); buildWall(W); buildIce(W); buildBridge(W);
+  buildPier(W); buildArcadeGate(W); buildArcadeGuide(W); buildHatShop(W); buildHerald(W); buildWitch(W); buildCave(W); buildCastleYard(W); buildCastle(W); buildWall(W); buildIce(W); buildBridge(W);
   buildJobNpcs(W);
 }
 
@@ -237,6 +238,132 @@ function buildArcadeGate(W) {
   const [bx, bz] = L(0, 2); W.arcadeDoor = { x: bx, z: bz };
   // sfeer: gekleurde gloed voor de poort
   W.glowMats.push(...[]);
+}
+
+// ---------------------------------------------------------------- de weg naar de Speelhal: lichtzuil, groot bord, gloeiende pijlen, borden, heraut
+// Alles goedkoop: een paar cilinders/sprite + twee InstancedMeshes (pijlen, lantaarntjes) + 3 bordjes.
+function glowBeamTex() {
+  return canvasTex(8, 256, (g, w, hh) => { const gr = g.createLinearGradient(0, hh, 0, 0); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.18, 'rgba(255,255,255,.85)'); gr.addColorStop(0.7, 'rgba(255,255,255,.3)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, hh); });
+}
+function dirSignTex(angle) {   // angle = schermhoek van de pijl (0 = rechts, PI/2 = omhoog)
+  return canvasTex(512, 256, (g, w, hh) => {
+    const gr = g.createLinearGradient(0, 0, w, hh); gr.addColorStop(0, '#3a1170'); gr.addColorStop(1, '#8a1f8a'); g.fillStyle = gr; g.fillRect(0, 0, w, hh);
+    g.strokeStyle = '#ffe14a'; g.lineWidth = 12; g.strokeRect(8, 8, w - 16, hh - 16); g.strokeStyle = '#5ad8ff'; g.lineWidth = 4; g.strokeRect(22, 22, w - 44, hh - 44);
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = '84px serif'; g.fillText('🎮', 80, 96);
+    g.font = 'bold 70px Fredoka, Arial Black, sans-serif'; g.lineWidth = 10; g.lineJoin = 'round'; g.strokeStyle = '#1a0a3a'; g.strokeText('Speelhal', 238, 100); g.fillStyle = '#fff'; g.fillText('Speelhal', 238, 100);
+    g.font = 'bold 34px Fredoka, Arial, sans-serif'; g.fillStyle = '#ffe14a'; g.fillText('Koning Klopper wacht!', 200, 196);
+    g.save(); g.translate(430, 128); g.rotate(-angle); g.fillStyle = '#ffe14a'; g.strokeStyle = '#1a0a3a'; g.lineWidth = 8; g.lineJoin = 'round';
+    g.beginPath(); g.moveTo(52, 0); g.lineTo(6, -44); g.lineTo(6, -18); g.lineTo(-52, -18); g.lineTo(-52, 18); g.lineTo(6, 18); g.lineTo(6, 44); g.closePath(); g.stroke(); g.fill(); g.restore();
+  });
+}
+function buildArcadeGuide(W) {
+  const LA = (lx, lz) => W.local(ARCADE.x, ARCADE.z, ARCADE.yaw, lx, lz);
+  const [bx, bz] = LA(0, 1.5); const by = groundY(bx, bz);
+  // 1. lichtzuil boven de poort: twee ineengeschoven cilinders, additief, zichtbaar van ver (ook overdag)
+  const bt = glowBeamTex();
+  const mkBeam = (r0, r1, hgt, color, op) => { const m = new THREE.Mesh(new THREE.CylinderGeometry(r1, r0, hgt, 20, 1, true), new THREE.MeshBasicMaterial({ map: bt, color, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })); m.position.set(bx, by + hgt / 2 - 2, bz); m.renderOrder = 6; m.frustumCulled = false; W.add(m); return m; };
+  const beamOut = mkBeam(5.2, 2.8, 150, 0xff3ad8, 0.5), beamIn = mkBeam(1.8, 0.9, 160, 0xff9af0, 0.8);
+  // 2. groot knipperend bord hoog boven de poort (sprite: kijkt altijd naar de camera)
+  const st = canvasTex(1024, 300, (g, w, hh) => {
+    g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'bold 128px Fredoka, Arial Black, sans-serif'; g.lineJoin = 'round';
+    g.shadowColor = '#ff2bd6'; g.shadowBlur = 40; g.lineWidth = 20; g.strokeStyle = '#2a0a5a'; g.strokeText('🎮 SPEELHAL', w / 2, hh / 2 + 6); g.fillStyle = '#fff6a8'; g.fillText('🎮 SPEELHAL', w / 2, hh / 2 + 6); g.shadowBlur = 0; g.lineWidth = 6; g.strokeStyle = '#ffffff'; g.strokeText('🎮 SPEELHAL', w / 2, hh / 2 + 6);
+  });
+  const signSp = new THREE.Sprite(new THREE.SpriteMaterial({ map: st, transparent: true, depthWrite: false, fog: false })); signSp.scale.set(46, 13.5, 1); signSp.position.set(bx, by + 42, bz); signSp.renderOrder = 7; W.add(signSp);
+  // 3. pad van pijlen (instanced) en lantaarntjes naast het pad
+  const pts = [], tr = ARCADE_TRAIL; let acc = 1.5; const STEP = 4.6;
+  for (let i = 0; i < tr.length - 1; i++) {
+    const [ax, az] = tr[i], [cx, cz] = tr[i + 1]; const len = Math.hypot(cx - ax, cz - az), dx = (cx - ax) / len, dz = (cz - az) / len;
+    let d = acc; while (d < len) { pts.push({ x: ax + dx * d, z: az + dz * d, yaw: Math.atan2(dx, dz), dx, dz }); d += STEP; } acc = d - len;
+  }
+  const ag = new THREE.ShapeGeometry((() => { const sh = new THREE.Shape(); [[0, 1.1], [0.95, -0.05], [0.95, -0.55], [0, 0.2], [-0.95, -0.55], [-0.95, -0.05]].forEach(([x, y], i) => (i ? sh.lineTo(x, y) : sh.moveTo(x, y))); return sh; })());
+  ag.rotateX(Math.PI / 2);   // punt wijst nu naar +z, plat op de grond
+  const am = new THREE.MeshBasicMaterial({ color: 0xffffff, side: THREE.DoubleSide, transparent: true, fog: false }); am.polygonOffset = true; am.polygonOffsetFactor = -4;
+  const om = new THREE.MeshBasicMaterial({ color: 0x2a0a4a, side: THREE.DoubleSide, transparent: true, opacity: 0.8, fog: false }); om.polygonOffset = true; om.polygonOffsetFactor = -2;
+  const arrows = new THREE.InstancedMesh(ag, am, pts.length); const M = new THREE.Matrix4(), Q = new THREE.Quaternion(), E = new THREE.Euler(), V = new THREE.Vector3(), SC = new THREE.Vector3(1.15, 1, 1.15), col = new THREE.Color();
+  pts.forEach((p, i) => { E.set(0, p.yaw, 0); Q.setFromEuler(E); V.set(p.x, groundY(p.x, p.z) + 0.16, p.z); M.compose(V, Q, SC); arrows.setMatrixAt(i, M); arrows.setColorAt(i, col.setHex(0xff2bd6)); });
+  arrows.instanceMatrix.needsUpdate = true; arrows.frustumCulled = false; arrows.renderOrder = 4; W.add(arrows);
+  const outl = new THREE.InstancedMesh(ag, om, pts.length);   // donkere rand eronder voor contrast op zand en gras
+  pts.forEach((p, i) => { E.set(0, p.yaw, 0); Q.setFromEuler(E); V.set(p.x - p.dx * 0.12, groundY(p.x, p.z) + 0.14, p.z - p.dz * 0.12); M.compose(V, Q, SC.set(1.4, 1, 1.4)); outl.setMatrixAt(i, M); });
+  outl.instanceMatrix.needsUpdate = true; outl.frustumCulled = false; outl.renderOrder = 3; W.add(outl);
+  // lantaarntjes: elke 3e pijl, om en om links/rechts van het pad
+  const lampPts = pts.filter((_, i) => i % 3 === 1).map((p, k) => { const side = k % 2 ? 1 : -1; return { x: p.x + p.dz * 2.4 * side, z: p.z - p.dx * 2.4 * side }; }).filter((p) => !isWater(p.x, p.z) && !onBridge(p.x, p.z));
+  const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.06, 0.08, 1.7, 5), new THREE.MeshStandardMaterial({ color: 0x4a3220, roughness: 0.9 }), lampPts.length);
+  const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.3, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), lampPts.length);
+  lampPts.forEach((p, i) => { const gy = groundY(p.x, p.z); M.compose(V.set(p.x, gy + 0.85, p.z), Q.identity(), SC.set(1, 1, 1)); poles.setMatrixAt(i, M); M.compose(V.set(p.x, gy + 1.95, p.z), Q.identity(), SC.set(1, 1, 1)); bulbs.setMatrixAt(i, M); bulbs.setColorAt(i, col.setHex([0xff5ad8, 0x5ad8ff, 0xffe14a][i % 3])); });
+  poles.instanceMatrix.needsUpdate = true; bulbs.instanceMatrix.needsUpdate = true; poles.frustumCulled = false; bulbs.frustumCulled = false; W.add(poles); W.add(bulbs);
+  // animatie: golf van licht richting poort; sterker zolang de Speelhal nog niet bezocht is
+  const cA = new THREE.Color(0xff1fc8), cB = new THREE.Color(0xffc400), tmp = new THREE.Color();
+  W.updaters.push((dt, t) => {
+    const fresh = !S.flags.met_king;
+    for (let i = 0; i < pts.length; i++) { const k = fresh ? 0.5 + 0.5 * Math.sin(t * 4.5 - i * 0.7) : 0.25; arrows.setColorAt(i, tmp.copy(cA).lerp(cB, k)); }
+    arrows.instanceColor.needsUpdate = true; am.opacity = fresh ? 1 : 0.55; om.opacity = fresh ? 0.8 : 0.4;
+    const cam = W.camera, near = cam ? 0.15 + 0.85 * smoothstep(14, 55, Math.hypot(cam.position.x - bx, cam.position.z - bz)) : 1;   // vlak bij de zuil niet het hele scherm vullen
+    const pulse = 0.5 + 0.5 * Math.sin(t * 2.2), amp = (fresh ? 1 : 0.42) * near;
+    beamOut.material.opacity = (0.4 + pulse * 0.25) * amp; beamIn.material.opacity = (0.65 + pulse * 0.3) * amp;
+    beamOut.scale.set(1 + pulse * 0.08, 1, 1 + pulse * 0.08);
+    const on = fresh ? (Math.sin(t * 7) > -0.25 ? 1 : 0.35) : 0.9;   // knipperen
+    signSp.material.opacity = on; const sc = 1 + (fresh ? 0.05 * Math.sin(t * 7) : 0); signSp.scale.set(46 * sc, 13.5 * sc, 1);
+    bulbs.material.opacity = 1;
+  });
+  // 4. drie wegwijzers: bij de spawn, bij het plein (west) en na de brug
+  const place = (x, z, from, text) => {
+    const nx = tr[from + 1]; const ang = Math.atan2(-(nx[1] - z), nx[0] - x);   // pijl in schermrichting (omhoog = noord)
+    const g = new THREE.Group(); g.add(mesh(new THREE.CylinderGeometry(0.09, 0.12, 3.2, 6), mat(0x5b3d24), { pos: [0, 1.6, 0] }));
+    const bd = mesh(new THREE.BoxGeometry(3.3, 1.7, 0.1), mat(0x3a2412), { pos: [0, 3.5, 0.1], rot: [-0.45, 0, 0] }); g.add(bd);
+    g.add(mesh(new THREE.PlaneGeometry(3.2, 1.6), new THREE.MeshBasicMaterial({ map: dirSignTex(ang) }), { cast: false, pos: [0, 3.524, 0.15], rot: [-0.45, 0, 0] }));   // los object: mergeStatic voegt de plank samen en zou kinderen meenemen
+    g.add(mesh(new THREE.SphereGeometry(0.22, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffe14a }), { cast: false, pos: [0, 4.5, 0.05] }));
+    W.put(g, x, z, 0); W.circle(x, z, 0.45);
+  };
+  place(-5.6, 17.2, 0); place(-18.6, 2.0, 5); place(-45.5, 3.4, 8);
+}
+
+// ---------------------------------------------------------------- Heraut Hans (nodigt uit voor de Speelhal)
+function buildHerald(W) {
+  const n = W.npc('bard', HERALD.x, HERALD.z, HERALD.yaw, { spec: { scale: 1.08, shirt: 0xd8372c, sleeve: 0xffd23f, tunic: 0xffd23f, pants: 0x2f3a8a, hat: 'bard', hatColor: 0xd8372c, hatColor2: 0xffd23f, hair: 0x6a4a2a, hairStyle: 'short', beard: 'stache', glasses: null, skin: 0xf2c3a0 }, lookR: 14 });
+  const tp = new THREE.Group(); tp.add(mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.8, 6), mat(0xe8c24a, { metalness: 0.6, roughness: 0.35 }), { pos: [0, 0, 0.45], rot: [Math.PI / 2, 0, 0] })); tp.add(mesh(new THREE.ConeGeometry(0.16, 0.34, 10, 1, true), mat(0xf2c230, { metalness: 0.6, roughness: 0.35, side: THREE.DoubleSide }), { pos: [0, 0, 0.98], rot: [Math.PI / 2, 0, 0] })); tp.rotation.x = -0.5; n.hold(tp, 'r');
+  const lbl = floatLabel('📯 Heraut Hans', 'Speelhal-nieuws!', '#ffe14a'); lbl.position.y = n.height + 1.2; n.group.add(lbl);
+  const q = questMark(); q.position.y = n.height + 2.7; n.group.add(q); n.userData = { mark: q };
+  W.heraldNpc = n; W.interact.push({ type: 'herald', x: HERALD.x, z: HERALD.z, r: 3.6, label: 'Heraut Hans aanspreken' }); W.circle(HERALD.x, HERALD.z, 0.7);
+}
+
+// ---------------------------------------------------------------- Hoedenmaker Hettie: kraam op het plein
+// Voegt alle plain-gekleurde meshes onder `root` samen tot één vertexkleuren-mesh (hoedjes bestaan uit veel kleine stukjes)
+function bakeColors(root) {
+  root.updateMatrixWorld(true); const inv = new THREE.Matrix4().copy(root.matrixWorld).invert(); const list = [];
+  root.traverse((o) => { if (o.isMesh && o.material && !Array.isArray(o.material) && o.material.type === 'MeshStandardMaterial' && !o.material.map) list.push(o); });
+  if (list.length < 2) return;
+  const geos = list.map((o) => { const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone(); g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, o.matrixWorld)); return [g, o.material.color]; });
+  const n = geos.reduce((a, [g]) => a + g.attributes.position.count, 0); const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3); let off = 0;
+  for (const [g, c] of geos) { const k = g.attributes.position.count; pos.set(g.attributes.position.array, off * 3); nor.set(g.attributes.normal.array, off * 3); for (let i = 0; i < k; i++) { col[(off + i) * 3] = c.r; col[(off + i) * 3 + 1] = c.g; col[(off + i) * 3 + 2] = c.b; } off += k; g.dispose(); }
+  const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); mg.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); mg.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const m = new THREE.Mesh(mg, mat(0xffffff, { vertexColors: true, flatShading: false })); m.castShadow = true; m.receiveShadow = true;
+  for (const o of list) o.parent && o.parent.remove(o);
+  root.add(m);
+}
+function buildHatShop(W) {
+  const { x, z } = HAT_SHOP; const g = new THREE.Group(); const wood = new THREE.MeshStandardMaterial({ map: tex.planks(2, 1, '#8a5a2b'), roughness: 0.9 });
+  g.add(mesh(new THREE.BoxGeometry(3.4, 1.0, 1.2), wood, { pos: [0, 0.5, 0.4] }));
+  g.add(mesh(new THREE.BoxGeometry(3.5, 0.08, 1.35), mat(0xf4e4bc), { pos: [0, 1.04, 0.4] }));
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) g.add(mesh(new THREE.CylinderGeometry(0.07, 0.07, 3.0, 5), mat(0x7a5530), { pos: [sx * 1.7, 1.5, 0.4 + sz * 0.9] }));
+  const stripes = new THREE.MeshStandardMaterial({ map: stripedTex('#8a3fd8', '#ffe9a0', 8) });
+  g.add(mesh(new THREE.BoxGeometry(3.9, 0.12, 2.5), stripes, { pos: [0, 3.05, 0.4], rot: [0.14, 0, 0] }));
+  g.add(mesh(new THREE.BoxGeometry(3.9, 0.45, 0.06), new THREE.MeshStandardMaterial({ map: stripedTex('#8a3fd8', '#ffe9a0', 16) }), { pos: [0, 2.78, 1.62] }));
+  g.add(mesh(new THREE.PlaneGeometry(3.1, 0.62), new THREE.MeshStandardMaterial({ map: tex.sign('Hoedenmaker Hettie', { w: 768, h: 160, size: 62, bg: '#5a1f7a', fg: '#ffe14a' }), roughness: 0.8 }), { cast: false, pos: [0, 2.2, 1.04] }));
+  // hoeden op de toonbank, op houten standaardjes
+  const show = [['wizard', 0x5b2a86, 0xffd24a], ['crown', 0xffd24a, 0xffd24a], ['pirate', 0x1a1820, 0xffffff], ['party', 0xff4aa8, 0xffe14a], ['cowboy', 0x8a5a2b, 0xffd24a]];
+  const hats = new THREE.Group(); g.add(hats);
+  show.forEach(([k, c, c2], i) => { const hx = -1.4 + i * 0.7; hats.add(mesh(new THREE.CylinderGeometry(0.05, 0.1, 0.32, 6), mat(0x6b4a2e), { pos: [hx, 1.24, 0.75] })); const hm = makeHatMesh(k, c, c2, 0.85); hm.position.set(hx, 1.5, 0.75); hats.add(hm); });
+  // hoedenrek naast het kraam
+  g.add(mesh(new THREE.CylinderGeometry(0.05, 0.07, 2.6, 5), mat(0x6b4a2e), { pos: [2.5, 1.3, 0.2] }));
+  [['chef', 0xffffff, 0xffffff], ['tophat', 0x1e1c24, 0xd8372c], ['jester', 0xd8357f, 0x2f6fe0]].forEach(([k, c, c2], i) => { const hm = makeHatMesh(k, c, c2, 0.8); hm.position.set(2.5, 2.3 - i * 0.65, 0.2); hm.rotation.y = i * 2; hats.add(hm); });
+  bakeColors(hats);
+  W.put(g, x, z, 0); W.box(x, z + 0.4, 3.9, 1.5, 0);
+  // een grote draaiende hoed op het dak (dynamisch, dus niet samengevoegd)
+  const big = makeHatMesh('wizard', 0x8a3fd8, 0xffd24a, 2.4); bakeColors(big); big.userData.dynamic = true; big.position.set(x, groundY(x, z) + 3.9, z + 0.4); W.add(big); W.updaters.push((dt, t) => { big.rotation.y = t * 1.2; big.position.y = groundY(x, z) + 4.3 + Math.sin(t * 2) * 0.12; });
+  // Hettie zelf, achter de toonbank
+  const hn = W.npc('innkeeper', x - 0.3, z - 0.95, 0, { spec: { shirt: 0xb04aa8, apron: 0xffe9a0, hat: 'tophat', hatColor: 0x6a2a8a, hatColor2: 0xff9aef, hair: 0xf2d28a, hairStyle: 'bun', glasses: 0xd4a84a, scale: 1.0 }, lookR: 12 });
+  const lbl = floatLabel('👒 Hoedenmaker Hettie', 'hoeden & kleuren', '#ff9aef'); lbl.position.y = hn.height + 1.2; hn.group.add(lbl);
+  W.hettie = hn; W.interact.push({ type: 'shop', x: x, z: z + 2.9, r: 3.6, label: 'Hoeden & kleuren kopen' });
 }
 
 // ---------------------------------------------------------------- heksenhut

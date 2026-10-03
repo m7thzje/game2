@@ -55,6 +55,12 @@ export const PATHS = [
   [[-24, -48], [-44, -50], [-58, -52]],
 ];
 
+// Route naar de Speelhal: gloeiende pijlen vanaf de spawn, over het plein en de brug naar de poort (zie village.js buildArcadeGuide)
+export const ARCADE_TRAIL = [[-2.8, 18.5], [-5, 14.5], [-10, 12], [-14, 8], [-15, 3.5], [-20, 6.5], [-25, 8], [-41, 8], [-48, 6], [-52, -6], [-56, -24], [-59, -40], [-61.5, -48.5]];
+PATHS.push([[-48, 6], [-52, -6], [-56, -24], [-59, -40], [-61.5, -48.5]]);   // het deel voorbij de brug als echt zandpad
+export const HERALD = { x: 3.8, z: 18.2, yaw: -1.0 };                      // Heraut Hans, vlak bij de spawn
+export const HAT_SHOP = { x: 7.5, z: 0.5 };                                 // Hoedenmaker Hettie, op het plein
+
 // zones waar GEEN bomen/struiken mogen staan: {x,z,r}
 export const KEEPOUT = [
   { x: 0, z: 0, r: 17 }, { x: HOME.x, z: HOME.z, r: 9 }, { x: -22, z: -6, r: 11 }, { x: 25, z: -8, r: 13 }, { x: 27, z: 14, r: 11 },
@@ -63,6 +69,7 @@ export const KEEPOUT = [
   { x: CASTLE.x, z: CASTLE.z + 10, r: 30 }, { x: 0, z: -63, r: 6 }, { x: 9, z: -5, r: 4 }, { x: 11, z: 6.5, r: 7 }, { x: 0, z: -9, r: 9 },
   { x: BRIDGE.x, z: BRIDGE.z, r: 13 },
   { x: -66, z: -54, r: 17 }, { x: -53, z: -51, r: 9 }, { x: -43, z: -49, r: 6 },
+  { x: -61, z: -46, r: 12 }, { x: -59, z: -36, r: 6 }, { x: HERALD.x, z: HERALD.z, r: 4 }, { x: -4, z: 16, r: 5 }, { x: HAT_SHOP.x, z: HAT_SHOP.z, r: 6 },
 ];
 
 // verspreide verzamelobjecten: gouden deurknoppen (8) en schatkisten
