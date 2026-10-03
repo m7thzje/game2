@@ -31,6 +31,7 @@ const CSS = `
 .bw-meter span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
 .bw-meter.full{animation:bwpulse .45s infinite alternate;border-color:#ffe14a}.bw-meter.full i{background:linear-gradient(90deg,#ff4a8a,#ffe14a,#4ad8ff)}
 @keyframes bwpulse{from{transform:scale(1)}to{transform:scale(1.06);box-shadow:0 0 18px #ffe14a}}
+@media (max-width:980px){.bw-panel{width:250px;padding:6px 8px}.bw-tips{font-size:11px}.bw-bl{font-size:11px}.bw-tile{height:52px;font-size:23px}.bw-tile small{display:none}.bw-meter{width:200px}}
 `;
 let cssDone = false;
 function ensureCss() {

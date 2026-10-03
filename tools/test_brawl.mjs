@@ -384,7 +384,7 @@ for (const name of scen) {
     await installBots(page, [{ style: 'manual', type: 'sword' }, { style: 'manual', type: 'sword' }]);
     const r = await page.evaluate((TY) => {
       const d = window.__app.mode.instance.dbg; const R = {}; d.pick(0, 'sword'); d.pick(1, 'sword'); d.finishSelect(); window.__bot(120); d.setEventT(1e9); d.setTime(1e9);
-      const setup = (a, b, gap, pb) => { window.__bot(40); d.setPos(0, -3, 0); d.setPos(1, -3 + gap, 0); d.fs[0].face = 1; d.fs[1].face = -1; d.fs.forEach((f) => { f.inv = 0; f.lag = 0; f.cd = 0; f.spCd = 0; f.st = 'free'; f.item = null; f.hitCool = 0; f.boostUsed = false; }); d.setPct(0, 0); d.setPct(1, pb || 0); window.__bot(3); };
+      const setup = (a, b, gap, pb) => { window.__bot(40); for (let k = 0; k < 600 && d.state().f.some((f) => f.st === 'dead'); k++) window.__bot(1); window.__bot(20); d.setPos(0, -3, 0); d.setPos(1, -3 + gap, 0); d.fs[0].face = 1; d.fs[1].face = -1; d.fs.forEach((f) => { f.inv = 0; f.lag = 0; f.cd = 0; f.spCd = 0; f.st = 'free'; f.item = null; f.hitCool = 0; f.boostUsed = false; }); d.setPct(0, 0); d.setPct(1, pb || 0); window.__bot(3); };
       for (const t of TY) {
         d.pick(0, t); d.fs[0].meter = 0; const o = {};
         // B + rechts
@@ -438,8 +438,8 @@ for (const name of scen) {
         if (stg === 'dragon') {
           // staan op de rug: de vechter beweegt mee met het platform
           d.fs.forEach((f) => { f.inv = 9; }); const p0 = S.plats[0]; const xs = [], ys = [], gap = []; let wind = 0, fire = 0, dive = 0;
-          for (let k = 0; k < 60 * 40; k++) { window.__bot(1); if (k % 30 === 0) { const s = d.state(); xs.push(p0.x); ys.push(p0.y); if (k < 60 * 9) gap.push(Math.abs(s.f[0].x - p0.x)); wind = Math.max(wind, Math.abs(s.wind)); fire = Math.max(fire, s.n.projs); } if (S.plats[0].y < -2.5) dive++; }
-          R.rangeX = +(Math.max(...xs) - Math.min(...xs)).toFixed(1); R.rangeY = +(Math.max(...ys) - Math.min(...ys)).toFixed(1); R.maxGap = +Math.max(...gap).toFixed(1); R.wind = wind; R.fire = fire; R.dive = dive; R.stillOn = d.state().f[0].ground;
+          for (let k = 0; k < 60 * 40; k++) { window.__bot(1); if (k % 30 === 0) { const s = d.state(); xs.push(p0.x); ys.push(p0.y); if (k < 60 * 9) gap.push(Math.abs(s.f[0].x - p0.x)); if (k === 60 * 8) R.stillOn = s.f[0].ground; wind = Math.max(wind, Math.abs(s.wind)); fire = Math.max(fire, s.n.projs); } if (S.plats[0].y < -2.5) dive++; }
+          R.rangeX = +(Math.max(...xs) - Math.min(...xs)).toFixed(1); R.rangeY = +(Math.max(...ys) - Math.min(...ys)).toFixed(1); R.maxGap = +Math.max(...gap).toFixed(1); R.wind = wind; R.fire = fire; R.dive = dive;
         } else if (stg === 'volcano') {
           d.fs.forEach((f) => { f.inv = 0; }); const lav = []; let crumbled = 0, back = false, gey = 0, lavaHits = 0;
           // lava stijgt

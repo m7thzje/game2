@@ -163,7 +163,7 @@ export class ArcadeMode {
       sc.add(mesh(new THREE.CircleGeometry(z.R, 48), rm, { cast: false, pos: [z.cx, 0.03, z.cz], rot: [-Math.PI / 2, 0, 0] }));
       // looplichtjes langs de rand van het kleed
       for (let i = 0; i < 26; i++) { const a = i / 26 * TAU; D.disc(0.2, z.cx + Math.cos(a) * (z.R - 0.55), 0.06, z.cz + Math.sin(a) * (z.R - 0.55), i % 2 ? z.color : z.color2, { kind: 'p' + (i % 3) }, 8); }
-      const sg = zoneSign(z); const front = z.cz > 5; sg.position.set(z.cx, front ? 10.2 : 12.2, front ? z.cz - 3 : z.cz - 6.5);   // voorste zones: lager, zodat het bord niet over de achterste zones hangt sc.add(sg); this.zoneSigns.push(sg); z.sign = sg;
+      const sg = zoneSign(z); const front = z.cz > 5; sg.position.set(z.cx, front ? 10.2 : 12.2, front ? z.cz - 3 : z.cz - 6.5); sc.add(sg); this.zoneSigns.push(sg); z.sign = sg;   // voorste zones: lager, zodat het bord niet over de achterste zones hangt
       (ZONE_PROPS[z.prop] || (() => {}))(this, D, z);
       z.cabs.forEach((c, n) => this.addCab(c, z, zi * 3 + n, n));
     });
