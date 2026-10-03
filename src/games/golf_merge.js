@@ -1,11 +1,13 @@
 import * as THREE from 'three';
 
 // Voegt statische meshes met hetzelfde materiaal samen (veel minder draw calls). Objecten met userData.dyn (of een ouder met dyn) blijven los.
+// opts.local: voeg samen in het assenstelsel van `root` zelf (voor een bewegend groepje: de samengevoegde meshes draaien/schuiven dan mee met root).
 // Ook bruikbaar voor pacduel (hergebruikt als eigen hulpbestandje, zodat we niet van andere games afhangen).
-export function mergeStatic(root) {
+export function mergeStatic(root, opts = {}) {
   root.updateMatrixWorld(true);
+  const local = !!opts.local, inv = local ? new THREE.Matrix4().copy(root.matrixWorld).invert() : null, mm4 = new THREE.Matrix4();
   const buckets = new Map();
-  const isDyn = (o) => { for (let p = o; p; p = p.parent) if (p.userData && p.userData.dyn) return true; return false; };
+  const isDyn = (o) => { for (let p = o; p && p !== root; p = p.parent) if (p.userData && p.userData.dyn) return true; return !local && !!(root.userData && root.userData.dyn); };
   root.traverse((o) => {
     if (!o.isMesh || o.isInstancedMesh || o.isSkinnedMesh || Array.isArray(o.material) || !o.visible || isDyn(o)) return;
     const g = o.geometry; if (!g || !g.attributes.position || !g.attributes.normal) return;
@@ -21,7 +23,7 @@ export function mergeStatic(root) {
     const n = geos.reduce((a, g) => a + g.attributes.position.count, 0);
     const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), uv = new Float32Array(n * 2); let off = 0;
     b.list.forEach((o, k) => {
-      const g = geos[k], m = o.matrixWorld; nm.getNormalMatrix(m);
+      const g = geos[k], m = local ? mm4.multiplyMatrices(inv, o.matrixWorld) : o.matrixWorld; nm.getNormalMatrix(m);
       const P = g.attributes.position, N = g.attributes.normal, U = g.attributes.uv;
       for (let i = 0; i < P.count; i++) {
         v.fromBufferAttribute(P, i).applyMatrix4(m); pos[(off + i) * 3] = v.x; pos[(off + i) * 3 + 1] = v.y; pos[(off + i) * 3 + 2] = v.z;
@@ -39,4 +41,8 @@ export function mergeStatic(root) {
     merged += b.list.length;
   }
   return merged;
+}
+// ruimt een groep op: geometrieen weg (materialen/textures die gedeeld zijn blijven staan)
+export function disposeGroup(root) {
+  root.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.isInstancedMesh && o.dispose) o.dispose(); });
 }

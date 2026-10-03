@@ -52,7 +52,7 @@ for (const id of ids) {
       return { state: m.state, tw };
     }, ids.indexOf(id));
     await page.waitForFunction(() => window.__app.mode.resultReady, null, { timeout: 20000 }).catch(() => { throw new Error('resultaat niet klaar: ' + JSON.stringify(info)); });
-    await page.evaluate(() => { const app = window.__app, m = app.mode, inp = app.input; inp.virtual[0].a = true; inp.update(); m.update(0.016); inp.virtual[0].a = false; inp.update(); m.update(0.016); });
+    await page.evaluate(() => { const app = window.__app, m = app.mode, inp = app.input; if (m.canRematch) { m.resSel = 1; } inp.virtual[0].a = true; inp.update(); m.update(0.016); inp.virtual[0].a = false; inp.update(); m.update(0.016); });
     await page.waitForFunction(() => window.__app.mode && window.__app.mode.cabs && window.__app.mode.interact, null, { timeout: 60000 });
     await page.waitForTimeout(1200);
     const after = await page.evaluate(async (id) => { const { S } = await import('/src/save.js'); return { plays: S.arcade.plays, g: S.arcade.byGame[id] }; }, id);
