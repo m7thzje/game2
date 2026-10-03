@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { mat, glow, mesh, clamp, damp, dampAngle, TAU, canvasTex, lerp } from './util.js';
+import { mat, glow, mesh, clamp, damp, dampAngle, TAU, canvasTex, lerp, disposeObject } from './util.js';
+import { applyCosmetics, lookSig } from './cosmetics.js';
 
 // ============================================================================
 // Character: lowpoly poppetje met procedurele animatie. Kijkt naar +z (lokaal).
@@ -8,14 +9,32 @@ import { mat, glow, mesh, clamp, damp, dampAngle, TAU, canvasTex, lerp } from '.
 //   c.pose = 'idle'|'cheer'|'sad'|'carry'|'push'|'scared'|'wave'|'point';  c.swing();  c.jump();
 // ============================================================================
 const BAKED = {};
+// Kleureffecten voor de winkel: 'gold' = glimmend metaal, 'rainbow' = regenboog (vertexkleuren bij bake(), of een gradiënt-textuur)
+const fxMat = (c, fx, o = {}) => (fx === 'gold' ? mat(0xf2c230, { metalness: 0.7, roughness: 0.35, ...o }) : mat(fx === 'rainbow' ? 0xffffff : c, o));
+const fxTag = (m, fx) => { if (fx === 'rainbow') m.userData.fx = 'rainbow'; return m; };
+let _rbTex = null;
+function rainbowMat() {
+  if (!_rbTex) { _rbTex = canvasTex(8, 64, (g, w, h) => { const gr = g.createLinearGradient(0, 0, 0, h); ['#ff3b3b', '#ff9a2a', '#ffe53b', '#4ad84a', '#3ab4ff', '#7a4aff', '#e04aff'].forEach((c, i) => gr.addColorStop(i / 6, c)); g.fillStyle = gr; g.fillRect(0, 0, w, h); }); _rbTex.userData.keep = true; }
+  return new THREE.MeshStandardMaterial({ map: _rbTex, roughness: 0.8, side: THREE.DoubleSide });
+}
+const _tc = new THREE.Color();
 export class Character {
   constructor(spec = {}) {
-    const s = spec.scale ?? 1;
+    this.spec = spec; this.s = spec.scale ?? 1;
+    const root = new THREE.Group(); this.group = root; root.userData.dynamic = true;
+    this._build();
+    // staat
+    this.speed = 0; this.pose = 'idle'; this.air = false; this.t = Math.random() * 10; this.phase = 0;
+    this.swingT = 0; this.jumpT = 0; this.yaw = 0; this.targetYaw = 0; this.squash = 0; this.blinkT = 2 + Math.random() * 3;
+    this.mood = 'happy';
+  }
+  // Bouwt alle lichaamsdelen (ook opnieuw na restyle)
+  _build() {
+    const spec = this.spec, s = this.s, root = this.group;
     const W = spec.bodyW ?? 1;
-    this.spec = spec; this.s = s;
+    this.cape = this.scarfTail = null;
     const skin = spec.skin ?? 0xf2c29b;
     const shirt = spec.shirt ?? 0x3b7dd8, pants = spec.pants ?? 0x5b4636, boots = spec.boots ?? 0x3a2a1e;
-    const root = new THREE.Group(); this.group = root; root.userData.dynamic = true;
     const body = new THREE.Group(); root.add(body); this.body = body;
     const legLen = 0.6 * s, torsoH = 0.62 * s;
     this.legLen = legLen; this.height = legLen + torsoH + 0.62 * s;
@@ -32,16 +51,16 @@ export class Character {
 
     // romp
     const torsoG = new THREE.Group(); torsoG.position.y = legLen; body.add(torsoG); this.torso = torsoG;
-    torsoG.add(mesh(new THREE.CylinderGeometry(0.27 * s * W, 0.31 * s * W, torsoH, 10), mat(shirt), { pos: [0, torsoH / 2, 0] }));
+    torsoG.add(fxTag(mesh(new THREE.CylinderGeometry(0.27 * s * W, 0.31 * s * W, torsoH, 10), fxMat(shirt, spec.shirtFx), { pos: [0, torsoH / 2, 0] }), spec.shirtFx));
     if (spec.tunic) { // rokje onderaan
-      torsoG.add(mesh(new THREE.CylinderGeometry(0.31 * s * W, 0.42 * s * W, 0.28 * s, 10, 1, true), mat(spec.tunic, { side: THREE.DoubleSide }), { pos: [0, 0.06 * s, 0] }));
+      torsoG.add(fxTag(mesh(new THREE.CylinderGeometry(0.31 * s * W, 0.42 * s * W, 0.28 * s, 10, 1, true), fxMat(spec.tunic, spec.tunicFx, { side: THREE.DoubleSide }), { pos: [0, 0.06 * s, 0] }), spec.tunicFx));
     }
     torsoG.add(mesh(new THREE.CylinderGeometry(0.315 * s * W, 0.315 * s * W, 0.08 * s, 10), mat(spec.belt ?? 0x4a2e17), { pos: [0, 0.14 * s, 0] }));
     torsoG.add(mesh(new THREE.BoxGeometry(0.1 * s, 0.1 * s, 0.03 * s), mat(0xe8c24a, { metalness: 0.6, roughness: 0.4 }), { pos: [0, 0.14 * s, 0.31 * s * W] }));
     if (spec.apron) torsoG.add(mesh(new THREE.BoxGeometry(0.4 * s * W, 0.5 * s, 0.05 * s), mat(spec.apron), { pos: [0, 0.3 * s, 0.28 * s * W] }));
     if (spec.scarf) {
-      torsoG.add(mesh(new THREE.TorusGeometry(0.2 * s, 0.07 * s, 6, 12), mat(spec.scarf), { pos: [0, torsoH - 0.02 * s, 0], rot: [Math.PI / 2, 0, 0] }));
-      const tail = mesh(new THREE.BoxGeometry(0.1 * s, 0.4 * s, 0.04 * s), mat(spec.scarf), { pos: [0.1 * s, torsoH - 0.25 * s, -0.22 * s] });
+      torsoG.add(fxTag(mesh(new THREE.TorusGeometry(0.2 * s, 0.07 * s, 6, 12), fxMat(spec.scarf, spec.scarfFx), { pos: [0, torsoH - 0.02 * s, 0], rot: [Math.PI / 2, 0, 0] }), spec.scarfFx));
+      const tail = mesh(new THREE.BoxGeometry(0.1 * s, 0.4 * s, 0.04 * s), spec.scarfFx === 'rainbow' ? rainbowMat() : fxMat(spec.scarf, spec.scarfFx), { pos: [0.1 * s, torsoH - 0.25 * s, -0.22 * s] });
       torsoG.add(tail); this.scarfTail = tail;
     }
     if (spec.backpack) {
@@ -49,14 +68,14 @@ export class Character {
       torsoG.add(mesh(new THREE.BoxGeometry(0.36 * s, 0.1 * s, 0.2 * s), mat(0x3a2a1e), { pos: [0, 0.6 * s, -0.3 * s * W] }));
     }
     if (spec.cape) {
-      const cape = mesh(new THREE.BoxGeometry(0.5 * s * W, 0.8 * s, 0.04 * s), mat(spec.cape, { side: THREE.DoubleSide }), { pos: [0, torsoH - 0.35 * s, -0.3 * s * W] });
+      const cape = mesh(new THREE.BoxGeometry(0.5 * s * W, 0.8 * s, 0.04 * s), spec.capeFx === 'rainbow' ? rainbowMat() : fxMat(spec.cape, spec.capeFx, { side: THREE.DoubleSide }), { pos: [0, torsoH - 0.35 * s, -0.3 * s * W] });
       cape.geometry.translate(0, 0, 0); torsoG.add(cape); this.cape = cape;
     }
 
     // armen
     const mkArm = (side) => {
       const g = new THREE.Group(); g.position.set(side * (0.33 * s * W + 0.02), torsoH - 0.1 * s, 0); torsoG.add(g);
-      g.add(mesh(new THREE.CapsuleGeometry(0.085 * s, 0.32 * s, 3, 8), mat(spec.sleeve ?? shirt), { pos: [0, -0.2 * s, 0] }));
+      g.add(fxTag(mesh(new THREE.CapsuleGeometry(0.085 * s, 0.32 * s, 3, 8), fxMat(spec.sleeve ?? shirt, spec.sleeve == null ? spec.shirtFx : spec.sleeveFx), { pos: [0, -0.2 * s, 0] }), spec.sleeve == null ? spec.shirtFx : spec.sleeveFx));
       const hand = mesh(new THREE.SphereGeometry(0.095 * s, 8, 6), mat(skin), { pos: [0, -0.45 * s, 0] });
       g.add(hand);
       const holder = new THREE.Group(); holder.position.set(0, -0.45 * s, 0.04 * s); g.add(holder);
@@ -93,7 +112,7 @@ export class Character {
 
     // haar
     const hairC = spec.hair ?? 0x5a3a22, style = spec.hairStyle ?? 'short';
-    const hm = mat(hairC, { flatShading: false });
+    const hm = fxMat(hairC, spec.hairFx, { flatShading: false }); const nHairBefore = headG.children.length;
     if (style === 'short' || style === 'long' || style === 'bun') {
       headG.add(mesh(new THREE.SphereGeometry(hr * 1.06, 14, 8, 0, TAU, 0, style === 'long' ? 2.0 : 1.75), hm, { pos: [0, 0.05 * s, -0.01 * s], rot: [-0.25, 0, 0] }));
       if (style === 'long') headG.add(mesh(new THREE.CapsuleGeometry(hr * 0.9, 0.3 * s, 3, 8), hm, { pos: [0, -0.12 * s, -hr * 0.45], scale: [1, 1, 0.55] }));
@@ -107,6 +126,7 @@ export class Character {
     } else if (style === 'mohawk') {
       for (let i = 0; i < 6; i++) headG.add(mesh(new THREE.ConeGeometry(0.07 * s, 0.25 * s, 5), hm, { pos: [0, 0.2 * s + hr * 0.6 - Math.abs(i - 2.5) * 0.03, (i - 2.5) * 0.08 * s] }));
     }
+    if (spec.hairFx === 'rainbow') for (const c of headG.children.slice(nHairBefore)) if (c.material === hm) c.userData.fx = 'rainbow';
     // baard
     if (spec.beard) {
       const bm = mat(spec.beardColor ?? hairC, { flatShading: false });
@@ -116,12 +136,18 @@ export class Character {
     }
     // hoed
     if (spec.hat) this._hat(spec.hat, spec.hatColor ?? 0xcc3333, spec.hatColor2 ?? 0xffd24a, hr, s, headG);
-
-    // staat
-    this.speed = 0; this.pose = 'idle'; this.air = false; this.t = Math.random() * 10; this.phase = 0;
-    this.swingT = 0; this.jumpT = 0; this.yaw = 0; this.targetYaw = 0; this.squash = 0; this.blinkT = 2 + Math.random() * 3;
-    this.mood = 'happy';
     this.bake();
+  }
+  // Nieuwe uiterlijk-spec (bijv. na de winkel): bouwt het lichaam opnieuw, behoudt positie/pose/kinderen van de groep
+  restyle(spec) {
+    if (this.body) { this.group.remove(this.body); disposeObject(this.body); }
+    this.spec = spec; this.s = spec.scale ?? 1; this._build();
+  }
+  // Voor de broers: leest de winkel-uitrusting opnieuw en bouwt alleen om als die veranderd is
+  refreshBrother() {
+    if (this.brother == null) return false;
+    const sig = lookSig(this.brother); if (sig === this.lookSig) return false;
+    this.lookSig = sig; this.restyle(brotherSpec(this.brother)); return true;
   }
   // Voegt de vaste onderdelen per lichaamsdeel samen tot één mesh (veel minder draw calls)
   bake() {
@@ -137,10 +163,10 @@ export class Character {
       }
       for (const [key, list] of buckets) {
         if (list.length < 2) { list.forEach((c) => (c.castShadow = true)); continue; }
-        const geos = list.map((c) => { const gg = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone(); gg.applyMatrix4(c.matrix); return [gg, c.material.color]; });
+        const geos = list.map((c) => { const gg = c.geometry.index ? c.geometry.toNonIndexed() : c.geometry.clone(); gg.applyMatrix4(c.matrix); return [gg, c.material.color, c.userData.fx === 'rainbow']; });
         const n = geos.reduce((a, [gg]) => a + gg.attributes.position.count, 0);
         const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = new Float32Array(n * 3); let o = 0;
-        for (const [gg, color] of geos) { const k = gg.attributes.position.count; pos.set(gg.attributes.position.array, o * 3); nor.set(gg.attributes.normal.array, o * 3); for (let i = 0; i < k; i++) { col[(o + i) * 3] = color.r; col[(o + i) * 3 + 1] = color.g; col[(o + i) * 3 + 2] = color.b; } o += k; gg.dispose(); }
+        for (const [gg, color, rb] of geos) { const k = gg.attributes.position.count; const pa = gg.attributes.position; pos.set(pa.array, o * 3); nor.set(gg.attributes.normal.array, o * 3); for (let i = 0; i < k; i++) { let cc = color; if (rb) { const hh = (pa.getY(i) * 1.7 + pa.getX(i) * 1.1 + pa.getZ(i) * 0.6) % 1; cc = _tc.setHSL(hh < 0 ? hh + 1 : hh, 0.9, 0.55); } col[(o + i) * 3] = cc.r; col[(o + i) * 3 + 1] = cc.g; col[(o + i) * 3 + 2] = cc.b; } o += k; gg.dispose(); }
         const mg = new THREE.BufferGeometry(); mg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); mg.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); mg.setAttribute('color', new THREE.BufferAttribute(col, 3));
         let bm = BAKED[key]; if (!bm) bm = BAKED[key] = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: key.includes('f'), metalness: key.includes('m') ? 0.6 : 0, roughness: key.includes('m') ? 0.4 : 0.85, side: key.includes('d') ? THREE.DoubleSide : THREE.FrontSide });
         const merged = new THREE.Mesh(mg, bm); merged.castShadow = true; merged.receiveShadow = false; g.add(merged);
@@ -166,6 +192,15 @@ export class Character {
       case 'bard': add(M(new THREE.CylinderGeometry(hr * 1.4, hr * 1.4, 0.03 * s, 14), c), 0, top - 0.08 * s, 0); add(M(new THREE.ConeGeometry(hr * 0.85, 0.3 * s, 10), c), 0, top + 0.08 * s, 0, 0, 0, 0); add(M(new THREE.CapsuleGeometry(0.02 * s, 0.4 * s, 3, 5), c2), -hr * 0.4, top + 0.25 * s, -0.1 * s, 0.3, 0, 0.8); break;
       case 'horns': add(M(new THREE.SphereGeometry(hr * 1.1, 14, 8, 0, TAU, 0, 1.4), 0x9a9a9a, { metalness: 0.6 }), 0, 0.06 * s, 0); for (const sd of [1, -1]) add(M(new THREE.ConeGeometry(0.06 * s, 0.35 * s, 6), 0xf5ecd0), sd * hr * 1.0, top - 0.04 * s, 0, 0, 0, -sd * 0.9); break;
       case 'knot': add(M(new THREE.TorusGeometry(hr * 1.0, 0.04 * s, 5, 14), c), 0, top - 0.2 * s, 0, Math.PI / 2 + 0.1); break;
+      case 'party': add(M(new THREE.ConeGeometry(hr * 0.62, 0.55 * s, 12), c), 0, top + 0.22 * s, 0, -0.12); for (let i = 0; i < 4; i++) { const a = i * 1.6, y = top + (0.06 + i * 0.1) * s, r = hr * (0.55 - i * 0.12); add(M(new THREE.SphereGeometry(0.035 * s, 6, 5), c2), Math.cos(a) * r, y, Math.sin(a) * r - 0.03 * s); } add(M(new THREE.SphereGeometry(0.07 * s, 8, 6), c2), 0.03 * s, top + 0.5 * s, -0.07 * s); add(M(new THREE.TorusGeometry(hr * 0.6, 0.02 * s, 4, 12), c2), 0, top - 0.04 * s, 0, Math.PI / 2); break;
+      case 'cheese': add(M(new THREE.CylinderGeometry(0.27 * s, 0.27 * s, 0.5 * s, 3), 0xffd23a), 0, top + 0.1 * s, 0, Math.PI / 2, Math.PI, 0); for (const [x, y] of [[-0.1, 0.02], [0.08, 0.12], [0.0, -0.08]]) add(M(new THREE.SphereGeometry(0.05 * s, 6, 5), 0xe0a420), x * s, top + (0.12 + y) * s, 0.25 * s); break;
+      case 'pot': add(M(new THREE.CylinderGeometry(hr * 0.72, hr * 0.5, 0.3 * s, 10), 0xc4623a), 0, top + 0.1 * s, 0); add(M(new THREE.CylinderGeometry(hr * 0.8, hr * 0.8, 0.07 * s, 10), 0xd4723f), 0, top + 0.27 * s, 0); add(M(new THREE.CylinderGeometry(hr * 0.64, hr * 0.64, 0.02 * s, 10), 0x4a3020), 0, top + 0.3 * s, 0); add(M(new THREE.CylinderGeometry(0.015 * s, 0.015 * s, 0.3 * s, 4), 0x3b9a45), 0, top + 0.45 * s, 0); for (let i = 0; i < 6; i++) { const a = i / 6 * TAU; add(M(new THREE.SphereGeometry(0.06 * s, 6, 5), 0xff6fa5), Math.cos(a) * 0.08 * s, top + 0.62 * s, Math.sin(a) * 0.08 * s); } add(M(new THREE.SphereGeometry(0.05 * s, 6, 5), 0xffe14a), 0, top + 0.62 * s, 0); break;
+      case 'cowboy': add(M(new THREE.CylinderGeometry(hr * 1.75, hr * 1.75, 0.03 * s, 16), c), 0, top - 0.1 * s, 0); for (const sd of [1, -1]) add(M(new THREE.BoxGeometry(hr * 0.9, 0.03 * s, hr * 1.5), c), sd * hr * 1.5, top - 0.02 * s, 0, 0, 0, -sd * 0.5); add(M(new THREE.CylinderGeometry(hr * 0.78, hr * 0.95, 0.3 * s, 12), c), 0, top + 0.06 * s, 0); add(M(new THREE.CylinderGeometry(hr * 0.96, hr * 0.96, 0.06 * s, 12), c2), 0, top - 0.06 * s, 0); add(M(new THREE.BoxGeometry(hr * 0.5, 0.04 * s, hr * 0.5), c), 0, top + 0.2 * s, 0); break;
+      case 'pirate': { const k = 0x1a1820; add(M(new THREE.SphereGeometry(1, 12, 8), k), 0, top - 0.04 * s, 0, 0, 0, 0).scale.set(hr * 1.75, 0.2 * s, hr * 1.15); add(M(new THREE.SphereGeometry(hr * 1.0, 12, 8, 0, TAU, 0, 1.4), k), 0, top - 0.1 * s, 0); add(M(new THREE.TorusGeometry(hr * 0.98, 0.025 * s, 4, 14), 0xe8c24a, { metalness: 0.6 }), 0, top - 0.02 * s, 0, Math.PI / 2); add(M(new THREE.SphereGeometry(0.06 * s, 8, 6), 0xf4f1e6), 0, top + 0.14 * s, hr * 0.78); for (const sd of [1, -1]) add(M(new THREE.BoxGeometry(0.13 * s, 0.025 * s, 0.02 * s), 0xf4f1e6), 0, top + 0.06 * s, hr * 0.85, 0, 0, sd * 0.5); break; }
+      case 'tophat': add(M(new THREE.CylinderGeometry(hr * 1.3, hr * 1.3, 0.04 * s, 16), c), 0, top - 0.08 * s, 0); add(M(new THREE.CylinderGeometry(hr * 0.72, hr * 0.74, 0.5 * s, 14), c), 0, top + 0.17 * s, 0); add(M(new THREE.CylinderGeometry(hr * 0.76, hr * 0.76, 0.1 * s, 14), c2), 0, top - 0.01 * s, 0); break;
+      case 'chickenhat': { const w = 0xf8f4ea; add(M(new THREE.SphereGeometry(0.25 * s, 10, 8), w), 0, top + 0.14 * s, 0, 0, 0, 0).scale.set(1, 0.85, 1.25); add(M(new THREE.SphereGeometry(0.13 * s, 8, 6), w), 0, top + 0.34 * s, 0.2 * s); add(M(new THREE.ConeGeometry(0.045 * s, 0.14 * s, 4), 0xf2a33a), 0, top + 0.32 * s, 0.34 * s, Math.PI / 2); add(M(new THREE.BoxGeometry(0.04 * s, 0.1 * s, 0.14 * s), 0xd83a2a), 0, top + 0.46 * s, 0.2 * s); for (const sd of [1, -1]) add(M(new THREE.SphereGeometry(0.02 * s, 5, 4), 0x111111), sd * 0.07 * s, top + 0.37 * s, 0.3 * s); add(M(new THREE.ConeGeometry(0.12 * s, 0.3 * s, 4), 0xe8e0d0), 0, top + 0.22 * s, -0.3 * s, -1.0); break; }
+      case 'goldcrown': { const G = { metalness: 0.75, roughness: 0.28 }; add(M(new THREE.CylinderGeometry(hr * 0.78, hr * 0.72, 0.2 * s, 12, 1, true), 0xf2c230, { ...G, side: THREE.DoubleSide }), 0, top + 0.04 * s, 0); for (let i = 0; i < 8; i++) { const a = i / 8 * TAU; add(M(new THREE.ConeGeometry(0.05 * s, 0.24 * s, 4), 0xf2c230, G), Math.cos(a) * hr * 0.77, top + 0.26 * s, Math.sin(a) * hr * 0.77); add(M(new THREE.SphereGeometry(0.035 * s, 6, 5), i % 2 ? 0xd8372c : 0x3a78e0), Math.cos(a) * hr * 0.77, top + 0.4 * s, Math.sin(a) * hr * 0.77); } add(M(new THREE.SphereGeometry(0.07 * s, 8, 6), 0xd8372c), 0, top + 0.04 * s, hr * 0.78); add(M(new THREE.TorusGeometry(hr * 0.75, 0.03 * s, 4, 14), 0xffe680, G), 0, top - 0.06 * s, 0, Math.PI / 2); break; }
+      case 'rainbowhat': { const rb = [0xff3b3b, 0xff9a2a, 0xffe53b, 0x4ad84a, 0x3ab4ff, 0x7a4aff, 0xe04aff]; add(M(new THREE.CylinderGeometry(hr * 1.35, hr * 1.35, 0.04 * s, 16), 0xff6fb5), 0, top - 0.08 * s, 0); rb.forEach((k, i) => add(M(new THREE.CylinderGeometry(hr * (0.7 - i * 0.04), hr * (0.72 - i * 0.04), 0.075 * s, 14), k), 0, top + (0.0 + i * 0.07) * s, 0)); add(M(new THREE.SphereGeometry(0.06 * s, 8, 6), 0xffffff), 0, top + 0.54 * s, 0); break; }
       default: break;
     }
   }
@@ -239,7 +274,11 @@ export const BROTHER_SPECS = [
 ];
 export const PLAYER_COLORS = [0x2f9e5b, 0x3a78e0];
 export const PLAYER_CSS = ['#35c46f', '#4a8cff'];
-export function makeBrother(i) { return new Character(BROTHER_SPECS[i]); }
+// Uiterlijk van een broer = standaardspec + wat in de winkel is gekocht/aangetrokken (S.cosmetics.equipped[i])
+export function brotherSpec(i, eq) { return applyCosmetics(BROTHER_SPECS[i], i, eq); }
+export function makeBrother(i, eq) { const c = new Character(brotherSpec(i, eq)); if (!eq) { c.brother = i; c.lookSig = lookSig(i); } return c; }
+// Losse hoed als 3D-object (voor kraampjes e.d.): hoed staat dan op y=0 met de rand op ~0
+export function makeHatMesh(kind, c = 0xcc3333, c2 = 0xffd24a, scale = 1) { const g = new THREE.Group(); const hr = 0.3; Character.prototype._hat(kind, c, c2, hr, 1, g); g.children.forEach((m) => { m.position.y -= 0.04 + hr * 0.9; }); g.scale.setScalar(scale); return g; }
 
 // ---------- NPC presets ----------
 export const NPC_SPECS = {

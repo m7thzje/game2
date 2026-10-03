@@ -13,6 +13,8 @@ import { h, mesh, mat, glow, canvasTex, clamp, damp, dampAngle, rand, pick, shuf
 import { ARCADE_IDS, ARCADE_HALLS } from '../games/index.js';
 import { floatLabel } from './build.js';
 import { TWISTS } from '../engine/twist.js';
+import { ArcadeDeurman } from './arcade_deur.js';
+import { dailyInfo, dailyDone, dailyBonus, dailyStreak } from '../engine/daily.js';
 
 const HALL = { w: 72, d: 52 };       // x: -36..36, z: -26..26
 const PIC = { dodgeball: '🔥', cakefight: '🎂', tugwar: '🪢', airhockey: '🏒', quickdraw: '🤠', memory: '🃏', paint: '🎨', duckshoot: '🦆', karts: '🏎️', climb: '🧗', tanks: '💥', chairs: '🪑', ticktock: '🕰️', minecart: '🚃', buttons: '🧱', vines: '🌿', screws: '🔩', chop: '🪓', bomber: '💣', tron: '🏍️', hexagone: '⬡', tag: '🧨', brawl: '🥊', spacewar: '🚀', volley: '🏐', soccer: '⚽', pacduel: '👻', golf: '⛳', stack: '🏗️', blocks: '🧩', connect4: '🔴', dance: '💃', quiz: '🎤', code: '🔮', bake: '🥧', claw: '🧸', kalaha: '💎', bowling: '🎳', ducks: '🛁', flappy: '🐲', pinball: '🎱', hide: '🕵️', heist: '💰', catapult: '🏰' };
@@ -45,7 +47,7 @@ export class ArcadeMode {
     this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(50, innerWidth / innerHeight, 0.3, 300);
     this.fx = new Particles(1500); this.scene.add(this.fx.points); this.fx.setViewportHeight(innerHeight);
     const L = setupLights(this.scene, 'indoor', { shadow: 36, center: [0, 0, 0], fog: true, fogNear: 50, fogFar: 140, shadows: S.settings.quality !== 'low' });
-    this.sun = L.sun; L.sun.intensity = 1.0; L.sun.position.set(10, 30, 15); L.hemi.intensity = 1.35;
+    this.sun = this.sunL = L.sun; this.hemi = L.hemi; L.sun.intensity = 1.0; L.sun.position.set(10, 30, 15); L.hemi.intensity = 1.35;
     this.scene.background = new THREE.Color(THEMES[this.hallId].bg); this.scene.fog.color.set(THEMES[this.hallId].bg);
     this.colliders = []; this.interact = []; this.cabs = []; this.glows = [];
     this.games = this.loadedIds();
@@ -57,8 +59,10 @@ export class ArcadeMode {
       const viaDoor = opts.via === 'door'; const dxs = (DOORS[this.hallId].find((d) => d.to === opts.fromHall) || DOORS[this.hallId][0]).x; return { i, c, ring, x: viaDoor ? dxs + (i ? 1.4 : -1.4) : (i ? 1 : -1) * 2, z: viaDoor ? -18.5 : 22, y: 0, vx: 0, vz: 0, vy: 0, grounded: true, yaw: Math.PI, stepT: 0 };
     });
     this.mid = new THREE.Vector3(0, 0, 18); this.camPos = new THREE.Vector3(0, 16, 36); this.camLook = new THREE.Vector3(0, 0, 18);
-    this.nextGlitch = rand(40, 80);
+    this.nextGlitch = rand(40, 80); this.camShake = 0; this.camOverride = null;
+    this.deur = new ArcadeDeurman(this);
   }
+  hasTourney() { return !!TOURNEY; }
   loadedIds() { return this.hall.ids.filter((id) => this.app.games[id]); }
   allLoaded() { return ARCADE_IDS.filter((id) => this.app.games[id]); }
   isOff(id) { return (S.arcade.excluded || []).includes(id); }
@@ -168,7 +172,7 @@ export class ArcadeMode {
   }
   refreshLabels() {
     for (const c of this.cabs) {
-      const gm = S.arcade.byGame[c.id]; const sub = this.isOff(c.id) ? '(uit het toernooi)' : gm ? `${gm.wins[0]} – ${gm.wins[1]}` : (this.games.includes(c.id) ? 'NIEUW!' : 'binnenkort');
+      const gm = S.arcade.byGame[c.id]; const sub = this.isOff(c.id) ? '(uit het toernooi)' : gm ? `${gm.wins[0] > gm.wins[1] ? '👑' + S.names[0][0] + ' ' : gm.wins[1] > gm.wins[0] ? '👑' + S.names[1][0] + ' ' : ''}${gm.wins[0]} – ${gm.wins[1]}` : (this.games.includes(c.id) ? 'NIEUW!' : 'binnenkort');
       this.scene.remove(c.lbl); const lbl = floatLabel(`${this.defOf(c.id).icon || PIC[c.id]} ${this.defOf(c.id).name || NAME[c.id]}`, sub, '#ffe14a'); lbl.scale.set(4.3, 1.34, 1); lbl.position.set(c.x, 8.2, c.z); this.scene.add(lbl); c.lbl = lbl;
     }
   }
@@ -198,7 +202,7 @@ export class ArcadeMode {
   }
 
   buildBack() {
-    const sc = this.scene; const zb = -HALL.d / 2;
+    const sc = this.scene; const zb = -HALL.d / 2; this.hostZ = zb + 3.7;
     // troon + koning
     const throne = new THREE.Group(); const gold = mat(0xe8b82a, { metalness: 0.6, roughness: 0.35 });
     throne.add(mesh(new THREE.BoxGeometry(5, 1.4, 4), mat(0x7a2fd4), { pos: [0, 0.7, 0] })); throne.add(mesh(new THREE.BoxGeometry(2.6, 0.5, 2.2), gold, { pos: [0, 1.65, 0] })); throne.add(mesh(new THREE.BoxGeometry(2.6, 4.2, 0.5), gold, { pos: [0, 3.7, -1] }));
@@ -259,15 +263,17 @@ export class ArcadeMode {
 
   // ------------------------------------------------------------------ start / stop
   async enter() {
-    ui.hud.reset(); this.hudSetup(); audio.music('concert'); this.refreshHud();
+    ui.hud.reset(); this.hudSetup(); audio.music('concert'); this.refreshHud(); ui.hudEl.append(this.deur.bar);
+    if (this.deur.takeover) { audio.music('tense'); ui.hud.setHint('De Deurman heeft de hal overgenomen! Speel één duel (in spookmodus) om hem te verjagen.'); }
     ui.fade(0, 600);
     const o = this.opts;
     if (o.result && o.result.pvp) await this.afterDuel(o.result);
     else if (o.result === null && TOURNEY) { TOURNEY = null; ui.hud.toast('Toernooi afgebroken.', 2200); }
     else if (o.via === 'door' && !S.flags['met_hall' + this.hallId]) { this.busy = true; S.flags['met_hall' + this.hallId] = true; await ui.say(this.hallId === 1 ? [{ who: 'DJ Dobber', text: 'Welkom in de NEONKELDER! Hier draait de muziek hard en zijn de spellen nóg gekker. Bommen, ruimteschepen, flipperkasten... jullie zeggen het maar.' }, { who: 'Jor', text: 'Waar is de pauzeknop?' }, { who: 'DJ Dobber', text: 'Die is stuk. Veel plezier!' }] : [{ who: 'Kermis-Kees', text: 'Kom d\'ren, kom d\'ren! Welkom op de KERMIS! Quiz, taart, bowlen, eendjes... en geen kaartje nodig. Ik ben niet van het kaartjes.' }, { who: 'Wes', text: 'Is dat een kip in de grijpkraan?' }, { who: 'Kermis-Kees', text: 'Ja. Niet aanraken. Hij weet wat hij doet.' }]); this.busy = false; }
     else if (!S.flags.met_king) { this.busy = true; S.flags.met_king = true; await ui.say([{ who: 'Koning Klopper', text: 'WELKOM in mijn Speelhal! Hier zijn geen karweitjes en geen heitjes te verdienen... Alleen eer, glorie en een heleboel chaos.' }, { who: 'Koning Klopper', text: 'Elk duel krijgt een TWIST: soms loop je achterstevoren, soms ruil je van lichaam, en soms staat de Deurman te kijken. Wie dan beweegt, verliest.' }, { who: 'Wes', text: 'Ik ga zo hard winnen.' }, { who: 'Jor', text: 'Dat dacht je.' }]); this.busy = false; }
+    if (!o.result && !dailyDone() && !this.deur.takeover) setTimeout(() => { if (!this.leaving) ui.hud.toast(`🌟 Uitdaging van de dag wacht bij ${this.hostName}! Bonus: +${dailyBonus()} heitjes`, 4200); }, 2500);
   }
-  exit() { ui.clearScreens(); ui.activeMenus = []; ui.hudEl.innerHTML = ''; ui.setVignette(0); }
+  exit() { this.deur && this.deur.cleanup(); ui.clearScreens(); ui.activeMenus = []; ui.hudEl.innerHTML = ''; ui.setVignette(0); }
   resize(w, hh) { this.camera.aspect = w / hh; this.camera.updateProjectionMatrix(); this.fx.setViewportHeight(hh); }
   hudSetup() { ui.hud.setHint(`Loop naar een kast en druk op je actieknop om te duelleren · Wiel van Gekte = verrassing · ${this.hostName} = toernooi` + (this.hallId === 0 ? ' · deuren in de achtermuur = meer hallen!' : '')); setTimeout(() => ui.hud.setHint(null), 14000); }
   refreshHud() {
@@ -300,7 +306,7 @@ export class ArcadeMode {
       if (it.type === 'cab') await this.cab(it.id);
       else if (it.type === 'wheel') await this.wheelSpin();
       else if (it.type === 'king') await this.kingTalk();
-      else if (it.type === 'board') { this.drawBoard(); await this.cardModal('Scorebord', h('p', { style: { textAlign: 'center', fontSize: '24px' }, html: `<b style="color:#1d9a52">${S.names[0]}</b> ${S.arcade.wins[0]} – ${S.arcade.wins[1]} <b style="color:#2f6fe0">${S.names[1]}</b><br><small>${S.arcade.plays} duels · ${S.arcade.draws} gelijkspel · toernooien ${S.arcade.tourneys[0]} – ${S.arcade.tourneys[1]}</small>` })); }
+      else if (it.type === 'board') { this.drawBoard(); await this.rankModal(); }
       else if (it.type === 'trophies') await this.cardModal('Trofeeënkast', h('p', { style: { textAlign: 'center' }, html: 'Win duels, speel veel verschillende spellen en win toernooien om trofeeën te verdienen.<br>Eerste Bloed (1 winst) · Duelist (5) · Meester (12) · Legende (30) · Gelijkspel-koning (4 gelijk) · Toernooi-winnaar · Allesspeler (8 spellen) · Rivaliteit (20 duels).' }));
       else if (it.type === 'exit') await this.leave();
       else if (it.type === 'door') await this.useDoor(it);
@@ -315,10 +321,23 @@ export class ArcadeMode {
     if (c !== 0) return;
     await this.launch(id);
   }
-  async launch(id, extra = null) {
+  async launch(id, extra = null, twist = null) {
     this.leaving = true; audio.sfx('powerup'); await ui.fade(1, 450); persist();
-    this.app.playGame(id, { back: 'arcade', extra: { ...(extra || {}), hall: this.hallId } });
+    if (this.deur.takeover) { extra = { ...(extra || {}), spooky: true }; twist = 'deurman'; }   // de Deurman heeft de hal: elk duel is een spookduel
+    this.app.playGame(id, { back: 'arcade', twist, extra: { ...(extra || {}), hall: this.hallId } });
     await new Promise(() => {});
+  }
+  // Ranglijst per spel: wie is de koning van elk duel?
+  async rankModal() {
+    const A = S.arcade; const n = S.names; const rows = [];
+    for (const hl of ARCADE_HALLS) for (const id of hl.ids) { const g = A.byGame[id]; if (g && g.plays) rows.push({ id, hall: hl.name, g }); }
+    rows.sort((x, y) => y.g.plays - x.g.plays);
+    const unplayed = ARCADE_IDS.filter((id) => this.app.games[id] && !(A.byGame[id] && A.byGame[id].plays)).length;
+    const crown = (g) => (g.wins[0] === g.wins[1] ? '🤝' : `👑 ${g.wins[0] > g.wins[1] ? n[0] : n[1]}`);
+    const tbl = h('table', { class: 'ranktbl', html: `<tr><th>Spel</th><th>${n[0]}</th><th>${n[1]}</th><th>Koning</th><th>Reeks</th></tr>` + rows.map(({ id, g }) => `<tr><td>${this.defOf(id).icon || ''} ${this.defOf(id).name || NAME[id]}</td><td>${g.wins[0]}</td><td>${g.wins[1]}</td><td>${crown(g)}</td><td>${g.streak > 1 ? '🔥' + g.streak + ' ' + n[g.streakWho] : '–'}</td></tr>`).join('') });
+    const king = A.wins[0] === A.wins[1] ? 'Gelijk!' : `👑 ${A.wins[0] > A.wins[1] ? n[0] : n[1]} staat voor`;
+    const body = h('div', { style: { maxHeight: '56vh', overflow: 'auto' } }, h('p', { style: { textAlign: 'center', fontSize: '22px', margin: '4px 0' }, html: `<b style="color:#1d9a52">${n[0]}</b> ${A.wins[0]} – ${A.wins[1]} <b style="color:#2f6fe0">${n[1]}</b> · ${king}<br><small>${A.plays} duels · ${A.draws} gelijkspel · toernooien ${A.tourneys[0]} – ${A.tourneys[1]}${S.banished ? ' · Deurman verjaagd: ' + S.banished + '×' : ''}</small>` }), rows.length ? tbl : h('p', { style: { textAlign: 'center' } }, 'Nog geen duels gespeeld. Kies een kast!'), h('p', { class: 'small-note' }, unplayed ? `Nog ${unplayed} spellen om te proberen!` : 'Alle spellen gespeeld. Wauw.'));
+    await this.cardModal('🏆 Ranglijst per spel', body);
   }
   async useDoor(it) {
     const o = ARCADE_HALLS[it.to]; const c = await this.choose(`${it.to === 0 ? '↩' : '🚪'} ${o.name}`, [`Ja, naar de ${o.name}!`, 'Nog niet'], `${o.ids.length} spellen`); if (c !== 0) return;
@@ -329,17 +348,34 @@ export class ArcadeMode {
     this.leaving = true; TOURNEY = null; await ui.fade(1, 500); persist(); this.app.goHub({ fromArcade: true }); await new Promise(() => {});
   }
   async kingTalk() {
+    if (this.deur.takeover) return this.deur.talk();
     const H = this.hostName; const A = S.arcade; A.excluded ||= []; A.tlen ||= 5;
-    const lines = [{ who: H, text: pick(['Ha, de uitdagers! Wie van jullie durft het eerst?', 'Kom maar op met je duels. Ik heb popcorn.', 'Mijn hal is de beste van het hele Koninkrijk. Ook de enige. Maar toch.']) }];
-    await this.say(lines);
-    const opts = TOURNEY ? ['Toernooi voortzetten', 'Toernooi stoppen', '⚙️ Spellen kiezen', 'Hoe werkt het?', 'Niets'] : [`🏆 Toernooi starten (${A.tlen} duels)`, '⚙️ Spellen kiezen & lengte', 'Hoe werkt het?', 'Niets'];
-    const c = await this.choose(H, opts);
-    const key = TOURNEY ? ['go', 'stop', 'pick', 'how', 'none'][c] : ['start', 'pick', 'how', 'none'][c];
+    await this.say([{ who: H, text: pick(['Ha, de uitdagers! Wie van jullie durft het eerst?', 'Kom maar op met je duels. Ik heb popcorn.', 'Mijn hal is de beste van het hele Koninkrijk. Ook de enige. Maar toch.']) }]);
+    const done = dailyDone(); const keys = []; const labels = [];
+    if (TOURNEY) { keys.push('go', 'stop'); labels.push('Toernooi voortzetten', 'Toernooi stoppen'); } else { keys.push('start'); labels.push(`🏆 Toernooi starten (${A.tlen} duels)`); }
+    keys.push('daily'); labels.push(done ? '🌟 Uitdaging van de dag (gedaan ✔)' : '🌟 Uitdaging van de dag (+bonus!)');
+    keys.push('shop', 'pick', 'how', 'none'); labels.push('👒 Hoeden & kleuren', '⚙️ Spellen kiezen & lengte', 'Hoe werkt het?', 'Niets');
+    const c = await this.choose(H, labels); const key = keys[c];
     if (key === 'start') { await this.startTourney(); return; }
     if (key === 'go') { await this.nextTourney(); return; }
     if (key === 'stop') { TOURNEY = null; this.refreshHud(); ui.hud.toast('Toernooi gestopt.', 1800); return; }
+    if (key === 'daily') { await this.dailyChallenge(); return; }
+    if (key === 'shop') { await this.openShop(); return this.kingTalk(); }
     if (key === 'pick') { await this.pickGames(); return this.kingTalk(); }
-    if (key === 'how') await this.say([{ who: H, text: 'Elk duel is 1 tegen 1 op hetzelfde scherm. Voor elk spel wordt een TWIST geloot: omgekeerde besturing, verwisselde knoppen, dronken kikker, reus tegen dwerg, zeepvloer, maanzwaartekracht, lichaamswissel of de Deurman die komt kijken.' }, { who: H, text: `In een toernooi spelen jullie ${A.tlen} verschillende duels uit álle hallen. Spellen die jullie niet leuk vinden kun je uitzetten bij "Spellen kiezen". Wie de meeste wint, wordt Kampioen. En ja, jullie delen de heitjes.` }]);
+    if (key === 'how') await this.say([{ who: H, text: 'Elk duel is 1 tegen 1 op hetzelfde scherm. Voor elk spel wordt een TWIST geloot: omgekeerde besturing, verwisselde knoppen, dronken kikker, reus tegen dwerg, zeepvloer, maanzwaartekracht, lichaamswissel of de Deurman die komt kijken.' }, { who: H, text: `In een toernooi spelen jullie ${A.tlen} verschillende duels uit álle hallen. Spellen die jullie niet leuk vinden kun je uitzetten bij "Spellen kiezen". Elke dag is er ook een Uitdaging van de dag met bonus-heitjes. En pas op: soms neemt de Deurman een hal over...` }]);
+  }
+  async openShop() {
+    try { const m = await import('./shop.js'); await m.openShop(this.app, {}); this.refreshHud(); }
+    catch (e) { console.warn('winkel niet beschikbaar', e); await this.say([{ who: this.hostName, text: 'De hoedenwinkel is nog dicht. Kom straks terug!' }]); }
+  }
+  async dailyChallenge() {
+    const info = dailyInfo(this.app.games); const H = this.hostName;
+    if (!info) { await this.say([{ who: H, text: 'Ik heb vandaag geen uitdaging. Vreemd.' }]); return; }
+    const def = this.defOf(info.id); const tw = TWISTS.find((t) => t.id === info.twist) || TWISTS[0];
+    const st = dailyStreak();
+    if (dailyDone()) { await this.say([{ who: H, text: `De uitdaging van vandaag is al gedaan! Reeks: ${st} ${st === 1 ? 'dag' : 'dagen'}. Kom morgen terug voor een nieuwe.` }]); return; }
+    const c = await this.choose('🌟 Uitdaging van de dag', ['Spelen!', 'Terug'], `${def.icon || ''} ${def.name} met twist: ${tw.icon || ''} ${tw.name} · bonus +${dailyBonus()} heitjes (reeks: ${st})`);
+    if (c === 0) await this.launch(info.id, { daily: true }, info.twist);
   }
   // Keuzescherm: welke spellen doen mee aan toernooi en wiel + toernooilengte
   pickGames() {
@@ -425,6 +461,8 @@ export class ArcadeMode {
     await new Promise((res) => setTimeout(res, 500));
     await this.say([{ who: this.hostName, text: line }]);
     this.players.forEach((p) => (p.c.pose = 'idle'));
+    if (this.opts.extra && this.opts.extra.spooky) await this.deur.endTakeover();
+    if (r.daily) await this.say([{ who: this.hostName, text: `🌟 Dagduel voltooid! +${r.daily} heitjes bonus. Reeks: ${dailyStreak()} ${dailyStreak() === 1 ? 'dag' : 'dagen'} achter elkaar!` }]);
     if (TOURNEY) {
       const T = TOURNEY; if (w != null) T.score[w]++; else { T.score[0] += 0.5; T.score[1] += 0.5; }
       T.idx++; this.refreshHud();
@@ -466,20 +504,24 @@ export class ArcadeMode {
     if (this.picker) this.picker.update(dt);
     const frozen = this.busy || scare.active;
     for (const p of this.players) {
-      if (!frozen && input.p[p.i].aP) { const it = this.nearest(p); if (it) this.doInteract(it, p); else if (p.grounded) { p.vy = 8; p.grounded = false; p.c.air = true; p.c.jump(); audio.sfx('jump', { vol: 0.5 }); } }
+      if (!frozen && input.p[p.i].aP) { const it = this.nearest(p); if (it && this.deur.active && it.type !== 'exit') { ui.hud.toast('Nu niet! De Deurman komt eraan...', 1400); } else if (it) this.doInteract(it, p); else if (p.grounded) { p.vy = 8; p.grounded = false; p.c.air = true; p.c.jump(); audio.sfx('jump', { vol: 0.5 }); } }
       this.movePlayer(p, dt, frozen); p.c.update(dt);
     }
     this.mid.set((this.players[0].x + this.players[1].x) / 2, 0, (this.players[0].z + this.players[1].z) / 2);
     // camera
     const sep = Math.hypot(this.players[0].x - this.players[1].x, this.players[0].z - this.players[1].z); const k = clamp((sep - 6) / 30, 0, 1);
     const tx = clamp(this.mid.x, -26, 26), ty = lerp(17, 28, k), tz = clamp(this.mid.z, -12, 20) + lerp(11, 18, k);
-    this.camPos.x = damp(this.camPos.x, tx, 4, dt); this.camPos.y = damp(this.camPos.y, ty, 3, dt); this.camPos.z = damp(this.camPos.z, tz, 4, dt);
-    this.camLook.x = damp(this.camLook.x, tx, 5, dt); this.camLook.z = damp(this.camLook.z, clamp(this.mid.z, -16, 22) - 1, 5, dt);
-    this.camera.position.copy(this.camPos); this.camera.lookAt(this.camLook.x, 1.5, this.camLook.z);
+    let tx2 = tx, tz2 = tz, lz = clamp(this.mid.z, -16, 22) - 1;
+    if (this.camOverride) { this.camOverride.t -= dt; if (this.camOverride.t <= 0) this.camOverride = null; else { tx2 = this.camOverride.x; tz2 = this.camOverride.z + 15; lz = this.camOverride.z; } }
+    this.camPos.x = damp(this.camPos.x, tx2, 4, dt); this.camPos.y = damp(this.camPos.y, ty, 3, dt); this.camPos.z = damp(this.camPos.z, tz2, 4, dt);
+    this.camLook.x = damp(this.camLook.x, tx2, 5, dt); this.camLook.z = damp(this.camLook.z, lz, 5, dt);
+    this.camera.position.copy(this.camPos);
+    if (this.camShake > 0.001) { this.camera.position.x += (Math.random() - 0.5) * this.camShake; this.camera.position.y += (Math.random() - 0.5) * this.camShake; this.camShake *= 0.9; } this.camera.lookAt(this.camLook.x, 1.5, this.camLook.z);
     // decor
     this.disco.rotation.y += dt * 0.8; this.lights.forEach((l, i) => { const a = t * 0.7 + i * TAU / 3; l.position.set(Math.cos(a) * 14, 9, 2 + Math.sin(a) * 9); });
     for (const f of this.glows) f.scale.y = 1 + Math.sin(t * 12 + f.position.x * 3) * 0.2;
     (this.banners || []).forEach((b, i) => P.animateBanner(b, t + i));
+    this.deur.update(dt);
     this.king.update(dt); this.king.pose = this.nearKing() ? 'wave' : 'idle';
     this.wheel.children[2].rotation.z = Math.sin(t * 2) * 0.03;
     if (this.spin) {
@@ -491,7 +533,7 @@ export class ArcadeMode {
     }
     // Deurman-spookje op een kast
     this.nextGlitch -= dt;
-    if (this.nextGlitch <= 0 && S.settings.scare >= 1 && this.cabs.length) { this.nextGlitch = rand(70, 140); const cab = pick(this.cabs); const old = cab.scr.material.map; cab.scr.material.map = this.cabTexture(cab.id, true); cab.scr.material.needsUpdate = true; audio.sfx('static'); setTimeout(() => { cab.scr.material.map = old; cab.scr.material.needsUpdate = true; }, 1600); }
+    if (this.nextGlitch <= 0 && S.settings.scare >= 1 && this.cabs.length && !this.deur.moodOn) { this.nextGlitch = rand(70, 140); const cab = pick(this.cabs); const old = cab.scr.material.map; cab.scr.material.map = this.cabTexture(cab.id, true); cab.scr.material.needsUpdate = true; audio.sfx('static'); setTimeout(() => { cab.scr.material.map = old; cab.scr.material.needsUpdate = true; }, 1600); }
     this.fx.update(dt);
     // prompt
     if (this.busy) ui.hud.setPrompt(null);

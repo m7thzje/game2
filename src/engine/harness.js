@@ -9,6 +9,10 @@ import { makeBrother, makeNPC, PLAYER_CSS, PLAYER_COLORS } from './chars.js';
 import { setupLights } from './lights.js';
 import { h, clamp, mulberry32, disposeObject, rand } from './util.js';
 import { pickTwist, applyTwist, blankIn, TWISTS } from './twist.js';
+import { dailyDone, dailyBonus, completeDaily } from './daily.js';
+
+// Revanche-reeks: opeenvolgende potjes van hetzelfde duel (wordt gewist bij een ander spel)
+export const SERIES = { id: null, wins: [0, 0], n: 0 };
 
 export const PAY = [10, 30, 55, 85];   // heitjes bij 0..3 sterren (x def.pay)
 export const PVP_PAY = 20;             // heitjes voor een afgespeeld duel (gedeelde portemonnee)
@@ -80,6 +84,7 @@ export class MinigameMode {
   nextDeurTime(first = false) {
     const lvl = S.settings.scare; if (lvl <= 0) return 1e9;
     const f = lvl === 1 ? 1.8 : lvl === 3 ? 0.65 : 1;
+    if (this.extra && this.extra.spooky) return first ? rand(5, 8) : rand(9, 13);   // spookduel: hij kijkt steeds mee
     if (this.isPvp && this.twist.id !== 'deurman') return 1e9;          // in duels alleen met de Deurman-twist
     if (this.twist.id === 'deurman') return first ? rand(8, 14) : rand(12, 20);
     return (first ? rand(22, 38) : rand(30, 55)) * f;
@@ -130,7 +135,7 @@ export class MinigameMode {
       this.cdT -= dt;
       const n = Math.ceil(this.cdT);
       if (n !== this._cdN && n > 0) { this._cdN = n; ui.hud.showBig(String(n), 800); audio.sfx('countdown'); }
-      if (this.cdT <= 0) { this.state = 'play'; ui.hud.showBig('GA!', 700, '#ffe14a'); audio.sfx('go'); this.instance.onStart && this.instance.onStart(); }
+      if (this.cdT <= 0) { this.state = 'play'; ui.hud.showBig('GA!', 700, '#ffe14a'); audio.sfx('go'); this.instance.onStart && this.instance.onStart(); if (this.extra && this.extra.spooky && !this.tintEl) { this.tintEl = h('div', { class: 'spook-tint' }); document.body.append(this.tintEl); audio.sfx('drone'); } }
       if (this.instance.introUpdate) this.instance.introUpdate(dt);
     } else if (this.state === 'play') {
       if (escP) { this.pause(); return; }
@@ -142,7 +147,12 @@ export class MinigameMode {
       }
     } else if (this.state === 'result') {
       if (this.instance.resultUpdate) this.instance.resultUpdate(dt);
-      if (this.resultReady && (input.p[0].aP || input.p[1].aP)) this.close();
+      if (this.resultReady) {
+        if (this.canRematch && this.isPvp) {
+          for (const p of input.p) { if (p.leftP || p.rightP || p.upP || p.downP) { this.resSel = 1 - this.resSel; this.drawResOpts(); audio.sfx('click'); } }
+          if (input.p[0].aP || input.p[1].aP) this.close(this.resSel === 0);
+        } else if (input.p[0].aP || input.p[1].aP) this.close();
+      }
     }
     this.fx.particles.update(dt); this.fx.texts.update(dt);
   }
@@ -223,7 +233,10 @@ export class MinigameMode {
     const rep = (S.arcade.byGame[this.def.id]?.plays || 0) > 0;
     const base = Math.round(PVP_PAY * (rep ? 0.6 : 1));
     this.result = { id: this.def.id, pvp: true, winner: res.winner ?? null, scoreArr: res.score || [0, 0], stars: 0, base, penalty: 0, bonus: res.bonus || 0, summary: res.summary || '', twist: this.twist.name };
+    if (this.extra && this.extra.daily && !this.practice && !dailyDone()) { this.result.daily = dailyBonus(); this.result.bonus += this.result.daily; }
     this.result.total = base + this.result.bonus;
+    if (SERIES.id !== this.def.id) { SERIES.id = this.def.id; SERIES.wins = [0, 0]; SERIES.n = 0; }
+    SERIES.n++; if (res.winner != null) SERIES.wins[res.winner]++;
     audio.sfx(res.winner == null ? 'good' : 'win'); audio.duck(false); ui.hud.setHint(null);
     setTimeout(() => this.showResult(), res.delay ?? 1100);
   }
@@ -236,12 +249,18 @@ export class MinigameMode {
       h('div', { class: 'vs' }, h('span', { style: { color: PLAYER_CSS[0] } }, `${names[0]} ${r.scoreArr[0]}`), h('span', {}, '–'), h('span', { style: { color: PLAYER_CSS[1] } }, `${r.scoreArr[1]} ${names[1]}`)),
       h('p', { style: { textAlign: 'center' }, html: r.summary || '' }),
       h('p', { class: 'small-note' }, `${this.twist.icon || ''} Twist: ${this.twist.name}`),
-      h('div', { class: 'reward', html: this.practice ? '' : `🪙 +${r.total} heitjes voor jullie samen` }),
-      h('div', { class: 'small-note' }, `Doorgaan: ${KEY_LABELS[0].a} of ${KEY_LABELS[1].a}`));
+      h('div', { class: 'reward', html: this.practice ? '' : `🪙 +${r.total} heitjes voor jullie samen` + (r.daily ? `<div style="font-size:16px;font-weight:400">🌟 Dagduel-bonus: +${r.daily}</div>` : '') }),
+      SERIES.n >= 2 ? h('p', { class: 'small-note', style: { fontSize: '17px' } }, `🔁 Reeks: ${names[0]} ${SERIES.wins[0]} – ${SERIES.wins[1]} ${names[1]}`) : null,
+      (this.canRematch = !(this.extra && (this.extra.tourney || this.extra.daily || this.extra.spooky))) ? (this.resOpts = h('div', { class: 'btnrow', style: { flexDirection: 'row', justifyContent: 'center', gap: '14px' } })) : h('div', { class: 'small-note' }, `Doorgaan: ${KEY_LABELS[0].a} of ${KEY_LABELS[1].a}`));
+    if (this.canRematch) { this.resSel = 0; this.drawResOpts(); }
     this.resEl = ui.overlay(card);
     if (w != null && this.instance.celebrate) this.instance.celebrate(w);
     setTimeout(() => { this.resultReady = true; }, 900);
     if (this.instance.onResult) this.instance.onResult(r);
+  }
+  drawResOpts() {
+    this.resOpts.innerHTML = '';
+    [['🔁 Revanche!', true], ['➡️ Doorgaan', false]].forEach(([label, re], i) => this.resOpts.append(h('div', { class: 'btn' + (this.resSel === i ? ' sel' : ''), style: { width: 'auto', padding: '10px 18px', fontSize: '22px' }, onClick: () => { if (this.resultReady) this.close(re); } }, label)));
   }
   showResult() {
     if (this.isPvp) return this.showPvpResult();
@@ -258,16 +277,22 @@ export class MinigameMode {
     setTimeout(() => { this.resultReady = true; }, 600 + r.stars * 450);
     if (this.instance.onResult) this.instance.onResult(r);
   }
-  close() {
+  close(rematch = false) {
     if (this.closed) return; this.closed = true;   // dubbel drukken mag niet dubbel tellen
-    const r = this.result; this.dispose();
+    const r = this.result; const { app, def, onDone, practice, extra } = this; this.dispose();
     if (r.pvp) {
       if (!this.practice) {
         S.coins += r.total; S.totalEarned += r.total;
         const A = S.arcade; A.plays++; const g = (A.byGame[r.id] ||= { plays: 0, wins: [0, 0] }); g.plays++;
-        if (r.winner == null) A.draws++; else { A.wins[r.winner]++; g.wins[r.winner]++; }
+        if (r.winner == null) { A.draws++; g.streak = 0; g.streakWho = null; } else {
+          A.wins[r.winner]++; g.wins[r.winner]++;
+          if (g.streakWho === r.winner) g.streak = (g.streak || 0) + 1; else { g.streakWho = r.winner; g.streak = 1; }
+          g.best = Math.max(g.best || 0, g.streak);
+        }
+        if (r.daily) completeDaily();
         persist();
       }
+      if (rematch) { app.setMode(new MinigameMode(app, def, { onDone, practice, extra })); return; }
       this.onDone && this.onDone(r); return;
     }
     if (!this.practice) {
@@ -291,7 +316,7 @@ export class MinigameMode {
   dispose() {
     removeEventListener('blur', this._onBlur);
     try { this.instance.dispose && this.instance.dispose(); } catch (e) { console.error(e); }
-    this.introEl && this.introEl.remove(); this.pauseEl && this.pauseEl.remove(); this.resEl && this.resEl.remove();
+    this.tintEl && this.tintEl.remove(); this.introEl && this.introEl.remove(); this.pauseEl && this.pauseEl.remove(); this.resEl && this.resEl.remove();
     this.fx.particles.dispose(); this.fx.texts.dispose();
     disposeObject(this.scene);
     ui.hud.clear(); ui.clearScreens(); audio.duck(false);
