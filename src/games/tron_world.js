@@ -72,7 +72,7 @@ export function buildWorld(ctx, L) {
   const outer = new THREE.Mesh(new THREE.PlaneGeometry(240, 240), new THREE.MeshBasicMaterial({ map: gridT, color: 0x9070ff, fog: true })); outer.rotation.x = -Math.PI / 2; outer.position.y = -0.4; scene.add(outer); W.outer = outer; W.gridT = gridT;
   // sokkel
   scene.add(mesh(new THREE.BoxGeometry(AX + 6, 1.2, AZ + 6), mat(0x20143c, { metalness: 0.5, roughness: 0.4 }), { cast: false, pos: [0, -0.62, 0] }));
-  const rim = new THREE.Mesh(new THREE.BoxGeometry(AX + 6.4, 0.14, AZ + 6.4), new THREE.MeshBasicMaterial({ color: 0xc060ff })); rim.position.y = -0.05; scene.add(rim);
+  const rim = new THREE.Mesh(new THREE.BoxGeometry(AX + 6.4, 0.14, AZ + 6.4), new THREE.MeshBasicMaterial({ color: 0xc060ff })); rim.position.y = -0.3; scene.add(rim);
 
   // ---------------- barrière (krimpt): 4 dozen ----------------
   const barT = barrierTexture(); barT.wrapS = barT.wrapT = THREE.RepeatWrapping;

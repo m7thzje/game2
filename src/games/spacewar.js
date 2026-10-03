@@ -11,6 +11,7 @@ import { buildSpace, buildDragonShip, buildBroomShip, AX, AZ } from './spacewar_
 //  * comeback: wie 2+ achterstaat laadt sneller op, krijgt na een knal een gouden schild en ziet de power-ups dichtbij verschijnen
 
 const WIN = 5, MATCH = 90, SD_MAX = 38;
+const VS = 1.5;                           // schepen visueel groter dan het ontwerp-model
 const WX = 2 * AX, WZ = 2 * AZ;
 const KG = 560;                          // sterkte van de Toverster
 const TURN = 3.9, THRUST = 25, VMAX = 25, DRAG = 0.1;
@@ -81,11 +82,11 @@ export default {
     const ships = players.map((pp, i) => {
       const size = pv.size(i);
       const g = i ? buildBroomShip(PLAYER_COLORS[i]) : buildDragonShip(PLAYER_COLORS[i]);
-      const c = makeBrother(i); const sc = 1.55 / c.height; c.group.scale.setScalar(sc); c.pose = 'sit';
+      const c = makeBrother(i); const sc = 1.55 / c.height; c.group.scale.setScalar(sc * 1.35); c.pose = 'sit';
       const seat = g.userData.seat; c.group.position.set(seat.x, seat.y - 0.25, seat.z); g.userData.body.add(c.group);
-      const holder = new THREE.Group(); holder.add(g); holder.scale.setScalar(size); scene.add(holder);
+      const holder = new THREE.Group(); holder.add(g); holder.scale.setScalar(size * VS); scene.add(holder);
       const ud = g.userData, fIdx = ud.body.children.indexOf(ud.flame); g.userData = {};      // userData zou bij clone() als JSON worden gekopieerd
-      const ghosts = [0, 1, 2].map(() => { const gh = new THREE.Group(); const cl = g.clone(true); gh.add(cl); gh.scale.setScalar(size); gh.visible = false; scene.add(gh); return { gh, flame: cl.children[0].children[fIdx] }; });
+      const ghosts = [0, 1, 2].map(() => { const gh = new THREE.Group(); const cl = g.clone(true); gh.add(cl); gh.scale.setScalar(size * VS); gh.visible = false; scene.add(gh); return { gh, flame: cl.children[0].children[fIdx] }; });
       g.userData = ud;
       const col = PLAYER_COLORS[i];
       const bubble = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false })); bubble.visible = false; scene.add(bubble);
@@ -93,7 +94,7 @@ export default {
       const mark = new THREE.Mesh(new THREE.RingGeometry(1.35, 1.6, 24), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false })); mark.rotation.x = -Math.PI / 2; scene.add(mark);
       const dir = i ? -1 : 1;
       const s = {
-        i, g, holder, ghosts, c, bubble, mark, flame: g.userData.flame, body: g.userData.body, col, size, r: 1.0 * size, spd: pv.speed(i),
+        i, g, holder, ghosts, c, bubble, mark, flame: g.userData.flame, body: g.userData.body, col, size, r: 1.25 * size, spd: pv.speed(i),
         x: -dir * AX * 0.72, z: dir * 6, vx: 0, vz: 0, a: i ? Math.PI : 0, alive: true, respT: 0, inv: 1.5, shield: 0, cd: 0, ammo: AMMO, fireCd: 0, triple: 0, missiles: 0, mineT: 0, mineCd: 0, gold: 0,
         bank: 0, trail: 0, warp: 0, thrusting: false, hits: 0, deaths: 0, wasA: false, lastKillBy: -1, tagKey: '',
       };
@@ -182,7 +183,7 @@ export default {
       for (const da of angs) {
         if (bullets.length >= BN * 2 - 2) break;
         const a = s.a + da, fx_ = Math.sin(a), fz_ = -Math.cos(a);
-        bullets.push({ x: wrapX(s.x + fx_ * 1.7 * s.size), z: wrapZ(s.z + fz_ * 1.7 * s.size), vx: fx_ * BSPD + s.vx * 0.5, vz: fz_ * BSPD + s.vz * 0.5, owner: s.i, life: BLIFE, age: 0, refl: false });
+        bullets.push({ x: wrapX(s.x + fx_ * 2.5 * s.size), z: wrapZ(s.z + fz_ * 2.5 * s.size), vx: fx_ * BSPD + s.vx * 0.5, vz: fz_ * BSPD + s.vz * 0.5, owner: s.i, life: BLIFE, age: 0, refl: false });
       }
       s.vx -= f[0] * 0.5; s.vz -= f[1] * 0.5;                       // een beetje terugslag
       audio.sfx('shoot', { vol: 0.4, rate: 0.9 + Math.random() * 0.3 });
@@ -191,7 +192,7 @@ export default {
     function launchMissile(s) {
       const g = missilePool.find((m) => !m.visible); if (!g) { shoot(s); return; }
       g.visible = true; const f = [Math.sin(s.a), -Math.cos(s.a)];
-      missiles.push({ x: wrapX(s.x + f[0] * 1.8 * s.size), z: wrapZ(s.z + f[1] * 1.8 * s.size), vx: f[0] * 13 + s.vx * 0.6, vz: f[1] * 13 + s.vz * 0.6, a: s.a, owner: s.i, target: 1 - s.i, life: 5, age: 0, g });
+      missiles.push({ x: wrapX(s.x + f[0] * 2.6 * s.size), z: wrapZ(s.z + f[1] * 2.6 * s.size), vx: f[0] * 13 + s.vx * 0.6, vz: f[1] * 13 + s.vz * 0.6, a: s.a, owner: s.i, target: 1 - s.i, life: 5, age: 0, g });
       stat.missiles++; audio.sfx('whoosh', { vol: 0.6, rate: 1.4 }); audio.sfx('throw', { vol: 0.3 });
     }
     function dropMine(s) {
@@ -199,7 +200,7 @@ export default {
       if (mines.filter((m) => m.owner === s.i).length >= 4) return;
       g.visible = true; g.userData.body.material.emissive.set(s.col);
       const f = [Math.sin(s.a), -Math.cos(s.a)];
-      mines.push({ x: wrapX(s.x - f[0] * 1.8 * s.size), z: wrapZ(s.z - f[1] * 1.8 * s.size), vx: s.vx * 0.2, vz: s.vz * 0.2, owner: s.i, arm: 0.9, life: 16, g, t: 0 });
+      mines.push({ x: wrapX(s.x - f[0] * 2.6 * s.size), z: wrapZ(s.z - f[1] * 2.6 * s.size), vx: s.vx * 0.2, vz: s.vz * 0.2, owner: s.i, arm: 0.9, life: 16, g, t: 0 });
       audio.sfx('pop', { vol: 0.35, rate: 0.7 });
     }
     function killMine(m, boom) {
@@ -377,7 +378,7 @@ export default {
       if (first && s.mineT > 0 && s.mineCd <= 0) { s.mineCd = 1.15; dropMine(s); }
       // vliegtuig-effecten
       if (thr && first) {
-        s.trail -= dt; if (s.trail <= 0) { s.trail = 0.03; const bx = s.x - fx_ * 2.2 * s.size, bz = s.z - fz_ * 2.2 * s.size; pe(bx, 0.3, bz, -fx_ * 5 + s.vx * 0.2 + rand(-1, 1), 0, -fz_ * 5 + s.vz * 0.2 + rand(-1, 1), { life: 0.6, size: 0.55 * s.size, color: Math.random() < 0.5 ? s.col : pick([0xffffff, 0xffe14a, 0xff9a4a]), gravity: 0 }); }
+        s.trail -= dt; if (s.trail <= 0) { s.trail = 0.03; const bx = s.x - fx_ * 3.3 * s.size, bz = s.z - fz_ * 3.3 * s.size; pe(bx, 0.3, bz, -fx_ * 5 + s.vx * 0.2 + rand(-1, 1), 0, -fz_ * 5 + s.vz * 0.2 + rand(-1, 1), { life: 0.6, size: 0.55 * s.size, color: Math.random() < 0.5 ? s.col : pick([0xffffff, 0xffe14a, 0xff9a4a]), gravity: 0 }); }
       }
     }
     function hyper(s) {
@@ -536,7 +537,7 @@ export default {
       // schild-bubbel + markering
       const sh = s.shield > 0 || s.gold > 0;
       s.bubble.visible = sh; if (sh) { const k = s.r * (1.9 + Math.sin(T * 14) * 0.06); s.bubble.position.set(s.x, 0.4, s.z); s.bubble.scale.set(k, k * 0.5, k); s.bubble.material.opacity = (s.shield > 0 ? 0.3 : 0.22) * (s.shield > 0 && s.shield < 0.35 ? (Math.sin(T * 40) > 0 ? 1 : 0.3) : 1); s.bubble.material.color.set(s.gold > 0 && s.shield <= 0 ? 0xffd23f : s.col); }
-      s.mark.position.set(s.x, -0.1, s.z); s.mark.scale.setScalar(s.size);
+      s.mark.position.set(s.x, -0.1, s.z); s.mark.scale.setScalar(s.size * 1.3);
       s.c.update(dt);
     }
     function drawPools(dt) {
@@ -563,7 +564,7 @@ export default {
       let pn = 0;
       for (const s of ships) {
         if (!s.alive) { for (let k = 0; k < AMMO; k++) { D.position.set(0, -50, 0); D.scale.setScalar(0.001); D.updateMatrix(); pips.setMatrixAt(pn++, D.matrix); } continue; }
-        for (let k = 0; k < AMMO; k++) { const fill = clamp(s.ammo - k, 0, 1); D.position.set(wrapX(s.x + (k - (AMMO - 1) / 2) * 0.62), 0.35, wrapZ(s.z + 2.5 * s.size + 0.3)); D.rotation.set(0, 0, 0); D.scale.setScalar(0.3 + fill * 0.7); D.updateMatrix(); pips.setMatrixAt(pn, D.matrix); _c.set(fill >= 1 ? 0xffffff : fill > 0 ? 0xffe14a : 0x445066); pips.setColorAt(pn, _c); pn++; }
+        for (let k = 0; k < AMMO; k++) { const fill = clamp(s.ammo - k, 0, 1); D.position.set(wrapX(s.x + (k - (AMMO - 1) / 2) * 0.62), 0.35, wrapZ(s.z + 3.4 * s.size)); D.rotation.set(0, 0, 0); D.scale.setScalar(0.3 + fill * 0.7); D.updateMatrix(); pips.setMatrixAt(pn, D.matrix); _c.set(fill >= 1 ? 0xffffff : fill > 0 ? 0xffe14a : 0x445066); pips.setColorAt(pn, _c); pn++; }
       }
       pips.instanceMatrix.needsUpdate = true; if (pips.instanceColor) pips.instanceColor.needsUpdate = true;
     }

@@ -12,7 +12,7 @@ const LX = 17, LZ = 10.2, CH = 4.2, GW = 4.4, GD = 3.4, GH = 3.3;
 // omtrek van het speelveld (tegen de klok in), inclusief de doelzakken; elk paar punten = een muur-segment
 const OUT = [[-LX + CH, -LZ], [LX - CH, -LZ], [LX, -LZ + CH], [LX, -GW], [LX + GD, -GW], [LX + GD, GW], [LX, GW], [LX, LZ - CH], [LX - CH, LZ], [-LX + CH, LZ], [-LX, LZ - CH], [-LX, GW], [-LX - GD, GW], [-LX - GD, -GW], [-LX, -GW], [-LX, -LZ + CH]];
 export const ARENA = { LX, LZ, CH, GW, GD, GH, OUT, SEG: OUT.map((p, i) => { const q = OUT[(i + 1) % OUT.length]; return [p[0], p[1], q[0], q[1]]; }) };
-export const PADS = [[-LX + 4.2, -LZ + 3.1, 1], [LX - 4.2, -LZ + 3.1, 1], [-LX + 4.2, LZ - 3.1, 1], [LX - 4.2, LZ - 3.1, 1], [0, -LZ + 2.6, 0], [0, LZ - 2.6, 0], [-8.5, 0, 0], [8.5, 0, 0]];
+export const PADS = [[-LX + 4.2, -LZ + 3.1, 1], [LX - 4.2, -LZ + 3.1, 1], [-LX + 4.2, LZ - 3.1, 1], [LX - 4.2, LZ - 3.1, 1], [0, -LZ + 2.6, 0], [0, LZ - 2.6, 0], [-6.5, 0, 0], [6.5, 0, 0]];
 
 const glowTex = () => canvasTex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 1, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
 

@@ -51,7 +51,7 @@ async function installBots(page, cfg) {
     let s = 1234; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
     window.__cfg = cfg; const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
     const LX = 17, LZ = 10.2;   // zie ARENA
-    const PADS = [[-LX + 4.2, -LZ + 3.1], [LX - 4.2, -LZ + 3.1], [-LX + 4.2, LZ - 3.1], [LX - 4.2, LZ - 3.1], [0, -LZ + 2.6], [0, LZ - 2.6], [-8.5, 0], [8.5, 0]];
+    const PADS = [[-LX + 4.2, -LZ + 3.1], [LX - 4.2, -LZ + 3.1], [-LX + 4.2, LZ - 3.1], [LX - 4.2, LZ - 3.1], [0, -LZ + 2.6], [0, LZ - 2.6], [-6.5, 0], [6.5, 0]];
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {

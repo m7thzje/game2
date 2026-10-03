@@ -109,7 +109,7 @@ export function makePowerBubble(type) {
 
 // ---------------- baan ----------------
 const blobGeo = new THREE.IcosahedronGeometry(1, 1);
-const blobMat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true });
+const blobMat = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true, emissive: 0x9a9ab4, emissiveIntensity: 0.9 });
 const tmp = { m: new THREE.Matrix4(), q: new THREE.Quaternion(), e: new THREE.Euler(), p: new THREE.Vector3(), s: new THREE.Vector3(), c: new THREE.Color() };
 function setInst(im, k, x, y, z, sx, sy, sz, ry = 0) { tmp.e.set(0, ry, 0); tmp.q.setFromEuler(tmp.e); tmp.m.compose(tmp.p.set(x, y, z), tmp.q, tmp.s.set(sx, sy, sz)); im.setMatrixAt(k, tmp.m); }
 function blobsFor(list, col1, col2) {   // list: [{x,y,r,z}] -> InstancedMesh

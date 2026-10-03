@@ -53,7 +53,7 @@ export default {
     // ---------------- toestand ----------------
     const score = [0, 0]; let T = 0, introT = 0, timeLeft = MATCH_TIME, started = false, finished = false;
     const G = { st: 'init', t: 0, frame: -1, timeUp: false, sudden: 0, sdRes: [0, 0], winner: -1, endT: 0 };
-    let gold = 3, dragonFrames = []; const stats = { strikes: [0, 0], spares: [0, 0], gutters: [0, 0], bombs: [0, 0], goldHits: [0, 0], bumperFrames: 0, dragons: 0, throws: [0, 0], pins: [0, 0] };
+    let tieFlag = false; let gold = 3; const dragonFrames = [1 + Math.floor(ctx.rng() * 2), 3 + Math.floor(ctx.rng() * 2)]; const stats = { strikes: [0, 0], spares: [0, 0], gutters: [0, 0], bombs: [0, 0], goldHits: [0, 0], bumperFrames: 0, dragons: 0, throws: [0, 0], pins: [0, 0] };
     const colorsCss = [['#35c46f', '#bff5d0'], ['#4a8cff', '#c0dcff']];
 
     const lanes = [0, 1].map((p) => {
@@ -315,7 +315,7 @@ export default {
     function updateLane(L, dt) {
       const p = L.p, inp = pv.input(p); const c = chars[p]; const spd = pv.speed(p);
       L.stT += dt;
-      if (L.st === 'rack') { if (L.stT > 0.95) { L.st = G.timeUp ? 'done' : 'aim'; L.aimT = 0; L.power = 0; L.angle = 0; L.stT = 0; } }
+      if (L.st === 'rack') { if (L.stT > 0.95) { L.st = G.timeUp && G.st === 'play' ? 'done' : 'aim'; L.aimT = 0; L.power = 0; L.angle = 0; L.stT = 0; } }
       else if (L.st === 'aim' || L.st === 'charge') {
         L.angle = clamp(L.angle + inp.x * 14 * D2R * spd * dt, -MAX_ANG, MAX_ANG);
         if (L.st === 'aim') {
@@ -324,7 +324,7 @@ export default {
           else if (inp.bP && L.armed) { L.armed = false; L.bombs++; L.ball.mesh.material = L.ball.bm; L.ball.fuse.visible = false; sfx('click', { vol: 0.5 }); refreshHud(); }
           if (inp.aP) { L.st = 'charge'; L.chargeT = 0; sfx('tick', { vol: 0.5 }); }
           else if (L.aimT > AIM_T) { L.power = 0.62 + rng() * 0.25; text('TE LAAT!', L.cx, 2.4, 0.5, '#ff9a6a', 1); throwBall(L); }
-          if (G.timeUp) { if (L.throwNo === 0) { L.st = 'done'; L.fscore[G.frame] = L.fscore[G.frame] ?? 0; closeFrame(L, true); } else closeFrame(L, true); }
+          if (G.timeUp && G.st === 'play') closeFrame(L, true);
         } else {
           L.chargeT += dt * (TEMPO > 1 ? 1.0 : 1); L.power = 0.5 - 0.5 * Math.cos(L.chargeT * TAU / 1.5);
           if (!inp.a || L.chargeT > 3.2) { if (L.chargeT <= 3.2 || true) throwBall(L); }
@@ -366,7 +366,7 @@ export default {
           if (G.sumT > (G.st === 'sudden' ? 1.6 : 1.5)) {
             G.sumT = 0;
             if (G.st === 'sudden') resolveSudden();
-            else if (G.frame >= FRAMES - 1 || G.timeUp) { if (score[0] === score[1]) startSudden(); else endGame(score[0] > score[1] ? 0 : 1, 'punten'); }
+            else if (G.frame >= FRAMES - 1 || G.timeUp) { if (score[0] === score[1] || tieFlag) { tieFlag = false; startSudden(); } else endGame(score[0] > score[1] ? 0 : 1, 'punten'); }
             else startFrame();
           }
         }
@@ -417,8 +417,7 @@ export default {
           const a = aimAngle(L); const sx = Math.sin(a), sz = -Math.cos(a);
           for (let k = 0; k < 12; k++) { const d = 1.3 + k * 0.85; dd.position.set(b.x + sx * d, 0.05, b.z + sz * d); dd.scale.setScalar(1 - k * 0.04); dd.updateMatrix(); L.dots.setMatrixAt(k, dd.matrix); }
           L.dots.instanceMatrix.needsUpdate = true;
-          const hd = 1.3 + 12 * 0.85 + 0.2; L.head.position.set(b.x + sx * hd, 0.06, b.z + sz * hd); L.head.rotation.set(-Math.PI / 2, 0, 0); L.head.rotation.z = a; L.head.rotation.order = 'YXZ'; L.head.rotation.y = -a; L.head.rotation.z = 0;
-          L.head.visible = false;
+          const hd = 1.3 + 12 * 0.85 + 0.2; L.head.position.set(b.x + sx * hd, 0.06, b.z + sz * hd); L.head.rotation.order = 'YXZ'; L.head.rotation.set(-Math.PI / 2, -a, 0);
         }
         const ms = L.meter; const showM = inAim || L.st === 'roll'; ms.bg.visible = showM; ms.fill.visible = showM; ms.sweet.visible = inAim; ms.steer.visible = L.st === 'roll';
         if (showM) {
@@ -433,6 +432,7 @@ export default {
         L.bumpers.forEach((m, i) => { const sq = L.bump.sq[i] = Math.max(0, L.bump.sq[i] - dt * 5); const k = L.bump.k; m.visible = k > 0.02; m.scale.set(1 + sq * 0.4, Math.max(0.01, k) * (1 - sq * 0.2), 1); m.position.y = 0.0 + 0.27 * Math.max(0.01, k); });
         // draak
         const D = L.drag;
+        if (!D.on) D.g = false;
         if (D.on) { D.t += dt; if (!D.g) { D.g = true; dragon.group.visible = true; dragon.group.userData.lane = p; sfx('thud', { vol: 0.8, rate: 0.7 }); ctx.shake(0.4); } }
         if (D.on && D.g) {
           const k = smoothstep(0, 0.9, D.t); const sd = D.side;
@@ -449,11 +449,10 @@ export default {
         else if (L.st === 'charge') pose = 'scared'; else if (inAim) pose = 'carry'; else if (L.st === 'done' && G.st === 'play') pose = 'wave'; else if (L.st === 'roll') pose = 'hands_up';
         c.pose = pose; c.speed = 0;
         const tx = L.st === 'roll' || L.st === 'settle' ? L.cx : 0; c.faceDir(-ch.sx * 0.6 + (tx - ch.holder.position.x) * 0.02, 1); c.update(dt);
-        hand(ch, L);
       }
+      if (!lanes.some((L) => L.drag.on)) dragon.group.visible = false;
       updateCamera(dt);
     }
-    function hand() { }
     function resultUpdate(dt) { T += dt; visuals(dt); }
     function introUpdate(dt) { introT += dt; visuals(dt); }
     for (const L of lanes) { rack(L, false); resetBall(L); L.pins.forEach((pn) => { pn.s = 1; }); }
@@ -469,7 +468,7 @@ export default {
       dbg: {
         state: () => ({ T, gst: G.st, frame: G.frame, timeLeft, score: [...score], finished, sudden: G.sudden, timeUp: G.timeUp, stats,
           lanes: lanes.map((L) => ({ st: L.st, throwNo: L.throwNo, angle: L.angle / D2R, aim: aimAngle(L) / D2R, power: L.power, chargeT: L.chargeT, bombs: L.bombs, armed: L.armed, steer: L.steer, bump: L.bump.on, drag: L.drag.on, ball: { mode: L.ball.mode, x: +L.ball.x.toFixed(2), z: +L.ball.z.toFixed(2) }, standing: L.pins.filter((p) => p.on && p.state === 'stand').length, cnt: [...L.cnt], k: [...L.k], fscore: [...L.fscore] })) }),
-        setTime: (t) => { timeLeft = t; },
+        setTime: (t) => { timeLeft = t; }, forceTie: () => { tieFlag = true; },
         lanes, gold: () => gold, setScore: (a, b) => { score[0] = a; score[1] = b; refreshHud(); drawBoard(); },
         forceDragonNext: () => { dragonFrames.push(G.frame + 1); }, dragonFrames,
       },

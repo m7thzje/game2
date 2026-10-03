@@ -72,6 +72,8 @@ async function installBots(page, cfg) {
           if (p.cursor !== mis) { const right = (mis - p.cursor + 4) % 4; if (right <= 2) v.right = true; else v.left = true; continue; }
           const cv = p.cur[mis]; const up = cv < 0 ? T[mis] : (T[mis] - cv + 6) % 6; if (up <= 3) v.up = true; else v.down = true;
         }
+        // twist-bewuste bots: compenseer omgekeerde besturing / verwisselde knoppen
+        for (const i of [0, 1]) { const v = inp.virtual[i], tw = m.twist.id; if (tw === 'invert') { [v.left, v.right] = [v.right, v.left]; [v.up, v.down] = [v.down, v.up]; v.x = -v.x; v.y = -v.y; } else if (tw === 'swapab') { [v.a, v.b] = [v.b, v.a]; } }
         inp.update(); m.update(dt);
       }
       m.paused = true; return false;

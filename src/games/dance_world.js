@@ -53,7 +53,7 @@ export function buildStage(ctx) {
   // achterwand + equalizer + neonbord
   scene.add(mesh(new THREE.PlaneGeometry(80, 40), new THREE.MeshStandardMaterial({ color: 0x180a2c, roughness: 0.9 }), { cast: false, pos: [0, 12, -9.5] }));
   const EQN = 36, eq = new THREE.InstancedMesh(new THREE.BoxGeometry(0.55, 1, 0.3), new THREE.MeshBasicMaterial({ color: 0xffffff }), EQN);
-  for (let i = 0; i < EQN; i++) eq.setColorAt(i, c4.setHSL(i / EQN * 0.85, 0.9, 0.55));
+  for (let i = 0; i < EQN; i++) eq.setColorAt(i, c4.setHSL(i / EQN * 0.85, 1, 0.5));
   eq.frustumCulled = false; scene.add(eq); S.eq = eq; S.eqN = EQN;
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.75), new THREE.MeshBasicMaterial({ map: signTex(), transparent: true, toneMapped: false, depthWrite: false })); sign.position.set(0, 9.6, -8.6); scene.add(sign); S.sign = sign;
   // gordijnen links en rechts
@@ -112,7 +112,7 @@ export function buildStage(ctx) {
     S.lights[0].intensity = 1.3 + k * 0.9; S.lights[1].intensity = 1.3 + (1 - k) * 0.5;
     S.woofers.forEach((w, i) => { const s = 1 + k * (i % 2 ? 0.1 : 0.2); w.scale.set(s, 1, s); });
     // equalizer
-    for (let i = 0; i < S.eqN; i++) { const h = 0.5 + (0.5 + 0.5 * Math.sin(t * 5.3 + i * 0.8) * Math.cos(t * 1.7 + i * 0.37)) * (1.5 + 4.5 * energy) + k * 1.2 * (1 - i / S.eqN); put(S.eq, i, -12.4 + i * (24.8 / (S.eqN - 1)), 1.0 + h / 2, -9.2, 0, 0, 1); _s.set(1, h, 1); _m.compose(_p.set(-12.4 + i * (24.8 / (S.eqN - 1)), 1.0 + h / 2, -9.2), _q.identity(), _s); S.eq.setMatrixAt(i, _m); }
+    for (let i = 0; i < S.eqN; i++) { const h = 0.5 + (0.5 + 0.5 * Math.sin(t * 5.3 + i * 0.8) * Math.cos(t * 1.7 + i * 0.37)) * (1.5 + 4.5 * energy) + k * 1.2 * (1 - i / S.eqN); _s.set(1, h, 1); _m.compose(_p.set(-12.4 + i * (24.8 / (S.eqN - 1)), 1.0 + h / 2, -9.2), _q.identity(), _s); S.eq.setMatrixAt(i, _m); }
     S.eq.instanceMatrix.needsUpdate = true;
     S.sign.material.opacity = 0.85 + 0.15 * Math.sin(t * 9) * (k > 0.5 ? 1 : 0.4);
     // lampjes

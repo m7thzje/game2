@@ -64,7 +64,7 @@ export default {
     const tagTex = (pp) => canvasTex(256, 96, (c, w, hh) => { c.font = 'bold 58px Fredoka, Arial Black, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 12; c.strokeStyle = 'rgba(8,2,20,.9)'; c.lineJoin = 'round'; c.strokeText(pp.name, w / 2, hh / 2); c.fillStyle = pp.css; c.fillText(pp.name, w / 2, hh / 2); });
     const glowTex = canvasTex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 1, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.4)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
     const bikes = players.map((pp, i) => {
-      const col = NEON[i]; const grp = new THREE.Group(); scene.add(grp); const sz = pv.size(i); const bs = lerp(1, sz, 0.75); grp.scale.setScalar(bs);
+      const col = NEON[i]; const grp = new THREE.Group(); scene.add(grp); const sz = pv.size(i); const bs = 1.45 * lerp(1, sz, 0.75); grp.scale.setScalar(bs);
       const dark = new THREE.MeshStandardMaterial({ color: 0x1e1838, metalness: 0.65, roughness: 0.3 }), glow = new THREE.MeshBasicMaterial({ color: col });
       grp.add(mesh(new THREE.BoxGeometry(0.78, 0.16, 1.7), dark, { pos: [0, 0.3, 0] }));
       grp.add(mesh(new THREE.ConeGeometry(0.46, 0.8, 4), dark, { pos: [0, 0.3, 1.2], rot: [Math.PI / 2, Math.PI / 4, 0], scale: [1, 1, 0.45] }));

@@ -38,7 +38,7 @@ export default {
     const D = [0, 1].map((i) => {
       const m = makeDragon(i); scene.add(m.root); const size = pv.size(i);
       const tag = canvasTex(256, 96, () => {}); const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tag, transparent: true, depthTest: false })); spr.scale.set(3.4, 1.275, 1); spr.renderOrder = 15; scene.add(spr);
-      const fire = new THREE.Group(); const fo = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 10, 1, true), new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.8, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide })); const fi = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 10, 1, true), new THREE.MeshBasicMaterial({ color: 0xffe08a, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }));
+      const fire = new THREE.Group(); const fo = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 10, 1, true), new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide })); const fi = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 10, 1, true), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide }));
       fo.rotation.z = fi.rotation.z = Math.PI / 2; fire.add(fo, fi); fire.visible = false; scene.add(fire);
       // stormwolkje boven de draak (bliksem-effect)
       const sc = new THREE.Group(); for (const [x, y, r] of [[0, 0, 0.9], [0.9, -0.1, 0.7], [-0.9, -0.15, 0.7], [0.3, 0.45, 0.65]]) sc.add(mesh(new THREE.IcosahedronGeometry(r, 1), mat(0x4a4868), { cast: false, receive: false, pos: [x, y, 0] })); sc.visible = false; scene.add(sc);

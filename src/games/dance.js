@@ -485,13 +485,13 @@ export default {
     }
 
     // ---------------- camera ----------------
-    const camTgt = new THREE.Vector3(0, 4.7, 0), camBase = new THREE.Vector3(), camTmp = new THREE.Vector3();
-    const fitPts = [[-LANE_X[1] - 2.6, 0.2, 1], [LANE_X[1] + 2.6, 0.2, 1], [-LANE_X[1] - 2.6, 8.6, 0], [LANE_X[1] + 2.6, 8.6, 0], [0, 12.2, 0]];
+    const camTgt = new THREE.Vector3(0, 4.3, 0), camBase = new THREE.Vector3(), camTmp = new THREE.Vector3();
+    const fitPts = [[-LANE_X[1] - 2.5, 0.0, 1.5], [LANE_X[1] + 2.5, 0.0, 1.5], [-LANE_X[1] - 2.5, 8.7, 0], [LANE_X[1] + 2.5, 8.7, 0]];
     function fitCamera() {
       const dir = new THREE.Vector3(0, 0.1, 1).normalize(), v = new THREE.Vector3(); let lo = 8, hi = 80;
       for (let it = 0; it < 22; it++) {
         const d = (lo + hi) / 2; camera.position.copy(camTgt).addScaledVector(dir, d); camera.lookAt(camTgt); camera.updateMatrixWorld(); camera.updateProjectionMatrix();
-        let ok = true; for (const q of fitPts) { v.set(q[0], q[1], q[2]).project(camera); if (Math.abs(v.x) > 0.98 || v.y > 0.88 || v.y < -0.9) { ok = false; break; } }
+        let ok = true; for (const q of fitPts) { v.set(q[0], q[1], q[2]).project(camera); if (Math.abs(v.x) > 0.98 || v.y > 0.66 || v.y < -0.92) { ok = false; break; } }
         if (ok) hi = d; else lo = d;
       }
       camBase.copy(camTgt).addScaledVector(dir, hi);
