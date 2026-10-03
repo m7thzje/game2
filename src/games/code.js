@@ -284,7 +284,7 @@ export default {
         movers.forEach((m, i) => { if (m) { const p = PS[i]; p.sab.sand = Math.max(p.sab.sand, 2.0); say(p, 'BEWOOG! Zandloper!', '#ff6a6a'); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.3); } });
       },
       celebrate(w) { V.chars[w].pose = 'cheer'; V.chars[1 - w].pose = 'sad'; },
-      onStart() { hud.setHint('◀ ▶ plek kiezen · ▲ ▼ kristal kiezen · A = gok indienen · B = wissen (vasthouden = POWER)'); },
+      onStart() { hud.setHint('◀▶ plek · ▲▼ kristal · A gok · B wis (vasthouden = POWER)'); },
       onResize() { V.fitCamera(camera); },
       dispose() {},
       dbg: {

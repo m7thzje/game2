@@ -9,7 +9,7 @@ import { buildStage, KINDS, KIND, ST, itemGeo, layerGeo, sprinkleGeo, drawIcon, 
 //  * Koning Klopper geeft sterren (nauwkeurigheid, versiering, bakstand) + tempo. 3 bestellingen, de laatste telt dubbel.
 //  * gimmicks: een kip springt in je taart, een draak stookt de oven op, een gouden ster op de bank
 
-const R_TIME = [22, 26, 30], N_LAY = [3, 4, 5], ROUNDS = 3;
+const R_TIME = [26, 30, 34], N_LAY = [4, 5, 6], ROUNDS = 3;
 const BAKE_MAX = 6.0, HEAT_T = 9, HEAT_MUL = 2.2, FLOUR_T = 3.4;
 const SP = 6.4;
 const CUSTOMERS = ['farmer', 'witch', 'princess', 'guard', 'dwarf', 'elder', 'jester', 'kid', 'fisher', 'bard'];
@@ -174,8 +174,8 @@ export default {
     // ---------------- rondes ----------------
     function genRecipe(r) {
       const n = N_LAY[r]; const mid = ['room', 'choco', 'aardbei', 'glazuur']; const rec = ['deeg'];
-      for (let k = 1; k < n - 1; k++) rec.push(pick(mid)); if (n >= 4 && new Set(rec.slice(1)).size === 1 && Math.random() < 0.5) rec[2] = pick(mid.filter((m) => m !== rec[1]));
-      rec.push(n >= 4 && Math.random() < 0.25 ? 'glazuur' : 'kers'); return rec;
+      for (let k = 1; k < n - 1; k++) rec.push(pick(mid)); if (new Set(rec.slice(1)).size === 1) rec[2] = pick(mid.filter((m) => m !== rec[1]));
+      rec.push(Math.random() < 0.25 ? 'glazuur' : 'kers'); return rec;
     }
     function startRound(r) {
       round = r; recipe = genRecipe(r); N = recipe.length; roundLeft = R_TIME[r]; hurry = false; firstServed = -1; patience = 1; stage = 0; bubT = 0;

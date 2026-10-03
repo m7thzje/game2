@@ -70,6 +70,8 @@ async function installBots(page, cfg) {
           if (st.gold.on && me.hold == null && n >= 1 && (c.golden ?? 0) > (rnd() * 3)) { const d = go(1.6, 1.0); press('a', d, 0.5); continue; }
           if (me.hold === 'gold') { press('a', plateGo(), 0.5); continue; }
           if (me.cdFlour <= 0 && (c.aggr ?? 0) > 0 && me.hold == null && n >= 1 && n < N && rnd() < 0.002 * (c.aggr ?? 0) * 10) b.mode = 'flour';
+          if (me.cdSteal <= 0 && (c.aggr ?? 0) > 0 && me.hold == null && rnd() < 0.002 * (c.aggr ?? 0) * 10 && Math.abs(op.x) < 5.2 && !b.mode) b.mode = 'steal';
+          if (b.mode === 'steal') { const d = go(1.6, 1.0); if (press('a', d, 0.6) || me.cdSteal > 0 || Math.abs(op.x) > 5.4) b.mode = ''; continue; }
           if (b.mode === 'flour') { const d = go(1.6, 1.0); if (press('b', d, 0.6)) b.mode = ''; if (me.cdFlour > 0) b.mode = ''; continue; }
           if (n === 0) {
             if (me.oven.st === 'baking') {
