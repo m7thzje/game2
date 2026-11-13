@@ -11,7 +11,7 @@ import { HX, TileField, buildWorld, glowSprite } from './hexagone_world.js';
 //  * gimmick: een draak die tegels wegbrandt (mikt op wie bovenaan staat). Na 16 s NOODVLOER: alles brokkelt sneller af en na 34 s smelt de hele vloer.
 
 const G0 = 34, JUMP_V = 10.8, JUMP2_V = 9.8, RUN = 7.6, DASH_V = 19, DASH_T = 0.2, PR = 0.62;
-const WIN_ROUNDS = 2, MAX_ROUNDS = 3;
+const WIN_ROUNDS = 2;
 const SD_AT = 16, MELT_AT = 34, HARD_AT = 46;
 const DELAY = [1.05, 0.9, 0.78];        // seconden trillen per ronde
 const START_X = 7.27, START_Z = 0.9;
@@ -43,10 +43,10 @@ export default {
   giver: 'Lavameester Lowie',
   icon: '🌋',
   mode: 'pvp',
-  players: [2, 3],                       // 2 spelers (duel) of 3 spelers (vrij voor allen, Juul doet mee)
+  players: [2, 3, 4],                    // 2 spelers (duel), 3 of 4 spelers (vrij voor allen)
   time: 90,
   music: 'game_fast',
-  blurb: 'De vloer van <b>zeshoekige tegels</b> stort in zodra je erop staat! Blijf rennen, spring over gaten en <b>duw</b> je broer van de tegels. Wie in de <b>lava</b> valt, verliest de ronde. Eerste met <b>2 rondes</b> wint! Met drie spelers wint wie als laatste nog staat.',
+  blurb: 'De vloer van <b>zeshoekige tegels</b> stort in zodra je erop staat! Blijf rennen, spring over gaten en <b>duw</b> je broer van de tegels. Wie in de <b>lava</b> valt, verliest de ronde. Eerste met <b>2 rondes</b> wint! Met drie of vier spelers wint wie als laatste nog staat (bij vier spelers maximaal vier rondes).',
   controls: ['{move} rennen', '{a} springen', '{b} duwen!'],
   tip: 'Sta nooit stil! Pak kristallen voor een dubbele sprong (klimt een laag omhoog), superduw, schild of herstel. Pas op voor de draak!',
 
@@ -61,8 +61,9 @@ export default {
     L.hemi.intensity = 1.2; L.hemi.color.set(0xe6ecff); L.hemi.groundColor.set(0xff7a3a);
     L.sun.color.set(0xfff0dc); L.sun.intensity = 2.1; L.sun.position.set(-8, 30, 14);
     camera.fov = 46; camera.updateProjectionMatrix();
-    const n = players.length;                                          // 2 of 3 deelnemers (slots)
-    const HEXC = [0x35c46f, 0x4a8cff, 0xff9a3c], CSS = ['#7dffb0', '#8fb8ff', '#ffc58a'], DASHC = [0x7dffb0, 0x8fb8ff, 0xffc58a];
+    const n = players.length;                                          // 2, 3 of 4 deelnemers (slots)
+    const MAX_ROUNDS = n === 4 ? 4 : 3;                                // vier spelers: meer kans op een duidelijke winnaar
+    const HEXC = [0x35c46f, 0x4a8cff, 0xff9a3c, 0xc844e8], CSS = ['#7dffb0', '#8fb8ff', '#ffc58a', '#e9a2ff'], DASHC = [0x7dffb0, 0x8fb8ff, 0xffc58a, 0xe9a2ff];
     const colorsHex = players.map((p) => HEXC[p.id]), pcss = players.map((p) => CSS[p.id]), dashc = players.map((p) => DASHC[p.id]);   // kleur per slot (volgt de speler)
     const world = buildWorld(ctx, colorsHex);
     const tiles = new TileField(scene, !!quality);
@@ -91,7 +92,7 @@ export default {
     });
 
     // ---------------- items (kristallen) ----------------
-    const items = Array.from({ length: 3 }, () => {
+    const items = Array.from({ length: 4 }, () => {
       const g = new THREE.Group(); const sp = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true, depthTest: false })); sp.scale.set(1.5, 1.5, 1); sp.renderOrder = 12; g.add(sp);
       const gl = glowSprite(0xffffff, 3.2, 0.7); g.add(gl);
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.95, 20), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; scene.add(ring);
@@ -104,8 +105,9 @@ export default {
     const R = { n: 0, state: 'ready', t: 0, tp: 0, sd: false, melt: false, loser: -1, winner: -1, meltN: 0, meltT: 0, itemT: 4 };
     // startposities: 2 spelers links/rechts (gespiegeld); 3 spelers een gelijkzijdige driehoek (zijde ±10,4) rond het midden, kijkend naar het midden
     const START3 = [[-5.196, 4.5], [5.196, 4.5], [0, -4.5]];
-    const startOf = (i) => (n === 3 ? START3[i] : [(i ? 1 : -1) * START_X, START_Z]);
-    const maxItems = n === 3 ? 3 : 2;
+    const START4 = [[-6.4, -3.6], [6.4, -3.6], [-6.4, 3.6], [6.4, 3.6]];   // 4 spelers: de vier hoeken van een rechthoek (de vloer is links-rechts en boven-onder gespiegeld: dus eerlijk), slot 0/1 achter, 2/3 voor, zoals de HUD-vakken
+    const startOf = (i) => (n === 4 ? START4[i] : n === 3 ? START3[i] : [(i ? 1 : -1) * START_X, START_Z]);
+    const maxItems = n === 4 ? 4 : n === 3 ? 3 : 2;
     const others = (p) => pl.filter((q) => q !== p);
     const bestWins = (p) => Math.max(...others(p).map((q) => q.wins));
     let T = 0, introT = 0, finished = false, started = false, slow = 1, slowT = 0, lastShakeSfx = 0, lastFallSfx = 0, lastLavaFx = 0, camPunch = 0, over2 = 0;
@@ -113,10 +115,10 @@ export default {
     const delayNow = () => DELAY[Math.min(R.n - 1, 2)] * TILE_T * lerp(1, 0.5, clamp((R.tp - SD_AT) / 14, 0, 1));
     const dots = (i) => '●'.repeat(Math.min(pl[i].wins, WIN_ROUNDS)) + '○'.repeat(Math.max(0, WIN_ROUNDS - pl[i].wins));
     function refreshHud() {
-      hud.setScore(n === 3 ? `${names[0]} ${dots(0)}  ·  ${names[1]} ${dots(1)}  ·  ${names[2]} ${dots(2)}` : `${names[0]} ${dots(0)}  –  ${dots(1)} ${names[1]}`);
+      hud.setScore(n === 4 ? `Ronde ${R.n}/${MAX_ROUNDS}  ·  eerste met ${WIN_ROUNDS} winsten` : n === 3 ? `${names[0]} ${dots(0)}  ·  ${names[1]} ${dots(1)}  ·  ${names[2]} ${dots(2)}` : `${names[0]} ${dots(0)}  –  ${dots(1)} ${names[1]}`);
       for (const p of pl) {
-        const bits = [R.n ? `Ronde ${R.n}` : ''];
-        if (p.djT > 0) bits.push('2x sprong'); if (p.power) bits.push('SUPERDUW'); if (p.shield > 0) bits.push('schild');
+        const bits = [n === 4 ? dots(p.i) : R.n ? `Ronde ${R.n}` : ''];   // 4 spelers: compact, rondepunten per speler
+        if (p.djT > 0) bits.push(n === 4 ? '2x↑' : '2x sprong'); if (p.power) bits.push(n === 4 ? 'SUPER' : 'SUPERDUW'); if (p.shield > 0) bits.push(n === 4 ? '🛡' : 'schild');
         bits.push(p.cd > 0 ? `duw ${p.cd.toFixed(1)}s` : 'duw klaar');
         const txt = bits.filter(Boolean).join(' · '); if (p.lastTxt !== txt) { p.lastTxt = txt; hud.setPlayerInfo(p.i, txt); }
       }
@@ -141,7 +143,7 @@ export default {
     function resetPlayer(p) {
       const [sx, sz] = startOf(p.i); p.x = sx; p.z = sz; p.y = 0; p.vx = p.vz = p.vy = 0; p.grounded = true; p.dead = false; p.extra = p.djT = p.power = p.shield = 0; p.extraLeft = 0;
       p.cd = 0; p.dashT = 0; p.stun = 0; p.inv = 0; p.deadAt = 0; p.holder.visible = true; p.holder.rotation.set(0, 0, 0); p.c.pose = 'idle';
-      if (n === 3) { const dl = Math.hypot(sx, sz) || 1; p.fx = -sx / dl; p.fz = -sz / dl; } else { p.fx = p.dir; p.fz = 0; }   // 3 spelers: kijk naar het midden
+      if (n >= 3) { const dl = Math.hypot(sx, sz) || 1; p.fx = -sx / dl; p.fz = -sz / dl; } else { p.fx = p.dir; p.fz = 0; }   // 3 spelers: kijk naar het midden
       p.c.faceDir(p.fx, p.fz);
     }
     function clearItems() { for (const it of items) { it.on = false; it.g.visible = false; it.ring.visible = false; } }
@@ -184,7 +186,8 @@ export default {
       if (finished) return; finished = true;
       const w = matchWinner(), l = n === 2 ? 1 - w : pl.filter((p) => p.i !== w).sort((a, b) => a.wins - b.wins || a.surv - b.surv)[0].i;   // l = de grootste verliezer
       const jokes = [`${names[w]} danst over de lava en laat ${names[l]} als gesmolten kaas achter.`, `${names[w]} is de Koning van de Kokende Vloer! ${names[l]} ruikt een beetje naar gebakken ui.`, `${names[l]} nam een warm bad in de lava. ${names[w]} wint met droge voeten.`, `De draak vond ${names[w]} de aardigste. ${names[l]} is te heet gebakken.`];
-      ctx.finishPvp({ winner: w, score: pl.map((p) => p.wins), delay: 700, summary: `${pick(jokes)} Er stortten ${stats.tiles} tegels in${stats.fires ? `, de draak spuwde ${stats.fires}x vuur` : ''} en er werd ${stats.pushes}x geduwd.` });
+      const place = pl.slice().sort((a, b) => (a.i === w ? -1 : b.i === w ? 1 : 0) || b.wins - a.wins || b.stats.pushes - a.stats.pushes || b.surv - a.surv).map((p) => p.i);   // 1e-4e plaats: winnaar, dan rondes, duwen, overlevingstijd
+      ctx.finishPvp({ winner: w, score: pl.map((p) => p.wins), place, delay: 700, summary: `${pick(jokes)} Er stortten ${stats.tiles} tegels in${stats.fires ? `, de draak spuwde ${stats.fires}x vuur` : ''} en er werd ${stats.pushes}x geduwd.` });
     }
 
     // ---------------- items ----------------
@@ -292,7 +295,7 @@ export default {
     function stepPlayer(p, dt, live) {
       const inp = pv.input(p.i), opp = others(p);
       let o = opp[0];                                                        // dichtstbijzijnde levende tegenstander (bij 2 spelers: de ander)
-      if (n === 3) { let bd = 1e9; for (const q of opp) { const d2 = (q.x - p.x) ** 2 + (q.z - p.z) ** 2 + (q.dead ? 1e6 : 0); if (d2 < bd) { bd = d2; o = q; } } }
+      if (n >= 3) { let bd = 1e9; for (const q of opp) { const d2 = (q.x - p.x) ** 2 + (q.z - p.z) ** 2 + (q.dead ? 1e6 : 0); if (d2 < bd) { bd = d2; o = q; } } }
       p.cd = Math.max(0, p.cd - dt); p.stun = Math.max(0, p.stun - dt); p.inv = Math.max(0, p.inv - dt); p.coyote = Math.max(0, p.coyote - dt);
       if (p.djT > 0) { p.djT -= dt; if (p.djT <= 0) { p.extra = 0; p.extraLeft = 0; } }
       if (p.power > 0) p.power = Math.max(0, p.power - dt); if (p.shield > 0) p.shield = Math.max(0, p.shield - dt);
@@ -475,6 +478,7 @@ export default {
     return {
       update: (dt) => { if (finished) { resultUpdate(dt); return; } update(dt); visuals(dt * slow); },
       resultUpdate, introUpdate,
+      onCountdown() { refreshHud(); for (const p of pl) p.lastTxt = ''; },   // de harness bouwt de HUD bij het aftellen opnieuw op
       onResize() { fitCamera(); },
       onSwap() { for (const p of pl) fx.particles.burst(p.x, p.y + 1, p.z, { count: 20, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) {

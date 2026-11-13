@@ -2,6 +2,7 @@
 //   TW=<twist-id> kiest een twist (anders "none"). Q=low|high kwaliteit.
 // content = pure data-test (zonder browser); bots/twists/idle/tie spelen versneld hele potjes (zonder renderen).
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -16,37 +17,40 @@ await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['content', 'bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'bodyswap', 'deurman'];   // = twists van quiz + none
+const NP = process.env.PLAYERS === '4' ? 4 : process.env.PLAYERS === '3' ? 3 : 2;   // PLAYERS=3|4: alle spelers doen mee
+const PLs = [...Array(NP).keys()];
 let fails = 0; const check = (ok, msg) => { if (!ok) { fails++; console.log('FAIL:', msg); } };
 
 async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=quiz&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=quiz&players=${NP}&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
-  await page.evaluate(async () => {
+  await page.evaluate(async (NP) => {
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (let q = 0; q < NP; q++) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (let q = 0; q < NP; q++) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
     // tel hoe vaak finishPvp wordt aangeroepen
     window.__fin = 0; const orig = mode.finishPvp.bind(mode); mode.finishPvp = (r) => { window.__fin++; return orig(r); };
-  });
+  }, NP);
   return { browser, page, errors };
 }
 
 // cfg[i] = { acc: kans op goed antwoord, rt: gemiddelde reactietijd (s), joker: kans per vraag op B, style: 'play'|'idle' }
-async function installBots(page, cfg) {
+async function installBots(page, cfg0) {
+  const cfg = PLs.map((i) => cfg0[i % cfg0.length]);   // bij meer spelers dan opgegeven: herhaal
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 4711; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    const B = [0, 1].map(() => ({ key: '', t: 0, plan: null }));
+    const B = cfg.map(() => ({ key: '', t: 0, plan: null }));
     window.__cfg = cfg;
     const DIR = ['left', 'up', 'right', 'down'];
     window.__bot = (n, stop) => {
@@ -54,7 +58,7 @@ async function installBots(page, cfg) {
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
         const G = inst.dbg.G, PL = inst.dbg.PL, q = G.q;
-        for (const i of [0, 1]) {
+        for (const i of cfg.keys()) {
           const v = inp.virtual[i], b = B[i], c = window.__cfg[i], p = PL[i];
           for (const d of DIR) v[d] = false; v.a = false; v.b = false; v.x = 0; v.y = 0;
           if (window.__force && window.__force[i]) v[window.__force[i]] = true;   // handmatig ingedrukte knop (voor screenshots)
@@ -80,7 +84,7 @@ async function installBots(page, cfg) {
           }
         }
         // twist-bewuste bots: compenseer omgekeerde besturing / verwisselde knoppen
-        for (const i of [0, 1]) { const v = inp.virtual[i], tw = m.twist.id; if (tw === 'invert') { [v.left, v.right] = [v.right, v.left]; [v.up, v.down] = [v.down, v.up]; v.x = -v.x; v.y = -v.y; } else if (tw === 'swapab') { [v.a, v.b] = [v.b, v.a]; } }
+        for (const i of cfg.keys()) { const v = inp.virtual[i], tw = m.twist.id; if (tw === 'invert') { [v.left, v.right] = [v.right, v.left]; [v.up, v.down] = [v.down, v.up]; v.x = -v.x; v.y = -v.y; } else if (tw === 'swapab') { [v.a, v.b] = [v.b, v.a]; } }
         inp.update(); m.update(dt);
       }
       m.paused = true; return false;
@@ -127,7 +131,7 @@ for (const name of scen) {
       : name === 'idle' ? [['none', [{ style: 'idle' }, { style: 'idle' }]]]
         : name === 'tie' ? [[process.env.TW || 'none', [{ acc: 0.9, rt: 2, joker: 0.2 }, { acc: 0.9, rt: 2, joker: 0.2 }]]]
           : [[process.env.TW || 'none', [{ ...A }, { ...Bw }]], [process.env.TW || 'none', [{ ...Bw }, { ...A }]], [process.env.TW || 'none', [{ acc: 0.85, rt: 2.3, joker: 0.4 }, { acc: 0.85, rt: 2.3, joker: 0.4 }]]];
-    const wins = [0, 0];
+    const wins = PLs.map(() => 0);
     for (const [tw, cfg] of list) {
       const { browser, page, errors } = await open(tw);
       await installBots(page, cfg);
@@ -138,7 +142,7 @@ for (const name of scen) {
           window.__bot(1);
           const st = inst.dbg.state();
           // 'tie': op vraag 10 de stand gelijktrekken zodat de beslissende vraag gespeeld wordt
-          if (forceTie && !forced && st.qi === 9 && st.phase === 'reveal') { inst.dbg.setScore(300, 300); forced = true; }
+          if (forceTie && !forced && st.qi === 9 && st.phase === 'reveal') { inst.dbg.setScore(300, 300, 300, 300); forced = true; }
           const key = st.qi + ':' + st.phase + ':' + st.stage + ':' + st.score.join('-');
           if (key !== last && (st.phase === 'reveal' || st.phase === 'final' || st.phase === 'intro')) { log.push(`T=${st.T.toFixed(1)} q${st.qi + 1} ${st.type} ${st.phase} score=${st.score} sd=${st.sd}${st.chicken ? ' KIP' : ''}`); last = key; }
         }
@@ -147,14 +151,14 @@ for (const name of scen) {
       console.log(`\n=== ${name} twist=${res.twist} cfg=${JSON.stringify(cfg)} ===`);
       console.log(res.log.filter((l, i) => /reveal|final/.test(l)).join('\n'));
       console.log(`end T=${res.st.T.toFixed(1)} score=${res.st.score} finished=${res.finished} finishPvp-aanroepen=${res.fin} sd=${res.st.sd} sdCount=${res.st.sdCount} coin=${res.st.coin}`);
-      if (res.result) { console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, '')}`); if (res.result.winner != null) wins[res.result.winner]++; }
+      if (res.result) { console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, '')}`); if (res.result.winner != null) wins[res.result.winner]++; if (NP > 2) check(res.result.place && res.result.place.length === NP, `volledige plaatsen voor ${NP} spelers [${name}/${tw}]`); }
       check(res.finished && res.fin === 1, `finishPvp precies één keer (${res.fin}) [${name}/${tw}]`);
       check(res.result && res.result.winner != null, `er is een winnaar [${name}/${tw}]`);
       if (name === 'tie') check(res.st.sd, 'beslissende vraag is gespeeld');
       if (errors.length) { console.log('ERRORS:\n' + errors.slice(0, 8).join('\n')); fails++; } else console.log('NO ERRORS');
       await browser.close();
     }
-    if (name === 'bots') { console.log('winsten Wes/Jor:', wins.join('/')); check(wins[0] > 0 && wins[1] > 0, 'beide spelers kunnen winnen'); }
+    if (name === 'bots') { console.log('winsten per speler:', wins.join('/')); check(wins.filter((w) => w > 0).length >= 2, 'minstens twee verschillende spelers kunnen winnen'); }
     continue;
   }
   if (name === 'deur') {

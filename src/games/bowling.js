@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mat, mesh, clamp, lerp, damp, rand, pick, TAU, smoothstep } from '../engine/util.js';
 import { makeBrother, Dragon } from '../engine/chars.js';
 import * as P from '../engine/props.js';
-import { buildWorld, LW, GUT, CX, HEAD, PIT_Z, PIN_HOME, PIN_TYPES, pinGeo, crownGeo, ballTexture } from './bowling_world.js';
+import { buildWorld, LW, GUT, CX_BY_N, HEAD, PIT_Z, PIN_HOME, PIN_TYPES, pinGeo, crownGeo, ballTexture } from './bowling_world.js';
 
 // Reuzen-Bowling — duel: twee banen naast elkaar, allebei bowlen TEGELIJK. 5 rondes van 2 worpen, kegels zijn kabouters, kippen en
 // knuffelmonsters die omvallen en elkaar omverkegelen (eigen 2D-natuurkunde).
@@ -22,22 +22,24 @@ export default {
   giver: 'Clown Knal',
   icon: '🎳',
   mode: 'pvp',
+  players: [2, 3, 4],
   time: 90,
   music: 'game_fast',
-  blurb: 'Bowlen tegelijk, met <b>kabouters, kippen en monsters</b> als kegels! 5 rondes, strike +10, spare +5, <b>gouden kegel</b> dubbel. Pas op voor <b>bumpers</b> en de <b>draak</b>!',
+  blurb: 'Bowlen tegelijk (2 tot 4 banen), met <b>kabouters, kippen en monsters</b> als kegels! 5 rondes, strike +10, spare +5, <b>gouden kegel</b> dubbel. Pas op voor <b>bumpers</b> en de <b>draak</b>!',
   controls: ['{move} richting (pijl slingert)', '{a} vast = kracht, los = gooien', '{b} bom (1x) · rollen: sturen'],
   tip: 'Niet vol gas: dan trilt de pijl wild.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp; const names = players.map((p) => p.name); const tw = ctx.twist.id;
+    const N = players.length, CX = CX_BY_N[N], NIL = (v) => players.map(() => v);
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const TEMPO = tw === 'turbo' || tw === 'slowmo' ? (ctx.twist.speed || 1) : 1;
     const L0 = ctx.lights('indoor', { shadow: 17, center: [0, 0, -8], fogNear: 55, fogFar: 120 });
     L0.hemi.intensity = 1.45; L0.hemi.color.set(0xfff0e0); L0.hemi.groundColor.set(0x6a4a5a);
     L0.sun.color.set(0xffe8c8); L0.sun.intensity = 1.7; L0.sun.position.set(-6, 26, 6);
     camera.fov = 36; camera.updateProjectionMatrix();
-    const W = buildWorld(ctx);
+    const W = buildWorld(ctx, N);
     const rng = ctx.rng;
 
     // ---------------- kegel- en bal-onderdelen ----------------
@@ -51,12 +53,13 @@ export default {
     const bumpGeo = new THREE.CapsuleGeometry(0.26, 17.0, 5, 10); bumpGeo.rotateX(Math.PI / 2);
 
     // ---------------- toestand ----------------
-    const score = [0, 0]; let T = 0, introT = 0, timeLeft = MATCH_TIME, started = false, finished = false;
-    const G = { st: 'init', t: 0, frame: -1, timeUp: false, sudden: 0, sdRes: [0, 0], winner: -1, endT: 0 };
-    let tieFlag = false; let gold = 3; const dragonFrames = [1 + Math.floor(ctx.rng() * 2), 3 + Math.floor(ctx.rng() * 2)]; const stats = { strikes: [0, 0], spares: [0, 0], gutters: [0, 0], bombs: [0, 0], goldHits: [0, 0], bumperFrames: 0, dragons: 0, throws: [0, 0], pins: [0, 0] };
-    const colorsCss = [['#35c46f', '#bff5d0'], ['#4a8cff', '#c0dcff']];
+    const score = NIL(0); let T = 0, introT = 0, timeLeft = MATCH_TIME, started = false, finished = false;
+    const G = { st: 'init', t: 0, frame: -1, timeUp: false, sudden: 0, sdRes: NIL(0), sdSet: [], winner: -1, endT: 0 };
+    let tieFlag = false; let gold = 3; const dragonFrames = [1 + Math.floor(ctx.rng() * 2), 3 + Math.floor(ctx.rng() * 2)]; const stats = { strikes: NIL(0), spares: NIL(0), gutters: NIL(0), bombs: NIL(0), goldHits: NIL(0), bumperFrames: 0, dragons: 0, throws: NIL(0), pins: NIL(0) };
+    const CCS = [['#35c46f', '#bff5d0'], ['#4a8cff', '#c0dcff'], ['#ff9a3c', '#ffe0bc'], ['#d45cf0', '#f3d0ff']], BALLC = [[0x9fffc0, 0x35e27a], [0x9fc6ff, 0x4a8cff], [0xffd0a0, 0xff9a3c], [0xe8b8ff, 0xd45cf0]];
+    const colorsCss = players.map((pp) => CCS[pp.id]);
 
-    const lanes = [0, 1].map((p) => {
+    const lanes = players.map((pp, p) => {
       const cx = CX[p]; const L = {
         p, cx, st: 'wait', stT: 0, throwNo: 0, angle: 0, power: 0, chargeT: 0, aimT: 0, armed: false, bombs: 1, steer: 1, single: false,
         k: [0, 0], cnt: [0, 0], fscore: [], acc: 0, rollT: 0, sfxT: 0, settleT: 0, quiet: 0, sayT: 0, strikeNow: false, spareNow: false, lastTxt: '',
@@ -78,8 +81,8 @@ export default {
       const bshadow = P.shadowBlob(0.9); scene.add(bshadow);
       L.ball = { grp: bgrp, mesh: bmesh, bm, bombM, fuse, shadow: bshadow, mode: 'hold', x: cx, z: -0.4, vx: 0, vz: 0, y: BALL_R, r: BALL_R, m: BALL_M, bomb: false, gT: 0, rotQ: new THREE.Quaternion(), steered: 0 };
       // richtingspijl: stippen + pijlkop, kracht-meter
-      const dots = new THREE.InstancedMesh(dotGeo, new THREE.MeshBasicMaterial({ color: p ? 0x9fc6ff : 0x9fffc0, transparent: true, opacity: 0.85, depthWrite: false }), 12); dots.frustumCulled = false; scene.add(dots); L.dots = dots;
-      const head = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.9, 3), new THREE.MeshBasicMaterial({ color: p ? 0x4a8cff : 0x35e27a })); head.rotation.x = -Math.PI / 2; scene.add(head); L.head = head;
+      const dots = new THREE.InstancedMesh(dotGeo, new THREE.MeshBasicMaterial({ color: BALLC[pp.id][0], transparent: true, opacity: 0.85, depthWrite: false }), 12); dots.frustumCulled = false; scene.add(dots); L.dots = dots;
+      const head = new THREE.Mesh(new THREE.ConeGeometry(0.42, 0.9, 3), new THREE.MeshBasicMaterial({ color: BALLC[pp.id][1] })); head.rotation.x = -Math.PI / 2; scene.add(head); L.head = head;
       const mbg = new THREE.Mesh(new THREE.PlaneGeometry(4.2, 0.62), new THREE.MeshBasicMaterial({ color: 0x1a1020, transparent: true, opacity: 0.85 })); mbg.rotation.x = -Math.PI / 2; mbg.position.set(cx, 0.06, 1.2); scene.add(mbg);
       const fg = new THREE.PlaneGeometry(1, 0.42); fg.translate(0.5, 0, 0); const mfill = new THREE.Mesh(fg, new THREE.MeshBasicMaterial({ color: 0x35e27a })); mfill.rotation.x = -Math.PI / 2; mfill.position.set(cx - 2.0, 0.08, 1.2); scene.add(mfill);
       const sweet = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.62), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.5 })); sweet.rotation.x = -Math.PI / 2; sweet.position.set(cx - 2.0 + 0.78 * 4.0, 0.07, 1.2); scene.add(sweet);
@@ -91,9 +94,11 @@ export default {
     });
 
     // ---------------- poppetjes ----------------
-    const chars = [0, 1].map((i) => {
-      const c = makeBrother(i); const holder = new THREE.Group(); holder.add(c.group); const k = 4.0 / 1.84;
-      const sx = i ? 1 : -1; holder.position.set(sx * 9.4, -0.3, -9.5); holder.scale.setScalar(k * pv.size(i)); scene.add(holder);
+    const chars = players.map((pp, i) => {
+      const c = makeBrother(i); const holder = new THREE.Group(); holder.add(c.group); const k = (N > 2 ? 3.2 : 4.0) / 1.84;
+      const sx = i ? 1 : -1;
+      if (N === 2) holder.position.set(sx * 9.4, -0.3, -9.5); else holder.position.set(CX[i], -0.3, 3.0);   // 3-4 spelers: achter de eigen baan
+      holder.scale.setScalar(k * pv.size(i)); scene.add(holder);
       c.faceDir(-sx * 0.55, 1); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
       return { c, holder, i, sx, cheerT: 0, sadT: 0, scareT: 0 };
     });
@@ -111,15 +116,16 @@ export default {
     function rack(L, withGold) {
       L.pins.forEach((pn, i) => { Object.assign(pn, { x: pn.hx, z: pn.hz, vx: 0, vz: 0, state: 'stand', f: 0, wob: 0, s: 0, y: 0, vy: 0, on: true, counted: false, popD: i * 0.05, gT: 0, thr: 1.9 + rng() * 1.8 }); setPinKind(pn, withGold && i === gold); pn.g.visible = true; pn.g.scale.setScalar(0.001); pn.g.quaternion.identity(); });
     }
-    const lead = (p) => score[p] - score[1 - p];
+    const lead = (p) => score[p] - Math.max(...score.filter((_, k) => k !== p));
+    const leaderLane = () => { const m = Math.max(...score), top = score.map((v, i) => (v === m ? i : -1)).filter((i) => i >= 0); return top[Math.floor(rng() * top.length)]; };
     function drawBoard() {
-      const g = W.sbCanvas.getContext('2d'), w = 1024, h = 320;
+      const g = W.sbCanvas.getContext('2d'), w = 1024, h = 84 + 118 * N;
       g.fillStyle = '#120c26'; g.fillRect(0, 0, w, h); g.fillStyle = '#2a1a4a'; g.fillRect(8, 8, w - 16, h - 16);
       g.textBaseline = 'middle'; g.textAlign = 'center';
       g.font = 'bold 30px Fredoka, Arial Black, sans-serif'; g.fillStyle = '#ffd24a';
       for (let f = 0; f < FRAMES; f++) g.fillText(f === FRAMES - 1 ? 'x2' : String(f + 1), 262 + f * 100 + 50, 40);
       g.fillText('TOTAAL', 880, 40);
-      for (let p = 0; p < 2; p++) {
+      for (let p = 0; p < N; p++) {
         const y = 70 + p * 118; g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(20, y, w - 40, 104);
         g.font = 'bold 54px Fredoka, Arial Black, sans-serif'; g.fillStyle = colorsCss[p][0]; g.textAlign = 'left'; g.fillText(names[p], 36, y + 52); g.textAlign = 'center';
         for (let f = 0; f < FRAMES; f++) {
@@ -131,15 +137,15 @@ export default {
       W.sbTex.needsUpdate = true;
     }
     const refreshHud = () => {
-      hud.setScore(`${names[0]} ${score[0]} – ${score[1]} ${names[1]}`);
-      for (let i = 0; i < 2; i++) { const L = lanes[i]; hud.setPlayerInfo(i, G.st === 'sudden' ? 'Beslissende worp!' : `Ronde ${Math.max(1, G.frame + 1)}/${FRAMES} · worp ${L.throwNo + 1} · Bom: ${L.bombs}${L.armed ? ' (AAN!)' : ''}`); }
+      hud.setScore(N === 2 ? `${names[0]} ${score[0]} – ${score[1]} ${names[1]}` : (G.st === 'sudden' ? 'Beslissende worp' : `Ronde ${Math.max(1, G.frame + 1)} / ${FRAMES}`));
+      for (let i = 0; i < N; i++) { const L = lanes[i]; hud.setPlayerInfo(i, G.st === 'sudden' ? 'Beslissende worp!' : N > 2 ? `${score[i]} pt · worp ${L.throwNo + 1} · Bom: ${L.bombs}${L.armed ? '!' : ''}` : `Ronde ${Math.max(1, G.frame + 1)}/${FRAMES} · worp ${L.throwNo + 1} · Bom: ${L.bombs}${L.armed ? ' (AAN!)' : ''}`); }
     };
 
     // ---------------- rondes ----------------
     function startFrame() {
       G.frame++; G.st = 'play'; G.t = 0; const f = G.frame;
       gold = 1 + Math.floor(rng() * 9);
-      const dragonLane = dragonFrames.includes(f) ? (score[0] === score[1] ? (rng() < 0.5 ? 0 : 1) : score[0] > score[1] ? 0 : 1) : -1;
+      const dragonLane = dragonFrames.includes(f) ? leaderLane() : -1;
       for (const L of lanes) {
         L.throwNo = 0; L.k = [0, 0]; L.cnt = [0, 0]; L.armed = false; L.steer = 1; L.single = false; L.st = 'rack'; L.stT = 0; L.fp = 0; L.strikeNow = L.spareNow = false;
         const trailing = lead(L.p) <= -12; const chance = trailing ? 0.8 : f === 0 ? 0.2 : 0.32;
@@ -155,20 +161,23 @@ export default {
       refreshHud(); drawBoard();
     }
     function startSudden() {
-      G.st = 'sudden'; G.sudden++; G.t = 0; G.sdRes = [0, 0]; sfx('bell', { vol: 0.8 }); hud.showBig(G.sudden === 1 ? 'GELIJK! BESLISSENDE WORP!' : 'NOG EEN WORP!', 1500, '#ffd23f'); hud.setTimer(null);
-      for (const L of lanes) { L.throwNo = 1; L.single = true; L.k = [0, 0]; L.cnt = [0, 0]; L.armed = false; L.steer = 1; L.st = 'rack'; L.stT = 0; L.bump.on = false; L.drag.on = false; rack(L, false); resetBall(L); L.sdDone = false; }
+      G.st = 'sudden'; G.sudden++; G.t = 0; G.sdRes = NIL(0);
+      { const top = Math.max(...score); if (G.sudden === 1 || !G.sdSet.length) G.sdSet = score.map((v, i) => (v === top ? i : -1)).filter((i) => i >= 0); if (G.sdSet.length < 2) G.sdSet = NIL(0).map((_, i) => i); } sfx('bell', { vol: 0.8 }); hud.showBig(G.sudden === 1 ? 'GELIJK! BESLISSENDE WORP!' : 'NOG EEN WORP!', 1500, '#ffd23f'); hud.setTimer(null);
+      for (const L of lanes) { L.throwNo = 1; L.single = true; L.k = [0, 0]; L.cnt = [0, 0]; L.armed = false; L.steer = 1; L.st = 'rack'; L.stT = 0; L.bump.on = false; L.drag.on = false; rack(L, false); resetBall(L); L.sdDone = false; if (!G.sdSet.includes(L.p)) { L.st = 'done'; L.sdDone = true; L.cnt = [0, 0]; L.pins.forEach((pn) => { pn.g.visible = false; pn.on = false; }); L.ball.grp.visible = false; L.ball.shadow.visible = false; } }
       refreshHud();
     }
     function finishMatch(winner, how) {
       if (finished) return; finished = true; G.st = 'end'; G.winner = winner; hud.setTimer(null);
-      const w = winner; const lines = [`${names[w]} is de Reuzen-Bowling-kampioen!`, `Strike! ${names[w]} bowlt de ander van de baan!`, `Wat een worpen! ${names[w]} wint.`];
+      const sum = (a) => a.reduce((x, y) => x + y, 0);
+      const order = [winner, ...NIL(0).map((_, i) => i).filter((i) => i !== winner).sort((a, b) => score[b] - score[a] || stats.strikes[b] - stats.strikes[a] || a - b)];
+      const w = winner, l = order[N - 1]; const lines = [`${names[w]} is de Reuzen-Bowling-kampioen!`, `Strike! ${names[w]} bowlt ${names[l]} van de baan!`, `Wat een worpen! ${names[w]} wint.`];
       const ex = [];
-      if (stats.strikes[0] + stats.strikes[1]) ex.push(`Strikes: ${names[0]} ${stats.strikes[0]}, ${names[1]} ${stats.strikes[1]}.`);
-      if (stats.goldHits[0] + stats.goldHits[1]) ex.push(`Gouden kegels: ${stats.goldHits[0] + stats.goldHits[1]}.`);
-      if (stats.bombs[0] + stats.bombs[1]) ex.push(`${stats.bombs[0] + stats.bombs[1]} bom-bal(len) ontploft.`);
+      if (sum(stats.strikes)) ex.push(`Strikes: ${players.map((pp, i) => `${names[i]} ${stats.strikes[i]}`).join(', ')}.`);
+      if (sum(stats.goldHits)) ex.push(`Gouden kegels: ${sum(stats.goldHits)}.`);
+      if (sum(stats.bombs)) ex.push(`${sum(stats.bombs)} bom-bal(len) ontploft.`);
       if (stats.dragons) ex.push('De draak versperde de baan.');
       if (how === 'sudden') ex.push('Beslist met een beslissende worp.'); else if (how === 'coin') ex.push('Zelfs na de extra worpen gelijk: de kip koos de winnaar.');
-      ctx.finishPvp({ winner, score: [score[0], score[1]], delay: 500, summary: `${pick(lines)} ${ex.join(' ')}` });
+      ctx.finishPvp({ winner, score: score.slice(), place: N > 2 ? order : undefined, delay: 500, summary: `${pick(lines)} ${ex.join(' ')}` });
     }
 
     // ---------------- natuurkunde ----------------
@@ -289,7 +298,7 @@ export default {
       const strike = L.throwNo === 0 && n >= 10 && !L.single, spare = L.throwNo === 1 && !L.single && tot >= 10;
       if (L.single) { L.sdDone = true; L.st = 'sweep'; L.stT = 0; text(`${n} kegels`, cx, 3, -9, '#ffffff', 1.1); return; }
       let txt = n === 0 ? (L.ball.mode === 'gone' && stats.gutters[L.p] >= 0 ? 'ernaast...' : '') : `${n} kegel${n > 1 ? 's' : ''}`;
-      if (strike) { L.strikeNow = true; stats.strikes[L.p]++; txt = 'STRIKE!'; hud.showBig(`${names[L.p]}: STRIKE!`, 1100, colorsCss[L.p][0]); sfx('win', { vol: 0.8 }); sfx('bell', { vol: 0.7 }); ctx.shake(0.7); c.cheerT = 2.2; chars[1 - L.p].sadT = 1.5; fx.particles.burst(cx, 3, -9, { count: 40, speed: 6, up: 3, life: 1.3, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a], gravity: 4 }); }
+      if (strike) { L.strikeNow = true; stats.strikes[L.p]++; txt = 'STRIKE!'; hud.showBig(`${names[L.p]}: STRIKE!`, 1100, colorsCss[L.p][0]); sfx('win', { vol: 0.8 }); sfx('bell', { vol: 0.7 }); ctx.shake(0.7); c.cheerT = 2.2; chars.forEach((q, k) => { if (k !== L.p) q.sadT = 1.5; }); fx.particles.burst(cx, 3, -9, { count: 40, speed: 6, up: 3, life: 1.3, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a], gravity: 4 }); }
       else if (spare) { L.spareNow = true; stats.spares[L.p]++; txt = 'SPARE!'; hud.showBig(`${names[L.p]}: SPARE!`, 900, colorsCss[L.p][0]); sfx('good', { vol: 0.9 }); sfx('powerup', { vol: 0.5 }); c.cheerT = 1.5; }
       else if (n === 0) { c.sadT = 1.6; sfx('miss', { vol: 0.7 }); }
       else if (n >= 7) c.cheerT = 1.0;
@@ -366,7 +375,7 @@ export default {
           if (G.sumT > (G.st === 'sudden' ? 1.6 : 1.5)) {
             G.sumT = 0;
             if (G.st === 'sudden') resolveSudden();
-            else if (G.frame >= FRAMES - 1 || G.timeUp) { if (score[0] === score[1] || tieFlag) { tieFlag = false; startSudden(); } else endGame(score[0] > score[1] ? 0 : 1, 'punten'); }
+            else if (G.frame >= FRAMES - 1 || G.timeUp) { const top = Math.max(...score), tops = score.filter((v) => v === top).length; if (tops > 1 || tieFlag) { tieFlag = false; G.sdSet = []; startSudden(); } else endGame(score.indexOf(top), 'punten'); }
             else startFrame();
           }
         }
@@ -375,21 +384,21 @@ export default {
       visuals(dt);
     }
     function resolveSudden() {
-      const a = lanes[0].cnt[1], b = lanes[1].cnt[1];
-      if (a !== b) { score[a > b ? 0 : 1] += 1; endGame(a > b ? 0 : 1, 'sudden'); }
-      else if (G.sudden >= SD_MAX) { const w = stats.strikes[0] !== stats.strikes[1] ? (stats.strikes[0] > stats.strikes[1] ? 0 : 1) : rng() < 0.5 ? 0 : 1; score[w] += 1; endGame(w, 'coin'); }
-      else startSudden();
+      const set = G.sdSet, best = Math.max(...set.map((k) => lanes[k].cnt[1])), win = set.filter((k) => lanes[k].cnt[1] === best);
+      if (win.length === 1) { score[win[0]] += 1; endGame(win[0], 'sudden'); }
+      else if (G.sudden >= SD_MAX) { const sb = Math.max(...win.map((k) => stats.strikes[k])), c = win.filter((k) => stats.strikes[k] === sb); const w = c[Math.floor(rng() * c.length)]; score[w] += 1; endGame(w, win.length < set.length || c.length < win.length ? 'sudden' : 'coin'); }
+      else { G.sdSet = win; startSudden(); }
     }
     function endGame(w, how) {
       G.st = 'end'; G.winner = w; G.endT = 0; G.how = how; refreshHud(); drawBoard(); hud.showBig(`${names[w]} WINT!`, 1800, colorsCss[w][0]); sfx('win', { vol: 0.8 }); ctx.shake(0.3); hud.setTimer(null);
-      chars[w].cheerT = 99; chars[1 - w].sadT = 99; setTimeout(() => {}, 0); G.finishAt = 2.4;
+      chars.forEach((ch, k) => { if (k === w) ch.cheerT = 99; else ch.sadT = 99; }); G.finishAt = 2.4;
     }
 
     // ---------------- visuals ----------------
     const camLook = new THREE.Vector3(), camPos = new THREE.Vector3(); let camShift = 0;
     function updateCamera(dt) {
       const asp = camera.aspect || 1.7, tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-      const dist = clamp(7.6 / (tanH * asp), 15, 36);
+      const dist = clamp((N === 2 ? 7.6 : N === 3 ? 9.4 : 11.6) / (tanH * asp), 15, 40);
       const rolling = lanes.some((L) => L.st === 'roll'); const tz = rolling ? -8.8 : -8.0; camShift = damp(camShift, tz, 1.5, dt);
       const sway = Math.sin((T + introT) * 0.3) * 0.35;
       camPos.set(sway, 4.4 + dist * 0.5, 4.2 + dist * 0.62); camLook.set(0, 0.3, camShift);
@@ -448,7 +457,7 @@ export default {
         else if (ch.cheerT > 0) pose = 'cheer'; else if (ch.sadT > 0) pose = 'sad';
         else if (L.st === 'charge') pose = 'scared'; else if (inAim) pose = 'carry'; else if (L.st === 'done' && G.st === 'play') pose = 'wave'; else if (L.st === 'roll') pose = 'hands_up';
         c.pose = pose; c.speed = 0;
-        const tx = L.st === 'roll' || L.st === 'settle' ? L.cx : 0; c.faceDir(-ch.sx * 0.6 + (tx - ch.holder.position.x) * 0.02, 1); c.update(dt);
+        const tx = L.st === 'roll' || L.st === 'settle' ? L.cx : 0; if (N > 2) c.faceDir(0, -1); else c.faceDir(-ch.sx * 0.6 + (tx - ch.holder.position.x) * 0.02, 1); c.update(dt);
       }
       if (!lanes.some((L) => L.drag.on)) dragon.group.visible = false;
       updateCamera(dt);
@@ -463,13 +472,13 @@ export default {
       resultUpdate, introUpdate,
       onSwap() { for (const ch of chars) fx.particles.burst(ch.holder.position.x, 1.5, ch.holder.position.z, { count: 16, speed: 4, up: 1, life: 0.6, size: 0.35, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) { movers.forEach((m, i) => { if (m) { score[i] = Math.max(0, score[i] - 3); text('DEURMAN: -3', lanes[i].cx, 3.4, 0, '#ff6a6a', 1.3); sfx('static', { vol: 0.5 }); chars[i].sadT = 1.5; refreshHud(); drawBoard(); } }); },
-      celebrate(w) { chars[w].cheerT = 99; chars[1 - w].sadT = 99; },
+      celebrate(w) { chars.forEach((ch, k) => { if (k === w) ch.cheerT = 99; else ch.sadT = 99; }); },
       dispose() {},
       dbg: {
         state: () => ({ T, gst: G.st, frame: G.frame, timeLeft, score: [...score], finished, sudden: G.sudden, timeUp: G.timeUp, stats,
           lanes: lanes.map((L) => ({ st: L.st, throwNo: L.throwNo, angle: L.angle / D2R, aim: aimAngle(L) / D2R, power: L.power, chargeT: L.chargeT, bombs: L.bombs, armed: L.armed, steer: L.steer, bump: L.bump.on, drag: L.drag.on, ball: { mode: L.ball.mode, x: +L.ball.x.toFixed(2), z: +L.ball.z.toFixed(2) }, standing: L.pins.filter((p) => p.on && p.state === 'stand').length, cnt: [...L.cnt], k: [...L.k], fscore: [...L.fscore] })) }),
         setTime: (t) => { timeLeft = t; }, forceTie: () => { tieFlag = true; },
-        lanes, gold: () => gold, setScore: (a, b) => { score[0] = a; score[1] = b; refreshHud(); drawBoard(); },
+        lanes, gold: () => gold, setScore: (a, b, c, d) => { [a, b, c, d].forEach((v, k) => { if (v != null && k < N) score[k] = v; }); refreshHud(); drawBoard(); },
         forceDragonNext: () => { dragonFrames.push(G.frame + 1); }, dragonFrames,
       },
     };

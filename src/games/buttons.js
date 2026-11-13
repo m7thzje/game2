@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mat, clamp, lerp, damp, TAU, shuffle, canvasTex } from '../engine/util.js';
 import { makeBrother, PLAYER_COLORS } from '../engine/chars.js';
-import { buildQuarry, makeBlockKit, makeMallet, starTexture, BH, COLX } from './buttons_world.js';
+import { buildQuarry, makeBlockKit, makeMallet, starTexture, BH, colsFor } from './buttons_world.js';
 
 // Knoppen-Breker — duel: stenen blokken storten op jullie neer. Druk de toets die op het onderste blok staat om het te
 // verpletteren. Eerste die GOAL blokken heeft gebroken wint. Gouden blokken = sabotage, bommen = chaos, ijs = twee toetsen.
@@ -25,20 +25,22 @@ export default {
   giver: 'Dwerg Brokkel',
   icon: '🧱',
   mode: 'pvp',
+  players: [2, 3, 4],                    // 2 = duel; 3-4 = vrij voor allen: elk een eigen kolom met dezelfde reeks
   time: 45,
   music: 'game_fast',
   twists: ['invert', 'swapab', 'drunk', 'bodyswap', 'turbo', 'slowmo', 'deurman'],
-  blurb: 'Dwerg Brokkel laat <b>stenen blokken</b> op jullie neerstorten! Druk de toets op het <b>onderste blok</b> en sla het kapot. Wie als eerste <b>25 blokken</b> breekt, wint. Pas op voor <b>gouden blokken</b> (sabotage!), <b>bommen</b> en <b>ijsblokken</b>.',
+  blurb: 'Dwerg Brokkel laat <b>stenen blokken</b> op jullie neerstorten! Druk de toets op het <b>onderste blok</b> en sla het kapot. Wie als eerste <b>25 blokken</b> breekt, wint (met 3-4 spelers allemaal tegelijk). Pas op voor <b>gouden blokken</b> (sabotage voor de koploper!), <b>bommen</b> en <b>ijsblokken</b>.',
   controls: ['{move} pijl-blokken ← ↑ → ↓', '{a} A-blokken', '{b} B-blokken'],
   tip: 'Verkeerde toets = verdoofd, te traag = platgedrukt. Wie achterstaat krijgt langzamere blokken.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const names = players.map((p) => p.name);
+    const N = players.length, COLX = colsFor(N);
     const L = ctx.lights('indoor', { shadow: 15, center: [0, 5, 0], fogNear: 45, fogFar: 100 });
     L.hemi.intensity = 1.25; L.sun.intensity = 1.5; L.sun.position.set(-6, 26, 20);
     camera.fov = 50; camera.updateProjectionMatrix();
-    const W = buildQuarry(ctx);
+    const W = buildQuarry(ctx, COLX);
     const kit = makeBlockKit(scene);
 
     // ---------------- hulpjes: deeltjes, brokstukken, flitsen ----------------
@@ -83,7 +85,7 @@ export default {
     const starTex = starTexture();
 
     // ---------------- spelers ----------------
-    const pl = [0, 1].map((i) => {
+    const pl = players.map((_, i) => {
       const c = makeBrother(i);
       const holder = new THREE.Group(); holder.add(c.group); scene.add(holder);
       const sc = TARGET_H / c.height;
@@ -96,7 +98,7 @@ export default {
         i, c, holder, sc, stars, starSprites, mallet,
         broken: 0, goal: GOAL, owed: 0, stun: 0, squash: 0, lock: 0, ignore: 0, frozen: 0, lifting: false, rattle: 0,
         swingT: 9, armX: -0.75, prevDir: -1, presses: [], blocks: [], bag: [], count: 0, lastSym: -1,
-        crushes: 0, errors: 0, golds: 0, defused: 0, booms: 0, sooty: 0, pose: 'idle', cheer: 0,
+        crushes: 0, errors: 0, golds: 0, defused: 0, booms: 0, sooty: 0, pose: 'idle', cheer: 0, out: false,
       };
     });
 
@@ -121,7 +123,7 @@ export default {
       p.blocks.push(b);
       if (sp.kind !== 'n' && !seen[sp.kind]) {
         seen[sp.kind] = true;
-        hud.toast({ g: '⭐ Gouden blok: breek hem en je broer krijgt 2 extra blokken!', b: '💣 Bom! Snel breken, anders ontploft hij!', i: '❄ IJsblok: twee toetsen achter elkaar!' }[sp.kind], 3200);
+        hud.toast({ g: N === 2 ? '⭐ Gouden blok: breek hem en je broer krijgt 2 extra blokken!' : '⭐ Gouden blok: breek hem en de koploper krijgt 2 extra blokken!', b: '💣 Bom! Snel breken, anders ontploft hij!', i: '❄ IJsblok: twee toetsen achter elkaar!' }[sp.kind], 3200);
       }
     }
     let uid = 0;
@@ -135,8 +137,8 @@ export default {
     pl.forEach((p) => { fill(p); layout(p); });
 
     function speedFor(p) {
-      const o = pl[1 - p.i];
-      const lag = (p.goal - p.broken) - (o.goal - o.broken);   // > 0 = ik sta achter
+      const rem = (q) => q.goal - q.broken, best = Math.min(...pl.filter((q) => q !== p && !q.out).map(rem), rem(p));   // best = de koploper (minste blokken te gaan)
+      const lag = rem(p) - best;   // > 0 = ik sta achter
       const comeback = 1 - 0.4 * clamp(lag / 6, 0, 1) + 0.12 * clamp(-lag / 6, 0, 1);
       const base = 1.45 + 1.0 * clamp(playT / 50, 0, 1);
       p.comeback = comeback;
@@ -146,10 +148,10 @@ export default {
     // ---------------- hud ----------------
     function updateHud() {
       pl.forEach((p) => {
-        hud.setPlayerInfo(p.i, `Gebroken: ${p.broken}/${p.goal}${(p.comeback || 1) < 0.9 ? '  🐌 trage blokken' : ''}`);
-        W.setMeter(p.i, p.broken, p.goal);
+        hud.setPlayerInfo(p.i, p.out ? `Gebroken: ${p.broken} (uit)` : `Gebroken: ${p.broken}/${p.goal}${(p.comeback || 1) < 0.9 ? '  🐌 trage blokken' : ''}`);
+        W.setMeter(p.i, p.broken, Math.min(p.goal, 31));
       });
-      hud.setScore(`${names[0]} ${pl[0].broken} – ${pl[1].broken} ${names[1]}`);
+      hud.setScore(N === 2 ? `${names[0]} ${pl[0].broken} – ${pl[1].broken} ${names[1]}` : pl.map((p) => p.broken).join(' – '));
     }
 
     // ---------------- acties ----------------
@@ -194,7 +196,8 @@ export default {
       checkWin(p);
     }
     function goldSabotage(p, b) {
-      const o = pl[1 - p.i]; p.golds++;
+      const cand = pl.filter((q) => q !== p && !q.out), room = cand.filter((q) => q.owed < MAXOWED), pool = room.length ? room : cand;
+      const bm = Math.max(...pool.map((q) => q.broken)), tops = pool.filter((q) => q.broken === bm), o = tops[Math.floor(Math.random() * tops.length)]; p.golds++;   // de koploper krijgt de extra blokken
       const x = COLX[p.i], y = b.y + BH / 2, ox = COLX[o.i];
       const add = Math.min(2, MAXOWED - o.owed);
       audio.sfx('powerup', { vol: 0.7 }); audio.sfx('coin', { vol: 0.5 });
@@ -241,6 +244,7 @@ export default {
       fx.particles.burst(bx, by, 1.2, { count: 60, speed: 9, up: 1, spread: 1.4, life: 1.1, size: 0.7, colors: [0xff5a1a, 0xffd23f, 0xff9a1a, 0x333333], gravity: 4 });
       hud.showBig('BOEM!', 900, '#ff8a3a');
       for (const q of pl) {
+        if (q.out) continue;
         for (const bb of q.blocks) { shatter(q, bb, 6); kit.release(bb); }
         q.blocks.length = 0; q.lifting = false; q.frozen = 1.1; q.squash = Math.min(q.squash, 0);
         fill(q);
@@ -250,57 +254,64 @@ export default {
       src.stun = 1.4; src.sooty = 1.6;
       fx.texts.add('BOEM!', bx, 6.6, 2.0, '#ffb04a', 1.6);
       // achterligger krijgt gratis blokken
-      const a = pl[0], c = pl[1];
-      if (a.broken !== c.broken) {
-        const tr = a.broken < c.broken ? a : c, ld = tr === a ? c : a;
-        const free = Math.min(3, 1 + (ld.broken - tr.broken));
+      const live = pl.filter((q) => !q.out), mxB = Math.max(...live.map((q) => q.broken)), mnB = Math.min(...live.map((q) => q.broken));
+      if (mxB !== mnB) {
+        const lows = live.filter((q) => q.broken === mnB), tr = lows[Math.floor(Math.random() * lows.length)];
+        const free = Math.min(3, 1 + (mxB - mnB));
         tr.broken += free;
         setTimeout(() => { try { fx.texts.add(`+${free} GRATIS!`, COLX[tr.i], 9.6, 2.0, '#7dffb0', 1.5); audio.sfx('good', { vol: 0.6 }); } catch (e) { /* weg */ } }, 300);
         hud.toast(`💥 ${names[tr.i]} krijgt ${free} blok${free > 1 ? 'ken' : ''} cadeau!`, 2400);
       } else hud.toast('💥 De bom ruimt alle stapels op!', 2000);
       updateHud();
-      checkWin(a.broken >= a.goal ? a : c);
-      if (!done) { if (a.broken >= a.goal) checkWin(a); if (c.broken >= c.goal) checkWin(c); }
+      for (const q of live) if (!done) checkWin(q);
     }
 
     // ---------------- winnen ----------------
     function checkWin(p) { if (!done && p.broken >= p.goal) win(p.i); }
-    function win(i, why = '') {
+    function win(i, why = '', tops = null) {
       if (done) return; done = true; winner = i;
-      const w = pl[i], l = pl[1 - i];
-      w.pose = 'cheer'; l.pose = 'sad'; w.stun = l.stun = 0; l.squash = 0;
+      const w = pl[i], l = N === 2 ? pl[1 - i] : pl.filter((q) => q !== w).sort((a, b) => a.broken - b.broken)[0];
+      const winSet = tops && tops.length > 1 ? tops : [i];
+      pl.forEach((q) => { q.pose = winSet.includes(q.i) ? 'cheer' : 'sad'; q.stun = 0; if (!winSet.includes(q.i)) q.squash = 0; });
       audio.sfx('win', { vol: 0.5 }); ctx.shake(0.4);
-      hud.showBig(`${names[i]} wint!`, 1500, i ? '#4a8cff' : '#35c46f');
+      hud.showBig(winSet.length > 1 ? 'GELIJK!' : `${names[i]} wint!`, 1500, players[i].css);
       for (let k = 0; k < 6; k++) setTimeout(() => { try { fx.particles.burst(COLX[i] + (Math.random() - 0.5) * 5, 5 + Math.random() * 5, 1.5, { count: 34, speed: 7, up: 1.2, life: 1.5, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 }); audio.sfx('sparkle', { vol: 0.4 }); } catch (e) { /* weg */ } }, k * 230);
       for (const q of pl) { for (const bb of q.blocks) { if (q === w) { shatter(q, bb, 5); kit.release(bb); } } if (q === w) q.blocks.length = 0; }
       W.cheer(3);
       const jokes = [
-        `${names[i]} sloopt de steengroeve! ${names[1 - i]} is nog aan het vegen.`,
+        `${names[i]} sloopt de steengroeve! ${names[l.i]} is nog aan het vegen.`,
         `Dwerg Brokkel is onder de indruk van ${names[i]}.`,
         `${names[i]} heeft stalen vingers!`,
-        `${names[1 - i]} zat nét te kijken naar een vlinder...`,
+        `${names[l.i]} zat nét te kijken naar een vlinder...`,
       ];
       const facts = [];
-      if (l.crushes) facts.push(`${names[1 - i]} werd ${l.crushes}x platgedrukt`);
-      if (w.crushes) facts.push(`${names[i]} werd ${w.crushes}x platgedrukt`);
-      if (l.errors + w.errors > 0) facts.push(`samen ${l.errors + w.errors}x de verkeerde knop`);
-      if (w.golds + l.golds > 0) facts.push(`${w.golds + l.golds}x goud gebroken`);
-      if (w.booms + l.booms > 0) facts.push(`${w.booms + l.booms}x BOEM`);
+      if (N === 2) { if (l.crushes) facts.push(`${names[l.i]} werd ${l.crushes}x platgedrukt`); if (w.crushes) facts.push(`${names[i]} werd ${w.crushes}x platgedrukt`); }
+      else { const cr = pl.reduce((a, q) => a + q.crushes, 0); if (cr) facts.push(`samen ${cr}x platgedrukt`); }
+      const er = pl.reduce((a, q) => a + q.errors, 0), gd = pl.reduce((a, q) => a + q.golds, 0), bm = pl.reduce((a, q) => a + q.booms, 0);
+      if (er > 0) facts.push(`samen ${er}x de verkeerde knop`);
+      if (gd > 0) facts.push(`${gd}x goud gebroken`);
+      if (bm > 0) facts.push(`${bm}x BOEM`);
       const summary = `<b>${why || jokes[Math.floor(Math.random() * jokes.length)]}</b>${facts.length ? '<br>' + facts.join(' · ') : ''}`;
-      ctx.finishPvp({ winner: i, score: [pl[0].broken, pl[1].broken], summary, delay: 1900 });
+      const args = { winner: i, score: pl.map((q) => q.broken), summary, delay: 1900 };
+      if (N > 2) {
+        const order = pl.slice().sort((a, b) => (winSet.includes(b.i) - winSet.includes(a.i)) || (b.broken - a.broken) || ((a.errors + a.crushes) - (b.errors + b.crushes)) || (a.i - b.i));
+        args.place = order.map((q) => q.i); if (winSet.length > 1) { args.winners = winSet; delete args.winner; }
+      }
+      ctx.finishPvp(args);
     }
     function timeUp() {
       if (done || sudden) return;
-      const a = pl[0].broken, b = pl[1].broken;
+      const bs = pl.map((q) => q.broken), mx = Math.max(...bs), tops = pl.filter((q) => q.broken === mx);
       hud.setTimer(0);
-      if (a !== b) { win(a > b ? 0 : 1, 'De tijd is om! Wie de meeste blokken brak, wint.'); return; }
+      if (tops.length === 1) { win(tops[0].i, 'De tijd is om! Wie de meeste blokken brak, wint.'); return; }
       sudden = true; suddenT = 0;
-      hud.showBig('BESLISSEND BLOK!', 1500, '#ff7a5a'); hud.toast('Gelijkspel! Het eerstvolgende blok wint.', 2500);
+      hud.showBig('BESLISSEND BLOK!', 1500, '#ff7a5a'); hud.toast(N === 2 ? 'Gelijkspel! Het eerstvolgende blok wint.' : `Gelijkspel tussen ${tops.map((q) => names[q.i]).join(' en ')}! Het eerstvolgende blok wint.`, 2500);
       audio.sfx('bell', { vol: 0.6 }); audio.music('tense');
       for (const q of pl) {
         for (const bb of q.blocks) { kit.release(bb); }
-        q.blocks.length = 0; q.goal = q.broken + 1; q.owed = 0; q.stun = 0; q.squash = 0; q.lifting = false; q.frozen = 0.6;
-        fill(q); q.blocks.forEach((nb, j) => { nb.y = SPAWN_Y + j * PITCH; });
+        q.blocks.length = 0; q.stun = 0; q.squash = 0; q.lifting = false;
+        if (tops.includes(q)) { q.goal = q.broken + 1; q.owed = 0; q.frozen = 0.6; fill(q); q.blocks.forEach((nb, j) => { nb.y = SPAWN_Y + j * PITCH; }); }
+        else { q.out = true; q.goal = 1e9; }   // alleen de gelijkspelers doen mee in de beslissing
       }
       updateHud();
     }
@@ -316,6 +327,7 @@ export default {
       return out;
     }
     function stepPlayer(p, dt) {
+      if (p.out) { p.stun = Math.max(0, p.stun - dt); return; }
       p.stun = Math.max(0, p.stun - dt); p.squash = Math.max(0, p.squash - dt); p.lock = Math.max(0, p.lock - dt);
       p.ignore = Math.max(0, p.ignore - dt); p.frozen = Math.max(0, p.frozen - dt); p.rattle = Math.max(0, p.rattle - dt); p.sooty = Math.max(0, p.sooty - dt);
       const pr = readPresses(p);
@@ -409,7 +421,7 @@ export default {
     let camDist = 17;
     function fitCamera() {
       const asp = camera.aspect || 1.7, tv = Math.tan(camera.fov * Math.PI / 360);
-      camDist = Math.max(9.0 / tv, 11.8 / (tv * asp));
+      camDist = Math.max(9.0 / tv, (Math.max(...COLX) + 7.1) / (tv * asp));
     }
     fitCamera();
     function cam(dt) {
@@ -417,8 +429,9 @@ export default {
       if (winner >= 0) { k = Math.min(1, resultT / 1.5); fx0 = COLX[winner] * 0.3 * k; }
       const dist = camDist * (1 - 0.06 * k);
       const tx = fx0 + Math.sin(T * 0.3) * 0.2;
-      camera.position.set(tx, 7.8 - 0.3 * k, dist);
-      camera.lookAt(tx, 6.5 - 0.3 * k, 0);
+      const up = N > 2 ? 1.9 : 0;   // bij 3-4 spelers staat de scène lager, onder de HUD-vakken in de hoeken
+      camera.position.set(tx, 7.8 + up - 0.3 * k, dist);
+      camera.lookAt(tx, 6.5 + up - 0.3 * k, 0);
     }
 
     // ---------------- loop ----------------
@@ -437,9 +450,9 @@ export default {
         if (done) { resultUpdate(dt); return; }
         T += dt; playT += dt;
         if (!sudden) { timeLeft -= dt; hud.setTimer(Math.max(0, timeLeft), 15); if (timeLeft <= 0) timeUp(); }
-        else { suddenT += dt; if (suddenT > 45 && !done) { const a = pl[0], b = pl[1]; win(a.errors + a.crushes <= b.errors + b.crushes ? 0 : 1, 'Dwerg Brokkel kiest zelf een winnaar!'); } }
+        else { suddenT += dt; if (suddenT > 45 && !done) { const live = pl.filter((q) => !q.out).sort((a, b) => (a.errors + a.crushes) - (b.errors + b.crushes) || a.i - b.i); win(live[0].i, 'Dwerg Brokkel kiest zelf een winnaar!', null); } }
         if (hintT > 0) { hintT -= dt; if (hintT <= 0) hud.setHint(null); }
-        const order = (frame++ & 1) ? [1, 0] : [0, 1];
+        const order = pl.map((_, k) => k); if (frame++ & 1) order.reverse();
         for (const i of order) if (!done) stepPlayer(pl[i], dt);
         updateHud();
         common(dt);
@@ -454,7 +467,7 @@ export default {
           fx.texts.add('🔄', COLX[p.i], 4.4, 1.5, '#ffe14a', 1.4);
           p.c.jump();
         });
-        hud.toast(swapped ? `🔄 ${names[0]} bestuurt nu de kolom van ${names[1]}!` : '🔄 Iedereen weer op zijn eigen kolom!', 2400);
+        hud.toast(swapped ? (N === 2 ? `🔄 ${names[0]} bestuurt nu de kolom van ${names[1]}!` : '🔄 Kolommen gewisseld!') : '🔄 Iedereen weer op zijn eigen kolom!', 2400);
       },
       onDeurman(movers) {
         movers.forEach((m, i) => {
@@ -464,7 +477,7 @@ export default {
         });
         updateHud();
       },
-      celebrate(w) { pl[w].pose = 'cheer'; pl[1 - w].pose = 'sad'; },
+      celebrate(w, ws = [w]) { pl.forEach((p, k) => { p.pose = ws.includes(k) ? 'cheer' : 'sad'; }); },
       dispose() { hud.setHint(null); },
       dbg: {
         state: () => ({

@@ -10,7 +10,10 @@ import { CAKES, makeCake, splatTexture, makeSplats } from './cakefight_items.js'
 
 const PR = 0.85, PH = 2.5, VIS = 1.5, SPEED = 7.8;
 const TIME = 60, SD_CAP = 40;
-const START = [[-12.0, 0], [12.0, 0]];
+const START2 = [[-12.0, 0], [12.0, 0]];
+const START3 = [[-12.0, 0], [12.0, 0], [0, 7.6]];
+const START4 = [[-12.0, -3.2], [12.0, 3.2], [-12.0, 3.2], [12.0, -3.2]];
+const startsFor = (n) => (n >= 4 ? START4 : n === 3 ? START3 : START2);
 const BRAM_SPEED = 15.5;
 
 export default {
@@ -20,16 +23,18 @@ export default {
   icon: '🎂',
   mode: 'pvp',
   time: 75,
+  players: [2, 3, 4],                    // 2 spelers (duel), 3 of 4 spelers (vrij voor allen)
   twists: ['invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'],
   music: 'game',
-  blurb: 'Taartengevecht in de keuken van Bakker Bram! Pak een <b>taart</b> bij een station en gooi hem op je broer: <b>slagroomkop</b> en een punt voor jou. Een <b>dienblad</b> (B) houdt taarten tegen. Pas op voor Bakker Bram zelf, de gladde <b>slagroomplassen</b> en de <b>bruidstaart</b>!',
+  blurb: 'Taartengevecht in de keuken van Bakker Bram! Pak een <b>taart</b> bij een station en gooi hem op een ander (met 3 of 4 spelers: ieder voor zich): <b>slagroomkop</b> en een punt voor jou. Een <b>dienblad</b> (B) houdt taarten tegen. Pas op voor Bakker Bram zelf, de gladde <b>slagroomplassen</b> en de <b>bruidstaart</b>!',
   controls: ['{move} lopen en richten', '{a} taart pakken (bij een station) / gooien', '{b} dienblad omhoog (houd vast)'],
-  tip: 'Bruidstaart = 3 punten maar traag. Confettitaart ontploft pas na een seconde! Wie achterstaat, krijgt vaker een bruidstaart.',
+  tip: 'Bruidstaart = 3 punten maar traag. Confettitaart ontploft pas na een seconde! Wie achterstaat, krijgt vaker een bruidstaart. Bij gelijkspel: gouden taart voor wie gelijk staat.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
-    const names = players.map((p) => p.name);
+    const N = players.length, names = players.map((p) => p.name), START = startsFor(N);
+    const srcOf = (i) => { if (!pv.swapped) return i; for (const [a, b] of pv.swapPairs) { if (i === a) return b; if (i === b) return a; } return i; };   // welke toetsenset bestuurt dit slot nu
     const tid = ctx.twist.id;
     const grav = pv.gravity;
     const tempo = tid === 'turbo' ? 1.25 : tid === 'slowmo' ? 0.8 : 1;
@@ -42,7 +47,8 @@ export default {
 
     // ---------------- toestand ----------------
     let T = 0, clock = 0, timeLeft = TIME, over = false, done = false, freeze = 0, sdMode = false, sdT = 0, sdWait = 0, introT = 0;
-    const stat = { throws: [0, 0], hits: [0, 0], blocks: [0, 0], bram: 0, self: 0, perType: { cream: 0, pudding: 0, bride: 0, confetti: 0 } };
+    const zeros = () => new Array(N).fill(0);
+    const stat = { throws: zeros(), hits: zeros(), blocks: zeros(), bram: 0, self: 0, perType: { cream: 0, pudding: 0, bride: 0, confetti: 0 } };
 
     // ---------------- camera ----------------
     const PITCH = 0.9;
@@ -75,6 +81,7 @@ export default {
       const t = canvasTex(256, 96, (g, w, h) => { g.font = 'bold 50px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; g.lineWidth = 12; g.strokeStyle = 'rgba(30,10,20,.92)'; g.strokeText(txt, w / 2, h / 2, w - 10); g.fillStyle = css; g.fillText(txt, w / 2, h / 2, w - 10); });
       hintTexCache[key] = t; return t;
     }
+    const faceOf = (i) => Math.atan2(-START[i][0], -START[i][1]);   // kijkt naar het midden
     const pl = players.map((pp, i) => {
       const c = ctx.make.brother(i); const sz = pv.size(i);
       const holder = new THREE.Group(), pivot = new THREE.Group(); pivot.rotation.order = 'YXZ'; pivot.position.y = 0.95; c.group.position.y = -0.95; pivot.add(c.group); holder.add(pivot); scene.add(holder);
@@ -90,12 +97,13 @@ export default {
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.1, 32), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; scene.add(ring);
       const p = {
         i, c, holder, pivot, tray, ring, hint, sz, blob: mkBlob(), label: mkLabel({ i }), splats: makeSplats(c),
-        x: START[i][0], z: START[i][1], y: 0, vy: 0, vx: 0, vz: 0, face: i ? -Math.PI / 2 : Math.PI / 2, yaw: i ? -Math.PI / 2 : Math.PI / 2,
+        x: START[i][0], z: START[i][1], y: 0, vy: 0, vx: 0, vz: 0, face: faceOf(i), yaw: faceOf(i),
         cake: null, stun: 0, inv: 0, sh: false, shT: 0, shCd: 0, trayBroken: 0, trayWob: 0, throwCd: 0, score: 0, air: false, spin: 0, puddle: false, cheer: false, slipT: 0, bramHit: false, near: -1,
       };
       return p;
     });
-    const opp = (p) => pl[1 - p.i];
+    const others = (p) => pl.filter((q) => q !== p && !q.out);
+    const leadOther = (p) => Math.max(...pl.filter((q) => q !== p).map((q) => q.score));   // hoogste score van de anderen
 
     // ---------------- taarten-pool ----------------
     const cakePool = {};
@@ -122,9 +130,14 @@ export default {
     function spark(x, y, z, n, cols, sp = 5, size = 0.45) { fx.particles.burst(x, y, z, { count: n, speed: sp, up: 1.1, life: 0.8, size, colors: cols, gravity: 9 }); }
     const CREAM = [0xffffff, 0xfff4ee, 0xffd0e0, 0xfff0a0], PUDD = [0xffd24a, 0xffc030, 0x7a4a1a, 0xfff0a0], BRIDE = [0xffffff, 0xffd0e4, 0xff9ac0, 0xfff8f0], CONF = [0xff3a5a, 0x3aa0ff, 0x6ad86a, 0xffe14a, 0xb06aff, 0xff9ad0];
     const colsOf = (t) => (t === 'pudding' ? PUDD : t === 'bride' ? BRIDE : t === 'confetti' ? CONF : t === 'gold' ? [0xffd23f, 0xfff3b0, 0xffffff] : CREAM);
+    function scoreLine() {
+      if (N === 2) return `${names[0]} ${pl[0].score}  –  ${pl[1].score} ${names[1]}`;
+      const m = Math.max(...pl.map((q) => q.score)), top = pl.filter((q) => q.score === m);
+      return top.length === 1 ? `🎂 ${names[top[0].i]} staat voorop met ${m}` : `🎂 gelijk aan kop met ${m}`;
+    }
     function refreshHud() {
-      hud.setPlayerInfo(0, `🎂 ${pl[0].score}`); hud.setPlayerInfo(1, `🎂 ${pl[1].score}`);
-      hud.setScore(sdMode ? '✨ GOUDEN TAART: eerste treffer wint! ✨' : `${names[0]} ${pl[0].score}  –  ${pl[1].score} ${names[1]}`);
+      pl.forEach((q) => hud.setPlayerInfo(q.i, `🎂 ${q.score}`));
+      hud.setScore(sdMode ? '✨ GOUDEN TAART: eerste treffer wint! ✨' : scoreLine());
     }
     function addScore(i, n, why) {
       const p = pl[i]; p.score = Math.max(0, p.score + n);
@@ -135,7 +148,7 @@ export default {
 
     // ---------------- pakken en gooien ----------------
     function cornerType(p) {
-      const behind = opp(p).score - p.score;
+      const behind = leadOther(p) - p.score;
       const w = { cream: 50, pudding: 28, confetti: 17, bride: behind >= 4 ? 40 : behind >= 2 ? 24 : behind >= 1 ? 8 : 0 };
       let tot = 0; for (const k in w) tot += w[k]; let r = Math.random() * tot; for (const k in w) { r -= w[k]; if (r <= 0) return k; } return 'cream';
     }
@@ -156,7 +169,7 @@ export default {
         if (d > reach + PR * p.sz * 0.3) continue;
         if (s.cd > 0) { fx.texts.add('even wachten...', s.cx, 3.6, s.cz, '#cccccc', 0.8); sfx('buzz', { vol: 0.3 }); return false; }
         let type;
-        if (s.kind === 'cart') { const behind = opp(p).score - p.score; type = behind >= 0 ? 'bride' : (Math.random() < 0.5 ? 'confetti' : 'pudding'); s.cd = 8; if (type !== 'bride') hud.toast(`${names[p.i]} staat voor, dus geen bruidstaart!`, 1400); }
+        if (s.kind === 'cart') { const behind = leadOther(p) - p.score; type = behind >= 0 ? 'bride' : (Math.random() < 0.5 ? 'confetti' : 'pudding'); s.cd = 8; if (type !== 'bride') hud.toast(`${names[p.i]} staat voor, dus geen bruidstaart!`, 1400); }
         else { type = cornerType(p); s.cd = 2.2; }
         giveCake(p, type); world.cart.scale.y = 1; s.pop = 0.3; return true;
       }
@@ -165,8 +178,10 @@ export default {
     const flying = [], fuses = [];
     function throwCake(p) {
       const ck = p.cake; if (!ck) return; const def = CAKES[ck.type];
-      const o = opp(p), dx = o.x - p.x, dz = o.z - p.z, dl = Math.hypot(dx, dz) || 1;
-      let ax = Math.sin(p.face), az = Math.cos(p.face); const dot = (ax * dx + az * dz) / dl;
+      let ax = Math.sin(p.face), az = Math.cos(p.face);
+      let o = null, dx = 0, dz = 0, dl = 1, dot = -1;   // doelwit: wie het best in de kijkrichting staat (bij 2 spelers: de tegenstander)
+      for (const q of others(p)) { const qx = q.x - p.x, qz = q.z - p.z, ql = Math.hypot(qx, qz) || 1, qd = (ax * qx + az * qz) / ql; if (!o || qd > dot) { o = q; dx = qx; dz = qz; dl = ql; dot = qd; } }
+      if (!o) o = p;
       let tx, tz;
       if (dot > 0.76 && dl > 1.0 && !o.air) { const Tg = Math.max(0.3, dl / def.speed); tx = o.x + o.vx * Tg * 0.5; tz = o.z + o.vz * Tg * 0.5; const l2 = Math.hypot(tx - p.x, tz - p.z) || 1; ax = (tx - p.x) / l2; az = (tz - p.z) / l2; }
       else { tx = p.x + ax * def.range; tz = p.z + az * def.range; }
@@ -189,7 +204,7 @@ export default {
     }
     // owner = werper (of -1), type = taartsoort, (sx,sz) = waar de taart vandaan kwam; geeft 'hit' | 'block' | 'none'
     function hitPlayer(p, owner, type, sx, sz) {
-      if (over || p.inv > 0 || p.air) return 'none';
+      if (over || p.inv > 0 || p.air || p.out) return 'none';
       const def = CAKES[type];
       if (blockedBy(p, sx, sz)) {
         stat.blocks[p.i]++; p.trayWob = 0.35;
@@ -210,7 +225,7 @@ export default {
       sfx('hurt', { vol: 0.7 }); sfx(type === 'bride' ? 'thud' : 'hit', { vol: 0.8 }); sfx('pop', { vol: 0.6, rate: 0.7 });
       ctx.shake(type === 'bride' ? 0.9 : 0.45); freeze = Math.max(freeze, type === 'bride' ? 0.14 : 0.07);
       if (owner >= 0 && owner !== p.i) addScore(owner, def.pts, `${names[owner]} raakt ${names[p.i]} met een taart!`);
-      else if (owner === p.i) { addScore(1 - p.i, 1, `${names[p.i]} raakt zichzelf!`); fx.texts.add('EIGEN TAART! +1 voor ' + names[1 - p.i], p.x, 6.2 * p.sz, p.z, '#ffb0a0', 1.1); stat.self++; }
+      else if (owner === p.i) { if (N === 2) { addScore(1 - p.i, 1, `${names[p.i]} raakt zichzelf!`); fx.texts.add('EIGEN TAART! +1 voor ' + names[1 - p.i], p.x, 6.2 * p.sz, p.z, '#ffb0a0', 1.1); } else { addScore(p.i, -1); fx.texts.add('EIGEN TAART! -1', p.x, 6.2 * p.sz, p.z, '#ffb0a0', 1.1); } stat.self++; }
       return 'hit';
     }
     function splashAt(f, x, z) {
@@ -282,7 +297,7 @@ export default {
       p.splats.hit('bride'); stat.bram++;
       fx.texts.add('OMVER GEREND!', p.x, 5.0 * p.sz + 0.6, p.z, '#ffd24a', 1.5); sfx('boing', { vol: 0.9 }); sfx('hurt', { vol: 0.8 }); ctx.shake(0.8); freeze = Math.max(freeze, 0.1);
       spark(p.x, 1.5, p.z, 50, [0xffffff, 0xffd0e4, 0xff9ac0, 0xfff0a0], 8, 0.6);
-      addScore(1 - p.i, 1, `Bakker Bram rent ${names[p.i]} omver!`);
+      if (N === 2) addScore(1 - p.i, 1, `Bakker Bram rent ${names[p.i]} omver!`); else addScore(p.i, -1);
     }
     function updateBram(dt) {
       const B = world.bram;
@@ -293,7 +308,7 @@ export default {
           bram.z = LANES[lane]; bram.x = -bram.dir * (WALL_X + 2.5); bram.state = 'warn'; bram.warn = 1.8; bram.runs++;
           world.setDoor(-bram.dir, lane, 1); stripe.visible = true; stripe.position.z = bram.z; warnSpr.visible = true; warnSpr.position.set(-bram.dir * (WALL_X - 3.5), 4.2, bram.z);
           hud.toast('Bakker Bram komt eraan! Weg uit de baan!', 1700); sfx('bell', { vol: 0.8 }); sfx('door', { vol: 0.6 });
-          bram.hit = [false, false];
+          bram.hit = zeros().map(() => false);
         }
       } else if (bram.state === 'warn') {
         bram.warn -= dt; stripe.material.opacity = 0.3 + (Math.sin(clock * 22) > 0 ? 0.35 : 0); warnSpr.position.y = 4.2 + Math.sin(clock * 12) * 0.2;
@@ -303,7 +318,7 @@ export default {
         if (Math.abs(bram.x) > WALL_X - 6 && Math.sign(bram.x) === bram.dir) world.setDoor(bram.dir, bram.lane, 1);
         if (Math.random() < dt * 40) fx.particles.dust(bram.x - bram.dir * 1.2, 0, bram.z, 1, 0xd8c8b0);
         for (const p of pl) {
-          if (bram.hit[p.i] || p.air || over) continue;
+          if (bram.hit[p.i] || p.air || over || p.out) continue;
           if (Math.abs(p.x - bram.x) < 1.7 + PR * p.sz * 0.5 && Math.abs(p.z - bram.z) < 1.35 + PR * p.sz * 0.5) { bram.hit[p.i] = true; bowl(p, bram.dir); }
         }
         if (Math.abs(bram.x) > WALL_X + 2.5 && Math.sign(bram.x) === bram.dir) { bram.state = 'idle'; bram.t = rand(12, 17); B.group.visible = false; world.bigCake.visible = false; stripe.visible = false; setTimeout(() => { world.setDoor(-bram.dir, bram.lane, 0); world.setDoor(bram.dir, bram.lane, 0); }, 600); }
@@ -322,8 +337,9 @@ export default {
         else { p.z += (p.z > cz ? 1 : -1) * (hz + r); }
       }
     }
+    const NOINP = { x: 0, y: 0, a: false, b: false, aP: false, bP: false, mag: 0 };
     function control(p, dt) {
-      const inp = pv.input(p.i), sz = p.sz, def = p.cake ? CAKES[p.cake.type] : null;
+      const inp = p.out ? NOINP : pv.input(p.i), sz = p.sz, def = p.cake ? CAKES[p.cake.type] : null;
       p.inv = Math.max(0, p.inv - dt); p.stun = Math.max(0, p.stun - dt); p.throwCd = Math.max(0, p.throwCd - dt); p.shCd = Math.max(0, p.shCd - dt); p.trayBroken = Math.max(0, p.trayBroken - dt); p.trayWob = Math.max(0, p.trayWob - dt);
       const canAct = p.stun <= 0 && !over && !p.air && sdWait <= 0;
       // dienblad
@@ -354,27 +370,30 @@ export default {
         for (const t of TABLES) circleBox(p, t.x, t.z, t.hx + 0.1, t.hz + 0.1, r);
         for (const s of STATIONS) circleBox(p, s.x, s.z, STATION_BOX.hx, STATION_BOX.hz, r);
         const dx = p.x - CART.x, dz = p.z - CART.z, d = Math.hypot(dx, dz); if (d < CART.r + r) { p.x = CART.x + dx / (d || 1) * (CART.r + r); p.z = CART.z + dz / (d || 1) * (CART.r + r); }
-        const o = opp(p); if (!o.air) { const ddx = p.x - o.x, ddz = p.z - o.z, dd = Math.hypot(ddx, ddz), mn = r + PR * o.sz; if (dd < mn && dd > 1e-4) { const push = (mn - dd) / 2; p.x += ddx / dd * push; p.z += ddz / dd * push; o.x -= ddx / dd * push; o.z -= ddz / dd * push; } }
+        for (const o of others(p)) { if (o.air) continue; const ddx = p.x - o.x, ddz = p.z - o.z, dd = Math.hypot(ddx, ddz), mn = r + PR * o.sz; if (dd < mn && dd > 1e-4) { const push = (mn - dd) / 2; p.x += ddx / dd * push; p.z += ddz / dd * push; o.x -= ddx / dd * push; o.z -= ddz / dd * push; } }
       }
     }
 
     // ---------------- einde ----------------
     function endGame(winner, line) {
       if (done) return; done = true; over = true; hud.setTimer(null);
-      pl.forEach((q) => { q.cheer = winner != null && q.i === winner; q.sh = false; q.hint.visible = false; });
+      pl.forEach((q) => { q.cheer = winner != null && q.i === winner; q.sh = false; q.hint.visible = false; if (q.out) { q.out = false; q.holder.visible = true; q.label.visible = true; q.blob.visible = true; } });
       const jokes = ['Bakker Bram heeft zijn keuken nooit zo plakkerig gezien.', 'Er zit slagroom op het plafond.', 'De koks hebben nog nooit zo gelachen.', 'Dat was een smakelijk gevecht!', 'Wie ruimt dit op?'];
-      const sum = `${line}<br>Taarten gegooid: ${stat.throws[0]} – ${stat.throws[1]} · raak: ${stat.hits[0]} – ${stat.hits[1]} · geblokkeerd: ${stat.blocks[0]} – ${stat.blocks[1]}${stat.bram ? ` · Bram: ${stat.bram}×` : ''}<br>${pick(jokes)}`;
-      ctx.finishPvp({ winner, score: [pl[0].score, pl[1].score], summary: sum, delay: 1700 });
+      const j = (a) => a.join(' – ');
+      const sum = `${line}<br>Taarten gegooid: ${j(stat.throws)} · raak: ${j(stat.hits)} · geblokkeerd: ${j(stat.blocks)}${stat.bram ? ` · Bram: ${stat.bram}×` : ''}<br>${pick(jokes)}`;
+      ctx.finishPvp({ winner, score: pl.map((q) => q.score), summary: sum, delay: 1700 });
       for (let k = 0; k < 4; k++) spark(rand(-8, 8), 5 + rand(0, 3), rand(-4, 4), 40, CONF, 8, 0.55);
     }
     function timeUp() {
       if (over || sdMode) return;
-      if (pl[0].score !== pl[1].score) { const w = pl[0].score > pl[1].score ? 0 : 1; hud.showBig('TIJD OM!', 1000, '#ffe14a'); endGame(w, `<b>${names[w]}</b> wint met ${pl[w].score} tegen ${pl[1 - w].score} punten!`); return; }
-      // gelijkspel: gouden taart!
+      const best = Math.max(...pl.map((q) => q.score)), tied = pl.filter((q) => q.score === best);
+      if (tied.length === 1) { const w = tied[0].i; hud.showBig('TIJD OM!', 1000, '#ffe14a'); endGame(w, N === 2 ? `<b>${names[w]}</b> wint met ${pl[w].score} tegen ${pl[1 - w].score} punten!` : `<b>${names[w]}</b> wint met ${best} punten! (${pl.map((q) => `${names[q.i]} ${q.score}`).join(' · ')})`); return; }
+      // gelijkspel: gouden taart! (alleen voor wie gelijk staat; de rest kijkt toe)
+      pl.forEach((q) => { q.out = !tied.includes(q); q.c.group.visible = !q.out; q.holder.visible = !q.out; q.label.visible = !q.out; q.ring.visible = !q.out; q.blob.visible = !q.out; });
       sdMode = true; sdT = 0; sdWait = 1.8; hud.setTimer(null);
       hud.showBig('GELIJK! GOUDEN TAART!', 1800, '#ffd23f'); hud.toast('Eerste treffer wint!', 2200); sfx('bell'); sfx('powerup');
       for (const f of flying) release(f.obj); flying.length = 0; for (const f of fuses) release(f.obj); fuses.length = 0;
-      pl.forEach((p, i) => { p.x = START[i][0]; p.z = START[i][1]; p.vx = p.vz = 0; p.stun = 0; p.inv = 0; p.air = false; p.y = 0; p.splats.clear(); giveCake(p, 'gold'); p.face = i ? -Math.PI / 2 : Math.PI / 2; });
+      pl.forEach((p, i) => { p.x = START[i][0]; p.z = START[i][1]; p.vx = p.vz = 0; p.stun = 0; p.inv = 0; p.air = false; p.y = 0; p.splats.clear(); if (!p.out) giveCake(p, 'gold'); else if (p.cake) { release(p.cake.obj); p.cake = null; } p.face = faceOf(i); });
       refreshHud();
     }
 
@@ -387,7 +406,7 @@ export default {
         p.holder.position.set(p.x, p.y, p.z);
         const sp = Math.hypot(p.vx, p.vz);
         c.speed = p.air ? 0 : clamp(sp / SPEED, 0, 1) * (p.stun > 0 ? 0.3 : 1);
-        if (done) c.pose = p.cheer ? 'cheer' : (pl[0].score === pl[1].score ? 'idle' : 'sad');
+        if (done) c.pose = p.cheer ? 'cheer' : (!pl.some((q) => q.cheer) ? 'idle' : 'sad');
         else if (p.air) c.pose = 'scared'; else if (p.stun > 0) c.pose = 'scared'; else if (p.sh) c.pose = 'push';
         else if (p.cake) c.pose = CAKES[p.cake.type].hold === 'hands_up' ? 'hands_up' : 'carry'; else c.pose = 'idle';
         c.update(dt);
@@ -402,9 +421,9 @@ export default {
         // dienblad
         p.tray.visible = p.sh; if (p.tray.visible) { const w = 1 + Math.sin(p.trayWob * 40) * 0.12 * (p.trayWob > 0 ? 1 : 0); p.tray.scale.setScalar(w); p.tray.position.z = 0.95 - (p.trayWob > 0 ? 0.12 : 0); }
         // knipperen bij onkwetsbaarheid
-        c.group.visible = !(p.inv > 0 && p.stun <= 0 && Math.sin(clock * 40) > 0.3);
+        c.group.visible = !p.out && !(p.inv > 0 && p.stun <= 0 && Math.sin(clock * 40) > 0.3);
         p.label.position.set(p.x, p.y + 3.6 * sz * (i ? 1.0 : 1.05) + 0.8, p.z);
-        p.ring.position.set(p.x, 0.07, p.z); p.ring.scale.setScalar(sz * (1 + Math.sin(clock * 6 + i) * 0.03)); p.ring.visible = !p.air;
+        p.ring.position.set(p.x, 0.07, p.z); p.ring.scale.setScalar(sz * (1 + Math.sin(clock * 6 + i) * 0.03)); p.ring.visible = !p.air && !p.out;
         p.blob.position.set(p.x, 0.045, p.z); p.blob.scale.setScalar(1.2 * sz * (1 - Math.min(0.5, p.y * 0.1)));
         // glibberige plas: glijdeffect
         if (p.puddle && sp > 3 && !p.air) c.speed = 0;
@@ -416,7 +435,7 @@ export default {
       stations.forEach((s) => {
         s.cd = Math.max(0, s.cd - dt); s.pop = Math.max(0, (s.pop || 0) - dt);
         const ring = s.kind === 'cart' ? world.cartRing : s.vis.ring, icon = s.kind === 'cart' ? world.cartIcon : s.vis.icon;
-        let near = -1; for (const p of pl) if (!p.cake && !p.air && Math.hypot(p.x - s.cx, p.z - s.cz) < (s.kind === 'cart' ? s.r : 2.5) + 0.3) near = p.i;
+        let near = -1; for (const p of pl) if (!p.cake && !p.air && !p.out && Math.hypot(p.x - s.cx, p.z - s.cz) < (s.kind === 'cart' ? s.r : 2.5) + 0.3) near = p.i;
         const ready = s.cd <= 0;
         if (near >= 0 && ready) pl[near].hintNow = true;
         ring.material.opacity = ready ? 0.55 + Math.sin(clock * 5 + s.x) * 0.15 + (near >= 0 ? 0.25 : 0) : 0.18;
@@ -428,7 +447,7 @@ export default {
     function hints() {
       for (const p of pl) {
         const on = p.hintNow && !p.cake && !p.air && !over && p.stun <= 0; p.hint.visible = on;
-        if (on) { const k = KEY_LABELS[pv.swapped ? 1 - p.i : p.i]; const txt = `${tid === 'swapab' ? k.b : k.a} = PAKKEN`; p.hint.material.map = hintTex(txt, players[p.i].css); p.hint.material.needsUpdate = true; p.hint.position.set(p.x, p.y + 4.9 * p.sz + 0.9 + Math.sin(clock * 8) * 0.12, p.z); }
+        if (on) { const k = KEY_LABELS[srcOf(p.i)]; const txt = `${tid === 'swapab' ? k.b : k.a} = PAKKEN`; p.hint.material.map = hintTex(txt, players[p.i].css); p.hint.material.needsUpdate = true; p.hint.position.set(p.x, p.y + 4.9 * p.sz + 0.9 + Math.sin(clock * 8) * 0.12, p.z); }
       }
     }
     function cameraUpdate(dt) { camera.position.copy(camBase); camera.lookAt(tgt); }
@@ -458,10 +477,10 @@ export default {
       onResize() { fitCamera(); },
       onStart() { hud.setTimer(TIME, 10); },
       onCountdown() { refreshHud(); hud.setTimer(TIME, 10); },
-      celebrate(w) { pl.forEach((q) => { q.cheer = q.i === w; }); for (let k = 0; k < 4; k++) spark(pl[w].x + rand(-3, 3), 4 + rand(0, 3), pl[w].z, 36, CONF, 7, 0.5); sfx('sparkle', { vol: 0.5 }); },
+      celebrate(w) { if (w == null) return; pl.forEach((q) => { q.cheer = q.i === w; }); for (let k = 0; k < 4; k++) spark(pl[w].x + rand(-3, 3), 4 + rand(0, 3), pl[w].z, 36, CONF, 7, 0.5); sfx('sparkle', { vol: 0.5 }); },
       onDeurman(movers) {
         movers.forEach((m, i) => {
-          if (!m || over) return; const p = pl[i];
+          if (!m || over || pl[i].out) return; const p = pl[i];
           p.splats.hit('cream'); fx.texts.add('DEURMAN!', p.x, 5.4, p.z, '#ff4a4a', 1.4);
           if (p.score > 0) { p.score--; refreshHud(); fx.texts.add('-1', p.x, 6.4, p.z, '#ff6a6a', 1.2); }
         });

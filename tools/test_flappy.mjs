@@ -1,7 +1,9 @@
 // Gebruik: node tools/test_flappy.mjs [scenario...]   scenario: bots | twists | shots | timeout | idle | balance
 //   TW=<twist-id> kiest een twist (anders: "none"). Q=low|high kwaliteit.
+//   bots3 / bots4 = drie / vier spelers (vrij voor allen, ?players=N): alle spelers krijgen input, uitslag volgt, place klopt.
 // Bots spelen versneld (zonder renderen) hele potjes; controleert dat finishPvp precies één keer komt, wie wint, geen console-fouten.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath, BROWSER_ARGS } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -18,13 +20,13 @@ const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 let FAILS = 0; const fail = (m) => { FAILS++; console.log('FAIL:', m); };
 
-async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+async function open(twist, N = 2) {
+  const browser = await chromium.launch({ executablePath: chromePath(), args: BROWSER_ARGS });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=flappy&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=flappy&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${N > 2 ? '&players=' + N : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
@@ -32,8 +34,8 @@ async function open(twist) {
     mode.paused = false;
     // telt hoe vaak finishPvp wordt aangeroepen (moet precies 1 zijn)
     window.__finishCalls = 0; const orig = mode.finishPvp.bind(mode); mode.finishPvp = (r) => { window.__finishCalls++; return orig(r); };
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -46,14 +48,14 @@ async function installBots(page, cfg) {
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input, d = inst.dbg;
     let s = 777; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    window.__cfg = cfg; const B = [{ lag: 0 }, { lag: 0 }];
+    window.__cfg = cfg; const NN = m.ids.length, B = m.ids.map(() => ({ lag: 0 }));
     const H = 10.5;
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         if (stop && stop(d)) { m.paused = true; return true; }
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i], c = window.__cfg[i], me = d.D[i], b = B[i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
+        for (let i = 0; i < NN; i++) {
+          const v = inp.virtual[m.ids[i]], c = window.__cfg[i], me = d.D[i], b = B[i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
           if (c.style === 'idle') continue;
           const cx = d.cx(me); let ty = H / 2;
           // volgende pilaar vooruit: mik op het midden van het gat
@@ -75,7 +77,7 @@ async function installBots(page, cfg) {
 }
 
 async function runMatch(tw, cfg, tag, pre) {
-  const { browser, page, errors } = await open(tw);
+  const { browser, page, errors } = await open(tw, cfg.length);
   await installBots(page, cfg);
   if (pre) await page.evaluate(pre);
   const res = await page.evaluate(() => {
@@ -111,6 +113,20 @@ for (const name of scen) {
     W.push((await runMatch(tw, [{ ...R, skill: 0.8 }, { ...R, skill: 0.8 }], 'bots gelijk')).result?.winner);
     console.log('winnaars:', W.join(','));
     if (!(W.includes(0) && W.includes(1))) fail('niet beide spelers wonnen in de bot-potjes');
+    continue;
+  }
+  if (name === 'bots3' || name === 'bots4') {
+    const N = name === 'bots4' ? 4 : 3, winners = new Set(); const mk = (sk) => ({ ...R, skill: sk });
+    const SK = N === 4 ? [[0.95, 0.5, 0.5, 0.5], [0.5, 0.95, 0.5, 0.5], [0.5, 0.5, 0.95, 0.5], [0.5, 0.5, 0.5, 0.95], [0.8, 0.8, 0.8, 0.8]] : [[0.95, 0.5, 0.5], [0.5, 0.95, 0.5], [0.5, 0.5, 0.95]];
+    for (let w = 0; w < N; w++) SK.push(Array.from({ length: N }, (_, k) => (k === w ? 0.9 : -1)));   // alleen speler w vliegt (de rest doet niets): elk slot kan winnen
+    for (const sk of SK) {
+      const r = await runMatch(process.env.TW || 'none', sk.map((v) => (v < 0 ? { style: 'idle' } : mk(v))), `bots${N} ${sk.join('/')}`);
+      if (!r.result || !r.result.place || r.result.place.length !== N || new Set(r.result.place).size !== N) fail('place ongeldig'); else console.log('place', r.result.place);
+      if (r.result) for (const w of r.result.winnerIds) winners.add(w);
+    }
+    await runMatch('none', Array.from({ length: N }, () => ({ style: 'idle' })), `idle${N}`);
+    console.log('winnaars (spelers-id):', [...winners].sort().join(','));
+    if (winners.size < N) fail('niet elke speler kon winnen');
     continue;
   }
   if (name === 'balance') { const N = +(process.env.N || 6); const wins = [0, 0]; for (let k = 0; k < N; k++) { const r = await runMatch('none', [{ ...R, skill: 0.8 }, { ...R, skill: 0.8 }], 'balance ' + k); const w = r.result?.winner; if (w != null) wins[w]++; } console.log('BALANS Wes/Jor =', wins.join('/')); continue; }

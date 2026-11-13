@@ -32,7 +32,7 @@ export function liveSprite(w = 3.4) {
 }
 
 // ---------------- vloer ----------------
-function floorTexture(M) {
+function floorTexture(M, ctx) {
   const PX = 80; const w = W * PX, h = H * PX;
   return canvasTex(w, h, (g) => {
     const r = mulberry32(77);
@@ -63,7 +63,7 @@ function floorTexture(M) {
     // kistmarkeringen en luiken
     for (const ch of M.chests) { const x = (ch.c + 0.5) * PX, y = (ch.r + 0.5) * PX; const gr = g.createRadialGradient(x, y, 4, x, y, PX * 0.7); gr.addColorStop(0, ch.kind === 'K' ? 'rgba(255,230,120,.5)' : 'rgba(255,200,80,.28)'); gr.addColorStop(1, 'rgba(255,200,80,0)'); g.fillStyle = gr; g.beginPath(); g.arc(x, y, PX * 0.7, 0, TAU); g.fill(); }
     for (const hh of M.hatches) {
-      const x = (hh.c + 0.5) * PX, y = (hh.r + 0.5) * PX, col = hh.side ? '90,150,255' : '90,230,140';
+      const x = (hh.c + 0.5) * PX, y = (hh.r + 0.5) * PX, tc = ctx.teams ? ctx.teamInfo[hh.side].color : 0, col = ctx.teams ? `${(tc >> 16) & 255},${(tc >> 8) & 255},${tc & 255}` : hh.side ? '90,150,255' : '90,230,140';   // bij 2 tegen 2: de kleur van het team
       g.fillStyle = `rgba(${col},.22)`; g.beginPath(); g.arc(x, y, PX * 1.15, 0, TAU); g.fill();
       g.strokeStyle = `rgba(${col},.85)`; g.lineWidth = 6; g.setLineDash([14, 10]); g.beginPath(); g.arc(x, y, PX * 1.1, 0, TAU); g.stroke(); g.setLineDash([]);
     }
@@ -85,7 +85,7 @@ export function buildCastleScene(ctx, M, L) {
   const scene = ctx.scene; const root = new THREE.Group(); scene.add(root);
   const FW = W * TILE, FH = H * TILE;
   // vloer
-  const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture(M), roughness: 0.95 });
+  const floorMat = new THREE.MeshStandardMaterial({ map: floorTexture(M, ctx), roughness: 0.95 });
   const fl = mesh(new THREE.PlaneGeometry(FW, FH), floorMat, { cast: false, rot: [-Math.PI / 2, 0, 0] }); root.add(fl);
   // buitenvloer (donker, voorbij de muren)
   root.add(mesh(new THREE.PlaneGeometry(FW + 80, FH + 60), mat(0x120e1a, { flatShading: false }), { cast: false, receive: false, pos: [0, -0.05, 0], rot: [-Math.PI / 2, 0, 0] }));
@@ -126,7 +126,7 @@ export function buildCastleScene(ctx, M, L) {
   const updTorches = (t) => spots.forEach(([c, r], k) => { const f = 0.85 + Math.sin(t * 11 + k * 1.7) * 0.15 + Math.sin(t * 23 + k) * 0.08; tmpP.set(tx(c), 1.85, tz(r) + TILE / 2 + 0.12); tmpS.set(f, f * 1.15, f); m4.compose(tmpP, tmpQ, tmpS); flame.setMatrixAt(k, m4); flame.instanceMatrix.needsUpdate = true; });
   // luiken
   const hatches = M.hatches.map((hh) => {
-    const col = hh.side ? 0x5a96ff : 0x5ae68c; const g = new THREE.Group(); g.position.set(tx(hh.c), 0, tz(hh.r));
+    const col = ctx.teams ? ctx.teamInfo[hh.side].color : hh.side ? 0x5a96ff : 0x5ae68c; const g = new THREE.Group(); g.position.set(tx(hh.c), 0, tz(hh.r));
     g.add(mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.12, 20), mat(0x3a2a1e), { cast: false, pos: [0, 0.06, 0] }));
     g.add(mesh(new THREE.CylinderGeometry(0.8, 0.8, 0.14, 20), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.55, roughness: 0.4 }), { cast: false, pos: [0, 0.08, 0] }));
     for (const a of [0, 1]) g.add(mesh(new THREE.BoxGeometry(1.4, 0.05, 0.12), mat(0x222222), { cast: false, pos: [0, 0.16, 0], rot: [0, a * Math.PI / 2 + 0.78, 0] }));

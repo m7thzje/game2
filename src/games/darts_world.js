@@ -148,10 +148,12 @@ export function buildTavern(ctx, L, css, hooks = {}) {
   A.setGold = (set) => { for (let i = 0; i < 20; i++) { const on = set.has(i); A.gold[i][0].visible = on; A.gold[i][1].visible = on; } };
 
   // ---------------- krijtborden ----------------
-  for (const i of [0, 1]) {
-    const cb = chalkBoard(3.9, 2.85, css[i]); cb.group.position.set((i ? 1 : -1) * 7.4, 6.8, -0.4); cb.group.rotation.y = (i ? -1 : 1) * 0.1; scene.add(cb.group);
+  // 2 spelers: links en rechts van het bord; 3-4 spelers: twee boven en twee onder elkaar (slot 0/2 links, 1/3 rechts)
+  for (let i = 0; i < css.length; i++) {
+    const many = css.length > 2, sx = i % 2 ? 1 : -1;
+    const cb = chalkBoard(many ? 3.5 : 3.9, many ? 2.55 : 2.85, css[i]); cb.group.position.set(sx * (many ? 8.0 : 7.4), many ? (i < 2 ? 8.3 : 5.1) : 6.8, -0.4); cb.group.rotation.y = -sx * 0.1; scene.add(cb.group);
     A.scoreboards.push(cb);
-    scene.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 4), mat(0x3a2412), { cast: false, pos: [(i ? 1 : -1) * 7.4 - 1.5, 9.2, -0.5] }));
+    scene.add(mesh(new THREE.CylinderGeometry(0.05, 0.05, 2.6, 4), mat(0x3a2412), { cast: false, pos: [sx * (many ? 8.0 : 7.4) - 1.5, many ? (i < 2 ? 10.7 : 7.5) : 9.2, -0.5] }));
   }
   const sc = (i, ...a) => { A.scoreboards[i].draw(...a); };
   A.drawScore = sc;

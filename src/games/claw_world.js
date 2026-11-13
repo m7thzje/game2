@@ -169,14 +169,14 @@ export function buildWorld(ctx, L) {
   add(B(2 * XO + 0.6, 0.3, 0.3), yel, 0, -0.5, ZF + 3.3);
   // console met joysticks en knoppen
   for (let i = 0; i < 2; i++) {
-    const sx = (i ? 1 : -1) * 8.2, col = i ? 0x3a78e0 : 0x2f9e5b;
+    const sx = (i ? 1 : -1) * 8.2, col = ctx.teams ? ctx.teamInfo[i].color : i ? 0x3a78e0 : 0x2f9e5b;   // teamkleur bij 2 tegen 2
     add(B(5.0, 0.2, 2.8), mat(col, { flatShading: false }), sx, -0.5, ZF + 1.8);
     add(C(0.45, 0.6, 0.3, 12), dark, sx, -0.25, ZF + 1.8);
     add(C(0.1, 0.1, 0.9, 6), steel, sx, 0.25, ZF + 1.8);
     add(S(0.32, 10, 8), red, sx, 0.8, ZF + 1.8);
   }
   // prijsluikjes
-  for (let i = 0; i < 2; i++) { const sx = (i ? 1 : -1) * (X - HOLE_W / 2); add(B(HOLE_W - 0.6, 0.8, 0.2), dark, sx, -3.5, ZF + 3.35); add(B(HOLE_W - 0.2, 0.18, 0.5), i ? mat(0x3a78e0) : mat(0x2f9e5b), sx, -3.0, ZF + 3.4); }
+  for (let i = 0; i < 2; i++) { const sx = (i ? 1 : -1) * (X - HOLE_W / 2); add(B(HOLE_W - 0.6, 0.8, 0.2), dark, sx, -3.5, ZF + 3.35); add(B(HOLE_W - 0.2, 0.18, 0.5), ctx.teams ? mat(ctx.teamInfo[i].color) : i ? mat(0x3a78e0) : mat(0x2f9e5b), sx, -3.0, ZF + 3.4); }
   // paaltjes + toplijst
   for (const sx of [-1, 1]) for (const z of [ZB - 0.3, ZF + 0.3]) add(B(0.7, CEIL + 0.5, 0.7), yel, sx * (X + 0.45), CEIL / 2, z);
   add(B(2 * X + 2.0, 0.6, ZF - ZB + 1.0), yel, 0, CEIL + 0.3, (ZB + ZF) / 2);
@@ -194,7 +194,7 @@ export function buildWorld(ctx, L) {
   for (let i = 0; i < 2; i++) {
     const sd = i ? 1 : -1, cx = sd * (X - HOLE_W / 2), cz = (holeZ0 + ZF) / 2;
     const pit = new THREE.Mesh(new THREE.BoxGeometry(HOLE_W - 0.04, 2.8, HOLE_D + 0.26), new THREE.MeshBasicMaterial({ color: 0x0c0618, side: THREE.BackSide })); pit.position.set(cx, -2.0, cz + 0.1); cab.add(pit);
-    const col = i ? 0x58a0ff : 0x58ff9a;
+    const col = ctx.teams ? ctx.teamInfo[i].color : (i ? 0x58a0ff : 0x58ff9a);   // teamkleur bij 2 tegen 2
     const glow = new THREE.Mesh(new THREE.PlaneGeometry(HOLE_W, HOLE_D), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })); glow.rotation.x = -Math.PI / 2; glow.position.set(cx, -3.35, cz + 0.1); cab.add(glow); W.lamps.push(glow);
     const rim = new THREE.Mesh(new THREE.BoxGeometry(HOLE_W + 0.3, 0.16, 0.18), new THREE.MeshBasicMaterial({ color: col })); rim.position.set(cx, 0.08, holeZ0 - 0.09); cab.add(rim);
     const rim2 = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.16, HOLE_D), new THREE.MeshBasicMaterial({ color: col })); rim2.position.set(cx - sd * (HOLE_W / 2 + 0.0), 0.08, cz); cab.add(rim2);
@@ -215,7 +215,7 @@ export function buildWorld(ctx, L) {
   const glints = []; for (let k = 0; k < 2; k++) { const gl = new THREE.Mesh(new THREE.PlaneGeometry(1.4 - k * 0.6, CEIL * 0.8), glintM); gl.position.set(-9 + k * 2.2, CEIL * 0.5, ZF + 0.33); gl.rotation.z = 0.35; gl.renderOrder = 7; cab.add(gl); glints.push(gl); }
   W.glints = glints;
   // trolleys (kabelwagentjes) bovenin
-  for (let i = 0; i < 2; i++) { const t = new THREE.Group(); t.add(mesh(B(1.3, 0.5, 1.3), i ? mat(0x3a78e0) : mat(0x2f9e5b), { cast: false })); t.add(mesh(C(0.2, 0.2, 0.9, 6), steel, { cast: false, pos: [0, 0.4, 0] })); t.position.y = CEIL - 0.55; t.userData.dynamic = true; cab.add(t); W.trolleys.push(t); }
+  for (let i = 0; i < players.length; i++) { const t = new THREE.Group(); t.add(mesh(B(1.3, 0.5, 1.3), players.length > 2 ? mat(players[i].color) : i ? mat(0x3a78e0) : mat(0x2f9e5b), { cast: false })); t.add(mesh(C(0.2, 0.2, 0.9, 6), steel, { cast: false, pos: [0, 0.4, 0] })); t.position.y = CEIL - 0.55; t.userData.dynamic = true; cab.add(t); W.trolleys.push(t); }
   // gekleurde lampjes (instanced) rond de kast en het bord
   const bulbPos = [];
   const bx0 = -(X + 1.7), bx1 = X + 1.7, zb = (ZB + ZF) / 2 + 0.95;

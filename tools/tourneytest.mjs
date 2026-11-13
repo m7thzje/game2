@@ -2,11 +2,12 @@
 // PLAYERS=3: toernooi voor drie (Wes, Jor, Juul): elke ronde een paar uit de wachtrij (winnaar blijft), stand per speler, eindwinnaar = meeste punten.
 // Standaard met ?unlock=1 (alle hallen open). LOCKED=1: geen hallen gebouwd -> het toernooi mag alleen spellen uit de Speelhal (hal 0) kiezen.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const server = http.createServer((req, res) => { let p = decodeURIComponent(req.url.split('?')[0]); if (p === '/') p = '/index.html'; const f = path.join(root, p); if (!fs.existsSync(f)) { res.writeHead(404); res.end(); return; } const m = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css' }; res.writeHead(200, { 'content-type': m[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(res); });
 await new Promise((r) => server.listen(0, r)); const port = server.address().port;
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+const b = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 const page = await b.newPage({ viewport: { width: 1100, height: 650 } });
 const P3 = process.env.PLAYERS === '3';
 const errors = []; page.on('pageerror', (e) => errors.push(e.message + ' ' + (e.stack||'').split('\n').slice(1,4).join(' | ')));

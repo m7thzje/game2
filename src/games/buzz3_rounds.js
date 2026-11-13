@@ -2,7 +2,7 @@ import { txt, rr, shape, pad, burst, DIRS, DCOL, SHAPES } from './buzz3_draw.js'
 
 // Drie-Buzzer — de vijf soorten rondes (+ beslissingsronde). Elke ronde is een object:
 //   { type, title, rule, finished, update(dt), draw(g,W,H,t), left() }  met G = spel-API uit buzz3.js
-// G: n, pl[i] {score,firsts,fouls}, rng(), aEdge(i), dirEdge(i), inp(i), helped(i), gold, spd(i), award(i,pts,label), lec(i,l1,l2,col),
+// G: n, pts (punten per plek: [3,2,1] bij 3 spelers, [4,3,2,1] bij 4), pts2, pl[i] {score,firsts,fouls}, rng(), aEdge(i), dirEdge(i), inp(i), helped(i), gold, spd(i), award(i,pts,label), lec(i,l1,l2,col),
 //    lecDraw(i,fn), sfx(naam,opts), press(i), lamp(i,hex,k), host(pose,secs), rot (draairichting voor eerlijke volgorde)
 const MEDAL = ['#ffd23f', '#d8e0ea', '#e0a070'];
 const shuf = (a, rng) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -44,7 +44,7 @@ export function roundA(G, o = {}) {
     if (st.every((s) => s.out || s.at != null) || (phase === 'go' && t - green > WIN)) {
       R.finished = true; res.sort((a, b) => a.rt - b.rt);
       if (only) { R.winner = res.length ? res[0].i : null; res.forEach((r, k) => R.lines.push({ i: r.i, text: `${G.name(r.i)} ${r.rt.toFixed(2)}s`, col: G.col(r.i) })); return; }
-      res.forEach((r, k) => { G.award(r.i, [3, 2, 1][k], `${r.rt.toFixed(2)}s`); if (k === 0) G.pl[r.i].firsts++; R.lines.push({ i: r.i, text: `${G.name(r.i)} ${r.rt.toFixed(2)}s`, col: G.col(r.i) }); });
+      res.forEach((r, k) => { G.award(r.i, G.pts[k] ?? 1, `${r.rt.toFixed(2)}s`); if (k === 0) G.pl[r.i].firsts++; R.lines.push({ i: r.i, text: `${G.name(r.i)} ${r.rt.toFixed(2)}s`, col: G.col(r.i) }); });
     }
   };
   R.dbg = () => ({ phase, go: phase === 'go', t, green });
@@ -89,7 +89,7 @@ export function roundB(G) {
     if (lock.every((l) => l) || t > WIN) {
       R.finished = true;
       const good = []; lock.forEach((l, i) => { if (!l) { G.lec(i, 'TE LAAT', '0 punten', '#aaaaaa'); return; } if (l.d === correct) good.push({ i, at: l.at }); else { G.pl[i].fouls++; G.award(i, -1, 'FOUT!'); G.lec(i, 'FOUT!', 'het was ' + SHAPES[win].name, '#ff5a5a'); } });
-      good.sort((a, b) => a.at - b.at); good.forEach((e, k) => { G.award(e.i, [3, 2, 1][k], k === 0 ? 'SNEL!' : 'GOED!'); if (k === 0) G.pl[e.i].firsts++; });
+      good.sort((a, b) => a.at - b.at); good.forEach((e, k) => { G.award(e.i, G.pts[k] ?? 1, k === 0 ? 'SNEL!' : 'GOED!'); if (k === 0) G.pl[e.i].firsts++; });
     }
   };
   R.dbg = () => ({ correct, counts: counts.slice(), t, locked: lock.map((l) => !!l), phase: R.finished ? 'reveal' : 'ask' });
@@ -157,7 +157,7 @@ export function roundC(G, o = {}) {
       const all = G.pl.every((_, i) => out[i] || done[i] != null || t > deadline(i));
       if (all) {
         R.finished = true; const fin = []; G.pl.forEach((_, i) => { if (done[i] != null) fin.push({ i, at: done[i] }); });
-        fin.sort((a, b) => a.at - b.at); fin.forEach((e, k) => { G.award(e.i, [3, 2, 1][k], `${(e.at - GO_AT).toFixed(1)}s`); if (k === 0) G.pl[e.i].firsts++; R.lines.push({ i: e.i, text: `${G.name(e.i)} ${(e.at - GO_AT).toFixed(1)}s`, col: G.col(e.i) }); });
+        fin.sort((a, b) => a.at - b.at); fin.forEach((e, k) => { G.award(e.i, G.pts[k] ?? 1, `${(e.at - GO_AT).toFixed(1)}s`); if (k === 0) G.pl[e.i].firsts++; R.lines.push({ i: e.i, text: `${G.name(e.i)} ${(e.at - GO_AT).toFixed(1)}s`, col: G.col(e.i) }); });
         G.pl.forEach((_, i) => { if (done[i] == null && !out[i]) G.lec(i, 'TE LAAT', '0 punten', '#aaaaaa'); lecProg(i); });
       }
     }
@@ -169,7 +169,7 @@ export function roundC(G, o = {}) {
     DIRS.forEach((d) => pad(g, d, cx + POS[d][0], cy + POS[d][1], 92, lit === d ? 1 : 0.15));
     txt(g, phase === 'show' ? 'KIJK GOED!' : R.finished ? 'KLAAR' : 'NU JIJ!', 800, 150, 52, phase === 'show' ? '#9ad8ff' : '#ffe14a');
     // voortgang van alle drie (rechts)
-    G.pl.forEach((_, i) => { const x0 = 640, y0 = 230 + i * 78; txt(g, G.name(i), x0, y0, 28, G.col(i), { align: 'left' }); for (let k = 0; k < L; k++) { g.fillStyle = out[i] ? '#ff5a5a' : k < prog[i] ? G.col(i) : 'rgba(255,255,255,.2)'; g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.arc(x0 + 14 + k * 36, y0 + 36, 13, 0, 7); g.fill(); if (k < prog[i]) g.stroke(); } });
+    G.pl.forEach((_, i) => { const x0 = 640, y0 = (G.n === 4 ? 212 : 230) + i * (G.n === 4 ? 66 : 78); txt(g, G.name(i), x0, y0, 28, G.col(i), { align: 'left' }); for (let k = 0; k < L; k++) { g.fillStyle = out[i] ? '#ff5a5a' : k < prog[i] ? G.col(i) : 'rgba(255,255,255,.2)'; g.strokeStyle = '#fff'; g.lineWidth = 2; g.beginPath(); g.arc(x0 + 14 + k * 36, y0 + 36, 13, 0, 7); g.fill(); if (k < prog[i]) g.stroke(); } });
   };
   return R;
 }
@@ -203,7 +203,7 @@ export function roundD(G, o = {}) {
     if (phase === 'cmd' && (pt >= CMD || G.pl.every((_, i) => jam[i] || pressed.some((p) => p.i === i)))) {
       // afrekenen
       phase = 'gap'; pt = 0;
-      if (c.valid) { pressed.sort((a, b) => a.at - b.at); pressed.forEach((p, k) => { G.award(p.i, [2, 1, 1][k], k === 0 ? 'SNEL!' : 'GOED!'); if (k === 0) G.pl[p.i].firsts++; }); G.pl.forEach((_, i) => { if (!jam[i] && !pressed.some((p) => p.i === i)) G.lec(i, 'TE LAAT', 'niet gebuzzerd', '#aaaaaa'); }); G.host('cheer', 1.2); }
+      if (c.valid) { pressed.sort((a, b) => a.at - b.at); pressed.forEach((p, k) => { G.award(p.i, G.pts2[k] ?? 1, k === 0 ? 'SNEL!' : 'GOED!'); if (k === 0) G.pl[p.i].firsts++; }); G.pl.forEach((_, i) => { if (!jam[i] && !pressed.some((p) => p.i === i)) G.lec(i, 'TE LAAT', 'niet gebuzzerd', '#aaaaaa'); }); G.host('cheer', 1.2); }
       else {
         pressed.forEach((p) => { G.pl[p.i].fouls++; G.award(p.i, -1, 'TRAP!'); G.lec(p.i, 'TRAP!', 'hij zei het niet', '#ff5a5a'); G.sfx('buzz'); G.lamp(p.i, '#ff3b3b', 1); });
         G.pl.forEach((_, i) => { if (!jam[i] && !pressed.some((p) => p.i === i)) { G.lec(i, 'SLIM!', 'niet in getrapt', '#35e04a'); G.floatAt(i, 'SLIM!', '#9ad8ff'); G.sfx('ding', { rate: 1.3, vol: 0.5 }); } });
@@ -270,7 +270,7 @@ export function roundE(G) {
       const lst = G.pl.map((_, i) => ({ i, d: Math.abs(v[i] - N), at: lockAt[i] == null ? 99 : lockAt[i], v: Math.round(v[i]) })).filter((e) => { if (!moved[e.i]) G.lec(e.i, 'NIET GESCHAT', '0 punten', '#aaaaaa'); return moved[e.i]; });
       lst.sort((a, b) => a.d - b.d || a.at - b.at);
       lst.forEach((e, k) => {
-        const bull = e.d <= 1.2; G.award(e.i, [3, 2, 1][k] + (bull ? 1 : 0), bull ? 'RAAK!' : `${e.v}`); if (k === 0) G.pl[e.i].firsts++;
+        const bull = e.d <= 1.2; G.award(e.i, (G.pts[k] ?? 1) + (bull ? 1 : 0), bull ? 'RAAK!' : `${e.v}`); if (k === 0) G.pl[e.i].firsts++;
         R.lines.push({ i: e.i, text: `${G.name(e.i)} ${e.v}`, col: G.col(e.i) }); G.lecDraw(e.i, (g, w) => { txt(g, `${e.v}`, w / 2, 36, 50, '#ffe14a'); txt(g, `${Math.abs(e.v - N)} ernaast`, w / 2, 76, 22, '#fff'); });
       });
     }
@@ -283,7 +283,7 @@ export function roundE(G) {
     } else { txt(g, '?', 360, 270, 200, 'rgba(255,255,255,.3)', { stroke: false }); txt(g, 'Hoeveel waren het er?', 360, 160, 40, '#ffe14a'); }
     // rechts: grote tekst
     if (phase === 'show') { txt(g, 'TEL OF SCHAT!', 860, 220, 40, '#ffe14a'); txt(g, 'Straks: 0 tot 100', 860, 275, 28, '#fff'); bar(g, 760, 330, 200, 16, 1 - t / SHOW, '#9ad8ff'); }
-    else if (!R.finished) { txt(g, 'SCHUIF + A', 860, 220, 40, '#ffe14a'); G.pl.forEach((_, i) => { txt(g, G.name(i) + (lockAt[i] != null ? '  VAST' : ''), 760, 290 + i * 44, 28, lockAt[i] != null ? '#ffe14a' : G.col(i), { align: 'left' }); }); bar(g, 760, 400, 200, 16, 1 - t / (WIN + 2), '#ffe14a'); }
+    else if (!R.finished) { txt(g, 'SCHUIF + A', 860, 220, 40, '#ffe14a'); G.pl.forEach((_, i) => { txt(g, G.name(i) + (lockAt[i] != null ? '  VAST' : ''), 760, (G.n === 4 ? 272 : 290) + i * (G.n === 4 ? 36 : 44), 28, lockAt[i] != null ? '#ffe14a' : G.col(i), { align: 'left' }); }); bar(g, 760, 400, 200, 16, 1 - t / (WIN + 2), '#ffe14a'); }
     else { txt(g, `Het waren er ${N}!`, 860, 220, 44, '#ffe14a', { max: 300 }); }
     // getallenlijn
     const x0 = 80, x1 = 944, y = 446; g.fillStyle = 'rgba(255,255,255,.5)'; g.fillRect(x0, y - 3, x1 - x0, 6);

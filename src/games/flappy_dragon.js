@@ -4,7 +4,7 @@ import { makeBrother } from '../engine/chars.js';
 
 // Draak in zijaanzicht voor de Wolkenrace (kijkt naar +x). Eigen model zodat de vleugels van opzij goed leesbaar zijn.
 const SH = (c, o = {}) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.55, flatShading: true, ...o });
-const COL = [{ body: 0x2fbf5f, belly: 0xf3e29a, wing: 0x8df0a8, acc: 0xffd23f }, { body: 0x3a7cff, belly: 0xf3e29a, wing: 0x9cc8ff, acc: 0xff7ad9 }];
+const COL = [{ body: 0x2fbf5f, belly: 0xf3e29a, wing: 0x8df0a8, acc: 0xffd23f }, { body: 0x3a7cff, belly: 0xf3e29a, wing: 0x9cc8ff, acc: 0xff7ad9 }, { body: 0xf08a2a, belly: 0xfff0c0, wing: 0xffcf9a, acc: 0x6fd8ff }, { body: 0xc844e8, belly: 0xf6e4ff, wing: 0xe8b4f8, acc: 0xffe14a }];
 
 let _wingGeo = null;
 function wingGeo() {

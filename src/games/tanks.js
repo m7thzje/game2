@@ -5,9 +5,11 @@ import * as P from '../engine/props.js';
 import { Terrain, buildBackdrop, buildCastle, makeProjectile, labelSprite, windArrowSprite, buildWindsock, animateWindsock, buildDecor, makeBird } from './tanks_world.js';
 
 // Kanonnenduel — beurtgebaseerd Worms/Tanks-duel op één scherm. Verwoestbaar landschap, wind, gekke projectielen en chaosbeurten.
+// 2 spelers: één kasteel elk, om de beurt. 4 spelers: 2 TEGEN 2, ieder zijn eigen kasteel (twee links, twee rechts); iedereen richt en schiet TEGELIJK, teamgenoten zijn onschendbaar;
+// het team waarvan beide kastelen vallen verliest (na afloop: het team met de meeste kasteel over).
 
-const X0 = -50, X1 = 50, NCOL = 400, XW = 39;
-const CASTLE_X = [-25, 25], BASE_Y = 6.6;
+const X0 = -50, X1 = 50, NCOL = 400;
+const BASE_Y = 6.6;
 const HP_MAX = 100;
 const G0 = 17;
 const TURN_TIME = 12;
@@ -40,17 +42,29 @@ export default {
   mode: 'pvp',
   time: 100,
   pay: 1,
+  players: [2, 4],                       // 2 = duel; 4 = 2 tegen 2 (teams), 3 spelers kan niet (dan speelt de hal een duel)
+  teams: true,
   music: 'game_minor',
   twists: ['invert', 'swapab', 'drunk', 'lowgrav', 'bodyswap'],
-  blurb: 'Twee kastelen, twee kanonnen en één heuvelachtig landschap! Om de beurt schiet je met <b>gekke projectielen</b> (kool, koe, taart, draken-ei...). Elke inslag maakt een <b>krater</b>. Let op de <b>wind</b>! Wie het kasteel van de ander <b>drie keer raakt</b> (100 punten schade) wint. Elke 4e beurt is een <b>chaosbeurt</b>.',
+  blurb: 'Twee kastelen, twee kanonnen en één heuvelachtig landschap! Om de beurt schiet je met <b>gekke projectielen</b> (kool, koe, taart, draken-ei...). Elke inslag maakt een <b>krater</b>. Let op de <b>wind</b>! Wie het kasteel van de ander <b>drie keer raakt</b> (100 punten schade) wint. Elke 4e beurt is een <b>chaosbeurt</b>. Met 4 spelers: <b>2 tegen 2</b>, ieder een eigen kasteel, en iedereen richt en schiet tegelijk!',
   controls: ['{move} richten: omhoog/omlaag = hoek, naar de vijand toe/terug = kracht', '{a} schieten (even ingedrukt houden = krachtmeter, loslaten = knal)'],
-  tip: 'Je instelling blijft staan. Een treffer midden op het kasteel is 34 schade; stuiterende koeien en rollende vuurballen kunnen om een heuvel heen! Hoe verder je achterligt, hoe groter je knal (en soms een extra schot).',
+  tip: 'Bij 2 tegen 2 kunnen je teamgenoten jou niet raken: schiet gerust over hun kasteel heen. Je instelling blijft staan. Een treffer midden op het kasteel is 34 schade; stuiterende koeien en rollende vuurballen kunnen om een heuvel heen! Hoe verder je achterligt, hoe groter je knal (en soms een extra schot).',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pvp = ctx.pvp;
-    const names = players.map((p) => p.name);
+    const N = players.length, four = N === 4, names = players.map((p) => p.name);
     const rng = ctx.rng;
+    // teams: bij 2 spelers elk een eigen 'team'; bij 4 spelers ctx.teams (slots), team 0 links, team 1 rechts
+    const teams = four ? (ctx.teams || [[0, 1], [2, 3]]) : [[0], [1]];
+    const teamOf = [], posIn = []; teams.forEach((t, ti) => t.forEach((slot, k) => { teamOf[slot] = ti; posIn[slot] = k; }));
+    const CASTLE_X = four ? players.map((_, i) => (teamOf[i] === 0 ? [-34, -12] : [34, 12])[posIn[i]]) : [-25, 25];
+    const XW = four ? 46 : 39;
+    const foe = (c, owner) => teamOf[c.i] !== teamOf[owner];                 // vijandelijk kasteel?
+    const mate = (c, owner) => c.i !== owner && teamOf[c.i] === teamOf[owner];   // kasteel van een teamgenoot
+    const teamAlive = (t) => teams[t].some((i) => !castles[i].ko);
+    const teamHp = (t) => teams[t].reduce((a, i) => a + castles[i].hp, 0);
+    const teamName = (t) => teams[t].map((i) => names[i]).join(' & ');
     const L = ctx.lights('day', { fog: false, shadow: 40, center: [0, 8, 0] });
     L.sun.castShadow = false; L.sun.position.set(-25, 42, 55); L.sun.intensity = 2.2; L.hemi.intensity = 1.25;
     const baseSun = L.sun.intensity, baseHemi = L.hemi.intensity;
@@ -68,7 +82,7 @@ export default {
         const x = terrain.xAt(i);
         let h = 4.4 + 1.7 * Math.sin(x * 0.17 + ph1) + 1.0 * Math.sin(x * 0.41 + ph2) + 0.45 * Math.sin(x * 0.9 + ph3);
         h += mid * Math.exp(-(((x - mid2) / 7.5) ** 2));
-        const e = Math.max(0, Math.abs(x) - 33); h += e * e * 0.12;
+        const e = Math.max(0, Math.abs(x) - (four ? 43 : 33)); h += e * e * 0.12;
         for (const cx of CASTLE_X) { const d = Math.abs(x - cx); const w = smoothstep(8, 4.3, d); h = lerp(h, BASE_Y, w); if (d <= 4.3) terrain.lockMin[i] = BASE_Y - 0.15; }
         terrain.h[i] = clamp(h, 1.2, 15);
       }
@@ -85,8 +99,8 @@ export default {
     const arrow = windArrowSprite(); arrow.position.set(0, 22, -6); scene.add(arrow);
 
     // ------------------------------------------------------------ kastelen en spelers
-    const SIDE = [1, -1];
-    const castles = [0, 1].map((i) => {
+    const SIDE = players.map((_, i) => (teamOf[i] === 0 ? 1 : -1));   // kant waarop het kanon van speler i schiet (2 spelers: [1, -1])
+    const castles = players.map((_, i) => {
       const cx = CASTLE_X[i];
       const cs = buildCastle(PLAYER_COLORS[i], SIDE[i]);
       cs.group.position.set(cx, BASE_Y - 0.1, 0); scene.add(cs.group);
@@ -116,10 +130,10 @@ export default {
     // krachtmeter-/banenvoorspelling
     const prevGeo = new THREE.BufferGeometry(); const NPREV = 22; const prevPos = new Float32Array(NPREV * 3);
     prevGeo.setAttribute('position', new THREE.BufferAttribute(prevPos, 3));
-    const prevDots = [0, 1].map((i) => { const pts = new THREE.Points(prevGeo.clone(), new THREE.PointsMaterial({ color: i ? 0x9fc4ff : 0x9fffbf, size: 0.5, sizeAttenuation: true, depthTest: false, transparent: true, opacity: 0.9 })); pts.frustumCulled = false; pts.renderOrder = 19; pts.visible = false; scene.add(pts); return pts; });
+    const prevDots = players.map((_, i) => { const pts = new THREE.Points(prevGeo.clone(), new THREE.PointsMaterial({ color: [0x9fffbf, 0x9fc4ff, 0xffd0a0, 0xe8b0ff][i], size: 0.5, sizeAttenuation: true, depthTest: false, transparent: true, opacity: 0.9 })); pts.frustumCulled = false; pts.renderOrder = 19; pts.visible = false; scene.add(pts); return pts; });
 
     // ------------------------------------------------------------ toestand
-    const pl = [0, 1].map((i) => ({ i, name: names[i], side: SIDE[i], ang: 45, pow: 62, angN: 45, angF: -22, type: TYPES[0], lastType: -1, fired: false, locked: false, aDown: false, aHold: 0, charging: false, chg: 8, chgDir: 1, holdY: 0, holdX: 0, dealt: 0, hits: 0, bestMiss: 999, shots: 0, extra: 0, comebackCd: 0, boosted: false, lock: 0, autoShot: false }));
+    const pl = players.map((_, i) => ({ i, name: names[i], side: SIDE[i], team: teamOf[i], ang: 45, pow: 62, angN: 45, angF: -22, type: TYPES[0], lastType: -1, fired: false, locked: false, aDown: false, aHold: 0, charging: false, chg: 8, chgDir: 1, holdY: 0, holdX: 0, dealt: 0, hits: 0, bestMiss: 999, shots: 0, extra: 0, comebackCd: 0, boosted: false, lock: 0, autoShot: false }));
     const S = { phase: 'intro', t: 0, turn: 0, shooters: [0], sim: false, chaos: null, wind: 0, gdir: 1, aimT: TURN_TIME, after: 0, nextShooter: rng() < 0.5 ? 0 : 1, bag: [], koWinner: -1, over: false, gameT: 0, giant: false, ended: false, endT: 0, lastChaosAt: 0 };
     let T = 0, introT = 0, done = false;
     const projs = []; const dragons = []; const flames = [];
@@ -132,7 +146,7 @@ export default {
       const dx = Math.max(c.x0 - x, 0, x - c.x1), dy = Math.max(c.y0 - y, 0, y - c.y1);
       return Math.hypot(dx, dy);
     }
-    function castleAt(x, y, r, skip = -1) { for (const c of castles) { if (c.ko || c.i === skip) continue; if (x > c.x0 - r && x < c.x1 + r && y > c.y0 - r && y < c.y1 + r) return c; } return null; }
+    function castleAt(x, y, r, skip = -1, owner = -1) { for (const c of castles) { if (c.ko || c.i === skip || (owner >= 0 && mate(c, owner))) continue; if (x > c.x0 - r && x < c.x1 + r && y > c.y0 - r && y < c.y1 + r) return c; } return null; }
     function windAcc(pr) { return S.wind * 0.12 * pr.type.windK * (0.5 + 0.5 * GS); }
     function gravAcc() { return G0 * GS * S.gdir; }
 
@@ -235,9 +249,9 @@ export default {
       // schade aan kastelen
       let hit = false;
       for (const c of castles) {
-        if (c.ko) continue;
+        if (c.ko || mate(c, pr.owner)) continue;       // teamgenoten zijn onschendbaar
         const d = castleDist(x, y, c);
-        if (c.i !== pr.owner) pr.bestD = Math.min(pr.bestD, d);
+        if (foe(c, pr.owner)) pr.bestD = Math.min(pr.bestD, d);
         const dm = Math.round((opts.dmg ?? pr.dmg) * clamp(1 - d / R, 0, 1) * (opts.mult || 1));
         if (dm >= 1) { damage(c, dm, pr.owner, d < 0.5); hit = true; }
       }
@@ -266,7 +280,7 @@ export default {
 
     // ------------------------------------------------------------ draken
     function hatch(pr, x, y) {
-      const dir = pr.owner === 0 ? 1 : -1;
+      const dir = SIDE[pr.owner];
       const d = new Dragon([0x4aa84a, 0x7a46d4, 0xd8742a][Math.floor(rng() * 3)], 0.42);
       const holder = new THREE.Group(); holder.add(d.group); holder.rotation.y = dir > 0 ? Math.PI / 2 : -Math.PI / 2; scene.add(holder);
       const dr = { d, holder, x, y, dir, owner: pr.owner, t: 0, fireT: 0, dmgT: 0, life: 5.2, state: 'pop' };
@@ -280,7 +294,7 @@ export default {
     function stepDragon(dr, dt) {
       dr.t += dt; dr.d.update(dt);
       const sc = Math.min(1, dr.t / 0.35); dr.holder.scale.setScalar(Math.max(0.01, sc * (1 + Math.sin(dr.t * 20) * (dr.t < 0.5 ? 0.15 : 0))));
-      const enemy = castles[1 - dr.owner];
+      const enemy = four ? (castles.filter((c) => foe(c, dr.owner) && !c.ko).sort((a, b) => Math.abs(a.cx - dr.x) - Math.abs(b.cx - dr.x))[0] || castles[teams[1 - teamOf[dr.owner]][0]]) : castles[1 - dr.owner];
       const distE = enemy.cx - dr.x; const near = Math.abs(distE) < 12 && !enemy.ko;
       const touching = castleDist(dr.x, dr.y + 0.5, enemy) < 2.6;
       if (dr.t > 0.5 && !touching && dr.life > 0.8) { dr.x += dr.dir * 3.4 * dt; }
@@ -324,7 +338,7 @@ export default {
         pr.vx += (-sl * G0 * 0.45 + pr.dirx * 4.2) * h; pr.vx *= (1 - 0.1 * h);
         pr.x += pr.vx * h; pr.rollT += h;
         pr.y = terrain.heightAt(pr.x) + pr.rad * 0.85;
-        const cc = castleAt(pr.x, pr.y, pr.rad * 0.4, pr.t < 0.55 ? pr.owner : -1);
+        const cc = castleAt(pr.x, pr.y, pr.rad * 0.4, pr.t < 0.55 ? pr.owner : -1, pr.owner);
         if (cc || pr.x < -XW + 2 || pr.x > XW - 2 || pr.rollT > 4.4 || (Math.abs(pr.vx) < 1.2 && (pr.slowT += h) > 0.6)) { explode(pr, pr.x, pr.y); return; }
         pr.scT -= h; if (pr.scT <= 0) { pr.scT = 0.12; terrain.scorch(pr.x, 0.5, 1.4); }
         if (Math.random() < h * 70) fx.particles.emit(pr.x - Math.sign(pr.vx) * 0.5, pr.y + rand(-0.2, 0.6), ZP, rand(-1, 1), rand(1, 3), 0, { life: rand(0.3, 0.6), size: rand(0.5, 0.9), color: [0xff7a1a, 0xffc93a, 0xff4a1a][Math.floor(rng() * 3)], gravity: -2 });
@@ -334,7 +348,7 @@ export default {
       pr.vy -= gravAcc() * h; pr.vx += windAcc(pr) * h;
       pr.x += pr.vx * h; pr.y += pr.vy * h;
       if (pr.x < -XW || pr.x > XW || pr.y < -8 || pr.y > 75) { pr.dead = true; scene.remove(pr.g); fx.texts.add('Weg...', clamp(pr.x, -XW + 4, XW - 4), clamp(pr.y, 2, 28), ZP, '#cfcfcf', 0.9); audio.sfx('miss', { vol: 0.4 }); return; }
-      const cc = castleAt(pr.x, pr.y, pr.rad * 0.5, pr.t < 0.55 ? pr.owner : -1);
+      const cc = castleAt(pr.x, pr.y, pr.rad * 0.5, pr.t < 0.55 ? pr.owner : -1, pr.owner);
       if (cc) {
         if (type.id === 'egg') { hatch(pr, pr.x, pr.y); return; }
         explode(pr, pr.x, pr.y); return;
@@ -391,7 +405,7 @@ export default {
           pr.g.userData.inner.rotation.z -= pr.vx * dt * 0.6;
         }
         // nul-afstand tot de vijand (voor "op een haar")
-        const ec = castles[1 - pr.owner]; if (!ec.ko) pr.bestD = Math.min(pr.bestD, castleDist(pr.x, pr.y, ec));
+        for (const ec of castles) if (foe(ec, pr.owner) && !ec.ko) pr.bestD = Math.min(pr.bestD, castleDist(pr.x, pr.y, ec));
       }
       for (let i = dragons.length - 1; i >= 0; i--) { if (!stepDragon(dragons[i], dt)) dragons.splice(i, 1); }
     }
@@ -406,8 +420,8 @@ export default {
       for (let k = 0, kmax = collide ? 120 * 9 : 14 * NPREV + 1; k < kmax; k++) {
         vy += ay * h; vx += ax * h; x += vx * h; y += vy * h; t += h;
         if (collide) {
-          const ec = castles[1 - p.i]; best = Math.min(best, castleDist(x, y, ec));
-          if (castleAt(x, y, 0.3, t < 0.55 ? p.i : -1)) { hit = true; endX = x; endY = y; break; }
+          for (const ec of castles) if (foe(ec, p.i) && !ec.ko) best = Math.min(best, castleDist(x, y, ec));
+          if (castleAt(x, y, 0.3, t < 0.55 ? p.i : -1, p.i)) { hit = true; endX = x; endY = y; break; }
           if (y < terrain.heightAt(x) + 0.2 && t > 0.15) { endX = x; endY = y; break; }
           if (x < -XW || x > XW || y < -8 || y > 75) break;
         }
@@ -441,14 +455,14 @@ export default {
     }
     function setHint() {
       if (S.phase !== 'aim') { return; }
-      if (S.sim) hud.setHint(`<b>${S.chaos.name}</b> Allebei richten en schieten! ${pl.map((p) => `${names[p.i]}: ${p.type.icon} ${p.type.name}`).join('  ·  ')}`);
+      if (S.sim) hud.setHint(four ? `<b>Iedereen tegelijk!</b> Richt en schiet${S.chaos ? ` · <b>${S.chaos.name}</b>` : ''} · ${pl.map((p) => `<span style="color:${players[p.i].css}">${names[p.i]}</span>: ${p.type.icon}`).join(' ')}` : `<b>${S.chaos.name}</b> Allebei richten en schieten! ${pl.map((p) => `${names[p.i]}: ${p.type.icon} ${p.type.name}`).join('  ·  ')}`);
       else { const p = pl[S.shooters[0]]; hud.setHint(`<b style="color:${players[p.i].css}">${names[p.i]}</b> is aan de beurt: ${p.type.icon} <b>${p.type.name}</b> — ${p.type.blurb}${S.chaos ? ` · <b>${S.chaos.name}</b>` : ''}${p.extra > 0 ? ' · 🍀 extra schot!' : ''}`); }
     }
 
     // ------------------------------------------------------------ beurten
     function nextChaos() {
       if (S.forceChaos) { const id = S.forceChaos; S.forceChaos = null; return CHAOS.find((c) => c.id === id); }
-      if (S.bag.length === 0) { S.bag = CHAOS.map((c) => c.id).sort(() => rng() - 0.5); }
+      if (S.bag.length === 0) { S.bag = CHAOS.filter((c) => !(four && c.id === 'sim')).map((c) => c.id).sort(() => rng() - 0.5); }
       const id = S.bag.pop(); return CHAOS.find((c) => c.id === id);
     }
     function rollWind() {
@@ -461,10 +475,10 @@ export default {
       if (!extra) {
         S.turn++;
         S.chaos = S.turn % 4 === 0 ? nextChaos() : null;
-        S.sim = !!(S.chaos && S.chaos.id === 'sim');
+        S.sim = four || !!(S.chaos && S.chaos.id === 'sim');
         S.gdir = S.chaos && S.chaos.id === 'flip' ? -1 : 1;
         S.wind = rollWind();
-        S.shooters = S.sim ? [0, 1] : [S.nextShooter];
+        S.shooters = S.sim ? pl.filter((q) => !castles[q.i].ko).map((q) => q.i) : [S.nextShooter];
         if (!S.sim) S.nextShooter = 1 - S.nextShooter;
         arrow.userData.draw(S.wind, S.chaos && S.chaos.id === 'storm' ? ' !!!' : '');
       }
@@ -496,19 +510,21 @@ export default {
     function endOfShot() {
       // alles is uitgeknald
       hud.setTimer(null);
-      if (castles.some((c) => c.ko)) { startKo(); return; }
+      if (teams.some((_, t) => !teamAlive(t))) { startKo(); return; }
       const p = pl[S.shooters[0]];
       if (!S.sim && p.extra > 0) { p.extra = 0; startTurn(S.shooters[0], true); return; }
       // einde van het duel door tijd?
-      const equal = pl[0].shots === pl[1].shots;
+      const equal = pl.every((q) => q.shots === pl[0].shots);
       if ((S.gameT >= SOFT_LIMIT && equal) || S.gameT >= HARD_LIMIT) { decideByPoints(); return; }
       startTurn();
     }
-    function winnerByPoints() {
-      const a = castles[0].hp, b = castles[1].hp;
+    function winnerByPoints() {   // geeft een team-index (bij 2 spelers = spelers-index) of null
+      const a = teamHp(0), b = teamHp(1);
       if (a !== b) return a > b ? 0 : 1;
-      if (pl[0].dealt !== pl[1].dealt) return pl[0].dealt > pl[1].dealt ? 0 : 1;
-      if (Math.abs(pl[0].bestMiss - pl[1].bestMiss) > 0.01) return pl[0].bestMiss < pl[1].bestMiss ? 0 : 1;
+      const da = teams[0].reduce((x, i) => x + pl[i].dealt, 0), db = teams[1].reduce((x, i) => x + pl[i].dealt, 0);
+      if (da !== db) return da > db ? 0 : 1;
+      const ma = Math.min(...teams[0].map((i) => pl[i].bestMiss)), mb = Math.min(...teams[1].map((i) => pl[i].bestMiss));
+      if (Math.abs(ma - mb) > 0.01) return ma < mb ? 0 : 1;
       return null;
     }
     function decideByPoints() {
@@ -517,7 +533,7 @@ export default {
     }
     function startKo() {
       S.phase = 'ko'; S.endT = 0; hud.setHint(null);
-      const a = castles[0].ko, b = castles[1].ko;
+      const a = !teamAlive(0), b = !teamAlive(1);
       if (a && b) S.koWinner = winnerByPoints(); else S.koWinner = a ? 1 : 0;
       if (S.koWinner != null) hud.showBig('KASTEEL VERWOEST!', 1700, '#ff8a5a');
       ctx.shake(1);
@@ -525,14 +541,17 @@ export default {
     function finishGame() {
       if (done) return; done = true;
       const w = S.koWinner; const l = w == null ? null : 1 - w;
-      const dealt = [Math.round(pl[0].dealt), Math.round(pl[1].dealt)];
+      const dealt = pl.map((p) => Math.round(p.dealt));
+      const nw = w == null ? '' : teamName(w), nl = l == null ? '' : teamName(l), hpw = w == null ? 0 : teamHp(w), hpl = l == null ? 0 : teamHp(l);
       let summary;
-      if (w == null) summary = 'Precies even sterk! Beide kastelen even beschadigd.';
-      else if (S.byPoints) summary = `<b>${names[w]}</b> had na afloop de meeste kasteel over (${castles[w].hp} tegen ${castles[l].hp}).`;
-      else summary = pick([`Het kasteel van <b>${names[l]}</b> ligt in puin! <b>${names[w]}</b> wint!`, `<b>${names[w]}</b> blies het kasteel van ${names[l]} van de kaart.`, `Wat een knal! <b>${names[w]}</b> is de kanonnenkoning.`]);
-      summary += `<br>Schade: ${names[0]} ${dealt[0]} · ${names[1]} ${dealt[1]}.`;
+      if (w == null) summary = four ? 'Precies even sterk! Beide teams even beschadigd.' : 'Precies even sterk! Beide kastelen even beschadigd.';
+      else if (S.byPoints) summary = `<b>${nw}</b> had na afloop de meeste kasteel over (${hpw} tegen ${hpl}).`;
+      else summary = four ? pick([`De kastelen van <b>${nl}</b> liggen in puin! <b>${nw}</b> winnen!`, `<b>${nw}</b> bliezen de burchten van ${nl} van de kaart.`, `Wat een knal! <b>${nw}</b> zijn de kanonnenkoningen.`])
+        : pick([`Het kasteel van <b>${names[l]}</b> ligt in puin! <b>${names[w]}</b> wint!`, `<b>${names[w]}</b> blies het kasteel van ${names[l]} van de kaart.`, `Wat een knal! <b>${names[w]}</b> is de kanonnenkoning.`]);
+      summary += `<br>Schade: ${players.map((q, i) => `${names[i]} ${dealt[i]}`).join(' · ')}.`;
       S.ended = true;
-      ctx.finishPvp({ winner: w, score: dealt, summary, delay: 600 });
+      if (four) ctx.finishPvp({ winners: w == null ? [] : teams[w].slice(), score: dealt, summary, delay: 600 });
+      else ctx.finishPvp({ winner: w, score: dealt, summary, delay: 600 });
     }
 
     // ------------------------------------------------------------ richten
@@ -579,7 +598,7 @@ export default {
     const camP = new THREE.Vector3(0, 14, 70), camL = new THREE.Vector3(0, 10.5, 0);
     function camera_(dt, mode = 0) {
       const aspect = camera.aspect || 1.7;
-      const half = 37;
+      const half = four ? 46 : 37;
       const dist = Math.max(48, half / (Math.tan(camera.fov * Math.PI / 360) * aspect));
       let tx = 0, zoom = 1, ty = 10.5;
       if (S.phase === 'fly' && projs.length) {
@@ -589,7 +608,7 @@ export default {
         tx = castles[S.shooters[0]].cx * 0.12;
       }
       if (mode === 1) { tx = Math.sin(introT * 0.5) * 7; zoom = 1; }
-      if (S.phase === 'ko' || S.phase === 'end') { const w = S.koWinner; const l = w == null ? null : castles[1 - w]; tx = l ? l.cx * 0.55 : 0; zoom = 0.8; }
+      if (S.phase === 'ko' || S.phase === 'end') { const w = S.koWinner; tx = w == null ? 0 : (teams[1 - w].reduce((a, i) => a + castles[i].cx, 0) / teams[1 - w].length) * 0.55; zoom = 0.8; }
       sleepers.camX = damp(sleepers.camX, tx, 3, dt); sleepers.camZoom = damp(sleepers.camZoom, zoom, 4, dt);
       const d = dist * sleepers.camZoom;
       camP.set(sleepers.camX, 14.8 - (1 - sleepers.camZoom) * 6, d); camL.set(sleepers.camX, ty, 0);
@@ -711,7 +730,7 @@ export default {
       }
       if (S.phase === 'ko') {
         S.endT += dt;
-        if (S.endT > 0.6 && !S.celebrated) { S.celebrated = true; const w = S.koWinner; for (const c of castles) { c.c.pose = w === c.i ? 'cheer' : w == null ? 'idle' : 'sad'; c.pose = c.c.pose; c.poseT = 99; } if (w != null) { audio.sfx('win'); for (let k = 0; k < 5; k++) setTimeout(() => { try { fx.particles.burst(castles[w].cx + rand(-4, 4), BASE_Y + rand(7, 11), 1, { count: 40, speed: 7, up: 1.2, life: 1.6, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 }); audio.sfx('sparkle', { vol: 0.4 }); } catch (e) { /* weg */ } }, k * 300); } }
+        if (S.endT > 0.6 && !S.celebrated) { S.celebrated = true; const w = S.koWinner; for (const c of castles) { c.c.pose = w != null && teams[w].includes(c.i) ? 'cheer' : w == null ? 'idle' : 'sad'; c.pose = c.c.pose; c.poseT = 99; } if (w != null) { audio.sfx('win'); for (let k = 0; k < 5; k++) setTimeout(() => { try { fx.particles.burst(castles[teams[w][k % teams[w].length]].cx + rand(-4, 4), BASE_Y + rand(7, 11), 1, { count: 40, speed: 7, up: 1.2, life: 1.6, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 }); audio.sfx('sparkle', { vol: 0.4 }); } catch (e) { /* weg */ } }, k * 300); } }
         if (S.endT > 3.2) finishGame();
       }
     }
@@ -747,14 +766,16 @@ export default {
         for (const c of castles) fx.particles.burst(c.pivot.x, c.pivot.y + 2, 1, { count: 26, speed: 5, up: 1, life: 0.9, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff], gravity: 4 });
         hud.toast(sw ? 'Wissel! Je schiet met het kanon van de ander!' : 'Terug naar je eigen kanon.', 2600);
       },
-      celebrate(w) { for (const c of castles) { c.c.pose = c.i === w ? 'cheer' : 'sad'; c.pose = c.c.pose; c.poseT = 99; } },
+      celebrate(w, winners = [w]) { for (const c of castles) { c.c.pose = winners.includes(c.i) ? 'cheer' : 'sad'; c.pose = c.c.pose; c.poseT = 99; } },
       dispose() { },
       dbg: {
         state: () => ({ T, phase: S.phase, turn: S.turn, shooters: S.shooters.slice(), chaos: S.chaos && S.chaos.id, wind: S.wind, gameT: S.gameT, done, ended: S.ended, hp: castles.map((c) => c.hp), dealt: pl.map((p) => p.dealt), shots: pl.map((p) => p.shots), projs: projs.length, dragons: dragons.length, types: pl.map((p) => p.type.id), ang: pl.map((p) => p.ang), pow: pl.map((p) => p.pow), aimT: S.aimT, winner: S.koWinner, gdir: S.gdir, sim: S.sim, bestMiss: pl.map((p) => p.bestMiss) }),
         pl, castles, terrain, predict: (i, a, pw) => predict(pl[i], a, pw, true), projs, S,
         startChaos: (id) => { S.forceChaos = id; S.turn = Math.floor(S.turn / 4) * 4 + 3; startTurn(); },
         setAim: (i, a, pw) => { pl[i].ang = a; pl[i].pow = pw; },
-        fireNow: (i) => fire(pl[i]),
+        fireNow: (i) => fire(pl[i]), teams, teamOf,
+        boom: (x, y, owner) => explode({ owner, type: TYPES[0], R: 3.0, dmg: 34, bestD: 999, g: new THREE.Group() }, x, y),   // test: laat een kogel van `owner` ontploffen op (x, y)
+        endShot: () => endOfShot(),
         setType: (i, id) => { pl[i].type = TYPE_BY_ID[id]; },
       },
     };

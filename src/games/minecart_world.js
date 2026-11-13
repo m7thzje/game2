@@ -6,7 +6,12 @@ import { makeBrother, makeNPC, PLAYER_COLORS } from '../engine/chars.js';
 // twee spoorbanen met elk 3 rails, mijnkarren, hindernissen (vonkjes, rotsen, gaten, turbo-pads, vuur, brokkelmuur).
 
 export const LANES = 3;
-export const LANE_X = [[-7, -5, -3], [3, 5, 7]];
+// sporen per aantal spelers: 3 rails per speler (2 / 3 / 4 sporen naast elkaar). setPlayers(n) kiest de indeling (in place, zodat laneX overal klopt).
+const CENTERS = { 2: [-5, 5], 3: [-7.5, 0, 7.5], 4: [-9.6, -3.2, 3.2, 9.6] };   // midden van elk spoor (3 rails op -2, 0, +2 daarvan)
+const LAYOUTS = Object.fromEntries(Object.entries(CENTERS).map(([n, cs]) => [n, cs.map((c) => [c - 2, c, c + 2])]));
+export const LANE_X = LAYOUTS[2].map((a) => a.slice());
+export const setPlayers = (n) => { LANE_X.length = 0; for (const a of LAYOUTS[n] || LAYOUTS[2]) LANE_X.push(a.slice()); };
+export const sideX = (n) => (n === 2 ? 11.4 : n === 3 ? 12.8 : 14.8);   // x van de steunbalken (zijkant van de tunnel)
 export const laneX = (p, l) => LANE_X[p][l];
 export const NS = 44, S0 = -14, SEG = 2.5;    // strips: NS segmenten van SEG meter, beginnend bij s = S0 (achter de kar)
 export const VIEW = S0 + NS * SEG;             // ~96 m vooruit
@@ -158,7 +163,7 @@ export function makeCart(i) {
     wheels.push(w);
   }
   // voorlamp met kristal
-  const lamp = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: i ? 0x6fd0ff : 0x7dffa0, emissiveIntensity: 1.2 })); lamp.position.set(0, 1.1, -1.25); lamp.scale.y = 1.5; inner.add(lamp);
+  const lamp = new THREE.Mesh(new THREE.OctahedronGeometry(0.2, 0), new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: i === 0 ? 0x7dffa0 : i === 1 ? 0x6fd0ff : PLAYER_COLORS[i], emissiveIntensity: 1.2 })); lamp.position.set(0, 1.1, -1.25); lamp.scale.y = 1.5; inner.add(lamp);
   const flag = new THREE.Group(); flag.position.set(0.7, 1.3, 0.9); inner.add(flag);
   flag.add(mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.1, 5), mat(0x444444), { pos: [0, 0.55, 0], cast: false }));
   const cloth = mesh(new THREE.BoxGeometry(0.02, 0.32, 0.55), col, { pos: [0, 1.0, 0.28], cast: false }); flag.add(cloth);
@@ -238,8 +243,9 @@ export function makeWall() {
 }
 
 // ---------------- hele wereld ----------------
-export function buildMine(ctx, rng) {
+export function buildMine(ctx, rng, NP = 2) {
   const { scene } = ctx;
+  const SX = sideX(NP);
   const B = makeBend();
   const M = { B, tracks: [], decor: {}, fx: [] };
   scene.fog = new THREE.Fog(0x140c2a, 38, 125);
@@ -259,11 +265,14 @@ export function buildMine(ctx, rng) {
   // sporen
   const sleeperT = sleeperTex(); sleeperT.wrapS = sleeperT.wrapT = THREE.RepeatWrapping;
   const railM = { color: 0xcfd6e6, metal: 0.85, rough: 0.28, emissive: 0x4a5a78, emi: 0.35 };
-  for (let p = 0; p < 2; p++) {
+  for (let p = 0; p < NP; p++) {
     const slots = [];
     for (let l = 0; l < LANES; l++) {
-      const sl = makeStrip(0.86, 0xffffff, { map: sleeperT, rough: 0.9, repU: 1 }); scene.add(sl);
-      const r1 = makeStrip(0.07, railM.color, railM), r2 = makeStrip(0.07, railM.color, railM); scene.add(r1, r2);
+      // bij 3-4 sporen naast elkaar: elk spoor een tint van zijn speler, zodat je ze uit elkaar houdt
+      const tint = NP > 2 ? new THREE.Color(0xffffff).lerp(new THREE.Color(PLAYER_COLORS[p]), 0.62).getHex() : 0xffffff;
+      const rtint = NP > 2 ? new THREE.Color(railM.color).lerp(new THREE.Color(PLAYER_COLORS[p]), 0.5).getHex() : railM.color;
+      const sl = makeStrip(0.86, tint, { map: sleeperT, rough: 0.9, repU: 1 }); scene.add(sl);
+      const r1 = makeStrip(0.07, rtint, railM), r2 = makeStrip(0.07, rtint, railM); scene.add(r1, r2);
       slots.push({ sl, r1, r2 });
     }
     M.tracks.push(slots);
@@ -271,7 +280,7 @@ export function buildMine(ctx, rng) {
   // scheidingsrichel in het midden (lage rotswand met kristallen)
   const ridgeM = { rough: 0.9, emissive: 0x2a1850, emi: 0.5, cols: 1 };
   const ridgeL = makeStrip(1, 0x7a6aa0, { ...ridgeM, normal: [-0.8, 0.6, 0] }), ridgeR = makeStrip(1, 0x7a6aa0, { ...ridgeM, normal: [-0.8, -0.6, 0] }), ridgeTop = makeStrip(1, 0x8a78c0, { ...ridgeM, cols: 1 });
-  scene.add(ridgeL, ridgeR, ridgeTop);
+  scene.add(ridgeL, ridgeR, ridgeTop); if (NP !== 2) { ridgeL.visible = ridgeR.visible = ridgeTop.visible = false; }
   // ---- geïnstantieerd decor ----
   const N_CRY = 110, N_BOUL = 70, N_STAL = 70, N_BEAM = 9;
   const mkInst = (geo, material, n) => { const im = new THREE.InstancedMesh(geo, material, n); im.frustumCulled = false; im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(im); return im; };
@@ -281,7 +290,7 @@ export function buildMine(ctx, rng) {
   const stalGeo = new THREE.ConeGeometry(0.6, 3.2, 5); stalGeo.translate(0, -1.6, 0);
   const stal = mkInst(stalGeo, new THREE.MeshStandardMaterial({ color: 0x5a4e78, roughness: 1, flatShading: true }), N_STAL);
   const post = mkInst(new THREE.BoxGeometry(0.5, 11, 0.5), mat(0x6a4426), N_BEAM * 2);
-  const beam = mkInst(new THREE.BoxGeometry(23.5, 0.6, 0.6), mat(0x7a4e2c), N_BEAM);
+  const beam = mkInst(new THREE.BoxGeometry(SX * 2 + 0.7, 0.6, 0.6), mat(0x7a4e2c), N_BEAM);
   const lamps = mkInst(new THREE.SphereGeometry(0.34, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffc060 }), N_BEAM * 2);
   const lampGlow = []; // sprites per lamp (aantal beperkt)
   const gT = glowTex();
@@ -319,12 +328,12 @@ export function buildMine(ctx, rng) {
     for (let k = 0; k < N_BEAM; k++) {
       let s = ((k * SP - d) % (N_BEAM * SP)); if (s < 0) s += N_BEAM * SP; s += S0 - 4;
       const bx = B.bx(s), hy = B.hy(s);
-      for (let q = 0; q < 2; q++) { dummy.position.set((q ? 11.4 : -11.4) + bx, 5.5 + hy, zc - s); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); post.setMatrixAt(k * 2 + q, dummy.matrix); }
+      for (let q = 0; q < 2; q++) { dummy.position.set((q ? SX : -SX) + bx, 5.5 + hy, zc - s); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); post.setMatrixAt(k * 2 + q, dummy.matrix); }
       dummy.position.set(bx, 10.8 + hy, zc - s); dummy.updateMatrix(); beam.setMatrixAt(k, dummy.matrix);
-      for (let q = 0; q < 2; q++) { dummy.position.set((q ? 9.2 : -9.2) + bx, 9.2 + hy + Math.sin(t * 1.3 + k + q) * 0.05, zc - s); dummy.updateMatrix(); lamps.setMatrixAt(k * 2 + q, dummy.matrix); }
-      if (k < lampGlow.length) { lampGlow[k].position.set((k % 2 ? 9.2 : -9.2) + bx, 9.2 + hy, zc - s); lampGlow[k].visible = s > -5 && s < 70; }
+      for (let q = 0; q < 2; q++) { dummy.position.set((q ? SX - 2.2 : -(SX - 2.2)) + bx, 9.2 + hy + Math.sin(t * 1.3 + k + q) * 0.05, zc - s); dummy.updateMatrix(); lamps.setMatrixAt(k * 2 + q, dummy.matrix); }
+      if (k < lampGlow.length) { lampGlow[k].position.set((k % 2 ? SX - 2.2 : -(SX - 2.2)) + bx, 9.2 + hy, zc - s); lampGlow[k].visible = s > -5 && s < 70; }
     }
-    for (const dw of M.dwarfs) { let s = (dw.b - d) % 132; if (s < 0) s += 132; s += S0 - 6; if (s < -3) s += 132; const on = s < VIEW - 6; dw.c.group.visible = on; if (on) { dw.c.group.position.set(B.bx(s) + (dw.k % 2 ? 0.25 : -0.25), 1.12 + B.hy(s), zc - s); dw.c.faceDir(0, 1); dw.c.update(dt); } }
+    for (const dw of M.dwarfs) { let s = (dw.b - d) % 132; if (s < 0) s += 132; s += S0 - 6; if (s < -3) s += 132; const on = s < VIEW - 6; dw.c.group.visible = on; if (on) { dw.c.group.position.set(B.bx(s) + (NP === 3 ? (dw.k % 2 ? 3.5 : -3.5) : (dw.k % 2 ? 0.25 : -0.25)), 1.12 + B.hy(s), zc - s); dw.c.faceDir(0, 1); dw.c.update(dt); } }
     endGlow.position.set(B.bx(VIEW) * 0.9, 5 + B.hy(VIEW) * 0.9, zc - VIEW - 5);
     for (const im of [cry, boul, stal, post, beam, lamps]) im.instanceMatrix.needsUpdate = true; if (cry.instanceColor) cry.instanceColor.needsUpdate = true;
   };

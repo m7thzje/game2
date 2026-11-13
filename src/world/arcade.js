@@ -28,6 +28,15 @@ import { SPORT_CABS, SPORT_PROPS, SPORT_RUGS, sportFloor, sportWall, sportShell,
 import { DOOR_CABS, DEUR_PROPS, DEUR_RUGS, deurWall, deurShell, deurCenter, deurBack, DeurHall, DEUR_HOST } from './arcade_deurhal.js';
 import { buildPartyTable, buildAlbumStand, refreshAlbum, SecretDoor } from './arcade_extra.js';
 import { nPlayers, activeIds, inp, anyP, pcol, pcss, pname, klabel, LABEL_CSS, joinNames, standTxt, sum, wins3, topOf, pairLabel, allPairs, supports, wantsAll, mainQueue, newQueue, readResult, Menu3 } from './players3.js';
+import { GAMEHAL } from '../variant.js';
+import * as GH from '../gamehal/flow.js';
+import { playable, playMode, badge, modeText, sizesTxt as GH_sizes } from '../gamehal/common.js';
+const BADGE_COL = { all: '#2f6fe0', ko: '#c0392b', pair: '#a86a00', no: '#555a66' };
+function badgeSprite(bd) {   // klein gekleurd label boven een kast
+  const t = canvasTex(320, 80, (g, w, hh) => { g.fillStyle = BADGE_COL[bd.cls] || '#2f6fe0'; g.strokeStyle = '#fff'; g.lineWidth = 6; const r = 30; g.beginPath(); g.moveTo(r, 4); g.arcTo(w - 4, 4, w - 4, hh - 4, r); g.arcTo(w - 4, hh - 4, 4, hh - 4, r); g.arcTo(4, hh - 4, 4, 4, r); g.arcTo(4, 4, w - 4, 4, r); g.closePath(); g.fill(); g.stroke(); g.fillStyle = '#fff'; g.font = 'bold 40px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(bd.txt, w / 2, hh / 2 + 3, w - 30); });
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthWrite: false })); sp.scale.set(3.0, 0.75, 1); sp.renderOrder = 16; return sp;
+}
+const canPlay = (def, n) => (!def ? true : GAMEHAL ? playable(def, n) : supports(def, n));   // Gamehal: elk spel is te spelen (alles samen, teams, knock-out of winnaar-blijft)
 Object.assign(ZONE_PROPS, SPORT_PROPS, DEUR_PROPS);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -101,7 +110,7 @@ export class ArcadeMode {
       const ring = mesh(new THREE.RingGeometry(0.75, 0.95, 24), new THREE.MeshBasicMaterial({ color: pcol(i), transparent: true, opacity: 0.7, depthWrite: false }), { cast: false, receive: false, rot: [-Math.PI / 2, 0, 0] }); this.scene.add(ring);
       const label = floatLabel(pname(i), '', LABEL_CSS[i]); label.scale.set(2.6, 0.8, 1); label.position.y = c.height + 0.95; label.material.depthTest = false; c.group.add(label);
       const viaDoor = opts.via === 'door'; const dxs = (DOORS[this.hallId].find((d) => d.to === opts.fromHall) || DOORS[this.hallId][0]).x;
-      const off = np === 3 ? (i - 1) * 1.8 : (i ? 1.4 : -1.4), sx0 = np === 3 ? (i - 1) * 2.6 : (i ? 1 : -1) * 2;
+      const off = (i - (np - 1) / 2) * (np === 2 ? 2.8 : np === 3 ? 1.8 : 1.5), sx0 = (i - (np - 1) / 2) * (np === 2 ? 4 : np === 3 ? 2.6 : 2.4);
       return { i, c, ring, x: viaDoor ? clamp(dxs + off, -HALL.w / 2 + 1.6, HALL.w / 2 - 1.6) : sx0, z: viaDoor ? -HALL.d / 2 + 7.5 : HALL.d / 2 - 6, y: 0, vx: 0, vz: 0, vy: 0, grounded: true, yaw: Math.PI, stepT: 0 };
     });
     this.mid = new THREE.Vector3(0, 0, 12); this.camPos = new THREE.Vector3(0, 40, 44); this.camLook = new THREE.Vector3(0, 0, 2); this.intro = 3.2;
@@ -111,8 +120,8 @@ export class ArcadeMode {
   }
   hasTourney() { return !!TOURNEY; }
   loadedIds() { return this.hall.ids.filter((id) => this.app.games[id]); }
-  allLoaded() { const ok = new Set(unlockedIds()); return ARCADE_IDS.filter((id) => this.app.games[id] && ok.has(id) && supports(this.app.games[id])); }   // alleen spellen uit ontgrendelde hallen
-  isOff(id) { return (S.arcade.excluded || []).includes(id) || !supports(this.app.games[id]); }
+  allLoaded() { const ok = new Set(unlockedIds()); return ARCADE_IDS.filter((id) => this.app.games[id] && ok.has(id) && canPlay(this.app.games[id])); }   // alleen spellen uit ontgrendelde hallen
+  isOff(id) { return (S.arcade.excluded || []).includes(id) || !canPlay(this.app.games[id]); }
   defOf(id) { return this.app.games[id] || { name: NAME[id], icon: PIC[id] }; }
 
   // ------------------------------------------------------------------ gebouw
@@ -137,8 +146,8 @@ export class ArcadeMode {
     this.exitDoor = mesh(new THREE.CircleGeometry(3.0, 28), new THREE.MeshBasicMaterial({ color: 0xfff0b0, transparent: true, opacity: 0.55, depthWrite: false }), { cast: false, receive: false, pos: [0, 0.08, ez], rot: [-Math.PI / 2, 0, 0] }); sc.add(this.exitDoor);
     D.tor(3.0, 0.18, 0, 0.2, ez, 0xffe14a, { kind: 'p0', rx: Math.PI / 2 }, 28);
     for (let i = 0; i < 3; i++) D.cone(0.5, 0.9, 3, (i - 1) * 1.6, 0.1, ez + 3.6, 0xffe14a, { kind: 'p' + i, rx: Math.PI / 2, ry: 0 });   // pijltjes naar buiten
-    const exl = floatLabel('🚪 Uitgang', 'terug naar het dorp', '#ffe14a'); exl.position.set(0, 3.8, ez); sc.add(exl);
-    this.interact.push({ type: 'exit', x: 0, z: ez, r: 3.4, label: 'Terug naar het dorp' });
+    const exl = floatLabel('🚪 Uitgang', GAMEHAL ? 'terug naar de lobby' : 'terug naar het dorp', '#ffe14a'); exl.position.set(0, 3.8, ez); sc.add(exl);
+    this.interact.push({ type: 'exit', x: 0, z: ez, r: 3.4, label: GAMEHAL ? 'Terug naar de lobby' : 'Terug naar het dorp' });
     shell(this, D); if (sport) sportShell(this, D); if (doorh) deurShell(this, D);
     // fakkels (vlam = instanced mesh, geen licht) + steunen
     const fl = []; for (let i = 0; i < 5; i++) for (const sx of [-1, 1]) { const fx = sx * (HALL.w / 2 - 0.8), fz = -HALL.d / 2 + 4.5 + i * 8.2; D.cyl(0.07, 0.1, 1.1, 5, fx, 4.3, fz, 0x5b3d24); D.box(0.4, 0.1, 0.4, fx, 3.8, fz, 0x333338); fl.push([fx, 4.9, fz]); }
@@ -242,11 +251,11 @@ export class ArcadeMode {
   buildPlan() {
     const D = this.D; const px = 7.5, pz = 14.2;
     D.cyl(0.1, 0.12, 3.0, 6, px - 1.2, 1.5, pz, 0x6b4a2e); D.cyl(0.1, 0.12, 3.0, 6, px + 1.2, 1.5, pz, 0x6b4a2e);
-    const bt = canvasTex(256, 160, (g, w, hh) => { g.fillStyle = '#1d4a9a'; g.fillRect(0, 0, w, hh); g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 1; for (let x = 0; x < w; x += 16) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, hh); g.stroke(); } for (let y = 0; y < hh; y += 16) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } g.strokeStyle = '#fff'; g.lineWidth = 3; for (let i = 0; i < 5; i++) g.strokeRect(14 + i * 48, 62, 40, 56); g.textAlign = 'center'; g.fillStyle = '#fff'; g.font = 'bold 34px Fredoka, Arial Black, sans-serif'; g.fillText('BOUWPLAN', w / 2, 38); });
+    const bt = canvasTex(256, 160, (g, w, hh) => { g.fillStyle = '#1d4a9a'; g.fillRect(0, 0, w, hh); g.strokeStyle = 'rgba(255,255,255,.35)'; g.lineWidth = 1; for (let x = 0; x < w; x += 16) { g.beginPath(); g.moveTo(x, 0); g.lineTo(x, hh); g.stroke(); } for (let y = 0; y < hh; y += 16) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); } g.strokeStyle = '#fff'; g.lineWidth = 3; for (let i = 0; i < 5; i++) g.strokeRect(14 + i * 48, 62, 40, 56); g.textAlign = 'center'; g.fillStyle = '#fff'; g.font = 'bold 34px Fredoka, Arial Black, sans-serif'; g.fillText(GAMEHAL ? 'HALLEN' : 'BOUWPLAN', w / 2, 38); });
     this.scene.add(mesh(new THREE.BoxGeometry(2.8, 1.8, 0.12), new THREE.MeshStandardMaterial({ map: bt, roughness: 0.8 }), { pos: [px, 2.4, pz], cast: false }));
-    const pl = floatLabel('🏗️ Bouwplan', 'hallen, rang & stand', '#9ad8ff'); pl.position.set(px, 4.9, pz); this.scene.add(pl);
+    const pl = floatLabel(GAMEHAL ? '🏆 Hallen & rang' : '🏗️ Bouwplan', GAMEHAL ? 'alle hallen staan open' : 'hallen, rang & stand', '#9ad8ff'); pl.position.set(px, 4.9, pz); this.scene.add(pl);
     this.colliders.push({ x: px, z: pz, r: 1.0 });
-    this.interact.push({ type: 'plan', x: px, z: pz + 2, r: 3.2, label: 'Bouwplan bekijken' });
+    this.interact.push({ type: 'plan', x: px, z: pz + 2, r: 3.2, label: GAMEHAL ? 'Hallen & rang bekijken' : 'Bouwplan bekijken' });
   }
   async planModal() {
     const r = rank(), A = S.arcade, n = S.names; const cards = [];
@@ -263,11 +272,17 @@ export class ArcadeMode {
     const fav = Object.entries(A.byGame).sort((a, b) => b[1].plays - a[1].plays)[0];
     const stats = `🎮 ${A.plays} duels · 🏅 ${standTxt(A.wins)} · 🤝 ${A.draws} gelijk · 🏆 toernooien ${activeIds().map((i) => (A.tourneys[i] || 0)).join(' – ')}<br>🌟 dagduels ${(S.daily && S.daily.total) || 0} · 📒 Deurman-stickers ${stickerCount()}/${STICKERS.length} · 🪙 ${S.coins} heitjes${fav ? ` · favoriet: ${this.defOf(fav[0]).icon || ''} ${this.defOf(fav[0]).name}` : ''}`;
     const body = h('div', { style: { maxHeight: '62vh', overflow: 'auto' } }, h('p', { style: { textAlign: 'center', fontSize: '22px', margin: '4px 0' }, html: `Rang: <b>${r.icon} ${r.name}</b>` }), bar, h('p', { class: 'small-note', style: { margin: '2px 0 8px' } }, goal), h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '8px 0' } }, ...cards), h('p', { style: { textAlign: 'center', fontSize: '16px' }, html: stats }));
-    await this.cardModal('🏗️ Bouwplan van de Speelhal', body);
+    await this.cardModal(GAMEHAL ? '🏆 Hallen & rang' : '🏗️ Bouwplan van de Speelhal', body);
   }
   // Rang-HUD linksonder: rang + voortgangsbalk + doel
   refreshRankHud() {
     if (!this.rankEl || !this.rankEl.isConnected) { this.rankEl = h('div', { class: 'hud-quest', style: { maxWidth: '330px' } }); ui.hudEl.append(this.rankEl); this._rk = null; }
+    if (GAMEHAL) {   // Gamehal: geen hallen om te bouwen, alleen rang en heitjes
+      const r = rank(), nx = r.next, frac = Math.round(rankFrac() * 100); const key = ['g', r.index, r.points, frac, S.coins].join('|'); if (this._rk === key) return; this._rk = key;
+      this.rankEl.classList.add('gh-rank');
+      this.rankEl.innerHTML = `<h4>Impactid Gamehal</h4><div>Rang: <b>${r.icon} ${r.name}</b>${nx ? ` <small>(${r.points}/${nx.at})</small>` : ' 👑'}</div><div style="height:9px;margin:3px 0;background:#2a1a3a;border-radius:6px;overflow:hidden;border:2px solid #000"><i style="display:block;height:100%;width:${frac}%;background:linear-gradient(90deg,#ffcf3a,#ff8a3a)"></i></div><div style="font-size:13px">🪙 ${S.coins} heitjes · voor hoedjes</div>`;
+      return;
+    }
     const r = rank(), nh = nextHall(); const nx = r.next; const frac = Math.round(rankFrac() * 100);
     const nextTxt = (nh != null ? `Volgende hal: ${HALL_NAMES[nh]} (🪙 ${Math.min(S.coins, HALL_COST[nh])}/${HALL_COST[nh]})` : 'Alle hallen gebouwd!') + ` · 📒 ${stickerCount()}/${STICKERS.length} stickers`;
     const key = [r.index, r.points, frac, nh, S.coins, stickerCount()].join('|'); if (this._rk === key) return; this._rk = key;
@@ -280,7 +295,7 @@ export class ArcadeMode {
     for (let i = 0; i < 6; i++) setTimeout(() => this.fx.burst(rand(-10, 10), 6 + rand(0, 5), rand(-2, 10), { count: 36, colors: [0xff5ad8, 0xffe14a, 0x5ad8ff, 0x7bff7b], speed: 8, size: 0.45, life: 1.5, gravity: 3 }), i * 240);
     this.life.party && this.life.party(7); this.players.forEach((p) => (p.c.pose = 'cheer'));
     const lines = [{ who: 'Koning Klopper', text: pick([`RANGSTIJGING! Jullie zijn nu ${r.icon} ${r.name}! Ik heb er een fanfare voor laten maken. De fanfare is nog aan het oefenen.`, `${r.icon} ${r.name}! Dat staat mooi op jullie visitekaartje. Als jullie een visitekaartje hadden.`, `Hoor je dat? Dat is het geluid van ${r.icon} ${r.name} worden. Het klinkt een beetje als confetti.`]) }];
-    if (r.index === RANKS.length - 1) lines.push({ who: 'Koning Klopper', text: 'Jullie zijn SPEELHAL-LEGENDES! Voor jullie geef ik het GROTE SLOTFEEST. Praat met mij en kies "Het Grote Slotfeest" wanneer jullie klaar zijn. Doorspelen mag daarna gewoon.' });
+    if (r.index === RANKS.length - 1 && !GAMEHAL) lines.push({ who: 'Koning Klopper', text: 'Jullie zijn SPEELHAL-LEGENDES! Voor jullie geef ik het GROTE SLOTFEEST. Praat met mij en kies "Het Grote Slotfeest" wanneer jullie klaar zijn. Doorspelen mag daarna gewoon.' });
     await this.say(lines); this.players.forEach((p) => (p.c.pose = 'idle')); this.busy = false; input.reset();
   }
   // Wijzer (bouncende pijl) voor de uitleg
@@ -336,7 +351,7 @@ export class ArcadeMode {
     try {
       for (;;) {
         const r = rank();
-        const c = await this.choose('Pauze', ['Doorgaan', '🏗️ Rang & Bouwplan', '🎲 Feestbord (Mario Party)', '📒 Deurman-vriendenboek', '👒 Hoeden & kleuren', 'Instellingen', '🌐 Online spelen', 'Naar het titelscherm'], `${r.icon} ${r.name}${r.next ? ` · ${r.points}/${r.next.at} punten` : ''} · 🪙 ${S.coins}`, true);
+        const c = await this.choose('Pauze', ['Doorgaan', GAMEHAL ? '🏆 Rang & hallen' : '🏗️ Rang & Bouwplan', GAMEHAL ? '🎲 Feestbord' : '🎲 Feestbord (Mario Party)', '📒 Deurman-vriendenboek', '👒 Hoeden & kleuren', 'Instellingen', '🌐 Online spelen', GAMEHAL ? 'Terug naar de lobby' : 'Naar het titelscherm'], `${r.icon} ${r.name}${r.next ? ` · ${r.points}/${r.next.at} punten` : ''} · 🪙 ${S.coins}`, true);
         if (c === 0 || c == null) break;
         if (c === 1) await this.planModal();
         else if (c === 2) { await this.partyMenu(); if (this.leaving) break; }
@@ -366,6 +381,7 @@ export class ArcadeMode {
     const sc = this.scene; const D = this.D; const neon = this.hallId === 1;
     this.zoneSigns = [];
     this.zones.forEach((z, zi) => {
+      if (GAMEHAL && z.id === 'drie') z.sub = 'voor 3 of 4 spelers';
       const rf = SPORT_RUGS[z.rug] || DEUR_RUGS[z.rug]; const rt = rf ? rf(z.color, z.color2, z.name) : rugTexture(z.rug, z.color, z.color2, z.name);
       const rm = new THREE.MeshStandardMaterial({ map: rt, roughness: 0.9, emissive: neon ? 0xffffff : 0x000000, emissiveMap: neon ? rt : null, emissiveIntensity: neon ? 0.5 : 0 });
       sc.add(mesh(new THREE.CircleGeometry(z.R, 48), rm, { cast: false, pos: [z.cx, 0.03, z.cz], rot: [-Math.PI / 2, 0, 0] }));
@@ -399,10 +415,17 @@ export class ArcadeMode {
     this.interact.push({ type: 'cab', id, x: ix, z: iz, r: 3.2, label: `${this.defOf(id).name || NAME[id]} spelen` });
   }
   refreshLabels() {
+    const np = nPlayers();
     for (const c of this.cabs) {
-      const gm = S.arcade.byGame[c.id]; const kg = gm ? topOf(gm.wins) : []; const sub = !supports(this.app.games[c.id]) ? (this.app.games[c.id].players.includes(3) ? '(alleen met 3 spelers)' : '(alleen met 2 spelers)') : this.isOff(c.id) ? '(uit het toernooi)' : gm ? `${kg.length === 1 ? '👑' + pname(kg[0])[0] + ' ' : ''}${activeIds().map((i) => gm.wins[i] || 0).join(' – ')}` : (this.games.includes(c.id) ? 'NIEUW!' : 'binnenkort');
+      const def = this.app.games[c.id]; const gm = S.arcade.byGame[c.id]; const kg = gm ? topOf(gm.wins) : [];
+      const sub = !canPlay(def, np) ? (GAMEHAL ? `(alleen met ${GH_sizes(def)} spelers)` : (def.players.includes(3) ? '(alleen met 3 spelers)' : def.players.includes(4) && !def.players.includes(2) ? '(alleen met 4 spelers)' : '(alleen met 2 spelers)')) : this.isOff(c.id) ? '(uit het toernooi)' : gm ? `${kg.length === 1 ? '👑' + pname(kg[0])[0] + ' ' : ''}${activeIds().map((i) => gm.wins[i] || 0).join(' – ')}` : (this.games.includes(c.id) ? 'NIEUW!' : 'binnenkort');
       if (c.lbl) { this.scene.remove(c.lbl); c.lbl.material.map && c.lbl.material.map.dispose(); c.lbl.material.dispose(); }
       const lbl = floatLabel(`${this.defOf(c.id).icon || PIC[c.id]} ${this.defOf(c.id).name || NAME[c.id]}`, sub, '#ffe14a'); lbl.scale.set(4.0, 1.24, 1); lbl.position.set(c.x, c.ly, c.z); this.scene.add(lbl); c.lbl = lbl;
+      if (GAMEHAL) {   // badge boven het label: 👥 2-4 / 👥 4 / 🏆 knock-out
+        if (c.badge) { this.scene.remove(c.badge); c.badge.material.map && c.badge.material.map.dispose(); c.badge.material.dispose(); c.badge = null; }
+        const bd = def ? badge(def, np) : { txt: '' };
+        if (bd.txt) { c.badge = badgeSprite(bd); c.badge.position.set(c.x, c.ly + 1.0, c.z); this.scene.add(c.badge); }
+      }
     }
   }
   drawWheel() {
@@ -537,14 +560,14 @@ export class ArcadeMode {
   // Feestbord (Mario Party): keuzekaart, daarna naar het bord (board.js)
   async partyMenu() {
     for (;;) {
-      const c = await this.choose('🎲 Feestbord (Mario Party)', ['🎲 Feestbord starten!', 'Hoe werkt het?', 'Terug'], `Een bordspel voor ${nPlayers() === 3 ? 'drie' : 'twee'}: dobbelen, muntjes pakken, trofeeën jagen — met duels uit de hallen tussendoor!`);
+      const c = await this.choose('🎲 Feestbord (Mario Party)', ['🎲 Feestbord starten!', 'Hoe werkt het?', 'Terug'], `Een bordspel voor ${['', '', 'twee', 'drie', 'vier'][nPlayers()]}: dobbelen, muntjes pakken, trofeeën jagen — met duels uit de hallen tussendoor!`);
       if (c === 1) { await this.say([{ who: this.hostName, text: 'Jullie dobbelen om de beurt en lopen over het bord. Op vakjes pak je muntjes, krijg je pech of volgt er een DUEL. Wie na de laatste ronde de meeste trofeeën heeft, wint het Feestbord. En jullie pionnen? Die doen alsof ze het snappen.' }]); continue; }
       if (c !== 0) return;
       this.leaving = true; TOURNEY = null; audio.sfx('powerup'); await ui.fade(1, 450); persist(); this.app.goBoard({}); await new Promise(() => {});
     }
   }
   drawBoard() {
-    const A = S.arcade; const ids = activeIds(); const W3 = ids.length === 3;
+    const A = S.arcade; const ids = activeIds(); const W3 = ids.length >= 3;
     const t = canvasTex(1024, 630, (g, w, hh) => {
       const gr = g.createLinearGradient(0, 0, 0, hh); gr.addColorStop(0, '#1a0a3a'); gr.addColorStop(1, '#3a1a6a'); g.fillStyle = gr; g.fillRect(0, 0, w, hh);
       g.textAlign = 'center'; g.fillStyle = '#ffe14a'; g.font = 'bold 64px MedievalSharp, serif'; g.fillText('SCOREBORD', w / 2, 80);
@@ -552,9 +575,10 @@ export class ArcadeMode {
       if (!W3) {
         g.font = 'bold 54px Fredoka, sans-serif'; g.fillStyle = LABEL_CSS[0]; g.fillText(pname(0), 230, 175); g.fillStyle = LABEL_CSS[1]; g.fillText(pname(1), 794, 175);
         g.font = 'bold 190px Fredoka, sans-serif'; g.fillStyle = LABEL_CSS[0]; g.fillText(String(A.wins[0] || 0), 230, 360); g.fillStyle = LABEL_CSS[1]; g.fillText(String(A.wins[1] || 0), 794, 360); g.fillStyle = '#fff'; g.font = 'bold 90px Fredoka'; g.fillText('–', 512, 330);
-      } else {   // drie kolommen: Wes, Jor, Juul
-        ids.forEach((i, k) => { const cx = 190 + k * 322; g.font = 'bold 54px Fredoka, sans-serif'; g.fillStyle = LABEL_CSS[i]; g.fillText(pname(i), cx, 175); g.font = 'bold 170px Fredoka, sans-serif'; g.fillText(String(A.wins[i] || 0), cx, 345); });
-        g.fillStyle = 'rgba(255,255,255,.35)'; g.fillRect(350, 120, 4, 250); g.fillRect(672, 120, 4, 250);
+      } else {   // 3 of 4 kolommen: Wes, Jor, Juul (Sam)
+        const nc = ids.length, cw = 960 / nc;
+        ids.forEach((i, k) => { const cx = 32 + cw * (k + 0.5); g.font = `bold ${nc === 4 ? 46 : 54}px Fredoka, sans-serif`; g.fillStyle = LABEL_CSS[i]; g.fillText(pname(i), cx, 175, cw - 16); g.font = `bold ${nc === 4 ? 150 : 170}px Fredoka, sans-serif`; g.fillText(String(A.wins[i] || 0), cx, 345); });
+        g.fillStyle = 'rgba(255,255,255,.35)'; for (let k = 1; k < nc; k++) g.fillRect(32 + cw * k - 2, 120, 4, 250);
       }
       g.textAlign = 'center'; g.font = '34px Fredoka, sans-serif'; g.fillStyle = '#d8c8ff'; g.fillText(`${A.plays} duels gespeeld · ${A.draws} gelijkspel · toernooien: ${tl}`, w / 2, 430);
       const best = Object.entries(A.byGame).sort((a, b) => b[1].plays - a[1].plays).slice(0, 3);
@@ -572,7 +596,8 @@ export class ArcadeMode {
     const o = this.opts;
     if (o.intro && !o.result) await this.introTutorial();
     else if (o.result && o.result.pvp) await this.afterDuel(o.result);
-    else if (o.result === null && TOURNEY) { TOURNEY = null; ui.hud.toast('Toernooi afgebroken.', 2200); }
+    else if (o.result === null && (TOURNEY || GH.bracketActive())) { const ko = GH.bracketActive(); TOURNEY = null; GH.cancelBracket(); ui.hud.toast(ko ? 'Knock-out afgebroken.' : 'Toernooi afgebroken.', 2200); }
+    else if (GAMEHAL) { /* geen begroetingen of hal-intro's: direct spelen */ }
     else if (o.via === 'door' && !S.flags['met_hall' + this.hallId] && HALL_INTRO[this.hallId]) { this.busy = true; S.flags['met_hall' + this.hallId] = true; await ui.say(HALL_INTRO[this.hallId]); this.busy = false; }
     else if (!S.flags.met_king) { this.busy = true; S.flags.met_king = true; S.flags.intro_done = true; await ui.say([{ who: 'Koning Klopper', text: 'WELKOM in mijn Speelhal! Hier winnen jullie heitjes met duels, en met die heitjes laat je nieuwe hallen bouwen. Zo werkt dat hier.' }, { who: 'Koning Klopper', text: 'Elk duel krijgt een TWIST: soms loop je achterstevoren, soms ruil je van lichaam, en soms staat de Deurman te zwaaien. Wie dan beweegt, verliest.' }, { who: 'Wes', text: 'Ik ga zo hard winnen.' }, { who: 'Jor', text: 'Dat dacht je.' }, ...(nPlayers() === 3 ? [{ who: 'Juul', text: 'Ik ook. En ik wil de mooiste hoed.' }] : [])]); this.busy = false; }
     await this.checkRankUp();
@@ -581,7 +606,7 @@ export class ArcadeMode {
   }
   exit() { this.deur && this.deur.cleanup(); try { disposeObject(this.scene); this.fx.dispose(); } catch (e) { console.warn('opruimen speelhal', e); } ui.clearScreens(); ui.activeMenus = []; ui.hudEl.innerHTML = ''; ui.setVignette(0); }
   resize(w, hh) { this.camera.aspect = w / hh; this.camera.updateProjectionMatrix(); this.fx.setViewportHeight(hh); }
-  hudSetup() { ui.hud.setHint(`Loop naar een kast en druk op je actieknop om te duelleren · Wiel van Gekte = verrassing · ${this.hostName} = toernooi` + (this.hallId === 0 ? ' · dichtgetimmerde deuren = nieuwe hallen bouwen!' : '') + ' · Esc = pauze'); setTimeout(() => ui.hud.setHint(null), 14000); }
+  hudSetup() { if (GAMEHAL) { ui.hud.setHint(`Loop naar een kast en druk op je actieknop · 👥 2-4 = iedereen mee · 🏆 knock-out = halve finales + finale · Wiel van Gekte = verrassing · ${this.hostName} = toernooi · Esc = pauze`); setTimeout(() => ui.hud.setHint(null), 14000); return; } ui.hud.setHint(`Loop naar een kast en druk op je actieknop om te duelleren · Wiel van Gekte = verrassing · ${this.hostName} = toernooi` + (this.hallId === 0 ? ' · dichtgetimmerde deuren = nieuwe hallen bouwen!' : '') + ' · Esc = pauze'); setTimeout(() => ui.hud.setHint(null), 14000); }
   // 3 spelers + 'winnaar blijft': rechtsonder staat wie er aan de beurt is en wie wacht
   refreshQueueHud() {
     const q = getDQ(); const on = !!q && S.arcade.queueMode !== 'pick';
@@ -593,12 +618,13 @@ export class ArcadeMode {
   refreshHud() {
     const A = S.arcade; this.refreshRankHud(); this.refreshQueueHud(); this.refreshDoors(); refreshAlbum(this);
     const ids = activeIds();
-    ui.hud.setScore(`Stand: ${ids.length === 3 ? standTxt(A.wins, ids, ' · ') : `${pname(0)} ${A.wins[0] || 0} – ${A.wins[1] || 0} ${pname(1)}`}   ·   🪙 ${S.coins}` + (TOURNEY ? `   ·   🏆 Toernooi ${TOURNEY.idx + 1}/${TOURNEY.queue.length}: ${ids.map((i) => TOURNEY.score[i] || 0).join(' – ')}` : ''));
+    ui.hud.setScore(`${ids.length >= 4 ? '' : 'Stand: '}${ids.length >= 3 ? standTxt(A.wins, ids, ' · ') : `${pname(0)} ${A.wins[0] || 0} – ${A.wins[1] || 0} ${pname(1)}`}   ·   🪙 ${S.coins}` + (TOURNEY ? `   ·   🏆 Toernooi ${TOURNEY.idx + 1}/${TOURNEY.queue.length}: ${ids.map((i) => TOURNEY.score[i] || 0).join(' – ')}` : '') + (GH.bracketActive() ? '   ·   🏆 Knock-out' : ''));
     for (const i of ids) ui.hud.setPlayerInfo(i, `Duels gewonnen: ${A.wins[i] || 0}`);
   }
 
   // ------------------------------------------------------------------ dialoog-hulp
   async say(lines, o) { await ui.say(lines, o); }
+  toast(t, ms = 2400) { ui.hud.toast(t, ms); }
   choose(title, labels, sub, center = false, sel0 = 0) {
     return new Promise((resolve) => {
       const items = labels.map((l, i) => ({ label: l, onSelect: () => { this.menu = null; el.remove(); resolve(i); } }));
@@ -635,9 +661,9 @@ export class ArcadeMode {
   async cab(id) {
     const def = this.app.games[id];
     if (!def) { await this.say([{ who: 'Koning Klopper', text: 'Die kast is nog kapot. De rekenmeester repareert hem. (Dit spel is nog niet geladen.)' }]); return; }
-    if (!supports(def)) { await this.say([{ who: this.hostName, text: def.players && def.players.includes(3) ? 'Dit spel heeft precies drie spelers nodig. Zet Juul aan bij Instellingen!' : 'Dit spel is alleen voor twee spelers. Zet Juul uit bij Instellingen om het te spelen.' }]); return; }
+    if (!canPlay(def, nPlayers())) { await this.say([{ who: this.hostName, text: GAMEHAL ? modeText(def, nPlayers()) : (def.players && def.players.includes(3) ? 'Dit spel heeft precies drie spelers nodig. Zet Juul aan bij Instellingen!' : def.players && def.players.includes(4) && !def.players.includes(2) ? 'Dit spel is alleen voor vier spelers: dat kan in Impactid Gamehal.' : 'Dit spel is alleen voor twee spelers. Zet Juul uit bij Instellingen om het te spelen.') }]); return; }
     const gm = S.arcade.byGame[id];
-    const c = await this.choose(`${def.icon || ''} ${def.name}`, ['Spelen!', 'Wat doet dit spel?', 'Terug'], gm ? `Stand in dit spel: ${nPlayers() === 3 ? standTxt(gm.wins, activeIds(), ' · ') : `${pname(0)} ${gm.wins[0] || 0} – ${gm.wins[1] || 0} ${pname(1)}`}` : 'Nog nooit gespeeld');
+    const c = await this.choose(`${def.icon || ''} ${def.name}`, ['Spelen!', 'Wat doet dit spel?', 'Terug'], (GAMEHAL ? [badge(def, nPlayers()).txt, modeText(def, nPlayers())].filter(Boolean).join(' · ') + ' · ' : '') + (gm ? `Stand in dit spel: ${nPlayers() >= 3 ? standTxt(gm.wins, activeIds(), ' · ') : `${pname(0)} ${gm.wins[0] || 0} – ${gm.wins[1] || 0} ${pname(1)}`}` : 'Nog nooit gespeeld'));
     if (c === 1) { await this.say([{ who: def.giver || this.hostName, text: (def.blurb || '').replace(/<[^>]+>/g, '') }]); return this.cab(id); }
     if (c !== 0) return;
     await this.launch(id);
@@ -659,7 +685,8 @@ export class ArcadeMode {
     }
   }
   async launch(id, extra = null, twist = null) {
-    if (nPlayers() === 3 && !(extra && extra.players)) {   // met drie spelers: 3-speler-spel = iedereen, anders eerst kiezen wie er speelt
+    if (GAMEHAL) { const pl = await GH.plan(this, id, extra, twist); if (!pl) return; extra = pl.extra; twist = pl.twist; }   // Gamehal: alle spelers / teams / knock-out / drie van vier
+    else if (nPlayers() === 3 && !(extra && extra.players)) {   // met drie spelers: 3-speler-spel = iedereen, anders eerst kiezen wie er speelt
       if (wantsAll(this.app.games[id])) extra = { ...(extra || {}), players: [0, 1, 2] };
       else { const sel = await this.pickPair(); if (!sel) return; extra = { ...(extra || {}), players: sel.pair, q: sel.q }; }
     }
@@ -675,10 +702,10 @@ export class ArcadeMode {
     rows.sort((x, y) => y.g.plays - x.g.plays);
     const unplayed = ARCADE_IDS.filter((id) => this.app.games[id] && !(A.byGame[id] && A.byGame[id].plays)).length;
     const crown = (g) => { const t = topOf(g.wins, ids); return t.length === 1 ? `👑 ${pname(t[0])}` : '🤝'; };   // koning van het spel = hoogste aantal winsten
-    const th = ids.map((i) => `<th${ids.length === 3 ? ` style="color:${pcss(i)}"` : ''}>${pname(i)}</th>`).join('');
+    const th = ids.map((i) => `<th${ids.length >= 3 ? ` style="color:${pcss(i)}"` : ''}>${pname(i)}</th>`).join('');
     const tbl = h('table', { class: 'ranktbl', html: `<tr><th>Spel</th>${th}<th>Koning</th><th>Reeks</th></tr>` + rows.map(({ id, g }) => `<tr><td>${this.defOf(id).icon || ''} ${this.defOf(id).name || NAME[id]}</td>${ids.map((i) => `<td>${(g.wins && g.wins[i]) || 0}</td>`).join('')}<td>${crown(g)}</td><td>${g.streak > 1 ? '🔥' + g.streak + ' ' + pname(g.streakWho) : '–'}</td></tr>`).join('') });
     const top = topOf(A.wins, ids); const king = top.length === 1 ? `👑 ${pname(top[0])} staat voor` : 'Gelijk!';
-    const head = ids.length === 3 ? ids.map((i) => `<b style="color:${pcss(i)}">${pname(i)}</b> ${A.wins[i] || 0}`).join(' · ') : `<b style="color:#1d9a52">${pname(0)}</b> ${A.wins[0] || 0} – ${A.wins[1] || 0} <b style="color:#2f6fe0">${pname(1)}</b>`;
+    const head = ids.length >= 3 ? ids.map((i) => `<b style="color:${pcss(i)}">${pname(i)}</b> ${A.wins[i] || 0}`).join(' · ') : `<b style="color:#1d9a52">${pname(0)}</b> ${A.wins[0] || 0} – ${A.wins[1] || 0} <b style="color:#2f6fe0">${pname(1)}</b>`;
     const body = h('div', { style: { maxHeight: '56vh', overflow: 'auto' } }, h('p', { style: { textAlign: 'center', fontSize: '22px', margin: '4px 0' }, html: `${head} · ${king}<br><small>${A.plays} duels · ${A.draws} gelijkspel · toernooien ${ids.map((i) => A.tourneys[i] || 0).join(' – ')}${S.banished ? ' · Deurman weggedanst: ' + S.banished + '×' : ''}</small>` }), rows.length ? tbl : h('p', { style: { textAlign: 'center' } }, 'Nog geen duels gespeeld. Kies een kast!'), h('p', { class: 'small-note' }, unplayed ? `Nog ${unplayed} spellen om te proberen!` : 'Alle spellen gespeeld. Wauw.'));
     await this.cardModal('🏆 Ranglijst per spel', body);
   }
@@ -689,8 +716,8 @@ export class ArcadeMode {
     this.leaving = true; audio.sfx('powerup'); await ui.fade(1, 450); persist(); this.app.goArcade({ extra: { hall: it.to }, via: 'door', fromHall: this.hallId }); await new Promise(() => {});
   }
   async leave() {
-    const c = await this.choose('Speelhal verlaten?', ['Ja, naar het dorp (karweitjes!)', 'Nog niet']); if (c !== 0) return;
-    this.leaving = true; TOURNEY = null; await ui.fade(1, 500); persist(); this.app.goHub({ fromArcade: true }); await new Promise(() => {});
+    const c = await this.choose(GAMEHAL ? 'Terug naar de lobby?' : 'Speelhal verlaten?', [GAMEHAL ? 'Ja, naar de lobby' : 'Ja, naar het dorp (karweitjes!)', 'Nog niet']); if (c !== 0) return;
+    this.leaving = true; TOURNEY = null; GH.cancelBracket(); await ui.fade(1, 500); persist(); if (GAMEHAL) this.app.goLobby(); else this.app.goHub({ fromArcade: true }); await new Promise(() => {});
   }
   async kingTalk() {
     if (this.deur.takeover) return this.deur.talk();
@@ -699,9 +726,9 @@ export class ArcadeMode {
     const done = dailyDone(); const keys = []; const labels = [];
     if (TOURNEY) { keys.push('go', 'stop'); labels.push('Toernooi voortzetten', 'Toernooi stoppen'); } else { keys.push('start'); labels.push(`🏆 Toernooi starten (${A.tlen} duels)`); }
     keys.push('daily'); labels.push(done ? '🌟 Uitdaging van de dag (gedaan ✔)' : '🌟 Uitdaging van de dag (+bonus!)');
-    if (this.hallId === 0 && rank().index === RANKS.length - 1) { keys.push('party'); labels.push('🎉 Het Grote Slotfeest!'); }
+    if (this.hallId === 0 && !GAMEHAL && rank().index === RANKS.length - 1) { keys.push('party'); labels.push('🎉 Het Grote Slotfeest!'); }
     if (this.hallId === 4) { keys.push('album'); labels.push('📒 Deurman-vriendenboek'); }
-    keys.push('plan', 'shop', 'pick', 'how', 'none'); labels.push('🏗️ Rang & Bouwplan', '👒 Hoeden & kleuren', '⚙️ Spellen & twists kiezen', 'Hoe werkt het?', 'Niets');
+    keys.push('plan', 'shop', 'pick', 'how', 'none'); labels.push(GAMEHAL ? '🏆 Rang & hallen' : '🏗️ Rang & Bouwplan', '👒 Hoeden & kleuren', '⚙️ Spellen & twists kiezen', 'Hoe werkt het?', 'Niets');
     const c = await this.choose(H, labels); const key = keys[c];
     if (key === 'start') { await this.startTourney(); return; }
     if (key === 'go') { await this.nextTourney(); return; }
@@ -712,14 +739,14 @@ export class ArcadeMode {
     if (key === 'plan') { await this.planModal(); return this.kingTalk(); }
     if (key === 'shop') { await this.openShop(); return this.kingTalk(); }
     if (key === 'pick') { await this.pickGames(); return this.kingTalk(); }
-    if (key === 'how') await this.say([{ who: H, text: 'Elk duel is 1 tegen 1 op hetzelfde scherm' + (nPlayers() === 3 ? ' (met drie spelers kies je wie er speelt: winnaar blijft, of zelf een paar kiezen)' : '') + '. Voor elk spel wordt een TWIST geloot: omgekeerde besturing, verwisselde knoppen, dronken kikker, reus tegen dwerg, zeepvloer, maanzwaartekracht, lichaamswissel of de Deurman die komt kijken.' }, { who: H, text: `In een toernooi spelen jullie ${A.tlen} verschillende duels uit álle gebouwde hallen. Spellen die jullie niet leuk vinden kun je uitzetten bij "Spellen kiezen". Elke dag is er ook een Uitdaging van de dag met bonus-heitjes. En pas op: soms neemt de Deurman een hal over...` }]);
+    if (key === 'how') await this.say([{ who: H, text: (GAMEHAL ? 'Alle spelers kijken naar hetzelfde scherm. Een spel met 👥 2-4 speelt iedereen tegelijk. Een duel voor twee (🏆 knock-out): met 3 spelers kiezen jullie een paar (winnaar blijft), met 4 spelers volgen twee halve finales en een finale' : 'Elk duel is 1 tegen 1 op hetzelfde scherm' + (nPlayers() === 3 ? ' (met drie spelers kies je wie er speelt: winnaar blijft, of zelf een paar kiezen)' : '')) + '. Voor elk spel wordt een TWIST geloot: omgekeerde besturing, verwisselde knoppen, dronken kikker, reus tegen dwerg, zeepvloer, maanzwaartekracht, lichaamswissel of de Deurman die komt kijken.' }, { who: H, text: `In een toernooi spelen jullie ${A.tlen} verschillende duels uit álle gebouwde hallen. Spellen die jullie niet leuk vinden kun je uitzetten bij "Spellen kiezen". Elke dag is er ook een Uitdaging van de dag met bonus-heitjes. En pas op: soms neemt de Deurman een hal over...` }]);
   }
   async openShop() {
     try { const m = await import('./shop.js'); await m.openShop(this.app, {}); this.refreshHud(); }
     catch (e) { console.warn('winkel niet beschikbaar', e); await this.say([{ who: this.hostName, text: 'De hoedenwinkel is nog dicht. Kom straks terug!' }]); }
   }
   async dailyChallenge() {
-    const ok = new Set(unlockedIds()); const gs = {}; for (const id of Object.keys(this.app.games)) if ((ARCADE_IDS.includes(id) ? ok.has(id) : true) && supports(this.app.games[id])) gs[id] = this.app.games[id];
+    const ok = new Set(unlockedIds()); const gs = {}; for (const id of Object.keys(this.app.games)) if ((ARCADE_IDS.includes(id) ? ok.has(id) : true) && canPlay(this.app.games[id])) gs[id] = this.app.games[id];
     const info = dailyInfo(gs); const H = this.hostName;
     if (!info) { await this.say([{ who: H, text: 'Ik heb vandaag geen uitdaging. Vreemd.' }]); return; }
     const def = this.defOf(info.id); const tw = TWISTS.find((t) => t.id === info.twist) || TWISTS[0];
@@ -802,14 +829,20 @@ export class ArcadeMode {
     const A = S.arcade; const pool = this.allLoaded().filter((id) => !this.isOff(id));
     if (pool.length < 2) { await this.say([{ who: this.hostName, text: 'Er zijn te weinig spellen aangezet voor een toernooi. Kies er meer bij "Spellen kiezen".' }]); return; }
     const n = Math.min(A.tlen || 5, pool.length); const ids = shuffle(pool.slice()).slice(0, n);
-    TOURNEY = { queue: ids, idx: 0, score: [0, 0, 0], hall: this.hallId, dq: nPlayers() === 3 ? newQueue(activeIds()) : null };
+    TOURNEY = { queue: ids, idx: 0, score: [0, 0, 0, 0], hall: this.hallId, dq: nPlayers() === 3 ? newQueue(activeIds()) : null };
     const icons = ids.map((id) => this.defOf(id).icon).join(' '); await this.say([{ who: this.hostName, text: this.H.tstart ? this.H.tstart.replace('{n}', ids.length).replace('{icons}', icons) : `Het TOERNOOI begint! ${ids.length} duels: ${icons}. Wie de meeste wint, is Kampioen. En de winnaar mag een fanfare kiezen.` }]);
     await this.nextTourney();
   }
-  tourneyStand(sep = null) { const T = TOURNEY, ids = activeIds(); const f = (x) => String(Math.round((x || 0) * 10) / 10); return ids.length === 3 ? ids.map((i) => `${pname(i)} ${f(T.score[i])}`).join(' · ') : `${pname(0)} ${f(T.score[0])} – ${f(T.score[1])} ${pname(1)}`; }
+  tourneyStand(sep = null) { const T = TOURNEY, ids = activeIds(); const f = (x) => String(Math.round((x || 0) * 10) / 10); return ids.length >= 3 ? ids.map((i) => `${pname(i)} ${f(T.score[i])}`).join(' · ') : `${pname(0)} ${f(T.score[0])} – ${f(T.score[1])} ${pname(1)}`; }
   async nextTourney() {
     const T = TOURNEY; const id = T.queue[T.idx]; const def = this.defOf(id); const extra = { tourney: true }; let wie = '';
-    if (nPlayers() === 3) {   // elke ronde een paar uit de wachtrij (winnaar blijft); 3-speler-spellen met allemaal
+    if (GAMEHAL && nPlayers() >= 3) {   // Gamehal: alles samen, knock-out (4) of een paar uit de wachtrij (3)
+      const mode = playMode(this.app.games[id], nPlayers());
+      if (mode === 'all') wie = ` Alle ${nPlayers()} doen mee!`;
+      else if (mode === 'bracket') wie = ' Knock-out met 4: halve finales en een finale!';
+      else if (mode === 'subset') wie = ' Drie spelen, de vierde kijkt toe.';
+      else if (mode === 'pair') { const pr = T.dq.next(); extra.players = pr.slice(); extra.q = false; wie = ` ${pname(pr[0])} tegen ${pname(pr[1])}, ${T.dq.waiting().map(pname).join(' en ')} wacht.`; }
+    } else if (nPlayers() === 3) {   // elke ronde een paar uit de wachtrij (winnaar blijft); 3-speler-spellen met allemaal
       if (wantsAll(this.app.games[id])) { extra.players = [0, 1, 2]; wie = ' Alle drie doen mee!'; }
       else { const pr = T.dq.next(); extra.players = pr.slice(); extra.q = false; wie = ` ${pname(pr[0])} tegen ${pname(pr[1])}, ${T.dq.waiting().map(pname).join(' en ')} wacht.`; }
     }
@@ -818,20 +851,37 @@ export class ArcadeMode {
   }
   async afterDuel(r) {
     this.busy = true; this.refreshLabels(); this.drawBoard(); this.refreshHud();
-    const { ids, winnerId: w } = readResult(r); const ex = this.opts.extra || {};
-    const losers = ids.filter((i) => i !== w); const P = (i) => this.players.find((p) => p.i === i);
-    const line = w == null ? pick(this.H.draw) : pick(this.H.wins).replace(/\{w\}/g, pname(w)).replace(/\{l\}/g, joinNames(losers));
-    if (w != null) { P(w) && (P(w).c.pose = 'cheer'); losers.forEach((i) => P(i) && (P(i).c.pose = 'sad')); this.life.cheer(); }
-    this.players.forEach((p) => { if (!ids.includes(p.i)) p.c.pose = 'wave'; });   // de derde speler juicht mee vanaf de zijlijn
+    const rr = readResult(r); let { ids, winnerId: w } = rr; let winners = rr.winnerIds; const ex = this.opts.extra || {};
+    const P = (i) => this.players.find((p) => p.i === i);
+    const team = winners.length > 1;
+    const setPoses = (win, lose) => { win.forEach((i) => P(i) && (P(i).c.pose = 'cheer')); lose.forEach((i) => P(i) && (P(i).c.pose = 'sad')); };
+    let losers = ids.filter((i) => !winners.includes(i)); let ko = null;
+    if (w != null || team) { setPoses(winners, losers); this.life.cheer(); }
+    this.players.forEach((p) => { if (!ids.includes(p.i)) p.c.pose = 'wave'; });   // wie niet meespeelt juicht mee vanaf de zijlijn
     const q = getDQ(); if (q && ex.q && ids.length === 2) { q.report(w); this.refreshQueueHud(); }
     await new Promise((res) => setTimeout(res, 500));
-    await this.say([{ who: this.hostName, text: line }]);
+    if (GAMEHAL && ex.bracket && GH.bracketActive()) {   // knock-out: kort tussenscherm, volgende wedstrijd (of eindstand)
+      ko = await GH.afterMatch(this, r);
+      if (!ko.done) { this.players.forEach((p) => (p.c.pose = 'idle')); this.busy = false; input.reset(); return; }
+      w = ko.winnerId; winners = [w]; ids = ko.ids; losers = ids.filter((i) => i !== w); this.refreshHud();
+    } else {
+      let line = team ? `${joinNames(winners)} winnen als team! ${joinNames(losers)}: volgende keer beter. Of een ander maatje.` : w == null ? pick(this.H.draw) : pick(this.H.wins).replace(/\{w\}/g, pname(w)).replace(/\{l\}/g, joinNames(losers));
+      if (GAMEHAL && losers.length > 1) line = line.replace(/ had /g, ' hadden ').replace(/ verliest /g, ' verliezen ').replace(/ krijgt /g, ' krijgen ').replace(/ mag /g, ' mogen ');   // meer verliezers: werkwoorden in het meervoud
+      await this.say([{ who: this.hostName, text: line }]);
+      if (GAMEHAL && ids.length >= 3 && rr.place && rr.place.length >= 3 && !ex.tourney) await GH.placeCard(this, r);
+    }
     if (q && ex.q && !TOURNEY) { const pr = q.next(); ui.hud.toast(`Volgende: ${pname(pr[0])} vs ${pname(pr[1])}, ${q.waiting().map(pname).join(' en ')} wacht`, 3600); }
     this.players.forEach((p) => (p.c.pose = 'idle'));
     if (this.opts.extra && this.opts.extra.spooky) await this.deur.endTakeover();
     if (r.daily) await this.say([{ who: this.hostName, text: `🌟 Dagduel voltooid! +${r.daily} heitjes bonus. Reeks: ${dailyStreak()} ${dailyStreak() === 1 ? 'dag' : 'dagen'} achter elkaar!` }]);
     if (TOURNEY) {
-      const T = TOURNEY; if (w != null) T.score[w] = (T.score[w] || 0) + 1; else for (const i of ids) T.score[i] = (T.score[i] || 0) + 1 / ids.length;
+      const T = TOURNEY; let pts = null;
+      if (GAMEHAL && ids.length >= 3 && !team) {   // Gamehal, 3-4 spelers: punten naar plaats (bracket: kampioen 3, finalist 2, de twee halve-finale-verliezers delen 1), zo komen er minder gelijke standen
+        const order = ko ? ko.standings : (rr.place && rr.place.length === ids.length ? rr.place : null);
+        if (order) { pts = {}; order.forEach((id, k) => { pts[id] = ko && ids.length === 4 ? [3, 2, 0.5, 0.5][k] : ids.length - 1 - k; }); }
+      }
+      if (pts) for (const i of Object.keys(pts)) T.score[+i] = (T.score[+i] || 0) + pts[i];
+      else if (winners.length) for (const i of winners) T.score[i] = (T.score[i] || 0) + 1; else for (const i of ids) T.score[i] = (T.score[i] || 0) + 1 / ids.length;
       if (T.dq && ids.length === 2) T.dq.report(w);
       T.idx++; this.refreshHud();
       if (T.idx >= T.queue.length) await this.finishTourney();
@@ -841,14 +891,14 @@ export class ArcadeMode {
   }
   async finishTourney() {
     const T = TOURNEY; TOURNEY = null; const ids = activeIds();
-    const tops = topOf(T.score, ids); const win = tops.length === 1 ? tops[0] : null;   // eindwinnaar = meeste punten
+    const tops = topOf(T.score, ids); const win = tops.length === 1 ? tops[0] : null; this.lastTourney = { score: T.score.slice(), win };   // eindwinnaar = meeste punten
     if (win != null) S.arcade.tourneys[win] = (S.arcade.tourneys[win] || 0) + 1; S.coins += 50; S.totalEarned += 50; persist(); this.refreshHud();
     audio.sfx('win'); ui.flash('#fff', 400);
     for (let i = 0; i < 6; i++) setTimeout(() => this.fx.burst(rand(-8, 8), 7 + rand(0, 4), rand(0, 10), { count: 40, colors: [0xff5ad8, 0xffe14a, 0x5ad8ff, 0x7bff7b], speed: 8, size: 0.45, life: 1.4, gravity: 3 }), i * 260);
     if (win != null) this.players.forEach((p) => (p.c.pose = p.i === win ? 'cheer' : 'sad'));
     this.life.party(10);
     const others = ids.filter((i) => i !== win);
-    await this.say([{ who: this.hostName, text: win == null ? (ids.length === 3 ? 'Het toernooi eindigt in een GELIJKSPEL aan de top! Dat is zo zeldzaam als een stille kip. De besten zijn allebei Kampioen. En de rest... ook, een beetje.' : 'Het toernooi eindigt in een GELIJKSPEL! Dat is zo zeldzaam als een stille kip. Jullie zijn allebei Kampioen. En allebei een beetje verliezer.') : this.H.champ ? this.H.champ.replace('{w}', pname(win)).replace('{l}', joinNames(others)) : `${pname(win)} is KAMPIOEN van de Speelhallen! ${joinNames(others)}, jij krijgt een applausje. Hier, ik klap voor je. Klap klap.` }, { who: this.hostName, text: this.H.bonus || 'Als beloning voor jullie moed krijgen jullie samen 50 heitjes van mijn schatkist. Gebruik ze verstandig. Of niet.' }]);
+    await this.say([{ who: this.hostName, text: win == null ? (ids.length >= 3 ? 'Het toernooi eindigt in een GELIJKSPEL aan de top! Dat is zo zeldzaam als een stille kip. De besten zijn allebei Kampioen. En de rest... ook, een beetje.' : 'Het toernooi eindigt in een GELIJKSPEL! Dat is zo zeldzaam als een stille kip. Jullie zijn allebei Kampioen. En allebei een beetje verliezer.') : this.H.champ ? this.H.champ.replace('{w}', pname(win)).replace('{l}', joinNames(others)) : `${pname(win)} is KAMPIOEN van de Speelhallen! ${joinNames(others)}, jij krijgt een applausje. Hier, ik klap voor je. Klap klap.` }, { who: this.hostName, text: this.H.bonus || 'Als beloning voor jullie moed krijgen jullie samen 50 heitjes van mijn schatkist. Gebruik ze verstandig. Of niet.' }]);
     this.players.forEach((p) => (p.c.pose = 'idle'));
   }
 
@@ -917,7 +967,7 @@ export class ArcadeMode {
     this.fx.update(dt);
     // prompt
     if (this.busy || this.noAct) ui.hud.setPrompt(null);
-    else { const lines = []; for (const p of this.players) { const it = this.nearest(p); if (it) lines.push(`<span style="color:${pcss(p.i)}">${pname(p.i)}</span> <b>${klabel(p.i).a}</b> ${it.label}`); } ui.hud.setPrompt(lines.length ? lines.join('<br>') : null); }
+    else { const lines = []; for (const p of this.players) { const it = this.nearest(p); if (it) lines.push(`<span style="color:${pcss(p.i)}">${pname(p.i)}</span> <b>${klabel(p.i).a}</b> ${it.label}`); } const grid = GAMEHAL && lines.length > 2; ui.hud.setPrompt(lines.length ? (grid ? lines.map((l) => `<div>${l}</div>`).join('') : lines.join('<br>')) : null); if (ui.hud.promptEl) ui.hud.promptEl.classList.toggle('gh-grid', grid); }
   }
   nearKing() { return this.players.some((p) => Math.hypot(p.x - 0, p.z - (-HALL.d / 2 + 3.7)) < 9); }
   render(renderer) { renderer.render(this.scene, this.camera); }

@@ -23,6 +23,9 @@ function swirlTex() {
 
 function floorTexture(maze, names, colors) {
   const S = 44;
+  const rgba = (css, a) => { const n = parseInt(css.slice(1), 16); return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`; };
+  // vier spelers: elk kwart van het doolhof een tintje in de kleur van de speler die daar start (links-onder 0, rechts-onder 1, links-boven 2, rechts-boven 3)
+  const quadTint = (x, z) => { if (x === 10 || z === 7) return 'rgba(255,90,216,.34)'; const k = (x < 10 ? 0 : 1) + (z < 7 ? 2 : 0); return colors[k] ? rgba(colors[k], 0.34) : 'rgba(150,150,190,.28)'; };
   return canvasTex(W * S, H * S, (g, w, h) => {
     const r = mulberry32(5);
     g.fillStyle = '#0a0518'; g.fillRect(0, 0, w, h);
@@ -30,7 +33,7 @@ function floorTexture(maze, names, colors) {
       const px = x * S, pz = z * S;
       const gr = g.createLinearGradient(px, pz, px + S, pz + S); gr.addColorStop(0, '#241659'); gr.addColorStop(1, '#170d3c');
       g.fillStyle = gr; g.beginPath(); g.roundRect(px + 2, pz + 2, S - 4, S - 4, 7); g.fill();
-      g.strokeStyle = x < 10 ? 'rgba(46,242,168,.30)' : x > 10 ? 'rgba(90,140,255,.34)' : 'rgba(255,90,216,.34)'; g.lineWidth = 1.5; g.beginPath(); g.roundRect(px + 4, pz + 4, S - 8, S - 8, 6); g.stroke();
+      g.strokeStyle = maze.four ? quadTint(x, z) : x < 10 ? 'rgba(46,242,168,.30)' : x > 10 ? 'rgba(90,140,255,.34)' : 'rgba(255,90,216,.34)'; g.lineWidth = 1.5; g.beginPath(); g.roundRect(px + 4, pz + 4, S - 8, S - 8, 6); g.stroke();
       if (r() < 0.2) { g.fillStyle = 'rgba(255,255,255,.04)'; g.fillRect(px + 6 + r() * 20, pz + 6 + r() * 20, 6, 4); }
     }
     // startplekken in de kleur van de speler
@@ -98,7 +101,8 @@ export function buildWorld(ctx, maze, names, colorsCss) {
   walls.forEach(([x, z], i) => {
     dm.position.set(cx2w(x), WALL_H / 2, cz2w(z)); dm.updateMatrix(); body.setMatrixAt(i, dm.matrix);
     dm.position.y = WALL_H + 0.02; dm.updateMatrix(); cap.setMatrixAt(i, dm.matrix);
-    cc.setHex(x < 10 ? COL_L : x > 10 ? COL_R : COL_C);
+    if (maze.four) { const k = x === 10 || z === 7 ? -1 : (x < 10 ? 0 : 1) + (z < 7 ? 2 : 0); if (k >= 0 && colorsCss[k]) cc.set(colorsCss[k]); else cc.setHex(COL_C); }   // vier spelers: elk kwart in de kleur van zijn speler
+    else cc.setHex(x < 10 ? COL_L : x > 10 ? COL_R : COL_C);
     cap.setColorAt(i, cc); body.setColorAt(i, cc.clone().multiplyScalar(0.3));
   });
   body.castShadow = true; body.receiveShadow = true; body.frustumCulled = false; cap.frustumCulled = false;

@@ -31,6 +31,12 @@ const CSS = `
 .bw-meter span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
 .bw-meter.full{animation:bwpulse .45s infinite alternate;border-color:#ffe14a}.bw-meter.full i{background:linear-gradient(90deg,#ff4a8a,#ffe14a,#4ad8ff)}
 @keyframes bwpulse{from{transform:scale(1)}to{transform:scale(1.06);box-shadow:0 0 18px #ffe14a}}
+.bw-sel.q .bw-stage{top:80px;font-size:13px;padding:3px 12px;max-width:44%;overflow:hidden;text-overflow:ellipsis}.bw-sel.q .bw-stage small{display:none}
+.bw-sel.q .bw-panel{top:auto;bottom:60px;padding:6px 8px 7px;border-radius:14px}
+.bw-sel.q .bw-hd{margin-bottom:4px}.bw-sel.q .bw-hd .who{font-size:16px}
+.bw-sel.q .bw-tiles{margin-bottom:4px}.bw-sel.q .bw-tile{height:44px;font-size:22px}.bw-sel.q .bw-tile small{display:none}
+.bw-sel.q .bw-nm{font-size:15px}.bw-sel.q .bw-bl{font-size:11px;margin:1px 0 0}.bw-sel.q .bw-bars,.bw-sel.q .bw-tips{display:none}
+.bw-meter.q{bottom:8px;height:30px;font-size:12px}
 @media (max-width:980px){.bw-panel{width:250px;padding:6px 8px}.bw-tips{font-size:11px}.bw-bl{font-size:11px}.bw-tile{height:52px;font-size:23px}.bw-tile small{display:none}.bw-meter{width:200px}}
 `;
 let cssDone = false;
@@ -43,22 +49,22 @@ function ensureCss() {
 export class SelectUI {
   constructor(names, stage, keyLabels) {
     ensureCss();
-    this.names = names; this.el = h('div', { class: 'bw-sel' }); this.panels = [];
+    const N = names.length; this.names = names; this.el = h('div', { class: N > 2 ? 'bw-sel q' : 'bw-sel' }); this.panels = [];
     this.el.append(h('div', { class: 'bw-stage', html: `${stage.icon} Podium: <b>${stage.name}</b><small>${stage.blurb}</small>` }));
-    for (let i = 0; i < 2; i++) {
-      const p = h('div', { class: `bw-panel ${i ? 'r' : 'l'}`, style: { '--c': PLAYER_CSS[i] } });
+    for (let i = 0; i < N; i++) {
+      const p = h('div', { class: `bw-panel ${i ? 'r' : 'l'}`, style: N > 2 ? { '--c': PLAYER_CSS[i], left: `calc(${i} * (100% - 16px) / ${N} + 8px)`, width: `calc((100% - 16px) / ${N} - 8px)` } : { '--c': PLAYER_CSS[i] } });
       const hd = h('div', { class: 'bw-hd' }, h('span', { class: 'who' }, names[i]), h('span', { class: 'st' }, '◀ ▶ kiezen'));
       const tiles = h('div', { class: 'bw-tiles' }, ...FT_IDS.map((id) => h('div', { class: 'bw-tile' }, FT[id].icon, h('small', {}, FT[id].name.split('vechter')[0]))));
       const det = h('div', { class: 'bw-det' });
       p.append(hd, tiles, det); this.el.append(p);
       this.panels.push({ p, st: hd.querySelector('.st'), tiles: [...tiles.children], det, last: '' });
     }
-    this.hint = h('div', { class: 'bw-hint', html: `<kbd>${keyLabels[0].a}</kbd> / <kbd>${keyLabels[1].a}</kbd> = deze vechter!` });
+    this.hint = h('div', { class: 'bw-hint', html: `${names.map((_, i) => `<kbd>${keyLabels[i].a}</kbd>`).join(' / ')} = deze vechter!` });
     this.el.append(this.hint);
     ui.hudEl.append(this.el);
   }
   update(sel) {
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < this.panels.length; i++) {
       const P = this.panels[i], s = sel[i], ft = FT[FT_IDS[s.idx]];
       P.p.classList.toggle('ok', s.ok);
       P.st.textContent = s.ok ? '✔ KLAAR!' : '◀ ▶ kiezen, A = klaar';
@@ -78,14 +84,15 @@ export class SelectUI {
 export class MeterUI {
   constructor(names) {
     ensureCss();
-    this.els = [0, 1].map((i) => {
+    const N = names.length;
+    this.els = names.map((_, i) => {
       const bar = h('i'), txt = h('span');
-      const el = h('div', { class: `bw-meter ${i ? 'r' : 'l'}`, style: { '--c': PLAYER_CSS[i] } }, bar, txt);
+      const el = h('div', { class: N > 2 ? 'bw-meter q' : `bw-meter ${i ? 'r' : 'l'}`, style: N > 2 ? { '--c': PLAYER_CSS[i], left: `calc(${i} * (100% - 16px) / ${N} + 8px)`, width: `calc((100% - 16px) / ${N} - 8px)` } : { '--c': PLAYER_CSS[i] } }, bar, txt);
       ui.hudEl.append(el); return { el, bar, txt, k: '' };
     });
   }
   update(fs) {
-    for (let i = 0; i < 2; i++) {
+    for (let i = 0; i < this.els.length; i++) {
       const f = fs[i], e = this.els[i], full = f.meter >= 99.5, k = `${Math.round(f.meter)}:${f.type}:${f.stT === 'super'}`;
       if (k === e.k) continue; e.k = k;
       e.el.classList.toggle('full', full); e.bar.style.width = `${Math.min(100, f.meter)}%`;

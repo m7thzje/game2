@@ -60,8 +60,10 @@ export function buildStage(ctx) {
   S.podTop = 1.4;
   const spot = new THREE.Mesh(new THREE.ConeGeometry(3.4, 16, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff4d0, transparent: true, opacity: 0.16, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })); spot.geometry.translate(0, -8, 0); spot.position.set(0, 17, -2.4); scene.add(spot); S.spot = spot;
   S.spots = [];
-  for (const [sx, col] of [[-7.2, 0x35c46f], [7.2, 0x4a8cff]]) {
-    const pl = new THREE.Group(); pl.position.set(sx, 0.4, 2.0); scene.add(pl);
+  const NPL = ctx.players.length;   // bij 4 spelers: vier smallere podiumpjes (x = -9.6, -3.2, 3.2, 9.6) in de spelerskleuren
+  const spots4 = NPL > 2 ? ctx.players.map((pl, i) => [(i - (NPL - 1) / 2) * 6.4, pl.color]) : [[-7.2, 0x35c46f], [7.2, 0x4a8cff]];
+  for (const [sx, col] of spots4) {
+    const pl = new THREE.Group(); pl.position.set(sx, 0.4, 2.0); if (NPL > 2) pl.scale.set(0.75, 1, 0.75); scene.add(pl);
     pl.add(mesh(new THREE.CylinderGeometry(2.3, 2.5, 0.3, 24), mat(0x2a1a44, { metalness: 0.5, roughness: 0.4 }), { pos: [0, 0.15, 0] }));
     const pool = new THREE.Mesh(new THREE.CircleGeometry(2.1, 28), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false })); pool.rotation.x = -Math.PI / 2; pool.position.y = 0.33; pl.add(pool);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.07, 6, 32), new THREE.MeshBasicMaterial({ color: col })); ring.rotation.x = Math.PI / 2; ring.position.y = 0.3; pl.add(ring);

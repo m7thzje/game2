@@ -12,16 +12,19 @@ import { B, cx, cz, setI, buildWorld, itemTexture, ITEM_COL } from './bomber_wor
 //  * sudden death: na 20 s vallen er stenen van het plafond (altijd in gespiegelde paren, dus eerlijk). Gelijk? Dan kiest Kip Kiki.
 //  * 3 spelers (Juul): drie startpunten (links, rechts, midden onder; onderling even ver), links-rechts gespiegelde kratten/stenen/slijm, de laatste die overleeft wint
 //    de ronde (eerste tot 2 ronde-winsten); de draak mikt op de sterkste; gelijke leiders na 3 rondes: Kip Kiki kiest een van hen.
+//  * 4 spelers (Sam): vier hoeken (Wes linksboven, Jor rechtsboven, Juul linksonder, Sam rechtsonder, zoals de HUD-vakken); kratten/stenen/slijm in viervoud
+//    gespiegeld (links-rechts en boven-onder), vier kippen, tot 4 rondes (eerste tot 2 winsten), snellere stenenregen en grotere pools.
 const { COLS, ROWS, CELL } = B;
 const N = COLS * ROWS;
 const idx = (c, r) => r * COLS + c;
 const toC = (x) => Math.round(x / CELL) + 6, toR = (z) => Math.round(z / CELL) + 5;
 const inb = (c, r) => c >= 0 && r >= 0 && c < COLS && r < ROWS;
+const SPAWN4 = [[0, 0], [COLS - 1, 0], [0, ROWS - 1], [COLS - 1, ROWS - 1]];   // 4: de vier hoeken, onderling gespiegeld (elke speler heeft precies dezelfde hoek)
 const SPAWN2 = [[0, 0], [COLS - 1, ROWS - 1]], SPAWN3 = [[0, 4], [COLS - 1, 4], [6, ROWS - 1]];   // 2: tegenover elkaar in de hoeken; 3: links, rechts en onder (paarsgewijs 12 stappen uit elkaar: eerlijk)
-const FACE2 = [[1, 0], [-1, 0]], FACE3 = [[1, 0], [-1, 0], [0, -1]];       // kijkrichting bij de start
-const PCSS_ALL = ['#7dffb0', '#8fb8ff', '#ffc58a'];
+const FACE2 = [[1, 0], [-1, 0]], FACE3 = [[1, 0], [-1, 0], [0, -1]], FACE4 = [[1, 0], [-1, 0], [1, 0], [-1, 0]];       // kijkrichting bij de start
+const PCSS_ALL = ['#7dffb0', '#8fb8ff', '#ffc58a', '#e9a2ff'];
 const BASE_SPEED = 5.2, FUSE = 2.5, FLAME_T = 0.62, SLIDE_V = 11;
-const NEED_WINS = 2, MAX_ROUNDS = 3, SUDDEN_T = 20, SUDDEN_T_FINAL = 13;
+const NEED_WINS = 2, SUDDEN_T = 20, SUDDEN_T_FINAL = 13;
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 const ITEM_NAME = { range: 'BEREIK +1!', bomb: 'EXTRA BOM!', speed: 'SNELLER!', shield: 'SCHILD!', mega: 'MEGA-BOM!', gold: 'GOUD-PAKKET!' };
 const ITEM_W = [['range', 28], ['bomb', 28], ['speed', 17], ['shield', 10], ['mega', 8]];
@@ -36,10 +39,10 @@ export default {
   giver: 'Meester Lont',
   icon: '💣',
   mode: 'pvp',
-  players: [2, 3],                       // 2 spelers (duel) of 3 spelers (vrij voor allen, Juul doet mee)
+  players: [2, 3, 4],                    // 2 spelers (duel), 3 of 4 spelers (vrij voor allen)
   time: 90,
   music: 'game_fast',
-  blurb: 'Leg <b>bommen</b>, sloop kratten, pak <b>power-ups</b> en blaas je broer op! Wie geraakt wordt is af. Eerste met <b>2 rondes</b> wint. Na 20 seconden vallen er <b>stenen van het plafond</b>. Pas op voor de <b>draak</b> en de <b>slijmerds</b>! Met drie spelers wint wie als laatste overeind blijft.',
+  blurb: 'Leg <b>bommen</b>, sloop kratten, pak <b>power-ups</b> en blaas je broer op! Wie geraakt wordt is af. Eerste met <b>2 rondes</b> wint. Na 20 seconden vallen er <b>stenen van het plafond</b>. Pas op voor de <b>draak</b> en de <b>slijmerds</b>! Met drie of vier spelers (elk in een eigen hoek) wint wie als laatste overeind blijft; bij vier spelers zijn er tot vier rondes.',
   controls: ['{move} lopen', '{a} bom leggen', '{b} schoppen (bom of broer)'],
   tip: 'Schop een bom naar je broer toe en ren om een hoek! Kippen laten cadeautjes vallen.',
 
@@ -47,9 +50,12 @@ export default {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
-    const NP = players.length;                                          // 2 of 3 deelnemers (slots)
-    const SPAWN = NP === 3 ? SPAWN3 : SPAWN2, FACE = NP === 3 ? FACE3 : FACE2, PCSS = players.map((p) => PCSS_ALL[p.id]);
-    const mir = NP === 3 ? (i) => i - (i % COLS) + (COLS - 1 - (i % COLS)) : (i) => N - 1 - i;   // gespiegelde cel: 2 spelers puntspiegeling, 3 spelers links-rechts
+    const NP = players.length;                                          // 2, 3 of 4 deelnemers (slots)
+    const MAX_ROUNDS = NP === 4 ? 4 : 3;                                // met vier spelers is een 1-1-1-0 na drie rondes te waarschijnlijk: tot 4 rondes
+    const SPAWN = NP === 4 ? SPAWN4 : NP === 3 ? SPAWN3 : SPAWN2, FACE = NP === 4 ? FACE4 : NP === 3 ? FACE3 : FACE2, PCSS = players.map((p) => PCSS_ALL[p.id] || p.css);
+    const mirC = (i) => i - (i % COLS) + (COLS - 1 - (i % COLS)), mirR = (i) => (ROWS - 1 - ((i / COLS) | 0)) * COLS + (i % COLS);
+    const mir = NP === 3 ? mirC : (i) => N - 1 - i;   // gespiegelde cel: 2 spelers puntspiegeling, 3 spelers links-rechts (bij 4: orbit(), links-rechts en boven-onder)
+    const orbit = (i) => (NP === 4 ? [...new Set([i, mirC(i), mirR(i), mirC(mirR(i))])] : [...new Set([i, mir(i)])]);   // alle cellen die dezelfde behandeling krijgen (eerlijke symmetrie)
     const tw = ctx.twist.id;
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const TEMPO = tw === 'turbo' || tw === 'slowmo' ? ctx.twist.speed : 1;
@@ -86,7 +92,7 @@ export default {
     // ---------------- bommen-pool ----------------
     const bombGeo = new THREE.SphereGeometry(0.72, 14, 10), capGeo = new THREE.CylinderGeometry(0.22, 0.28, 0.2, 8), bandGeo = new THREE.TorusGeometry(0.69, 0.07, 5, 16), fuseGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.4, 5);
     const sparkTex = canvasTex(64, 64, (c) => { const gr = c.createRadialGradient(32, 32, 1, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,220,80,.9)'); gr.addColorStop(1, 'rgba(255,100,0,0)'); c.fillStyle = gr; c.fillRect(0, 0, 64, 64); });
-    const bombs = Array.from({ length: 18 }, () => {
+    const bombs = Array.from({ length: NP === 4 ? 30 : 18 }, () => {
       const grp = new THREE.Group();
       const bm = new THREE.MeshStandardMaterial({ color: 0x20202c, roughness: 0.4, metalness: 0.35, emissive: 0xff2200, emissiveIntensity: 0 });
       const body = mesh(bombGeo, bm, { pos: [0, 0.78, 0] });
@@ -96,11 +102,11 @@ export default {
       grp.add(body, band, capm, fuse, spark); grp.visible = false; scene.add(grp);
       return { on: false, grp, body, bm, band, spark, c: 0, r: 0, x: 0, z: 0, t: 0, owner: 0, range: 2, slide: null, prog: 0, pass: new Array(NP).fill(false), fy: 0, fvy: 0, wob: rnd() * 6, ghost: false };
     });
-    const shadows = Array.from({ length: 18 }, () => { const s = P.shadowBlob(0.9); s.visible = false; scene.add(s); return s; });
+    const shadows = Array.from({ length: NP === 4 ? 30 : 18 }, () => { const s = P.shadowBlob(0.9); s.visible = false; scene.add(s); return s; });
 
     // ---------------- power-ups (sprites) ----------------
     const itemTex = {}; for (const k of Object.keys(ITEM_COL)) itemTex[k] = itemTexture(k);
-    const items = Array.from({ length: 24 }, () => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: itemTex.range, transparent: true, depthWrite: false })); s.scale.set(1.6, 1.6, 1); s.visible = false; scene.add(s); const sh = P.shadowBlob(0.6); sh.visible = false; scene.add(sh); return { on: false, s, sh, c: 0, r: 0, type: '', t: 0, imm: 0 }; });
+    const items = Array.from({ length: NP === 4 ? 32 : 24 }, () => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: itemTex.range, transparent: true, depthWrite: false })); s.scale.set(1.6, 1.6, 1); s.visible = false; scene.add(s); const sh = P.shadowBlob(0.6); sh.visible = false; scene.add(sh); return { on: false, s, sh, c: 0, r: 0, type: '', t: 0, imm: 0 }; });
 
     // ---------------- dieren, slijm, draak ----------------
     const chickens = []; const slimes = [];
@@ -111,7 +117,7 @@ export default {
 
     // ---------------- stenen (sudden death) ----------------
     const stoneGeo = new THREE.BoxGeometry(1.98, 1.7, 1.98), stoneMat = new THREE.MeshStandardMaterial({ map: tex.stone(1, 1), color: 0xb07058, emissive: 0x401408, emissiveIntensity: 0.6, roughness: 0.95, flatShading: true });
-    const fall = Array.from({ length: NP === 3 ? 18 : 10 }, () => { const m = mesh(stoneGeo, stoneMat); m.visible = false; scene.add(m); return { on: false, m, i: 0, t: 0, y: 0, vy: 0 }; });
+    const fall = Array.from({ length: NP === 4 ? 20 : NP === 3 ? 18 : 10 }, () => { const m = mesh(stoneGeo, stoneMat); m.visible = false; scene.add(m); return { on: false, m, i: 0, t: 0, y: 0, vy: 0 }; });
     let stoneQ = [], stoneQi = 0, stoneT = 0, stoneBack = [];     // stoneBack: stenen die wachten op een vrij plekje in de pool (nooit een cel overslaan)
 
     const power = (p) => p.bombsMax + p.range + p.speedLv + (p.shield ? 1 : 0);
@@ -123,18 +129,18 @@ export default {
     function genLevel(seed) {
       const lr = mulberry32(seed); g.fill(0); hid.fill(null); flameT.fill(0); flameOwner.fill(-1); bombAt.fill(-1);
       for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (c % 2 === 1 && r % 2 === 1) g[idx(c, r)] = 1;
-      const safeCells = NP === 3 ? [[0, 3], [0, 4], [0, 5], [1, 4], [0, 6], [0, 7], [0, 8], [6, 10], [5, 10], [6, 9], [6, 6], [6, 7], [6, 8]] : [[0, 0], [1, 0], [0, 1], [0, 4], [0, 5], [0, 6]];   // startvelden + ruimte voor de kippen
-      const safe = new Set(); for (const [c, r] of safeCells) { safe.add(idx(c, r)); safe.add(mir(idx(c, r))); }
+      const safeCells = NP === 3 ? [[0, 3], [0, 4], [0, 5], [1, 4], [0, 6], [0, 7], [0, 8], [6, 10], [5, 10], [6, 9], [6, 6], [6, 7], [6, 8]] : NP === 4 ? [[0, 0], [1, 0], [0, 1], [0, 4], [0, 5], [0, 6], [5, 0], [6, 0], [7, 0]] : [[0, 0], [1, 0], [0, 1], [0, 4], [0, 5], [0, 6]];   // startvelden + ruimte voor de kippen
+      const safe = new Set(); for (const [c, r] of safeCells) for (const j of orbit(idx(c, r))) safe.add(j);
       const totW = ITEM_W.reduce((a, [, w]) => a + w, 0);
       for (let i = 0; i < N; i++) {
-        const j = mir(i); if (j < i || g[i] === 1 || safe.has(i)) continue;
-        if (i === j) {                                    // midden: gouden krat (3 spelers: de rest van de middenkolom zijn gewone losse kratten)
+        const orb = orbit(i); if (Math.min(...orb) < i || g[i] === 1 || safe.has(i)) continue;
+        if (orb.length === 1) {                                    // midden: gouden krat (3 spelers: de rest van de middenkolom zijn gewone losse kratten)
           if (i === idx(6, 5)) g[i] = 3; else if (lr() < 0.74) { g[i] = 2; if (lr() < ITEM_FRAC) { let q = lr() * totW, t = 'range'; for (const [k, w] of ITEM_W) { q -= w; if (q <= 0) { t = k; break; } } hid[i] = t; } }
           continue;
         }
         if (lr() < 0.74) {
-          g[i] = g[j] = 2;
-          if (lr() < ITEM_FRAC) { let q = lr() * totW, t = 'range'; for (const [k, w] of ITEM_W) { q -= w; if (q <= 0) { t = k; break; } } hid[i] = hid[j] = t; }
+          for (const j of orb) g[j] = 2;
+          if (lr() < ITEM_FRAC) { let q = lr() * totW, t = 'range'; for (const [k, w] of ITEM_W) { q -= w; if (q <= 0) { t = k; break; } } for (const j of orb) hid[j] = t; }
         }
       }
       for (let i = 0; i < N; i++) { const c = i % COLS, r = (i / COLS) | 0; if (g[i] === 2) setI(W.crates, i, cx(c), 0.78, cz(r)); else setI(W.crates, i, 0, -50, 0, 0); setI(W.stones, i, 0, -50, 0, 0); }
@@ -152,7 +158,7 @@ export default {
       } else {
         cells.sort((p, q) => p.ring - q.ring || p.a - q.a);
         const seen = new Set();
-        for (const { i } of cells) { if (seen.has(i)) continue; seen.add(i); seen.add(mir(i)); stoneQ.push(i === mir(i) ? [i] : [i, mir(i)]); }
+        for (const { i } of cells) { if (seen.has(i)) continue; const orb = orbit(i); for (const j of orb) seen.add(j); stoneQ.push(orb); }
       }
       stoneQi = 0; stoneT = 0; stoneBack.length = 0;
     }
@@ -174,7 +180,7 @@ export default {
       // kippen en slijm
       for (const a of chickens) scene.remove(a.a.group); chickens.length = 0;
       for (const s of slimes) scene.remove(s.a.group); slimes.length = 0;
-      for (const [c, r] of (NP === 3 ? [[0, 7], [COLS - 1, 7], [6, 7]] : [[0, 5], [COLS - 1, 5]])) { const a = new Animal('chicken'); a.group.scale.setScalar(1.35); scene.add(a.group); chickens.push({ a, x: cx(c), z: cz(r), tc: c, tr: r, c, r, wait: rand(0.3, 1.2), moving: false, dead: false, prog: 0 }); }
+      for (const [c, r] of (NP === 4 ? [[0, 5], [COLS - 1, 5], [6, 0], [6, ROWS - 1]] : NP === 3 ? [[0, 7], [COLS - 1, 7], [6, 7]] : [[0, 5], [COLS - 1, 5]])) { const a = new Animal('chicken'); a.group.scale.setScalar(1.35); scene.add(a.group); chickens.push({ a, x: cx(c), z: cz(r), tc: c, tr: r, c, r, wait: rand(0.3, 1.2), moving: false, dead: false, prog: 0 }); }
       D.state = 'idle'; D.t = rand(8, 11); dragon.group.visible = false; dMark.visible = false; slimeT = rand(9, 12);
       buildStoneQueue();
       G.slowT = 0;
@@ -184,7 +190,7 @@ export default {
     let slimeT = 10;
 
     function refreshHud() {
-      hud.setScore(NP === 3 ? `${names[0]} ${G.wins[0]} – ${G.wins[1]} ${names[1]} – ${G.wins[2]} ${names[2]}   (ronde ${G.round}/${MAX_ROUNDS})` : `${names[0]} ${G.wins[0]} – ${G.wins[1]} ${names[1]}   (ronde ${G.round}/${MAX_ROUNDS})`);
+      hud.setScore(NP === 4 ? `${names.map((n, k) => `${n} ${G.wins[k]}`).join(' – ')}   (ronde ${G.round}/${MAX_ROUNDS})` : NP === 3 ? `${names[0]} ${G.wins[0]} – ${G.wins[1]} ${names[1]} – ${G.wins[2]} ${names[2]}   (ronde ${G.round}/${MAX_ROUNDS})` : `${names[0]} ${G.wins[0]} – ${G.wins[1]} ${names[1]}   (ronde ${G.round}/${MAX_ROUNDS})`);
     }
     function infoText(p) { return `💣${p.bombsMax} 🔥${p.range} 👟${p.speedLv}${p.shield ? ' 🛡' : ''}${p.mega ? ' ☄' : ''}${p.alive ? '' : ' 💀'}  ·  ${G.wins[p.i]} gewonnen`; }
 
@@ -359,9 +365,9 @@ export default {
     }
     function spawnSlimes() {
       const far = (j) => pl.every((p) => Math.hypot(p.x - cx(j % COLS), p.z - cz((j / COLS) | 0)) > 7);
-      const free = []; for (let i = 0; i < N; i++) if (g[i] === 0 && mir(i) > i && walkable(i % COLS, (i / COLS) | 0) && far(i) && far(mir(i))) free.push(i);
+      const free = []; for (let i = 0; i < N; i++) if (g[i] === 0 && Math.min(...orbit(i)) === i && orbit(i).length > 1 && walkable(i % COLS, (i / COLS) | 0) && orbit(i).every(far)) free.push(i);
       if (!free.length) return; const i = pick(free);
-      const spots = [i, mir(i)];
+      const spots = orbit(i);
       if (NP === 3) { const ax = []; for (let r = 0; r < ROWS; r++) { const j = idx(6, r); if (g[j] === 0 && walkable(6, r) && far(j)) ax.push(j); } if (ax.length) spots.push(pick(ax)); }   // 3 spelers: ook een slijmerd op de middenlijn
       for (const j of spots) { const c = j % COLS, r = (j / COLS) | 0; const a = new Slime(0x58d86b, 1.3); scene.add(a.group); a.group.position.set(cx(c), 0, cz(r)); slimes.push({ a, x: cx(c), z: cz(r), c, r, tc: c, tr: r, wait: 0.3, moving: false, dead: false, prog: 0, sx: 0, sz: 0, hit: new Array(NP).fill(0) }); fx.particles.burst(cx(c), 0.5, cz(r), { count: 14, speed: 3, up: 1.3, life: 0.6, size: 0.4, colors: [0x58d86b, 0xb8ffa0], gravity: 4 }); }
       fx.texts.add('SLIJMERDS!', cx(6), 3, cz(5), '#8dff6a', 1.4); audio.sfx('splash', { vol: 0.4 }); hud.toast('🟢 Er kruipen slijmerds uit de put! Niet aanraken!', 2000);
@@ -402,7 +408,7 @@ export default {
       if (!G.sudden && G.roundT >= (G.final ? SUDDEN_T_FINAL : SUDDEN_T)) { G.sudden = true; hud.setTimer(null); hud.toast('⚠️ DOODGEWOON! Stenen vallen van het plafond!', 2400); audio.sfx('creak', { vol: 0.5 }); ctx.shake(0.4); }
       if (G.sudden && !G.ending && stoneQi < stoneQ.length) {
         stoneT -= dt;
-        if (stoneT <= 0) { stoneT = NP === 3 ? Math.max(0.16, 0.6 - stoneQi * 0.014) : Math.max(0.12, 0.42 - stoneQi * 0.006); stoneBack.push(...stoneQ[stoneQi]); stoneQi++; }
+        if (stoneT <= 0) { stoneT = NP === 4 ? Math.max(0.2, 0.62 - stoneQi * 0.012) : NP === 3 ? Math.max(0.16, 0.6 - stoneQi * 0.014) : Math.max(0.12, 0.42 - stoneQi * 0.006); stoneBack.push(...stoneQ[stoneQi]); stoneQi++; }
       }
       while (G.sudden && !G.ending && stoneBack.length) { const f = fall.find((q) => !q.on); if (!f) break; f.on = true; f.i = stoneBack.shift(); f.t = 0; f.y = 16; f.vy = 0; f.m.visible = false; }
       let wk = 0;
@@ -598,6 +604,7 @@ export default {
     return {
       update: (dt) => { if (finished) { resultUpdate(dt); return; } if (!started) { started = true; G.state = 'play'; G.t = 0; } update(dt); },
       onStart() { if (!started) { started = true; G.state = 'play'; G.t = 0; } },
+      onCountdown() { refreshHud(); for (const p of pl) p.lastTxt = ''; },   // de harness bouwt de HUD bij het aftellen opnieuw op
       resultUpdate, introUpdate,
       onSwap() { for (const p of pl) fx.particles.burst(p.x, 1, p.z, { count: 20, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) {

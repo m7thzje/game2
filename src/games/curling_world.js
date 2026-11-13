@@ -109,7 +109,7 @@ export function makeHole() {
   g.userData.dynamic = true; return g;
 }
 
-export function buildWorld(ctx) {
+export function buildWorld(ctx, NPL = 2) {
   const { scene, fx } = ctx; const rng = mulberry32(31337); const W = { penguins: [], clouds: [] };
   const first = scene.children.length;
   const { HW, Z0, Z1 } = SH; const len = Z0 - Z1;
@@ -183,22 +183,23 @@ export function buildWorld(ctx) {
   W.updatePenguins(0);
 
   // scorebord achter het huis
-  const cv = document.createElement('canvas'); cv.width = 768; cv.height = 300; const g = cv.getContext('2d');
+  const NE = NPL === 4 ? 3 : 4, BH = NPL > 2 ? 420 : 300, ROWH = NPL > 2 ? 62 : 80;   // 3-4 spelers: hoger bord met 3-4 rijen
+  const cv = document.createElement('canvas'); cv.width = 768; cv.height = BH; const g = cv.getContext('2d');
   const stex = new THREE.CanvasTexture(cv); stex.colorSpace = THREE.SRGBColorSpace;
-  const sb = new THREE.Group(); sb.position.set(0, 3.9, Z1 - 2.6); sb.scale.setScalar(0.9); scene.add(sb);
-  sb.add(mesh(new THREE.BoxGeometry(12.6, 4.9, 0.6), mat(0x2a3a6a, { metalness: 0.3 }), { cast: false }), mesh(new THREE.PlaneGeometry(12, 4.3), new THREE.MeshBasicMaterial({ map: stex, toneMapped: false }), { cast: false, receive: false, pos: [0, 0, 0.32] }));
+  const sb = new THREE.Group(); sb.position.set(0, NPL > 2 ? 4.7 : 3.9, Z1 - 2.6); sb.scale.setScalar(0.9); scene.add(sb);
+  sb.add(mesh(new THREE.BoxGeometry(12.6, NPL > 2 ? 7.2 : 4.9, 0.6), mat(0x2a3a6a, { metalness: 0.3 }), { cast: false }), mesh(new THREE.PlaneGeometry(12, NPL > 2 ? 6.56 : 4.3), new THREE.MeshBasicMaterial({ map: stex, toneMapped: false }), { cast: false, receive: false, pos: [0, 0, 0.32] }));
   for (const dx of [-5.2, 5.2]) sb.add(mesh(new THREE.CylinderGeometry(0.12, 0.12, 8, 5), mat(0x6b4a2e), { cast: false, pos: [dx, -4, 0] }));
   W.board = (names, cols, ends, score, cur, endMul) => {
-    g.fillStyle = '#0c1430'; g.fillRect(0, 0, 768, 300); g.strokeStyle = '#ffd86b'; g.lineWidth = 8; g.strokeRect(5, 5, 758, 290);
+    g.fillStyle = '#0c1430'; g.fillRect(0, 0, 768, BH); g.strokeStyle = '#ffd86b'; g.lineWidth = 8; g.strokeRect(5, 5, 758, BH - 10);
     g.textBaseline = 'middle'; g.textAlign = 'center';
     g.font = 'bold 34px Fredoka, Arial Black, sans-serif'; g.fillStyle = '#cfe0ff'; g.fillText('CURLING-CHAOS', 384, 36);
     const x0 = 250, cw = 74; g.font = 'bold 28px Fredoka, Arial Black, sans-serif';
-    for (let e = 0; e < 4; e++) { g.fillStyle = e === cur ? '#ffe14a' : '#8fa0c8'; g.fillText(e === 3 ? 'x2' : String(e + 1), x0 + e * cw + cw / 2, 82); }
-    g.fillStyle = '#ffffff'; g.fillText('TOT', x0 + 4 * cw + 50, 82);
-    for (let p = 0; p < 2; p++) {
-      const y = 148 + p * 80; g.textAlign = 'left'; g.font = 'bold 44px Fredoka, Arial Black, sans-serif'; g.fillStyle = cols[p]; g.fillText(names[p], 24, y); g.textAlign = 'center';
-      for (let e = 0; e < 4; e++) { g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(x0 + e * cw + 4, y - 30, cw - 8, 60); const v = ends[e] ? ends[e][p] : null; if (v != null) { g.font = 'bold 44px Fredoka, Arial Black, sans-serif'; g.fillStyle = v > 0 ? cols[p] : '#6a7498'; g.fillText(String(v), x0 + e * cw + cw / 2, y); } }
-      g.font = 'bold 62px Fredoka, Arial Black, sans-serif'; g.fillStyle = cols[p]; g.fillText(String(score[p]), x0 + 4 * cw + 50, y);
+    for (let e = 0; e < NE; e++) { g.fillStyle = e === cur ? '#ffe14a' : '#8fa0c8'; g.fillText(e === NE - 1 ? 'x2' : String(e + 1), x0 + e * cw + cw / 2, 82); }
+    g.fillStyle = '#ffffff'; g.fillText('TOT', x0 + NE * cw + 50, 82);
+    for (let p = 0; p < names.length; p++) {
+      const y = 148 + p * ROWH; g.textAlign = 'left'; g.font = 'bold 44px Fredoka, Arial Black, sans-serif'; g.fillStyle = cols[p]; g.fillText(names[p], 24, y); g.textAlign = 'center';
+      for (let e = 0; e < NE; e++) { g.fillStyle = 'rgba(255,255,255,.08)'; g.fillRect(x0 + e * cw + 4, y - 28, cw - 8, 56); const v = ends[e] ? ends[e][p] : null; if (v != null) { g.font = 'bold 44px Fredoka, Arial Black, sans-serif'; g.fillStyle = v > 0 ? cols[p] : '#6a7498'; g.fillText(String(v), x0 + e * cw + cw / 2, y); } }
+      g.font = 'bold 62px Fredoka, Arial Black, sans-serif'; g.fillStyle = cols[p]; g.fillText(String(score[p]), x0 + NE * cw + 50, y);
     }
     stex.needsUpdate = true;
   };

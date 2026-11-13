@@ -4,7 +4,7 @@ import { makeBrother, makeNPC, PLAYER_COLORS } from '../engine/chars.js';
 import * as P from '../engine/props.js';
 import { buildHall, makeChair, SEAT_Y, makeTrapdoor, makeSpringBoard, makeTrophy, tagSprite, bigLabel, noteSprite, glowTex } from './chairs_world.js';
 
-// Stoelendans — Mario Party-stoelendans in de gouden troonzaal. 2 broers + 2 narren (Fonkel en Dobber).
+// Stoelendans — Mario Party-stoelendans in de gouden troonzaal. Altijd 4 deelnemers: de spelers (2, 3 of 4) en de rest narren (Fonkel en Dobber).
 // Muziek speelt, stopt abrupt, iedereen rent naar een stoel. Er is altijd één stoel te weinig.
 
 const CHAIR_SCALE = 1.7;
@@ -34,15 +34,16 @@ export default {
   mode: 'pvp',
   time: 90,
   pay: 1,
+  players: [2, 3, 4],                    // altijd 4 deelnemers: bij 2 of 3 spelers vullen de narren Fonkel en Dobber aan; bij 4 spelers doet iedereen mee
   music: 'game',
-  blurb: 'In de gouden troonzaal van het Speelhal-kasteel speelt de hofkapel! Loop rond de stoelen, en <b>zodra de muziek stopt</b> ren je naar een vrije stoel. Er is altijd <b>één stoel te weinig</b>: wie blijft staan, valt door het valluik of wordt weggekatapulteerd. Pas op voor <b>nepstops</b>! Wie het langst overleeft wint, ook tegen de narren <b>Fonkel</b> en <b>Dobber</b>.',
+  blurb: 'In de gouden troonzaal van het Speelhal-kasteel speelt de hofkapel! Loop rond de stoelen, en <b>zodra de muziek stopt</b> ren je naar een vrije stoel. Er is altijd <b>één stoel te weinig</b>: wie blijft staan, valt door het valluik of wordt weggekatapulteerd. Pas op voor <b>nepstops</b>! Wie het langst overleeft wint (met minder dan vier spelers doen de narren <b>Fonkel</b> en <b>Dobber</b> mee).',
   controls: ['{move} rennen', '{a} zitten / duiken op een stoel (pas als de muziek stopt!)', '{b} rivaal wegduwen'],
   tip: 'Te vroeg gaan zitten (bij een nepstop!) kost je een duikeling. Een duw met B kan een duikende rivaal uit de lucht halen. Op de gouden stoel mag je kiezen wie er uitvalt!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pvp = ctx.pvp;
-    const names = players.map((p) => p.name);
+    const N = players.length, names = players.map((p) => p.name);
     const L = ctx.lights('indoor', { shadow: 18, center: [0, 0, 0], fog: false });
     L.sun.position.set(-10, 26, 18); L.sun.intensity = 1.9; L.hemi.intensity = 1.25; L.hemi.color.set(0xffe9c8); L.hemi.groundColor.set(0x7a4a3a);
     scene.background = new THREE.Color(0x1d1220);
@@ -66,16 +67,16 @@ export default {
       { scale: 0.98, shirt: 0x3a6ae8, sleeve: 0xffd23f, pants: 0xffd23f, hatColor: 0x3a6ae8, hatColor2: 0xffd23f, boots: 0x2a2a6a },
       { scale: 1.1, bodyW: 1.25, shirt: 0xe8742a, sleeve: 0x7ad83a, pants: 0x7ad83a, hatColor: 0xe8742a, hatColor2: 0x7ad83a, nose: 2.0, skin: 0xf0b890, boots: 0xffe14a },
     ];
-    const css = [players[0].css, players[1].css, NPC_CSS[0], NPC_CSS[1]];
-    const nm = [names[0], names[1], NAMES_NPC[0], NAMES_NPC[1]];
+    const css = [0, 1, 2, 3].map((id) => (id < N ? players[id].css : NPC_CSS[id - N]));
+    const nm = [0, 1, 2, 3].map((id) => (id < N ? names[id] : NAMES_NPC[id - N]));
     const E = [0, 1, 2, 3].map((id) => {
-      const bro = id < 2;
-      const c = bro ? makeBrother(id) : makeNPC('jester', SPEC[id - 2]);
+      const bro = id < N, nk = id - N;   // nk = welke nar (0 = Fonkel, 1 = Dobber)
+      const c = bro ? makeBrother(id) : makeNPC('jester', SPEC[nk]);
       const holder = new THREE.Group(); holder.add(c.group); scene.add(holder);
       const sz = bro ? pvp.size(id) : 1;
       const gs = 1.85 * sz;
       holder.scale.setScalar(gs);
-      const ringCol = bro ? PLAYER_COLORS[id] : NPC_COL[id - 2];
+      const ringCol = bro ? PLAYER_COLORS[id] : NPC_COL[nk];
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.66, 0.86, 24), new THREE.MeshBasicMaterial({ color: ringCol, transparent: true, opacity: 0.9, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.renderOrder = 3; scene.add(ring);
       const blob = P.shadowBlob(0.9); scene.add(blob);
       const tag = tagSprite(nm[id], css[id]); scene.add(tag);
@@ -83,7 +84,7 @@ export default {
         id, bro, name: nm[id], css: css[id], c, holder, ring, blob, tag, sz, gs, rad: 0.8 * sz,
         x: 0, z: 0, vx: 0, vz: 0, y: PLAT_Y, vy: 0, face: 0, alive: true, out: false, outRound: 0, mode: 'walk', modeT: 0, stunT: 0, pushCd: 0, hopCd: 0, seat: null, seatT: 1e9, safe: false, early: false, earlyT: 0,
         dive: null, slide: null, fall: null, fly: null, spinY: 0, tiltX: 0, tiltZ: 0, scaleK: 1, sits: 0, bonks: 0, auto: false,
-        ai: bro ? null : { smart: id === 2, react: 0, delay: 0, target: null, orbA: 0, orbR: 6, fakeFall: false, fakeT: 0, pushT: 0, confused: 0, sprint: 0 },
+        ai: bro ? null : { smart: nk === 0, react: 0, delay: 0, target: null, orbA: 0, orbR: 6, fakeFall: false, fakeT: 0, pushT: 0, confused: 0, sprint: 0 },
       };
     });
     const speedOf = (e) => (e.bro ? pvp.speed(e.id) : (ctx.twist.id === 'turbo' || ctx.twist.id === 'slowmo' ? ctx.twist.speed : 1));
@@ -430,17 +431,14 @@ export default {
     // ------------------------------------------------------------ einde
     function ranking() {
       // wie het langst overleeft; broers: score = ronde van uitval (overlevende = MAX_ROUNDS + 1)
-      return [0, 1].map((i) => (E[i].out ? E[i].outRound : MAX_ROUNDS + 1));
+      return players.map((_, i) => (E[i].out ? E[i].outRound : MAX_ROUNDS + 1));
     }
-    function decideWinner() {
-      const sc = ranking();
-      if (sc[0] !== sc[1]) return sc[0] > sc[1] ? 0 : 1;
-      // zelfde ronde uitgevallen: wie het eerst zat wint
-      const a = E[0].seatT, b = E[1].seatT;
-      if (a !== b) return a < b ? 0 : 1;
-      if (E[0].sits !== E[1].sits) return E[0].sits > E[1].sits ? 0 : 1;
-      return Math.random() < 0.5 ? 0 : 1;
+    // volgorde van de spelers (slots) van 1e naar laatste: langst overleefd, dan wie het eerst zat, dan wie vaker zat
+    function placeOrder() {
+      const sc = ranking(), tie = players.map(() => Math.random());
+      return players.map((_, i) => i).sort((a, b) => (sc[b] - sc[a]) || (E[a].seatT - E[b].seatT) || (E[b].sits - E[a].sits) || (tie[a] - tie[b]));
     }
+    function decideWinner() { return placeOrder()[0]; }
     function startTrophy() {
       R.state = 'trophy'; R.t = 0; R.lastHint = null; hud.setHint(null); hud.setTimer(null);
       const w = decideWinner(); winnerBro = w; const we = E[w];
@@ -462,21 +460,26 @@ export default {
     function finishGame() {
       if (finishCalled) return; finishCalled = true; done = true;
       const w = winnerBro ?? decideWinner(); const l = 1 - w;
-      const sc = ranking();
+      const sc = ranking(), order = placeOrder();
       const surv = champion;
       let txt;
-      if (surv && !surv.bro) txt = `<b>${surv.name}</b> won de hele stoelendans! Maar tussen de broers gaat de trofee naar <b>${E[w].name}</b>, die langer bleef zitten dan ${E[l].name} (uitgevallen in ronde ${E[l].outRound || '-'}).`;
-      else if (sc[w] === MAX_ROUNDS + 1) txt = `<b>${E[w].name}</b> overleefde alle ${MAX_ROUNDS} rondes en pakt de gouden trofee! ${E[l].name} viel uit in ronde ${E[l].outRound}.`;
-      else txt = `<b>${E[w].name}</b> viel pas in ronde ${E[w].outRound} uit, ${E[l].name} al in ronde ${E[l].outRound}. De trofee is voor ${E[w].name}!`;
+      if (N > 2) {
+        const rest = order.slice(1).map((i) => `${E[i].name} (${sc[i] === MAX_ROUNDS + 1 ? 'bleef staan' : `uit in ronde ${E[i].outRound}`})`).join(', ');
+        txt = surv && !surv.bro ? `<b>${surv.name}</b> won de hele stoelendans! Onder de spelers gaat de trofee naar <b>${E[w].name}</b>. Daarna: ${rest}.`
+          : sc[w] === MAX_ROUNDS + 1 ? `<b>${E[w].name}</b> overleefde alle ${MAX_ROUNDS} rondes en pakt de gouden trofee! Daarna: ${rest}.` : `<b>${E[w].name}</b> hield het langst vol en pakt de trofee! Daarna: ${rest}.`;
+      }
+      else if (surv && !surv.bro) txt = `<b>${surv.name}</b> won de hele stoelendans! Maar tussen de broers gaat de trofee naar <b>${E[w].name}</b>, die langer bleef zitten dan ${E[l].name} (uitgevallen in ronde ${E[l].outRound || '-'}).`;
+      else if (N === 2 && sc[w] === MAX_ROUNDS + 1) txt = `<b>${E[w].name}</b> overleefde alle ${MAX_ROUNDS} rondes en pakt de gouden trofee! ${E[l].name} viel uit in ronde ${E[l].outRound}.`;
+      else if (N === 2) txt = `<b>${E[w].name}</b> viel pas in ronde ${E[w].outRound} uit, ${E[l].name} al in ronde ${E[l].outRound}. De trofee is voor ${E[w].name}!`;
       try { audio.music('game'); } catch (e) { /* weg */ }
-      ctx.finishPvp({ winner: w, score: [sc[0], sc[1]], summary: txt + `<br><small>Score = ronde van uitval (${MAX_ROUNDS + 1} = bleef staan tot het einde)</small>`, delay: 500 });
+      ctx.finishPvp({ winner: w, score: sc, place: order, summary: txt + `<br><small>Score = ronde van uitval (${MAX_ROUNDS + 1} = bleef staan tot het einde)</small>`, delay: 500 });
     }
 
     // ------------------------------------------------------------ HUD
     function refreshHud() {
       if (hud.scoreEl) hud.scoreEl.style.whiteSpace = 'nowrap';
       hud.setScore(R.n ? `Ronde ${R.n}/${MAX_ROUNDS} · ${R.chairsN} stoelen · ${alive().length} spelers` : 'Stoelendans');
-      for (const i of [0, 1]) {
+      for (let i = 0; i < N; i++) {
         const e = E[i];
         hud.setPlayerInfo(i, !e.alive && e.outRound ? `Uitgevallen in ronde ${e.outRound}` : e.mode === 'sit' || e.mode === 'slide' ? 'Zit!' : e.safe ? 'Veilig!' : R.state === 'stop' ? 'Naar een stoel!' : 'Nog in het spel');
       }
@@ -907,13 +910,13 @@ export default {
       update, introUpdate, resultUpdate,
       onCountdown() { R.lastHint = null; refreshHud(); },
       onStart() { R.lastHint = null; try { audio.music(null); } catch (e) { /* weg */ } refreshHud(); },
-      onSwap(sw) { for (const e of E.slice(0, 2)) fx.particles.burst(e.x, e.y + 1.5, e.z, { count: 26, speed: 5, up: 1, life: 0.9, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff], gravity: 4 }); },
+      onSwap(sw) { for (const e of E.slice(0, N)) fx.particles.burst(e.x, e.y + 1.5, e.z, { count: 26, speed: 5, up: 1, life: 0.9, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff], gravity: 4 }); },
       onDeurman(movers) {
         movers.forEach((m, i) => { if (!m) return; const e = E[i]; if (e.alive && (e.mode === 'walk')) { e.mode = 'stun'; e.stunT = 1.6; e.vy = 5; say('De Deurman zag je!', e.x, e.z, '#ff7a7a', 1.1, 5); } });
       },
       celebrate(w) {
         for (const e of E) { if (e.mode === 'podium' || e.id === w) e.c.pose = 'cheer'; }
-        const l = E[1 - w]; if (l.mode === 'spec') l.specPose = 'sad';
+        for (const l of E.slice(0, N)) if (l.id !== w && l.mode === 'spec') l.specPose = 'sad';
       },
       dispose() { try { if (mg) mg.disconnect(); } catch (e) { /* weg */ } },
       dbg: {

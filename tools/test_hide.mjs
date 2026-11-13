@@ -4,6 +4,7 @@
 // Bots spelen versneld hele potjes. Controleert: finishPvp precies 1x, beide spelers kunnen winnen, geen console-errors, elke twist werkt.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
+import { chromePath, BROWSER_ARGS } from './chrome_path.mjs';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json' };
@@ -19,21 +20,21 @@ const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 let failures = 0; const check = (ok, msg) => { console.log((ok ? 'OK   ' : 'FAIL ') + msg); if (!ok) failures++; };
 
-async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+async function open(twist, N = 2) {
+  const browser = await chromium.launch({ executablePath: chromePath(), args: BROWSER_ARGS });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   page.setDefaultTimeout(180000);
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=hide&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=hide&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${N === 4 ? '&players=4' : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 120000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -49,15 +50,15 @@ async function installBots(page, cfg) {
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 777; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    const B = { wp: null, wpT: 0, press: 0, runT: 0, tHunt: -1, lastPhase: '', pcool: 0 };
+    const B = { s: {}, wp: null, wpT: 0, press: 0, runT: 0, tHunt: -1, lastPhase: '', pcool: 0 };
     window.__cfg = cfg;
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
         for (const v of inp.virtual) { v.a = false; v.b = false; v.x = 0; v.y = 0; }
-        const hi = st.hider, se = 1 - hi; const swapAB = m.twist.id === 'swapab';
-        const drive = (idx, dx, dz, a, b) => { const vi = m.swapped ? 1 - idx : idx; const v = inp.virtual[vi]; v.x = dx; v.y = dz; if (swapAB) { v.a = b; v.b = a; } else { v.a = a; v.b = b; } };
+        const hi = st.hider; const swapAB = m.twist.id === 'swapab';
+        const drive = (idx, dx, dz, a, b) => { const vi = m.ids.length === 2 && m.swapped ? 1 - idx : idx; const v = inp.virtual[m.ids[vi]]; v.x = dx; v.y = dz; if (swapAB) { v.a = b; v.b = a; } else { v.a = a; v.b = b; } };
         const dir = (fx, fz, tx, tz, sp = 1) => { const dx = tx - fx, dz = tz - fz, d = Math.hypot(dx, dz) || 1; return [dx / d * Math.min(1, d / 0.8) * sp, dz / d * Math.min(1, d / 0.8) * sp]; };
         if (st.phase !== B.lastPhase) { B.lastPhase = st.phase; if (st.phase === 'hunt') { B.tHunt = st.T; B.wp = null; B.runT = 0; } }
         B.pcool = Math.max(0, B.pcool - dt); B.wpT -= dt; B.press = Math.max(0, B.press - dt); B.runT = Math.max(0, B.runT - dt);
@@ -70,24 +71,26 @@ async function installBots(page, cfg) {
           // verstopper
           const hc = cfg[hi].hide;
           if (hc === 'wander') {
-            const ds = Math.hypot(st.Sk.x - st.H.x, st.Sk.z - st.H.z);
+            const ds = Math.min(...st.K.map((q) => Math.hypot(q.x - st.H.x, q.z - st.H.z)));
             if (st.H.dis && ds < 3.2 && st.H.cdPop <= 0 && B.runT <= 0) { drive(hi, 0, 0, true, false); B.runT = 1.4; }
-            else if (!st.H.dis && B.runT > 0) { const [dx, dz] = dir(st.Sk.x, st.Sk.z, st.H.x, st.H.z); drive(hi, dx, dz, false, false); }
+            else if (!st.H.dis && B.runT > 0) { const q0 = st.K[0]; const [dx, dz] = dir(q0.x, q0.z, st.H.x, st.H.z); drive(hi, dx, dz, false, false); }
             else if (!st.H.dis) { let best = null, bd = 1e9; for (const p of props) { const d = Math.hypot(p.x - st.H.x, p.z - st.H.z); if (d < bd) { bd = d; best = p; } } if (bd < 2.6 && B.pcool <= 0) { drive(hi, 0, 0, true, false); B.pcool = 0.4; } else { const [dx, dz] = dir(st.H.x, st.H.z, best.x, best.z); drive(hi, dx, dz, false, false); } }
             else if (st.H.cdDecoy <= 0 && rnd() < 0.02) drive(hi, 0, 0, false, true);
             else if (rnd() < 0.01) drive(hi, rnd() < 0.5 ? -1 : 1, 0, false, false);
           }
-          // zoeker
-          const sc = cfg[se].seek; if (sc !== 'idle') {
+          // zoekers (bij 4 spelers drie tegelijk)
+          for (const sk of st.K) {
+            const se = sk.slot, sc = cfg[se].seek; if (sc === 'idle' || sk.out) continue;
+            const Bs = (B.s[se] = B.s[se] || { wp: null, wpT: 0, press: 0 }); Bs.wpT -= dt; Bs.press = Math.max(0, Bs.press - dt);
             const known = sc === 'smart' && (st.T - B.tHunt) > cfg[se].know;
             let tx, tz;
             if (known) { tx = st.H.x; tz = st.H.z; }
-            else { if (!B.wp || B.wpT <= 0) { const p = props[Math.floor(rnd() * props.length)]; B.wp = [p.x + (rnd() - 0.5) * 2, p.z + 1.2]; B.wpT = 2.5; } tx = B.wp[0]; tz = B.wp[1]; }
-            const [dx, dz] = dir(st.Sk.x, st.Sk.z, tx, tz); const dd = Math.hypot(tx - st.Sk.x, tz - st.Sk.z);
+            else { if (!Bs.wp || Bs.wpT <= 0) { const p = props[Math.floor(rnd() * props.length)]; Bs.wp = [p.x + (rnd() - 0.5) * 2, p.z + 1.2]; Bs.wpT = 2.5; } tx = Bs.wp[0]; tz = Bs.wp[1]; }
+            const [dx, dz] = dir(sk.x, sk.z, tx, tz); const dd = Math.hypot(tx - sk.x, tz - sk.z);
             let a = false, b = false;
-            if (known && dd < 1.1 && B.press <= 0) { a = true; B.press = 0.5; }
-            else if (!known && dd < 1.4 && B.press <= 0 && (sc === 'dumb' ? rnd() < 0.5 : rnd() < 0.04)) { a = true; B.press = 0.6; }
-            if (st.Sk.scanCd <= 0 && rnd() < 0.05) b = true;
+            if (known && dd < 1.1 && Bs.press <= 0) { a = true; Bs.press = 0.5; }
+            else if (!known && dd < 1.4 && Bs.press <= 0 && (sc === 'dumb' ? rnd() < 0.5 : rnd() < 0.04)) { a = true; Bs.press = 0.6; }
+            if (sk.scanCd <= 0 && rnd() < 0.05) b = true;
             drive(se, dx, dz, a, b);
           }
         }
@@ -114,6 +117,25 @@ async function runMatch(page, maxFrames = 60 * 200) {
 
 const wins = [0, 0, 0];
 for (const name of scen) {
+  if (name === 'bots4' || name === 'idle4') {
+    // vier spelers: vier rondes, elk poppetje is één keer verstopper; slimme zoekers vinden de verstopper, de rest niet altijd
+    const cfg = name === 'idle4' ? [0, 1, 2, 3].map(() => ({ seek: 'idle', hide: 'idle', know: 0 })) : [{ seek: 'smart', know: 3, hide: 'wander' }, { seek: 'smart', know: 6, hide: 'still' }, { seek: 'dumb', know: 0, hide: 'wander' }, { seek: 'dumb', know: 0, hide: 'still' }];
+    const { browser, page, errors } = await open(process.env.TW || 'none', 4);
+    await installBots(page, cfg);
+    const res = await runMatch(page, 60 * 300);
+    console.log(res.log.join('\n'));
+    const st = res.st, r = res.result;
+    console.log(`end T=${st.T.toFixed(1)} pts=${st.pts.map((x) => x.toFixed(1))} order=${st.order} results=${JSON.stringify(st.results.map((q) => [q.kind, q.hider, q.finder, +q.hiP.toFixed(1), +q.seP.toFixed(1)]))}`);
+    check(res.finished && res.fin === 1, `finishPvp precies 1x (${res.fin})`);
+    check(st.results.length === 4 && [...new Set(st.results.map((q) => q.hider))].length === 4, `vier rondes, ieder poppetje één keer verstopper (${st.results.map((q) => q.hider)})`);
+    check(r && r.scoreArr.length === 4 && r.place.length === 4 && [...r.place].sort().join() === '0,1,2,3', `plaatsen: ${r && r.place}, score ${r && r.scoreArr}`);
+    check(r && r.winnerIds.length === 1 && r.place[0] === r.winnerId, `één winnaar = eerste plaats (${r && r.winnerId})`);
+    check(r && Math.max(...r.scoreArr) === r.scoreArr[r.winner], 'winnaar heeft de hoogste score');
+    if (name === 'bots4') check(st.stats.found >= 2, `er zijn verstoppers gevonden (${st.stats.found})`);
+    if (name === 'idle4') check(st.results.every((q) => q.kind === 'time') && st.pts.every((v) => v === st.pts[0]), 'iedereen idle: alle rondes tijd op, gelijke stand, kip kiest');
+    check(!errors.length, errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'geen console-errors');
+    await browser.close(); continue;
+  }
   if (['bots', 'twists', 'timeout', 'idle', 'deur'].includes(name)) {
     const mk = (a, b, ha, hb) => [{ seek: a, know: a === 'smart' ? 3 : 0, hide: ha }, { seek: b, know: b === 'smart' ? 3 : 0, hide: hb }];
     const TW_LIST = process.env.ONLY ? process.env.ONLY.split(',') : TWISTS;

@@ -38,9 +38,10 @@ export default {
   giver: 'Strandmeester Sjaak',
   icon: '🏐',
   mode: 'pvp',
+  players: [2, 4], teams: true,   // 1 tegen 1, of met 4 spelers 2 tegen 2 (teamgenoten delen één kant en de 3 slagen)
   time: 90,
   music: 'game_fast',
-  blurb: 'Volleybal met <b>slijmblobs</b> op een kermis-strand! Laat de bal op de grond van je broer vallen: eerste tot <b>11</b>, max <b>3 slagen</b> per kant. Pas op voor de <b>bom-bal</b>, de <b>kip</b>, de <b>wind</b> en de <b>spiegel</b>!',
+  blurb: 'Volleybal met <b>slijmblobs</b> op een kermis-strand! Laat de bal op de grond van je broer vallen: eerste tot <b>11</b>, max <b>3 slagen</b> per kant (met vier spelers: <b>2 tegen 2</b>, jullie delen de 3 slagen!). Pas op voor de <b>bom-bal</b>, de <b>kip</b>, de <b>wind</b> en de <b>spiegel</b>!',
   controls: ['{move} lopen, omhoog = springen', '{a} SLAG (smash of lob)', '{b} DUIKSLAG (redding)'],
   tip: 'Spring en sla vlak voor de bal je kop raakt = SMASH! Wie 3 punten achterstaat krijgt een bredere slag.',
 
@@ -48,16 +49,23 @@ export default {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
+    const NP = players.length, TM = NP === 4 && ctx.teams ? ctx.teams : null;          // TM = 2 tegen 2 (slots per team), anders 1 tegen 1
+    const teamOf = (i) => (TM ? ctx.teamOf[i] : i);
+    const tNames = [0, 1].map((t) => (TM ? ctx.teamInfo[t].name : names[t]));
+    const tHex = [0, 1].map((t) => (TM ? ctx.teamInfo[t].color : PLAYER_COLORS[t]));
+    const tCss = [0, 1].map((t) => (TM ? ctx.teamInfo[t].css : players[t].css));
+    const hexRgba = (h) => `rgba(${(h >> 16) & 255},${(h >> 8) & 255},${h & 255},1)`;
+    const sbNames = TM ? ['TEAM 1', 'TEAM 2'] : names;
     const tw = ctx.twist.id;
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const TEMPO = ctx.twist.speed && (tw === 'turbo' || tw === 'slowmo') ? ctx.twist.speed : 1;
     const PHYS_T = 1 + (TEMPO - 1) * 0.45;
     const GBALL = GB * lerp(1, GRAV, 0.6), GBLOB = GP * GRAV;
-    const colorsCss = ['rgba(60,200,120,1)', 'rgba(70,140,255,1)'];
+    const colorsCss = [hexRgba(tHex[0]), hexRgba(tHex[1])];
 
     const L = ctx.lights('dusk', { shadow: 16, center: [0, 3, 0], fog: false });
     camera.fov = 45; camera.updateProjectionMatrix();
-    const B = buildBeach(ctx, L, colorsCss);
+    const B = buildBeach(ctx, L, colorsCss, tHex, tCss);
 
     // ---------------- bal ----------------
     const ballG = new THREE.Group(); scene.add(ballG);
@@ -77,8 +85,9 @@ export default {
     // ---------------- blobs ----------------
     const eyeW = new THREE.MeshBasicMaterial({ color: 0xffffff }), eyeB = new THREE.MeshBasicMaterial({ color: 0x14142a });
     const pipOn = new THREE.MeshBasicMaterial({ color: 0xffe14a }), pipOff = new THREE.MeshBasicMaterial({ color: 0x3a3a5a, transparent: true, opacity: 0.55 }), pipHot = new THREE.MeshBasicMaterial({ color: 0xff5a3a });
+    const memberIdx = [0, 0];
     const pl = players.map((pp, i) => {
-      const colr = PLAYER_COLORS[i];
+      const colr = PLAYER_COLORS[i], team = teamOf(i), kIn = memberIdx[team]++, sideV = team ? 1 : -1;
       const g = new THREE.Group(); scene.add(g);
       const bodyM = new THREE.MeshStandardMaterial({ color: colr, roughness: 0.18, metalness: 0, emissive: colr, emissiveIntensity: 0.18, flatShading: false });
       const body = mesh(new THREE.SphereGeometry(1, 24, 14, 0, TAU, 0, Math.PI / 2), bodyM, {}); g.add(body);
@@ -87,38 +96,42 @@ export default {
       const eyes = [-1, 1].map((sd) => { const e = new THREE.Group(); e.userData.sd = sd; e.position.set(sd * 0.27, 0.56, 0.78); e.add(mesh(new THREE.SphereGeometry(0.21, 10, 8), eyeW, { cast: false })); const pu = mesh(new THREE.SphereGeometry(0.1, 8, 6), eyeB, { cast: false, pos: [0, 0, 0.17] }); e.add(pu); e.userData.pu = pu; g.add(e); return e; });
       const mouth = mesh(new THREE.TorusGeometry(0.14, 0.035, 5, 10, Math.PI), eyeB, { cast: false, pos: [0, 0.26, 0.93], rot: [0, 0, Math.PI] }); g.add(mouth);
       // haar (Wes: stekels, Jor: pet achterstevoren)
-      if (i === 0) { for (let k = 0; k < 3; k++) g.add(mesh(new THREE.ConeGeometry(0.17, 0.55, 5), mat(0x7a4a24), { cast: false, pos: [(k - 1) * 0.3, 1.02, 0.0], rot: [0, 0, -(k - 1) * 0.35] })); g.add(mesh(new THREE.TorusGeometry(0.62, 0.07, 5, 18), mat(0xd8372c, { flatShading: false }), { cast: false, pos: [0, 0.2, 0], rot: [Math.PI / 2, 0, 0] })); }
+      if (i % 2 === 0) { for (let k = 0; k < 3; k++) g.add(mesh(new THREE.ConeGeometry(0.17, 0.55, 5), mat(0x7a4a24), { cast: false, pos: [(k - 1) * 0.3, 1.02, 0.0], rot: [0, 0, -(k - 1) * 0.35] })); g.add(mesh(new THREE.TorusGeometry(0.62, 0.07, 5, 18), mat(0xd8372c, { flatShading: false }), { cast: false, pos: [0, 0.2, 0], rot: [Math.PI / 2, 0, 0] })); }
       else { g.add(mesh(new THREE.SphereGeometry(0.62, 12, 6, 0, TAU, 0, 1.2), mat(0xffc93c, { flatShading: false }), { cast: false, pos: [0, 0.54, -0.06] })); g.add(mesh(new THREE.BoxGeometry(0.7, 0.05, 0.4), mat(0xffc93c), { cast: false, pos: [0, 0.78, -0.62] })); }
+      let teamRing = null; if (TM) { teamRing = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.28, 28), new THREE.MeshBasicMaterial({ color: tHex[team], transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })); teamRing.rotation.x = -Math.PI / 2; scene.add(teamRing); }   // teamring op de grond
       const ring = new THREE.Mesh(new THREE.RingGeometry(1, 1.16, 28, 1, 0, Math.PI), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })); scene.add(ring);
       const shadow = P.shadowBlob(1.3); scene.add(shadow);
       const pips = [0, 1, 2].map((k) => { const m = mesh(new THREE.SphereGeometry(0.16, 8, 6), pipOff, { cast: false }); scene.add(m); return m; });
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex(pp.name, pp.css), transparent: true, depthTest: false })); tag.scale.set(2.3, 0.86, 1); tag.renderOrder = 15; scene.add(tag);
       const R = R0 * lerp(1, pv.size(i), 0.6);
-      return { i, side: i ? 1 : -1, g, body, bodyM, eyes, mouth, ring, shadow, pips, tag, R0: R, R, Rc: R,
-        x: (i ? 1 : -1) * 5.2, y: 0, vx: 0, vy: 0, grounded: true, state: 'idle', st: 0, slapUsed: false, slapQ: 0, slapCd: 0, diveCd: 0, diveDir: 1, stun: 0, frozen: 0, assist: false, sx: 1, sy: 1, lastHit: 9, face: i ? -1 : 1, jumpBuf: 0, mood: 'play', hits: 0, smashes: 0, digs: 0, tagTxt: '' };
+      return { i, t: team, teamRing, z: TM ? (kIn ? 0.75 : -0.75) : 0, side: sideV, g, body, bodyM, eyes, mouth, ring, shadow, pips, tag, R0: R, R, Rc: R,
+        x: sideV * (TM ? (kIn ? 7.3 : 3.6) : 5.2), y: 0, vx: 0, vy: 0, grounded: true, state: 'idle', st: 0, slapUsed: false, slapQ: 0, slapCd: 0, diveCd: 0, diveDir: 1, stun: 0, frozen: 0, assist: false, sx: 1, sy: 1, lastHit: 9, face: -sideV, jumpBuf: 0, mood: 'play', hits: 0, smashes: 0, digs: 0, tagTxt: '' };
     });
-    pl.forEach((p) => { p.g.position.set(p.x, 0, 0); });
+    pl.forEach((p) => { p.g.position.set(p.x, 0, p.z); });
 
     // ---------------- toestand ----------------
     const score = [0, 0];
     let T = 0, introT = 0, started = false, finished = false, slow = 1, slowHold = 0;
     const G = { state: 'init', t: 0, timeLeft: MATCH_TIME, timeUp: false, server: 0, cnt: [0, 0], lastSide: -1, end: false, winner: -1, camPunch: 0, rally: 0, rallyT: 0, mirrorNext: false, sinceSpecial: 0, golden: false, stall: 0, lastPointer: -1 };
-    const stats = { smashes: [0, 0], digs: [0, 0], gold: 0, bombs: 0, chickens: 0, mirrors: 0, gusts: 0, faults: 0, longest: 0 };
+    const stats = { smashes: new Array(NP).fill(0), digs: new Array(NP).fill(0), gold: 0, bombs: 0, chickens: 0, mirrors: 0, gusts: 0, faults: 0, longest: 0 };
     let wind = 0, windTarget = 0, gustT = rand(10, 16), gustLeft = 0, chickenT = rand(14, 22), eventDir = 1;
     const chick = { on: false, a: new Animal('chicken'), x: 0, dir: 1, t: 0, vy: 0, y: 0, flap: 0 };
     chick.a.group.scale.setScalar(2.1); chick.a.group.visible = false; scene.add(chick.a.group);
-    const lead = (i) => score[1 - i] - score[i];
+    const lead = (t) => score[1 - t] - score[t];
+    const teamAssist = [false, false];
+    const sideTeam = (side) => pl.find((p) => sidx(p) === side).t;      // team dat nu op kant side (0 = links, 1 = rechts) staat
+    const serverSide = (t) => pl.find((p) => p.t === t).side;
     const sidx = (p) => (p.side < 0 ? 0 : 1);
     const late = () => !G.golden && G.timeLeft <= 15 && G.timeLeft > 0;
 
     function refreshHud() {
-      hud.setScore(`${names[0]} ${score[0]} – ${score[1]} ${names[1]}${G.golden ? '  (GOUDEN PUNT)' : ''}`);
-      B.scoreboard(names, score, G.timeLeft, G.golden ? 'GOUDEN PUNT' : null);
+      hud.setScore(`${tNames[0]} ${score[0]} – ${score[1]} ${tNames[1]}${G.golden ? '  (GOUDEN PUNT)' : ''}`);
+      B.scoreboard(sbNames, score, G.timeLeft, G.golden ? 'GOUDEN PUNT' : null);
     }
     function refreshInfo(p) {
       const sl = p.slapCd > 0 ? `slag ${p.slapCd.toFixed(1)}s` : 'slag klaar'; const dv = p.diveCd > 0 ? `duik ${p.diveCd.toFixed(1)}s` : 'duik klaar';
       const txt = p.frozen > 0 ? 'Verstijfd!' : p.stun > 0 ? 'Kip-schrik!' : `${sl} · ${dv}${p.assist ? ' · SLIJMKRACHT' : ''}`;
-      if (txt !== p.tagTxt) { p.tagTxt = txt; hud.setPlayerInfo(p.i, `${score[p.i]} punten · ${txt}`); }
+      if (txt !== p.tagTxt) { p.tagTxt = txt; hud.setPlayerInfo(p.i, `${TM ? 'Team: ' : ''}${score[p.t]} punten · ${txt}`); }
     }
 
     // ---------------- punten / flow ----------------
@@ -130,8 +143,8 @@ export default {
       G.state = 'serve'; G.t = 0; G.server = server; G.cnt[0] = G.cnt[1] = 0; G.lastSide = -1; G.rally = 0; G.rallyT = 0; G.stall = 0; G.lastPointer = -1;
       // spiegel-wissel: kanten ruilen (alles gespiegeld, incl. de besturing-gevoel)
       if (G.mirrorNext && !first) { G.mirrorNext = false; doMirror(); }
-      const sp = pl[server];
-      ball.held = true; ball.x = sp.side * 5.4; ball.y = 7.4; ball.vx = ball.vy = 0; ball.spin = 0; ball.last = -1; ball.hitT = 9;
+      const sSide = serverSide(server);
+      ball.held = true; ball.x = sSide * 5.4; ball.y = 7.4; ball.vx = ball.vy = 0; ball.spin = 0; ball.last = -1; ball.hitT = 9;
       // speciale ballen (niet te vaak; comeback: de achterstaander krijgt vaker een gouden bal)
       let kind = 'normal'; G.sinceSpecial++;
       const diff = Math.abs(score[0] - score[1]);
@@ -164,29 +177,29 @@ export default {
       G.end = score[winner] >= WIN || G.golden || (G.timeUp && score[0] !== score[1]);
       if (G.timeUp && !G.end) { G.golden = true; hud.toast('Gelijkspel! Het volgende punt wint', 2200); }
       refreshHud();
-      const col = winner ? '#8fb8ff' : '#7dffb0';
-      const wp = pl[winner], lp = pl[1 - winner];
-      hud.showBig(G.end ? `${names[winner]} WINT!` : pts > 1 ? `+${pts} PUNTEN!` : `PUNT ${names[winner].toUpperCase()}!`, 1500, col);
+      const col = tCss[winner];
+      const wp = pl.find((p) => p.t === winner);
+      hud.showBig(G.end ? `${tNames[winner].toUpperCase()} WINT!` : pts > 1 ? `+${pts} PUNTEN!` : `PUNT ${tNames[winner].toUpperCase()}!`, 1500, col);
       const spot = clamp(ball.x, -W + 1, W - 1);
       fx.texts.add(`+${pts}`, spot, 3.2, 0.5, col, 1.6 + pts * 0.2);
       if (why) hud.toast(why, 2000);
       audio.sfx('bell', { vol: 0.6 }); audio.sfx('win', { vol: 0.35 });
       if (!bombBoom) { audio.sfx('thud', { vol: 0.6 }); ctx.shake(0.35); }
-      B.cheer(2.4); wp.mood = 'cheer'; lp.mood = 'sad';
+      B.cheer(2.4); for (const q of pl) q.mood = q.t === winner ? 'cheer' : 'sad';
       fx.particles.burst(wp.x, 1.5, 0.5, { count: 40, speed: 7, up: 1.3, life: 1.2, size: 0.45, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 });
       applyAssist();
     }
     function groundHit() {
       const lx = ball.x, side = lx < 0 ? 0 : 1;            // kant waar de bal landt
-      const loser = pl.find((p) => sidx(p) === side); const winner = pl.find((p) => p !== loser);
+      const loserT = sideTeam(side), winnerT = 1 - loserT;
       fx.particles.dust(ball.x, 0.1, 0, 10, 0xfff0c8); fx.particles.ring(ball.x, 0.15, 0, { count: 16, speed: 5, color: 0xfff0c8, size: 0.3, life: 0.5 });
-      if (ball.kind === 'bomb') { explode(ball.x, ball.y); rallyEnd(winner.i, 'BOEM! De bom ontplofte op de grond', false); return; }
-      rallyEnd(winner.i, null);
+      if (ball.kind === 'bomb') { explode(ball.x, ball.y); rallyEnd(winnerT, 'BOEM! De bom ontplofte op de grond', false); return; }
+      rallyEnd(winnerT, null);
     }
     function fault(p, why) {
-      stats.faults++; const w = pl.find((q) => q !== p);
+      stats.faults++;
       fx.texts.add('FOUT!', p.x, p.R * 2 + 2.5, 0.5, '#ff5a3a', 1.6); audio.sfx('buzz', { vol: 0.6 });
-      rallyEnd(w.i, why);
+      rallyEnd(1 - p.t, why);
     }
     function explode(x, y) {
       audio.sfx('explode', { vol: 0.9 }); ctx.shake(0.9);
@@ -198,25 +211,29 @@ export default {
     }
     function endMatch(winner) {
       G.state = 'end'; G.t = 0; G.winner = winner; slow = 1; hud.setTimer(null);
-      if (winner != null) { pl[winner].mood = 'cheer'; pl[1 - winner].mood = 'sad'; B.cheer(5); }
+      if (winner != null) { for (const q of pl) q.mood = q.t === winner ? 'cheer' : 'sad'; B.cheer(5); }
     }
     function finishMatch(winner) {
       if (finished) return; finished = true;
       const w = winner, l = winner == null ? null : 1 - winner;
-      const jokes = w == null ? ['Gelijkspel! Beide blobs rollen lachend over het zand.'] : [
-        `${names[w]} sloeg ${names[l]} van het strand! Het publiek joelt.`, `${names[w]} is de nieuwe Slijmkoning van het strand. ${names[l]} zoekt de bal nog in zee.`,
-        `${names[w]} smashte alles kapot. ${names[l]} zit nu onder het zand.`, `Wat een ballen! ${names[w]} wint, ${names[l]} balt zijn blob-vuistjes.`];
+      const nw = w == null ? '' : tNames[w], nl = w == null ? '' : tNames[l], plu = TM ? 'zoeken' : 'zoekt';
+      const jokes = w == null ? ['Gelijkspel! Beide blobs rollen lachend over het zand.'] : TM ? [
+        `${nw} sloegen ${nl} van het strand! Het publiek joelt.`, `${nw} zijn de nieuwe Slijmkoningen van het strand. ${nl} ${plu} de bal nog in zee.`,
+        `${nw} smashten alles kapot. ${nl} zitten onder het zand.`, `Wat een teamwork! ${nw} winnen, ${nl} ballen hun blob-vuistjes.`] : [
+        `${nw} sloeg ${nl} van het strand! Het publiek joelt.`, `${nw} is de nieuwe Slijmkoning van het strand. ${nl} ${plu} de bal nog in zee.`,
+        `${nw} smashte alles kapot. ${nl} zit nu onder het zand.`, `Wat een ballen! ${nw} wint, ${nl} balt zijn blob-vuistjes.`];
       const extra = [stats.gold ? `Er vloog ${stats.gold}x een gouden bal` : '', stats.bombs ? `${stats.bombs}x een bom-bal` : '', stats.chickens ? `en de kip rende ${stats.chickens}x langs` : ''].filter(Boolean).join(', ');
-      ctx.finishPvp({ winner, score: [score[0], score[1]], delay: 800, summary: `${pick(jokes)}${G.tiebreak ? ' Bij precies gelijk besliste: wie het dichtst bij de bal stond.' : ''}${extra ? ` (${extra}.)` : ''}` });
+      ctx.finishPvp({ winners: winner == null ? [] : (TM ? TM[winner].slice() : [winner]), score: pl.map((p) => score[p.t]), delay: 800, summary: `${pick(jokes)}${G.tiebreak ? ' Bij precies gelijk besliste: wie het dichtst bij de bal stond.' : ''}${extra ? ` (${extra}.)` : ''}` });
     }
     function applyAssist() {
       for (const p of pl) {
-        const want = lead(p.i) >= 3;
+        const want = lead(p.t) >= 3;
         if (want !== p.assist) {
           p.assist = want;
-          if (want) { fx.texts.add('SLIJMKRACHT!', p.x, p.R * 2 + 2.6, 0.5, '#ffd23f', 1.5); hud.toast(`✨ ${names[p.i]} krijgt slijmkracht: een bredere slag!`, 2200); audio.sfx('powerup', { vol: 0.7 }); fx.particles.burst(p.x, 1, 0.3, { count: 30, speed: 5, up: 1.4, life: 0.9, size: 0.35, colors: [0xffd23f, 0xffffff], gravity: 3 }); }
+          if (want) { fx.texts.add('SLIJMKRACHT!', p.x, p.R * 2 + 2.6, 0.5, '#ffd23f', 1.5); if (!teamAssist[p.t]) hud.toast(`✨ ${tNames[p.t]} ${TM ? 'krijgen' : 'krijgt'} slijmkracht: een bredere slag!`, 2200); teamAssist[p.t] = true; audio.sfx('powerup', { vol: 0.7 }); fx.particles.burst(p.x, 1, 0.3, { count: 30, speed: 5, up: 1.4, life: 0.9, size: 0.35, colors: [0xffd23f, 0xffffff], gravity: 3 }); }
         }
       }
+      for (let t = 0; t < 2; t++) if (lead(t) < 3) teamAssist[t] = false;
     }
 
     // ---------------- natuurkunde ----------------
@@ -277,6 +294,7 @@ export default {
       if (d2 >= minD * minD) return;
       let d = Math.sqrt(d2); const n = { x: 0, y: 1 }; if (d > 1e-4) { n.x = dx / d; n.y = dy / d; } else d = 0;
       const rvx = ball.vx - p.vx, rvy = ball.vy - p.vy, vn = rvx * n.x + rvy * n.y;
+      if (TM && ball.last !== p.i && ball.last >= 0 && ball.hitT < 0.1 && G.state === 'play') return;   // teamgenoot was net al aan de bal: niet dubbel tellen
       const canTouch = p.lastHit > 0.13 || slapping || diving;
       if (slapping && d < minD) { ball.x = p.x + n.x * Math.max(d, p.Rc + RB); ball.y = p.y + n.y * Math.max(d, p.Rc + RB); onTouch(p, 'slap'); slapBall(p, n); return; }
       if (diving && p.lastHit > 0.2) { onTouch(p, 'dive'); diveBall(p, n); return; }
@@ -416,7 +434,7 @@ export default {
     let lastSb = -1;
     function update(dt) {
       dt = Math.min(dt, 0.05); T += dt;
-      if (!started) { started = true; hud.toast(`${names[G.server]} begint met serveren`, 1500); }
+      if (!started) { started = true; hud.toast(`${tNames[G.server]} ${TM ? 'beginnen' : 'begint'} met serveren`, 1500); }
       if (T > 330 && !finished && G.state !== 'end') endMatch(decideByCloseness());
       if (slowHold > 0) slowHold -= dt; else slow = damp(slow, 1, 3.5, dt);
       const sdt = dt * slow * PHYS_T;
@@ -431,7 +449,7 @@ export default {
           else { hud.showBig('TIJD! Laatste rally...', 1400, '#ffd23f'); }
         }
         hud.setTimer(G.timeLeft, 10);
-        if (Math.floor(G.timeLeft) !== lastSb) { lastSb = Math.floor(G.timeLeft); B.scoreboard(names, score, G.timeLeft, G.golden ? 'GOUDEN PUNT' : null); }
+        if (Math.floor(G.timeLeft) !== lastSb) { lastSb = Math.floor(G.timeLeft); B.scoreboard(sbNames, score, G.timeLeft, G.golden ? 'GOUDEN PUNT' : null); }
       } else if (G.golden) hud.setTimer(0);
       // rally-timer
       if (G.state === 'play') {
@@ -440,15 +458,15 @@ export default {
       }
       // serve: bal hangt even boven de serveerder
       if (G.state === 'serve') {
-        ball.y = 7.4 + Math.sin(T * 5) * 0.18; ball.x = pl[G.server].side * 5.4;
-        if (G.t > SERVE_WAIT) { ball.held = false; G.state = 'play'; G.t = 0; G.noDoom = false; audio.sfx('go', { vol: 0.25 }); fx.texts.add('AANSLAG!', ball.x, 8.8, 0.5, G.server ? '#8fb8ff' : '#7dffb0', 1.3); }
+        ball.y = 7.4 + Math.sin(T * 5) * 0.18; ball.x = serverSide(G.server) * 5.4;
+        if (G.t > SERVE_WAIT) { ball.held = false; G.state = 'play'; G.t = 0; G.noDoom = false; audio.sfx('go', { vol: 0.25 }); fx.texts.add('AANSLAG!', ball.x, 8.8, 0.5, tCss[G.server], 1.3); }
       }
       // bom-lont
       if (G.state === 'play' && ball.kind === 'bomb') {
         const prev = ball.fuse; ball.fuse -= dt;
         const rate = ball.fuse < 2 ? 0.2 : ball.fuse < 4 ? 0.4 : 0.7;
         if (Math.floor(prev / rate) !== Math.floor(ball.fuse / rate)) audio.sfx('tick', { vol: 0.35, rate: 1.4 + (7 - ball.fuse) * 0.12 });
-        if (ball.fuse <= 0) { const side = ball.x < 0 ? 0 : 1; const loser = pl.find((p) => sidx(p) === side); explode(ball.x, ball.y); rallyEnd(1 - loser.i, `BOEM! De bom ontplofte aan de kant van ${names[loser.i]}`, true); }
+        if (ball.fuse <= 0) { const side = ball.x < 0 ? 0 : 1; const loserT = sideTeam(side); explode(ball.x, ball.y); rallyEnd(1 - loserT, `BOEM! De bom ontplofte aan de kant van ${tNames[loserT]}`, true); }
       }
       // spelers lezen
       for (const p of pl) { const can = G.state === 'play' || G.state === 'serve' || G.state === 'point'; if (can) readInput(p, dt * (G.state === 'point' ? slow : 1)); else { p.vx = 0; } }
@@ -472,7 +490,8 @@ export default {
     }
     function decideByCloseness() {
       G.tiebreak = true;
-      const d0 = Math.abs(pl[0].x - ball.x), d1 = Math.abs(pl[1].x - ball.x);
+      const dd = (t) => Math.min(...pl.filter((p) => p.t === t).map((p) => Math.abs(p.x - ball.x)));
+      const d0 = dd(0), d1 = dd(1);
       return Math.abs(d0 - d1) < 0.01 ? (Math.random() < 0.5 ? 0 : 1) : (d0 < d1 ? 0 : 1);
     }
 
@@ -518,24 +537,25 @@ export default {
         const R = p.Rc * (p.mood === 'cheer' ? 1 + Math.abs(Math.sin(tt * 9)) * 0.08 : 1);
         if (p.mood === 'cheer' && p.grounded && G.state !== 'play' && Math.random() < dt * 3) { p.vy = 8; p.grounded = false; }
         if (p.frozen > 0 && p.grounded) sy *= 1 + Math.sin(tt * 50) * 0.04;
-        p.g.position.set(p.x, p.y, 0); p.g.scale.set(R * sx * (1 + bob), R * sy * (1 - bob), R * 0.92);
+        p.g.position.set(p.x, p.y, p.z); p.g.scale.set(R * sx * (1 + bob), R * sy * (1 - bob), R * 0.92);
         p.g.rotation.z = p.state === 'dive' ? -p.diveDir * 0.35 : clamp(p.vx * -0.012, -0.12, 0.12) + (p.stun > 0 ? Math.sin(tt * 30) * 0.15 : 0);
         // ogen kijken naar de bal; pupillen groter bij een slag
         const lx = ball.x - p.x, ly = ball.y - (p.y + R * 0.7); const ll = Math.hypot(lx, ly) || 1;
         for (const e of p.eyes) { e.position.x = e.userData.sd * 0.27 + (-p.side) * 0.1; e.userData.pu.position.set(lx / ll * 0.07, ly / ll * 0.07, 0.17); e.userData.pu.scale.setScalar(p.state === 'slap' ? 1.5 : p.mood === 'sad' ? 0.8 : 1); e.scale.y = p.stun > 0 || p.frozen > 0 ? 0.3 : 1; }
         p.mouth.rotation.z = p.mood === 'sad' || p.stun > 0 ? 0 : Math.PI; p.mouth.scale.set(p.state === 'slap' ? 1.5 : 1, p.state === 'slap' ? 1.5 : 1, 1);
         p.bodyM.emissiveIntensity = 0.18 + (p.state === 'slap' ? 0.5 : 0) + (p.assist ? 0.25 + Math.sin(tt * 8) * 0.12 : 0);
-        p.bodyM.color.setHex(p.frozen > 0 ? 0x9fd8ff : PLAYER_COLORS[p.i]);
+        p.bodyM.color.setHex(p.frozen > 0 ? 0x9fd8ff : PLAYER_COLORS[p.i]);   // eigen kleur; het team zie je aan de band, het veld en de pilaren
         // slag-ring
         const slap = p.state === 'slap'; const rr = p.Rc + (slap ? SLAP_X + (p.assist ? 0.35 : 0) : 0);
-        p.ring.position.set(p.x, p.y, 0.1); p.ring.scale.setScalar(rr * (slap ? 1 + p.st * 0.4 : 1));
+        p.ring.position.set(p.x, p.y, p.z + 0.1); p.ring.scale.setScalar(rr * (slap ? 1 + p.st * 0.4 : 1));
         p.ring.material.opacity = slap ? 0.85 * (1 - p.st / SLAP_T) : 0; p.ring.material.color.setHex(p.assist ? 0xffd23f : 0xffffff);
-        p.shadow.position.set(p.x, 0.04, 0.2); p.shadow.scale.setScalar(R * (1 - clamp(p.y / 10, 0, 0.5)) * 1.2); p.shadow.material.opacity = 0.9 - clamp(p.y / 8, 0, 0.5);
+        if (p.teamRing) { p.teamRing.position.set(p.x, 0.05, p.z + 0.1); p.teamRing.scale.setScalar(p.R0 * 1.15); }
+        p.shadow.position.set(p.x, 0.04, p.z + 0.2); p.shadow.scale.setScalar(R * (1 - clamp(p.y / 10, 0, 0.5)) * 1.2); p.shadow.material.opacity = 0.9 - clamp(p.y / 8, 0, 0.5);
         // slagen-bolletjes + naamplaatje
         const top = p.y + p.Rc * sy * 1.0 + 0.9; const si = sidx(p);
         const used = G.lastSide === si ? G.cnt[si] : 0;
-        p.pips.forEach((m, k) => { m.position.set(p.x + (k - 1) * 0.5, top, 0.3); m.material = k < used ? (used >= 3 ? pipHot : pipOn) : pipOff; m.scale.setScalar(k < used ? 1 + (k === used - 1 ? Math.sin(tt * 12) * 0.12 : 0) : 0.8); m.visible = G.state === 'play' || G.state === 'serve'; });
-        p.tag.position.set(p.x, top + 0.95, 0.4); p.tag.visible = G.state !== 'point' || G.t < 1.6;
+        p.pips.forEach((m, k) => { m.position.set(p.x + (k - 1) * 0.5, top, p.z + 0.3); m.material = k < used ? (used >= 3 ? pipHot : pipOn) : pipOff; m.scale.setScalar(k < used ? 1 + (k === used - 1 ? Math.sin(tt * 12) * 0.12 : 0) : 0.8); m.visible = G.state === 'play' || G.state === 'serve'; });
+        p.tag.position.set(p.x, top + 0.95 + (TM && p.z > 0 ? 0.55 : 0), p.z + 0.4); p.tag.visible = G.state !== 'point' || G.t < 1.6;
         refreshInfo(p);
         p.g.visible = true;
       }
@@ -550,14 +570,14 @@ export default {
       resultUpdate, introUpdate,
       onSwap() { for (const p of pl) fx.particles.burst(p.x, 1.2, 0, { count: 20, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) {
-        movers.forEach((m, i) => { if (m) { const p = pl[i]; p.frozen = 1.8; p.state = 'idle'; if (score[i] > 0) { score[i]--; refreshHud(); applyAssist(); } fx.texts.add('BEWOGEN!', p.x, p.Rc * 2 + 2, 0.5, '#9fe8ff', 1.4); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
+        movers.forEach((m, i) => { if (m) { const p = pl[i]; p.frozen = 1.8; p.state = 'idle'; if (score[p.t] > 0) { score[p.t]--; refreshHud(); applyAssist(); } fx.texts.add('BEWOGEN!', p.x, p.Rc * 2 + 2, 0.5, '#9fe8ff', 1.4); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
       },
-      celebrate(w) { pl[w].mood = 'cheer'; pl[1 - w].mood = 'sad'; B.cheer(6); },
+      celebrate(w, winners = [w]) { for (const q of pl) q.mood = winners.includes(q.i) ? 'cheer' : 'sad'; B.cheer(6); },
       dispose() {},
       dbg: {
         state: () => ({ T, gstate: G.state, timeLeft: G.timeLeft, golden: G.golden, score: [...score], finished, slow, server: G.server, cnt: [...G.cnt], lastSide: G.lastSide, rally: G.rally, wind, mirrorNext: G.mirrorNext,
           ball: { x: ball.x, y: ball.y, vx: ball.vx, vy: ball.vy, kind: ball.kind, held: ball.held, fuse: ball.fuse, spin: ball.spin },
-          pl: pl.map((p) => ({ i: p.i, side: p.side, x: p.x, y: p.y, vx: p.vx, vy: p.vy, st: p.state, slapCd: p.slapCd, diveCd: p.diveCd, R: p.Rc, grounded: p.grounded, assist: p.assist, stun: p.stun, frozen: p.frozen, smashes: p.smashes, digs: p.digs })),
+          pl: pl.map((p) => ({ i: p.i, t: p.t, side: p.side, x: p.x, y: p.y, vx: p.vx, vy: p.vy, st: p.state, slapCd: p.slapCd, diveCd: p.diveCd, R: p.Rc, grounded: p.grounded, assist: p.assist, stun: p.stun, frozen: p.frozen, smashes: p.smashes, digs: p.digs })),
           chicken: chick.on ? { x: chick.x } : null, stats }),
         setScore: (a, b) => { score[0] = a; score[1] = b; refreshHud(); applyAssist(); },
         setTime: (t) => { G.timeLeft = t; }, forceKind: (k) => { setBallKind(k); ball.fuse = ball.fuse0 = k === 'bomb' ? 7.5 : 0; }, chicken: () => startChicken(), gust: (d) => { gustLeft = 7; windTarget = d * 3.5; stats.gusts++; }, mirror: () => { G.mirrorNext = true; },

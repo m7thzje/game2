@@ -38,16 +38,18 @@ export default {
   giver: 'De Deurman',
   icon: '🚪',
   mode: 'pvp',
+  players: [2, 3, 4],   // 2 = duel; 4 = iedereen tegen iedereen (hartjes op = af, laatste die overblijft of de meeste punten wint)
   time: 90,
   twists: ['invert', 'swapab', 'turbo', 'slowmo', 'giant', 'lowgrav', 'bodyswap', 'deurman'],
   music: 'game_fast',
-  blurb: 'De Deurman is quizmaster! Zegt hij <b>"Deurman zegt: SPRING!"</b>, doe het dan supersnel. Zegt hij het <b>zonder</b> die woorden (of "NIET", of roept de kip, of slaapt hij nep)? Dan <b>STIL STAAN</b>! Fout = hartje kwijt, snel en goed = punten.',
+  blurb: 'Met <b>2 of 4 spelers</b> (bij vier: iedereen tegen iedereen, wie geen hartjes meer heeft is af). De Deurman is quizmaster! Zegt hij <b>"Deurman zegt: SPRING!"</b>, doe het dan supersnel. Zegt hij het <b>zonder</b> die woorden (of "NIET", of roept de kip, of slaapt hij nep)? Dan <b>STIL STAAN</b>! Fout = hartje kwijt, snel en goed = punten.',
   controls: ['{a} SPRING · {b} DUIK', '← DRAAI · → ZWAAI · ↑ HOERA · ↓ ZIT'],
   tip: 'Let op wat hij ZEGT, niet wat hij DOET! SPIEGEL = doe het omgekeerde.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp; const names = players.map((p) => p.name); const tw = ctx.twist.id;
+    const N = players.length;
     const GRAV = pv.gravity || 1;
     const SPD = ctx.twist.speed && (tw === 'turbo' || tw === 'slowmo') ? ctx.twist.speed : 1;
     const TEMPO = Math.pow(SPD, 0.7);      // >1 = sneller (kortere vensters en pauzes)
@@ -63,37 +65,39 @@ export default {
     // ------------------------------------------------------------------ poppetjes + plaquettes
     const heroes = players.map((pp, i) => {
       const c = makeBrother(i); const sz = pv.size(i); const bs = HERO_H / c.height * sz;
-      const holder = new THREE.Group(); holder.add(c.group); holder.position.set(i ? 6.4 : -6.4, 0.56, 2.2); holder.scale.setScalar(bs); scene.add(holder);
-      const face = i ? -0.3 : 0.3; holder.rotation.y = face;
+      const holder = new THREE.Group(); holder.add(c.group); holder.position.set(N > 2 ? (i - (N - 1) / 2) * 4.3 : i ? 6.4 : -6.4, 0.56, 2.2); holder.scale.setScalar(bs); scene.add(holder);
+      const face = N > 2 ? -(i - (N - 1) / 2) * 0.1 : i ? -0.3 : 0.3; holder.rotation.y = face;
       const cv = document.createElement('canvas'); cv.width = 512; cv.height = 200; const g = cv.getContext('2d');
       const tx = new THREE.CanvasTexture(cv); tx.colorSpace = THREE.SRGBColorSpace;
-      const plaque = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthTest: false })); plaque.scale.set(4.3, 1.68, 1); plaque.renderOrder = 15;
+      const plaque = new THREE.Sprite(new THREE.SpriteMaterial({ map: tx, transparent: true, depthTest: false })); plaque.scale.set(N > 2 ? 3.9 : 4.3, N > 2 ? 1.52 : 1.68, 1); plaque.renderOrder = 15;
       plaque.position.set(holder.position.x, 0.56 + HERO_H * sz + 1.55, 2.2); scene.add(plaque);
-      const barBg = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x1a1030, transparent: true, opacity: 0.8, depthTest: false })); barBg.scale.set(3.3, 0.34, 1); barBg.renderOrder = 15;
-      const barFg = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x6fe87a, transparent: true, depthTest: false })); barFg.scale.set(3.1, 0.2, 1); barFg.renderOrder = 16;
+      const barBg = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x1a1030, transparent: true, opacity: 0.8, depthTest: false })); barBg.scale.set(N > 2 ? 3.0 : 3.3, 0.34, 1); barBg.renderOrder = 15;
+      const barFg = new THREE.Sprite(new THREE.SpriteMaterial({ color: 0x6fe87a, transparent: true, depthTest: false })); barFg.scale.set(N > 2 ? 2.8 : 3.1, 0.2, 1); barFg.renderOrder = 16;
       barBg.position.set(holder.position.x, plaque.position.y - 1.15, 2.2); barFg.position.copy(barBg.position); barBg.visible = barFg.visible = false; scene.add(barBg, barFg);
-      return { i, c, bs, sz, holder, face, plaque, g, tx, barBg, barFg, act: null, mood: 'idle', moodT: 0, key: '' };
+      return { i, c, bs, sz, holder, face, plaque, g, tx, barBg, barFg, act: null, mood: 'idle', moodT: 0, key: '', BW: N > 2 ? 2.8 : 3.1 };
     });
     function drawPlaque(h) {
-      const i = h.i, key = hearts[i] + '|' + pts[i] + '|' + (trailing === i ? 1 : 0); if (h.key === key) return; h.key = key;
+      const i = h.i, key = hearts[i] + '|' + pts[i] + '|' + (trail[i] ? 1 : 0) + '|' + (out[i] ? 1 : 0); if (h.key === key) return; h.key = key;
       const g = h.g; g.clearRect(0, 0, 512, 200);
-      g.fillStyle = 'rgba(14,8,34,.82)'; g.strokeStyle = players[i].css; g.lineWidth = 8; g.beginPath(); g.roundRect(8, 8, 496, 184, 34); g.fill(); g.stroke();
+      g.fillStyle = out[i] ? 'rgba(14,8,34,.5)' : 'rgba(14,8,34,.82)'; g.strokeStyle = out[i] ? '#6a5a84' : players[i].css; g.lineWidth = 8; g.beginPath(); g.roundRect(8, 8, 496, 184, 34); g.fill(); g.stroke();
       g.textAlign = 'left'; g.textBaseline = 'middle'; g.font = `bold 56px ${FONT}`; g.fillStyle = players[i].css; g.fillText(names[i], 30, 54, 300);
       g.textAlign = 'right'; g.font = `bold 78px ${FONT}`; g.fillStyle = '#ffe14a'; g.fillText(String(pts[i]), 482, 62); g.font = `bold 28px ${FONT}`; g.fillStyle = '#cfc4ff'; g.fillText('PUNTEN', 482, 118);
       for (let k = 0; k < HEARTS; k++) heart(g, 58 + k * 74, 140, 30, k < hearts[i] ? '#ff4a6a' : '#4a3a64');
-      if (trailing === i) { g.textAlign = 'left'; g.font = `bold 24px ${FONT}`; g.fillStyle = '#9fffb0'; g.fillText('+ denktijd', 262, 150); }
+      if (out[i]) { g.textAlign = 'left'; g.font = `bold 28px ${FONT}`; g.fillStyle = '#ff9aaa'; g.fillText('AF!', 300, 150); }
+      else if (trail[i]) { g.textAlign = 'left'; g.font = `bold 24px ${FONT}`; g.fillStyle = '#9fffb0'; g.fillText('+ denktijd', 262, 150); }
       h.tx.needsUpdate = true;
     }
     function heart(g, x, y, s, col) { g.fillStyle = col; g.beginPath(); g.moveTo(x, y + s * 0.8); g.bezierCurveTo(x - s * 1.25, y - s * 0.1, x - s * 0.5, y - s * 0.95, x, y - s * 0.3); g.bezierCurveTo(x + s * 0.5, y - s * 0.95, x + s * 1.25, y - s * 0.1, x, y + s * 0.8); g.fill(); g.strokeStyle = 'rgba(0,0,0,.4)'; g.lineWidth = 3; g.stroke(); }
 
     // ------------------------------------------------------------------ toestand
-    const hearts = [HEARTS, HEARTS], pts = [0, 0], gift = [false, false];
-    let trailing = -1;
+    const hearts = players.map(() => HEARTS), pts = players.map(() => 0), gift = players.map(() => false), out = players.map(() => false);   // out = af (geen hartjes meer / uit de sudden death, alleen bij 4 spelers)
+    const trail = players.map(() => false), elimOrder = players.map(() => 0);   // elimOrder: 0 = niet af; hoger = later af
     let T = 0, introT = 0, started = false, finished = false;
     const G = { state: 'init', t: 0, clock: MATCH_TIME, round: 0, R: null, gapT: 1.2, preT: 1, fbT: 1, sd: false, sdN: 0, last: null, queue: [], noPressRun: 0, sleepCd: 0, winner: -1, why: '', typed: 0, revealed: false, pop: 0 };
-    const stats = { perfect: [0, 0], wrong: [0, 0], late: [0, 0], caught: [0, 0], best: [9, 9], rounds: 0 };
-    const P = [{}, {}];
-    const prevAct = [{}, {}];
+    const z0 = () => players.map(() => 0);
+    const stats = { perfect: z0(), wrong: z0(), late: z0(), caught: z0(), best: players.map(() => 9), rounds: 0 };
+    const P = players.map(() => ({}));
+    const prevAct = players.map(() => ({}));
     const bubSt = { header: '', word: '', sub: '', style: 'plain', pop: 0 };
     let bubDirty = true;
     const setBub = (o) => { Object.assign(bubSt, o); bubDirty = true; };
@@ -101,11 +105,13 @@ export default {
 
     function refreshHud() {
       hud.setScore(G.sd ? 'SUDDEN DEATH' : null);
-      for (let i = 0; i < 2; i++) hud.setPlayerInfo(i, `${'♥'.repeat(Math.max(0, hearts[i]))}${'♡'.repeat(Math.max(0, HEARTS - hearts[i]))} · ${pts[i]} pt`);
+      for (let i = 0; i < N; i++) hud.setPlayerInfo(i, out[i] ? 'AF!' : `${'♥'.repeat(Math.max(0, hearts[i]))}${'♡'.repeat(Math.max(0, HEARTS - hearts[i]))} · ${pts[i]} pt`);
     }
-    function computeTrailing() {
-      const a = hearts[0] * 4 + pts[0], b = hearts[1] * 4 + pts[1];
-      trailing = Math.abs(a - b) >= 3 ? (a < b ? 0 : 1) : -1;
+    function computeTrailing() {   // wie ver achterstaat krijgt meer denktijd (bij 4 spelers: de laagste, als het verschil groot genoeg is)
+      const v = players.map((_, i) => hearts[i] * 4 + pts[i]); const live = v.filter((_, i) => !out[i]);
+      if (!live.length) return;
+      const hi = Math.max(...live), lo = Math.min(...live);
+      for (let i = 0; i < N; i++) trail[i] = !out[i] && hi - lo >= 3 && v[i] === lo && live.filter((x) => x === lo).length === 1;
     }
 
     // ------------------------------------------------------------------ rondes
@@ -151,7 +157,7 @@ export default {
     function startRound() {
       G.round++; stats.rounds++;
       const R = makeRound(); G.R = R; G.state = 'pre'; G.t = 0; G.typed = 0; G.revealed = false;
-      for (let i = 0; i < 2; i++) P[i] = { done: false, idx: 0, res: null, dv: 0, W: R.W * (trailing === i && !TYPE_NOPRESS[R.type] ? 1.3 : 1), t0: 0 };
+      for (let i = 0; i < N; i++) P[i] = out[i] ? { done: true, idx: 0, res: 'out', dv: 0, W: R.W, t0: 0 } : { done: false, idx: 0, res: null, dv: 0, W: R.W * (trail[i] && !TYPE_NOPRESS[R.type] ? 1.3 : 1), t0: 0 };
       setBub({ header: '', word: '', sub: '', style: R.style, pop: 0 });
       if (R.type === 'chicken') { chick.mode = 'in'; chick.g.visible = true; chick.x = -24; DM.play('shrug', 0, 'idle'); audio.sfx('pop', { vol: 0.5, rate: 0.8 }); }
       else if (R.type === 'sleep') { DM.play('sleep', 0); audio.tone(120, 0.5, { type: 'sine', vol: 0.12, slide: 80 }); }
@@ -169,12 +175,13 @@ export default {
         else if (R.fakeMove) DM.move(R.fakeMove, ACT_DUR[R.fakeMove] * 1.05);
         else DM.play('say', 0.5, 'idle');
       }
-      for (let i = 0; i < 2; i++) { P[i].t0 = 0; }
+      for (let i = 0; i < N; i++) { P[i].t0 = 0; }
       barsOn(!TYPE_NOPRESS[R.type]);
     }
 
     // ------------------------------------------------------------------ antwoorden verwerken
     function readPress(i) {
+      if (out[i]) return null;
       const n = pv.input(i);
       const act = { A: n.a, B: n.b, L: n.left || n.x < -0.6, R: n.right || n.x > 0.6, U: n.up || n.y < -0.6, D: n.down || n.y > 0.6 };
       let pressed = null; for (const k of MK) if (act[k] && !prevAct[i][k] && !pressed) pressed = k;
@@ -184,7 +191,7 @@ export default {
     function heroDo(i, m) {
       const h = heroes[i]; const lg = GRAV < 1;
       h.act = { m, t: 0, dur: ACT_DUR[m] * (m === 'A' && lg ? 1.5 : 1) };
-      audio.sfx(SFX_MOVE[m], { vol: 0.45, rate: i ? 1.1 : 0.95 });
+      audio.sfx(SFX_MOVE[m], { vol: 0.45, rate: 0.95 + (i % 4) * 0.07 });
     }
     function award(i, res) {
       const R = G.R, P_ = P[i], h = heroes[i], x = h.holder.position.x;
@@ -236,15 +243,15 @@ export default {
       heroes.forEach((h, i) => {
         const on = G.state === 'win' && !TYPE_NOPRESS[R.type] && !P[i].done; h.barBg.visible = h.barFg.visible = on; if (!on) return;
         const f = clamp(1 - G.t / P[i].W, 0, 1);
-        h.barFg.scale.x = Math.max(0.001, 3.1 * f); h.barFg.position.x = h.barBg.position.x - (3.1 - 3.1 * f) / 2;
-        h.barFg.material.color.setHex(trailing === i ? 0xffe14a : f > 0.5 ? 0x6fe87a : f > 0.25 ? 0xffc23a : 0xff5a4a);
+        h.barFg.scale.x = Math.max(0.001, h.BW * f); h.barFg.position.x = h.barBg.position.x - (h.BW - h.BW * f) / 2;
+        h.barFg.material.color.setHex(trail[i] ? 0xffe14a : f > 0.5 ? 0x6fe87a : f > 0.25 ? 0xffc23a : 0xff5a4a);
       });
     }
 
     // ------------------------------------------------------------------ flow
     function endWin() {
       const R = G.R; G.state = 'fb'; G.t = 0; barsOn(false);
-      const rs = P.map((p) => p.res); const ok = (r) => r === 'perfect' || r === 'good' || r === 'ok' || r === 'survive';
+      const rs = P.map((p) => p.res).filter((r) => r !== 'out'); const ok = (r) => r === 'perfect' || r === 'good' || r === 'ok' || r === 'survive';
       const lost = (r) => r === 'wrong' || r === 'late' || r === 'oops';
       let line, mode = 'say', sty = R.style;
       if (rs.some((r) => r === 'oops') && R.type === 'sleep') { line = pick(BANTER.wake); mode = 'shrug'; }
@@ -264,25 +271,46 @@ export default {
     }
     function afterRound() {
       G.R && (G.roundV = P.map((p) => p.dv));
-      const dead = hearts.map((hh) => hh <= 0);
-      const coin = () => Math.random() < 0.5 ? 0 : 1;
-      // medelijden-hartje
-      if (!dead[0] && !dead[1]) for (let i = 0; i < 2; i++) if (!gift[i] && hearts[i] === 1 && hearts[1 - i] - hearts[i] >= 2) { gift[i] = true; hearts[i]++; fx.texts.add('+1 HART!', heroes[i].holder.position.x, 5.6, 2.2, '#9fffb0', 1.5); hud.toast(`🚪 De Deurman heeft medelijden: +1 hartje voor ${names[i]}!`, 2200); audio.sfx('powerup', { vol: 0.6 }); computeTrailing(); refreshHud(); }
-      if (dead[0] || dead[1]) {
-        if (dead[0] && dead[1]) return endMatch(pts[0] !== pts[1] ? (pts[0] > pts[1] ? 0 : 1) : coin(), pts[0] !== pts[1] ? 'hartjes' : 'muntje');
-        return endMatch(dead[0] ? 1 : 0, 'hartjes');
+      const coin = (list) => list[Math.floor(Math.random() * list.length)];
+      const goOut = (i) => { out[i] = true; heroes[i].mood = 'sad'; heroes[i].moodT = 1e9; heroes[i].act = null; };
+      // medelijden-hartje (alleen voor wie nog meedoet)
+      for (let i = 0; i < N; i++) {
+        const others = players.map((_, j) => j).filter((j) => j !== i && !out[j] && hearts[j] > 0);
+        if (out[i] || hearts[i] <= 0 || gift[i] || hearts[i] !== 1 || !others.length) continue;
+        if (Math.max(...others.map((j) => hearts[j])) - hearts[i] >= 2) { gift[i] = true; hearts[i]++; fx.texts.add('+1 HART!', heroes[i].holder.position.x, 5.6, 2.2, '#9fffb0', 1.5); hud.toast(`🚪 De Deurman heeft medelijden: +1 hartje voor ${names[i]}!`, 2200); audio.sfx('good', { vol: 0.5 }); }
+      }
+      if (N === 2) {
+        const dead = hearts.map((hh) => hh <= 0);
+        if (dead[0] || dead[1]) {
+          if (dead[0] && dead[1]) return endMatch(pts[0] !== pts[1] ? (pts[0] > pts[1] ? 0 : 1) : coin([0, 1]), pts[0] !== pts[1] ? 'hartjes' : 'muntje');
+          return endMatch(dead[0] ? 1 : 0, 'hartjes');
+        }
+      } else {
+        // 4 spelers: wie geen hartjes meer heeft is af; de laatste die overblijft wint
+        const died = players.map((_, i) => i).filter((i) => !out[i] && hearts[i] <= 0);
+        for (const i of died) { goOut(i); G.elim = (G.elim || 0) + 1; elimOrder[i] = G.elim; fx.texts.add('AF!', heroes[i].holder.position.x, 5.6, 2.2, '#ff9aaa', 1.5); }
+        if (died.length) { computeTrailing(); refreshHud(); }
+        const alive = players.map((_, i) => i).filter((i) => !out[i]);
+        if (alive.length === 0) { const best = Math.max(...died.map((i) => pts[i])); return endMatch(coin(died.filter((i) => pts[i] === best)), 'hartjes'); }   // iedereen tegelijk af: de meeste punten
+        if (alive.length === 1) return endMatch(alive[0], 'hartjes');
       }
       if (G.sd) {
-        const v = G.roundV;
-        if (v[0] !== v[1]) return endMatch(v[0] > v[1] ? 0 : 1, 'sd');
-        if (P[0].rt != null && P[1].rt != null && Math.abs(P[0].rt - P[1].rt) > 0.01) return endMatch(P[0].rt < P[1].rt ? 0 : 1, 'sd');   // gelijk: snelste reactie wint
-        G.sdN++; if (G.sdN >= 6) return endMatch(coin(), 'muntje');
+        const v = G.roundV, sdp = players.map((_, i) => i).filter((i) => !out[i]);   // alleen wie nog meedoet
+        const top = Math.max(...sdp.map((i) => v[i])), best = sdp.filter((i) => v[i] === top);
+        if (best.length === 1) return endMatch(best[0], 'sd');
+        if (best.every((i) => P[i].rt != null)) { const fast = Math.min(...best.map((i) => P[i].rt)), f = best.filter((i) => P[i].rt - fast <= 0.01); if (f.length === 1) return endMatch(f[0], 'sd'); }   // gelijk: snelste reactie wint
+        G.sdN++; if (G.sdN >= 6) return endMatch(coin(best), 'muntje');
+        if (N > 2) for (const i of sdp) if (!best.includes(i)) goOut(i);   // volgende sudden-death-ronde: alleen nog de gelijkstaanden
         return toGap();
       }
       if (G.clock <= 0 || G.round >= MAXR) {
-        if (pts[0] !== pts[1]) return endMatch(pts[0] > pts[1] ? 0 : 1, 'punten');
-        if (hearts[0] !== hearts[1]) return endMatch(hearts[0] > hearts[1] ? 0 : 1, 'hartjes2');
+        const alive = players.map((_, i) => i).filter((i) => !out[i]);
+        const bestP = Math.max(...alive.map((i) => pts[i])), topP = alive.filter((i) => pts[i] === bestP);
+        if (topP.length === 1) return endMatch(topP[0], 'punten');
+        const bestH = Math.max(...topP.map((i) => hearts[i])), topH = topP.filter((i) => hearts[i] === bestH);
+        if (topH.length === 1) return endMatch(topH[0], 'hartjes2');
         G.sd = true; G.sdN = 0; hud.showBig('SUDDEN DEATH!', 1500, '#ffd23f'); hud.setTimer(null); refreshHud(); audio.sfx('bell', { vol: 0.8 });
+        if (N > 2) for (const i of alive) if (!topH.includes(i)) goOut(i);   // sudden death: alleen de gelijkstaanden
         setBub({ header: '', word: 'GELIJK!', sub: 'Eén ronde beslist!', style: 'say' }); G.gapT = 1.8; G.state = 'gap'; G.t = 0; return;
       }
       toGap();
@@ -290,16 +318,21 @@ export default {
     function toGap() { G.state = 'gap'; G.t = 0; const p = clamp((G.round - 1) / 16, 0, 1); G.gapT = lerp(1.0, 0.55, p) / Math.pow(TEMPO, 0.6); if (G.round === 0) G.gapT = 1.2; DM.play('idle', 0); if (chick.mode === 'off') chick.g.visible = false; }
     function finishMatch(winner) {
       if (finished) return; finished = true;
-      const w = winner, l = 1 - winner;
-      const bits = { hartjes: `${names[l]} is door zijn hartjes heen`, hartjes2: 'Gelijk op punten, maar meer hartjes', punten: 'De meeste punten', sd: 'Sudden death besliste het', muntje: 'De Deurman gooide een muntje' };
+      const w = winner, l = N === 2 ? 1 - winner : players.map((_, i) => i).filter((i) => i !== w).sort((a, b) => pts[a] - pts[b])[0];   // l = (een) verliezer voor de grap
+      const bits = { hartjes: N === 2 ? `${names[l]} is door zijn hartjes heen` : 'Alle anderen zijn door hun hartjes heen', hartjes2: 'Gelijk op punten, maar meer hartjes', punten: 'De meeste punten', sd: 'Sudden death besliste het', muntje: 'De Deurman gooide een muntje' };
       const jokes = [`${names[w]} luistert beter dan een deur met oren! ${names[l]} deed vooral wat de kip zei.`, `${names[w]} springt, duikt en zwaait als een echte deurkenner. ${names[l]} liep in de val.`, `De Deurman is dolblij met ${names[w]}. ${names[l]} krijgt een troostdeur.`];
-      ctx.finishPvp({ winner, score: [pts[0], pts[1]], delay: 700, summary: `${pick(jokes)} <br><small>${bits[G.why] || ''} · hartjes ${hearts[0]}–${hearts[1]} · perfecte antwoorden ${stats.perfect[0]}–${stats.perfect[1]}${Math.min(...stats.best) < 9 ? ` · snelste reactie ${Math.min(...stats.best).toFixed(2)}s` : ''}</small>` });
+      const summary = `${pick(jokes)} <br><small>${bits[G.why] || ''} · hartjes ${hearts.join('–')} · perfecte antwoorden ${stats.perfect.join('–')}${Math.min(...stats.best) < 9 ? ` · snelste reactie ${Math.min(...stats.best).toFixed(2)}s` : ''}</small>`;
+      if (N === 2) ctx.finishPvp({ winner, score: [pts[0], pts[1]], delay: 700, summary });
+      else {
+        const order = players.map((_, i) => i).sort((a, b) => (b === w) - (a === w) || (out[a] ? 0 : 1e6) - (out[b] ? 0 : 1e6) || elimOrder[b] - elimOrder[a] || pts[b] - pts[a]);   // winnaar, dan wie nog in het spel was, dan wie het laatst afviel, dan punten
+        ctx.finishPvp({ winner, score: pts.slice(), place: order, delay: 700, summary });
+      }
     }
     function endMatch(winner, why) {
       G.state = 'end'; G.t = 0; G.winner = winner; G.why = why; barsOn(false); hud.setTimer(null);
       const text = why === 'muntje' ? 'MUNTJE!' : `${names[winner].toUpperCase()} WINT!`;
       setBub({ header: why === 'muntje' ? 'De Deurman gooit een muntje...' : 'EINDE!', word: text, sub: why === 'hartjes' ? 'Geen hartjes meer!' : why === 'sd' ? 'Sudden death!' : '', style: 'good' });
-      DM.play('cheer', 0); heroes[winner].mood = 'cheer'; heroes[winner].moodT = 99; heroes[1 - winner].mood = 'sad'; heroes[1 - winner].moodT = 99;
+      DM.play('cheer', 0); heroes.forEach((h, i) => { h.mood = i === winner ? 'cheer' : 'sad'; h.moodT = 99; });
       S.audCheer(5); audio.sfx('win', { vol: 0.7 }); audio.sfx('bell', { vol: 0.6 }); ctx.shake(0.5);
       const x = heroes[winner].holder.position.x;
       for (let k = 0; k < 4; k++) fx.particles.burst(x + rand(-3, 3), 4 + rand(0, 3), 2.2, { count: 30, speed: 7, up: 1.2, life: 1.4, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 });
@@ -311,14 +344,14 @@ export default {
     function update(dt) {
       dt = Math.min(dt, 0.05); T += dt;
       if (!started) { started = true; toGap(); refreshHud(); hud.setTimer(MATCH_TIME, 10); hud.setHint(HINT); }
-      if (T > 260 && !finished && G.state !== 'end') endMatch(pts[0] === pts[1] ? (Math.random() < 0.5 ? 0 : 1) : pts[0] > pts[1] ? 0 : 1, 'punten');
+      if (T > 260 && !finished && G.state !== 'end') { const live = players.map((_, i) => i).filter((i) => !out[i]), bp = Math.max(...live.map((i) => pts[i])); endMatch(live.find((i) => pts[i] === bp), 'punten'); }
       G.t += dt;
       if (G.state !== 'end' && !G.sd && G.state !== 'init') { G.clock = Math.max(0, G.clock - dt); const s = Math.ceil(G.clock); if (s !== lastClockSec) { lastClockSec = s; hud.setTimer(G.clock, 10); } }
-      const pr = [readPress(0), readPress(1)];
+      const pr = players.map((_, i) => readPress(i));
       if (G.state === 'gap') { if (G.t >= G.gapT) startRound(); }
       else if (G.state === 'pre') {
         const R = G.R;
-        for (let i = 0; i < 2; i++) if (pr[i] && !P[i].done) onPress(i, pr[i]);
+        for (let i = 0; i < N; i++) if (pr[i] && !P[i].done) onPress(i, pr[i]);
         // getypte tekst + stem-blipjes
         if (R.typeDur > 0) {
           const n = Math.min(R.header.length, Math.floor(G.t / R.typeDur * R.header.length));
@@ -327,14 +360,14 @@ export default {
         if (G.t >= R.preT) reveal();
       } else if (G.state === 'win') {
         const R = G.R;
-        for (let i = 0; i < 2; i++) if (pr[i] && !P[i].done) onPress(i, pr[i]);
-        for (let i = 0; i < 2; i++) {
+        for (let i = 0; i < N; i++) if (pr[i] && !P[i].done) onPress(i, pr[i]);
+        for (let i = 0; i < N; i++) {
           if (P[i].done) continue;
           if (TYPE_NOPRESS[R.type]) { if (G.t >= R.W) award(i, 'survive'); }
           else if (G.t >= P[i].W) award(i, 'late');
         }
-        if (P[0].done && P[1].done) endWin();
-        else if (G.t > 12) { for (let i = 0; i < 2; i++) if (!P[i].done) award(i, 'late'); endWin(); }
+        if (P.every((q) => q.done)) endWin();
+        else if (G.t > 12) { for (let i = 0; i < N; i++) if (!P[i].done) award(i, 'late'); endWin(); }
       } else if (G.state === 'fb') {
         if (G.t >= G.fbT) afterRound();
       } else if (G.state === 'end') {
@@ -415,14 +448,14 @@ export default {
       onStart() { DM.play('say', 0.8, 'idle'); setBub({ header: 'DEURMAN ZEGT:', word: 'KLAAR?', sub: '', style: 'say', pop: 1 }); G.pop = 1; blip(); },
       onSwap() { for (const h of heroes) fx.particles.burst(h.holder.position.x, 3, 2.2, { count: 22, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) {
-        movers.forEach((m, i) => { if (m && !finished) { pts[i] = Math.max(0, pts[i] - 1); fx.texts.add('BEWOGEN! -1', heroes[i].holder.position.x, 5.5, 2.2, '#9fe8ff', 1.3); audio.sfx('static', { vol: 0.4 }); refreshHud(); } });
+        movers.forEach((m, i) => { if (m && !finished && !out[i]) { pts[i] = Math.max(0, pts[i] - 1); fx.texts.add('BEWOGEN! -1', heroes[i].holder.position.x, 5.5, 2.2, '#9fe8ff', 1.3); audio.sfx('static', { vol: 0.4 }); refreshHud(); } });
       },
-      celebrate(w) { heroes[w].mood = 'cheer'; heroes[w].moodT = 99; heroes[1 - w].mood = 'sad'; heroes[1 - w].moodT = 99; DM.play('cheer', 0); S.audCheer(8); },
+      celebrate(w, winners = [w]) { heroes.forEach((h, i) => { h.mood = winners.includes(i) ? 'cheer' : 'sad'; h.moodT = 99; }); DM.play('cheer', 0); S.audCheer(8); },
       dispose() { hud.setHint(null); },
       dbg: {
-        state: () => ({ T, gstate: G.state, t: G.t, round: G.round, sd: G.sd, clock: G.clock, type: G.R && G.R.type, expect: G.R ? G.R.expect.slice() : [], shown: G.R ? G.R.shown.slice() : [], W: P.map((p) => p.W), idx: P.map((p) => p.idx), done: P.map((p) => p.done), res: P.map((p) => p.res), hearts: [...hearts], pts: [...pts], trailing, finished, winner: G.winner, why: G.why, stats }),
+        state: () => ({ T, gstate: G.state, t: G.t, round: G.round, sd: G.sd, clock: G.clock, type: G.R && G.R.type, expect: G.R ? G.R.expect.slice() : [], shown: G.R ? G.R.shown.slice() : [], W: P.map((p) => p.W), idx: P.map((p) => p.idx), done: P.map((p) => p.done), res: P.map((p) => p.res), hearts: [...hearts], pts: [...pts], out: [...out], trail: [...trail], finished, winner: G.winner, why: G.why, stats }),
         setTime: (t) => { G.clock = t; }, queue: (...t) => { G.queue.push(...t); }, setRound: (n) => { G.round = n; },
-        setPts: (a, b) => { pts[0] = a; pts[1] = b; computeTrailing(); refreshHud(); }, setHearts: (a, b) => { hearts[0] = a; hearts[1] = b; computeTrailing(); refreshHud(); },
+        setPts: (...v) => { v.forEach((x, i) => { if (i < N) pts[i] = x; }); computeTrailing(); refreshHud(); }, setHearts: (...v) => { v.forEach((x, i) => { if (i < N) hearts[i] = x; }); computeTrailing(); refreshHud(); },
       },
     };
   },

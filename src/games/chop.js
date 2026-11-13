@@ -8,7 +8,6 @@ import { makeBars } from './screws_bars.js';
 // A = hakken, links/rechts (of B) = van kant wisselen. Eerst 40 stammen gehakt wint.
 
 const TOTAL = 40, MAXT = 90;
-const TX = [-6.4, 6.4];
 const BASE_Y = 0.5;
 const WIN_H = 21;                // stukken met hun voet lager dan dit krijgen een mesh
 const SIDE_X = 2.2;
@@ -22,17 +21,21 @@ export default {
   giver: 'Boswachter Berk',
   icon: '🪓',
   mode: 'pvp',
+  players: [2, 3, 4],              // 2 = duel; 3-4 = vrij voor allen: elk een eigen totempaal, zelfde stammen-reeks
   time: 40,
   music: 'game_fast',
   twists: ['invert', 'swapab', 'drunk', 'bodyswap', 'turbo', 'slowmo', 'deurman'],
-  blurb: 'Twee torenhoge <b>totempalen</b>, twee houthakkers! Hak je stammen weg: de <b>eerste met 40 stammen</b> wint. Maar pas op voor <b>stekels, takken en bijennesten</b>: sta je aan de verkeerde kant als zo\'n stuk naar beneden valt, dan ben je even uitgeschakeld. <b>Snel hakken</b> bouwt tempo op (jij wordt sneller!). Gouden stammen tellen 3, en bommen zorgen voor gekke dingen...',
+  blurb: 'Elke houthakker een torenhoge <b>totempaal</b> (met 3-4 spelers allemaal tegelijk, met dezelfde stammen)! Hak je stammen weg: de <b>eerste met 40 stammen</b> wint. Maar pas op voor <b>stekels, takken en bijennesten</b>: sta je aan de verkeerde kant als zo\'n stuk naar beneden valt, dan ben je even uitgeschakeld. <b>Snel hakken</b> bouwt tempo op (jij wordt sneller!). Gouden stammen tellen 3, en bommen zorgen voor gekke dingen...',
   controls: ['{a} hakken', '{move} links/rechts: van kant wisselen', '{b} van kant wisselen'],
-  tip: 'Kijk naar het stuk BOVEN je: dat valt zo naar beneden. Groene bom = schoonmaak, rode bom = stekels voor je broer!',
+  tip: 'Kijk naar het stuk BOVEN je: dat valt zo naar beneden. Groene bom = schoonmaak, rode bom = stekels voor de koploper!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const names = players.map((p) => p.name), css = players.map((p) => p.css);
     const rng = ctx.rng;
+    const N = players.length;
+    const TX = N === 2 ? [-6.4, 6.4] : N === 3 ? [-6.8, 0, 6.8] : [-9.9, -3.3, 3.3, 9.9];   // totempalen, links naar rechts
+    const CAMZ = 19.6 + (N - 2) * 1.5;
     const L = ctx.lights('day', { shadow: 20, center: [0, 6, 0], fogNear: 60, fogFar: 170 });
     L.hemi.intensity = 1.1; L.sun.intensity = 2.3; L.sun.position.set(-18, 40, 26);
     camera.fov = 50; camera.updateProjectionMatrix();
@@ -68,7 +71,7 @@ export default {
     const seq = genSequence();
 
     // ---------- spelers ----------
-    const pl = [0, 1].map((i) => {
+    const pl = players.map((_, i) => {
       const c = ctx.make.brother(i); const sz = ctx.pvp.size(i), base = 2.9 / c.height;
       c.group.scale.setScalar(base * sz); scene.add(c.group);
       // bijl
@@ -84,7 +87,7 @@ export default {
       const p = {
         i, c, axe, mats, tail, tag, base, sz,
         list: seq.map((s) => ({ ...s })), chopped: 0, total: TOTAL,
-        side: i === 0 ? -1 : 1, x: TX[i] + (i === 0 ? -1 : 1) * SIDE_X, hopT: -1, hopFrom: 0,
+        side: i < N / 2 ? -1 : 1, x: TX[i] + (i < N / 2 ? -1 : 1) * SIDE_X, hopT: -1, hopFrom: 0,
         lock: 0, bufT: 0, switchT: 0, stun: 0, tempo: 0, streak: 0, lastChop: -9, swingT: -1, hits: 0, prevX: 0, stag: 3 + rng() * 2, wob: 0,
         cbCd: 4, cbUses: 0, flash: 0, tailLen: 0, finishedAt: -1, bestStreak: 0, kick: 0,
       };
@@ -96,7 +99,7 @@ export default {
       const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace;
       const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false })); s.scale.set(2.4, 0.9, 1); s.renderOrder = 15; return s;
     }
-    const bars = makeBars(ctx, { colors: PLAYER_COLORS, vertical: false, length: 0.4 });
+    const bars = makeBars(ctx, { colors: players.map((p) => p.color), vertical: false, length: N > 2 ? 0.34 : 0.4 });
 
     // ---------- toestand ----------
     let T = 0, done = false, phase = 'play', winner = null, winT = 0, introT = 0, cine = 1, counting = false, punch = 0, finishCalled = false;
@@ -161,13 +164,13 @@ export default {
       fx.particles.ring(TX[p.i], y, 1.2, { count: 24, speed: 9, color: 0xffcf6a, size: 0.4, life: 0.5 });
     }
     function bombEffect(p, it, y) {
-      const o = pl[1 - p.i];
+      const others = pl.filter((q) => q !== p), topC = Math.max(...others.map((q) => q.chopped)), tops = others.filter((q) => q.chopped === topC), o = tops[Math.floor(rng() * tops.length)];   // rode bom: de koploper (van de anderen)
       audio.sfx('explode', { vol: 0.9 }); ctx.shake(0.7); punch = 1;
       boomAt(p, y, 1.2);
       if (it.bomb === 'green') {
         let cleared = 0;
         for (const q of pl) for (let k = 0; k < Math.min(7, q.list.length); k++) { const t = q.list[k]; if (t.side !== 0) { t.side = 0; t.hz = null; cleared++; if (t.obj) { setHazMesh(t); fx.particles.burst(TX[q.i] + 1.8, t.ty, 1, { count: 8, speed: 3, up: 1, life: 0.5, size: 0.3, colors: [0x9dff7a, 0xffffff], gravity: 5 }); } } }
-        note(p.i, 'SCHOON! 💚', '#7dff6a', 1.3, 6.5); hud.toast(`Groene bom! De stekels van de volgende stukken zijn weggeblazen (voor allebei)`, 2200);
+        note(p.i, 'SCHOON! 💚', '#7dff6a', 1.3, 6.5); hud.toast(`Groene bom! De stekels van de volgende stukken zijn weggeblazen (voor iedereen)`, 2200);
         for (const q of pl) q.flash = 1;
       } else {
         let added = 0;
@@ -264,8 +267,8 @@ export default {
       g.userData = { tail, legs, acorn }; g.visible = false; scene.add(g); return g;
     })();
     function spawnSquirrel() {
-      const lead = pl[0].chopped - pl[1].chopped;
-      const ti = Math.abs(lead) >= 3 && rng() < 0.65 ? (lead > 0 ? 0 : 1) : (rng() < 0.5 ? 0 : 1);
+      const cs = pl.map((q) => q.chopped), mx = Math.max(...cs), lead = mx - Math.min(...cs);
+      const ti = lead >= 3 && rng() < 0.65 ? cs.indexOf(mx) : Math.floor(rng() * N);
       const p = pl[ti];
       E.sq = { ti, state: 'run', t: 0, x: TX[ti] + (rng() < 0.5 ? -11 : 11), y: BASE_Y + 0.5, tgt: null, done: false, climbY: BASE_Y + 0.5 };
       E.sq.dir = Math.sign(TX[ti] - E.sq.x);
@@ -320,8 +323,8 @@ export default {
     function comebackCheck(dt) {
       for (const p of pl) {
         p.cbCd -= dt;
-        const o = pl[1 - p.i];
-        if (p.cbCd > 0 || p.cbUses >= 2 || o.chopped - p.chopped < 6 || phase !== 'play') continue;
+        const oMax = Math.max(...pl.filter((q) => q !== p).map((q) => q.chopped));
+        if (p.cbCd > 0 || p.cbUses >= 2 || oMax - p.chopped < 6 || phase !== 'play') continue;
         let conv = 0, k = 7;
         while (k < p.list.length - 2 && conv < 4) {
           const a = p.list[k], b = p.list[k + 1];
@@ -349,17 +352,22 @@ export default {
     }
 
     // ---------- eind ----------
-    function endGame(w) {
+    function endGame(w, tops = null) {
       if (finishCalled) return; finishCalled = true; phase = 'won'; winner = w; winT = 0;
       const sc = pl.map((p) => p.chopped);
+      const order = pl.slice().sort((a, b) => (b.chopped - a.chopped) || ((a.finishedAt < 0 ? 1e9 : a.finishedAt) - (b.finishedAt < 0 ? 1e9 : b.finishedAt)) || (a.i - b.i));
+      let place = order.map((p) => p.i); if (w != null) place = [w, ...place.filter((k) => k !== w)];
       let summary;
-      if (w == null) summary = 'Allebei evenveel stammen gehakt. Gelijkspel!';
-      else if (pl[w].list.length > 0) summary = `Tijd om! ${names[w]} heeft de meeste stammen gehakt (${sc[w]} tegen ${sc[1 - w]}).`;
+      if (w == null) summary = N === 2 ? 'Allebei evenveel stammen gehakt. Gelijkspel!' : 'Allemaal evenveel stammen gehakt. Gelijkspel!';
+      else if (tops && tops.length > 1) summary = `Tijd om! ${tops.map((k) => names[k]).join(' & ')} hebben evenveel stammen gehakt (${sc[w]}).`;
+      else if (pl[w].list.length > 0) summary = N === 2 ? `Tijd om! ${names[w]} heeft de meeste stammen gehakt (${sc[w]} tegen ${sc[1 - w]}).` : `Tijd om! ${names[w]} heeft de meeste stammen gehakt (${sc[w]}).`;
       else {
-        const l = 1 - w; const jokes = [`TIMBER! ${names[w]} hakt als een echte bosreus.`, `${names[w]} is de snelste houthakker van het bos. ${names[l]} heeft nog ${remaining(pl[l])} stammen te gaan.`, `De eekhoorns joelen voor ${names[w]}!`];
-        summary = pick(jokes) + `<br>${Math.round(T)} sec · ${pl[w].hits} keer geraakt tegen ${pl[l].hits}`;
+        const l = order[order.length - 1].i; const jokes = [`TIMBER! ${names[w]} hakt als een echte bosreus.`, `${names[w]} is de snelste houthakker van het bos. ${names[l]} heeft nog ${remaining(pl[l])} stammen te gaan.`, `De eekhoorns joelen voor ${names[w]}!`];
+        summary = pick(jokes) + (N === 2 ? `<br>${Math.round(T)} sec · ${pl[w].hits} keer geraakt tegen ${pl[l].hits}` : `<br>${Math.round(T)} sec · ${pl[w].hits} keer geraakt`);
       }
-      ctx.finishPvp({ winner: w, score: sc, summary, delay: 2600 });
+      const args = { winner: w, score: sc, summary, delay: 2600 };
+      if (N > 2) { args.place = place; if (tops && tops.length > 1) { args.winners = tops; delete args.winner; } }
+      ctx.finishPvp(args);
     }
 
     // ---------- spelers per frame ----------
@@ -457,7 +465,7 @@ export default {
         hudT = 0.12;
         for (const p of pl) { const tm = p.tempo > 0.75 ? ' TEMPO!' : p.tempo > 0.3 ? ' tempo+' : ''; hud.setPlayerInfo(p.i, `${p.chopped}/${p.total} stammen${p.stun > 0 ? '  AU!' : tm}`); }
       }
-      bars.update([pl[0].chopped / pl[0].total, pl[1].chopped / pl[1].total]);
+      bars.update(pl.map((p) => p.chopped / p.total));
       if (phase === 'play') hud.setTimer(Math.max(0, MAXT - T), 12);
     }
 
@@ -466,10 +474,10 @@ export default {
     let camInit = false;
     function cam(dt) {
       punch = Math.max(0, punch - dt * 3);
-      let px = 0, py = 6.2, pz = 19.6 - punch * 1.2, lx = 0, ly = 5.8;
+      let px = 0, py = 6.2, pz = CAMZ - punch * 1.2, lx = 0, ly = 5.8;
       if (phase === 'won' && winner != null) { const k = smoothstep(0.2, 2.0, winT); px = lerp(0, TX[winner] * 0.6, k); pz = lerp(pz, 13, k); py = lerp(py, 4.2, k); lx = lerp(0, TX[winner] * 0.8, k); ly = lerp(5.8, 4.0, k); }
       gp.set(px + Math.sin(T * 0.4) * 0.25, py, pz); gl.set(lx, ly, 0);
-      ip.set(-12 + Math.sin(introT * 0.3) * 6, 24 - Math.min(introT, 6) * 0.9, 40); il.set(0, 11, 0);
+      ip.set(-12 + Math.sin(introT * 0.3) * 6, 24 - Math.min(introT, 6) * 0.9, 40 + (N - 2) * 3); il.set(0, 11, 0);
       gp.lerp(ip, cine); gl.lerp(il, cine);
       if (!camInit) { camP.copy(gp); camL.copy(gl); camInit = true; }
       const f = 1 - Math.exp(-6 * dt); camP.lerp(gp, f); camL.lerp(gl, f);
@@ -485,8 +493,11 @@ export default {
         E.squirrelT -= dt; if (!E.sq && E.squirrelT <= 0) { spawnSquirrel(); E.squirrelT = 9 + rng() * 6; }
         updateSquirrel(dt); comebackCheck(dt);
         const f = pl.filter((p) => p.list.length === 0);
-        if (f.length) endGame(f.length === 1 ? f[0].i : (pl[0].finishedAt <= pl[1].finishedAt ? 0 : 1));
-        else if (T >= MAXT) { const d = pl[0].chopped - pl[1].chopped; endGame(d === 0 ? null : d > 0 ? 0 : 1); }
+        if (f.length) endGame(f.reduce((a, b) => (b.finishedAt < a.finishedAt ? b : a)).i);
+        else if (T >= MAXT) {
+          const mx = Math.max(...pl.map((p) => p.chopped)), tops = pl.filter((p) => p.chopped === mx).map((p) => p.i);
+          endGame(tops.length === 1 ? tops[0] : tops.length === N ? null : tops[0], tops);
+        }
       } else {
         for (const p of pl) playerStep(p, dt, false);
         if (E.sq) updateSquirrel(dt);
@@ -498,7 +509,7 @@ export default {
     function wonFx() {
       audio.sfx('win'); ctx.shake(0.5);
       if (winner != null) hud.showBig('TIMBER!', 1300, winner ? '#4a8cff' : '#35c46f');
-      for (let q = 0; q < 7; q++) setTimeout(() => { try { fx.particles.burst(TX[winner == null ? q % 2 : winner] + (Math.random() - 0.5) * 8, 7 + Math.random() * 5, 3, { count: 44, speed: 8, up: 1.1, life: 1.8, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff, 0xff9a3a], gravity: 5 }); audio.sfx('sparkle', { vol: 0.4 }); } catch (e) { /* weg */ } }, q * 260);
+      for (let q = 0; q < 7; q++) setTimeout(() => { try { fx.particles.burst(TX[winner == null ? q % N : winner] + (Math.random() - 0.5) * 8, 7 + Math.random() * 5, 3, { count: 44, speed: 8, up: 1.1, life: 1.8, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff, 0xff9a3a], gravity: 5 }); audio.sfx('sparkle', { vol: 0.4 }); } catch (e) { /* weg */ } }, q * 260);
     }
     function update(dt) { tick(dt, true); }
     function resultUpdate(dt) { tick(dt, false); }
@@ -512,7 +523,7 @@ export default {
       onCountdown() { counting = true; hud.setTimer(MAXT, 12); hud.setScore('🪓 Hak je totempaal om!'); },
       onStart() { hud.setTimer(MAXT, 12); hud.setScore('🪓 Hak je totempaal om!'); },
       onDeurman,
-      celebrate(w) { pl[w].c.pose = 'cheer'; pl[1 - w].c.pose = 'sad'; },
+      celebrate(w, ws = [w]) { pl.forEach((p, k) => { p.c.pose = ws.includes(k) ? 'cheer' : 'sad'; }); },
       onSwap() { for (const p of pl) fx.particles.ring(p.x, 3, 0.3, { count: 18, speed: 3, color: 0xffe14a, size: 0.3, life: 0.5 }); },
       dispose() { },
       dbg: {

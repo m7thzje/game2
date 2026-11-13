@@ -6,7 +6,8 @@ import { mat, mesh, canvasTex, clamp, lerp, mulberry32, TAU } from '../engine/ut
 
 export const LW = 2.0;                 // halve baanbreedte
 export const GUT = 0.62;               // goot-breedte
-export const CX = [-3.3, 3.3];         // baan-middens
+export const CX = [-3.3, 3.3];         // baan-middens (2 spelers)
+export const CX_BY_N = { 2: CX, 3: [-5.4, 0, 5.4], 4: [-8.1, -2.7, 2.7, 8.1] };   // 3-4 spelers: banen dicht naast elkaar
 export const HEAD = -11.5;             // z van de voorste kegel
 export const ROW = 0.92, SPC = 1.06;   // rij-afstand en kegel-afstand
 export const PIT_Z = -16.2;            // einde baan
@@ -120,7 +121,8 @@ function curtainTex() {
 }
 function stripeTex(c1, c2, n = 16) { return canvasTex(256, 64, (g, w, h) => { for (let i = 0; i < n; i++) { g.fillStyle = i % 2 ? c1 : c2; g.fillRect(i * w / n, 0, w / n + 1, h); } }, { repeat: [3, 1] }); }
 
-export function buildWorld(ctx) {
+export function buildWorld(ctx, N = 2) {
+  const CX = CX_BY_N[N] || CX_BY_N[2];
   const { scene } = ctx;
   const W = { t: 0 };
   const rng = mulberry32(99);
@@ -135,7 +137,7 @@ export function buildWorld(ctx) {
   // banen
   const lt = laneTex();
   W.laneMats = [];
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < CX.length; i++) {
     const cx = CX[i];
     const lane = new THREE.Mesh(new THREE.BoxGeometry(LW * 2, 0.3, 18.6), [mat(0x8a5a2a), mat(0x8a5a2a), new THREE.MeshStandardMaterial({ map: lt, roughness: 0.35, metalness: 0.05 }), mat(0x8a5a2a), mat(0x8a5a2a), mat(0x8a5a2a)]);
     lane.position.set(cx, -0.15, -7.7); lane.receiveShadow = true; scene.add(lane);
@@ -148,10 +150,12 @@ export function buildWorld(ctx) {
     scene.add(mesh(new THREE.BoxGeometry(LW * 2 + GUT * 2, 1.8, 0.6), mat(0x6a1428), { pos: [cx, 0.6, -19.0] }));
   }
   // middenstuk: terugloop-buis + versiering
-  scene.add(mesh(new THREE.BoxGeometry(1.0, 0.5, 18.6), mat(0x5a3a22), { pos: [0, -0.05, -7.7] }));
-  scene.add(mesh(new THREE.CylinderGeometry(0.28, 0.28, 17.8, 10), mat(0xd8372c), { pos: [0, 0.4, -7.7], rot: [Math.PI / 2, 0, 0], cast: false }));
+  if (N === 2) {
+    scene.add(mesh(new THREE.BoxGeometry(1.0, 0.5, 18.6), mat(0x5a3a22), { pos: [0, -0.05, -7.7] }));
+    scene.add(mesh(new THREE.CylinderGeometry(0.28, 0.28, 17.8, 10), mat(0xd8372c), { pos: [0, 0.4, -7.7], rot: [Math.PI / 2, 0, 0], cast: false }));
+  }
   // buitenranden
-  for (const s of [-1, 1]) scene.add(mesh(new THREE.BoxGeometry(1.4, 0.6, 18.6), mat(0x5a3a22), { pos: [s * (CX[1] + LW + GUT + 0.9), 0, -7.7] }));
+  for (const s of [-1, 1]) scene.add(mesh(new THREE.BoxGeometry(1.4, 0.6, 18.6), mat(0x5a3a22), { pos: [s * (CX[CX.length - 1] + LW + GUT + 0.9), 0, -7.7] }));
 
   // gordijn + clown-boog
   const curt = new THREE.Mesh(new THREE.PlaneGeometry(36, 14), new THREE.MeshStandardMaterial({ map: curtainTex(), roughness: 1 })); curt.position.set(0, 7, -20.5); scene.add(curt);
@@ -172,10 +176,12 @@ export function buildWorld(ctx) {
   for (let k = 0; k < 18; k++) { const side = k % 2 ? 1 : -1; dm.position.set(side * (9.5 + rng() * 5), 3 + rng() * 5, -4 - rng() * 14); dm.rotation.set(0, 0, 0); dm.scale.set(1, 1.2, 1); dm.updateMatrix(); bal.setMatrixAt(k, dm.matrix); bal.setColorAt(k, new THREE.Color(fc[k % 5])); } scene.add(bal); dm.scale.set(1, 1, 1);
 
   // scorebord boven het midden
-  W.sbCanvas = document.createElement('canvas'); W.sbCanvas.width = 1024; W.sbCanvas.height = 320;
+  const SBH = 84 + 118 * N;   // 320 bij 2 spelers; meer rijen bij 3-4
+  W.sbCanvas = document.createElement('canvas'); W.sbCanvas.width = 1024; W.sbCanvas.height = SBH;
   W.sbTex = new THREE.CanvasTexture(W.sbCanvas); W.sbTex.colorSpace = THREE.SRGBColorSpace;
-  const sb = new THREE.Mesh(new THREE.PlaneGeometry(9.6, 3.0), new THREE.MeshBasicMaterial({ map: W.sbTex, fog: false })); sb.position.set(0, 5.7, -19.9); scene.add(sb);
-  scene.add(mesh(new THREE.BoxGeometry(10.0, 3.4, 0.2), mat(0x2a1a10), { cast: false, pos: [0, 5.7, -20.05] }));
+  const sbw = N === 2 ? 9.6 : 9.4, sbh = sbw * SBH / 1024, sby = N === 2 ? 5.7 : 3.4;
+  const sb = new THREE.Mesh(new THREE.PlaneGeometry(sbw, sbh), new THREE.MeshBasicMaterial({ map: W.sbTex, fog: false })); sb.position.set(0, sby, -19.9); scene.add(sb);
+  scene.add(mesh(new THREE.BoxGeometry(sbw + 0.4, sbh + 0.4, 0.2), mat(0x2a1a10), { cast: false, pos: [0, sby, -20.05] }));
 
   W.update = (t, dt) => {
     W.t = t;

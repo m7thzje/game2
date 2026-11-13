@@ -3,6 +3,7 @@
 // Bots (met een simpele blok-AI) spelen versneld (zonder renderen) hele potjes. Controleert: finishPvp precies 1x,
 // beide spelers kunnen winnen, geen console-errors, elke twist werkt, en de power-blokken / rommelrijen / kip / I-balk doen wat ze moeten.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -21,7 +22,7 @@ const fails = [];
 const check = (ok, msg) => { console.log(`${ok ? 'OK  ' : 'FAIL'} ${msg}`); if (!ok) fails.push(msg); };
 
 async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });

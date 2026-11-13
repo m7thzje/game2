@@ -7,7 +7,9 @@ import * as P from '../engine/props.js';
 // Knoppen-Breker: de steengroeve van Dwerg Brokkel (wereld, blokken en symbolen).
 
 export const BW = 3.8, BH = 1.7, BD = 1.8;          // blokafmetingen
-export const COLX = [-4.7, 4.7];                      // x van de twee kolommen
+export const COLX = [-4.7, 4.7];                      // x van de twee kolommen (2 spelers)
+export const colsFor = (n) => (n === 2 ? COLX : n === 3 ? [-8, 0, 8] : [-12, -4, 4, 12]);   // kolommen voor 2, 3 of 4 spelers
+const darkCss = (css, k = 0.55) => { const c = new THREE.Color(css); return `rgb(${Math.round(c.r * 255 * k)},${Math.round(c.g * 255 * k)},${Math.round(c.b * 255 * k)})`; };
 export const SYM_NAMES = ['←', '→', '↑', '↓', 'A', 'B'];
 export const METER_N = 31;                            // 25 + max. 6 strafblokken
 
@@ -159,8 +161,9 @@ export function makeMallet() {
 }
 
 // ---------------------------------------------------------------- de steengroeve
-export function buildQuarry(ctx) {
+export function buildQuarry(ctx, colX = COLX) {
   const { scene, fx, players } = ctx;
+  const N = players.length, DX = Math.max(1, (Math.max(...colX) + 5.9) / 10.6), plateBg = (i) => (i < 2 ? (i ? '#27508f' : '#1f6b3f') : darkCss(players[i].css));   // DX: zijdecor schuift mee naar buiten
   const anim = [];
   const root = new THREE.Group(); scene.add(root);
   const add = (m) => { root.add(m); return m; };
@@ -172,25 +175,25 @@ export function buildQuarry(ctx) {
   const stalMat = mat(0x5e5068);
   for (let i = 0; i < 17; i++) {
     const h = 1.2 + ((i * 37) % 11) / 11 * 2.2, r = 0.35 + ((i * 53) % 7) / 7 * 0.5;
-    add(mesh(new THREE.ConeGeometry(r, h, 6), stalMat, { cast: false, pos: [-16 + i * 2 + ((i * 7) % 5) * 0.2, 15.2 - h / 2, -2.2 - (i % 3) * 0.5], rot: [Math.PI, 0, 0] }));
+    add(mesh(new THREE.ConeGeometry(r, h, 6), stalMat, { cast: false, pos: [(-16 + i * 2 + ((i * 7) % 5) * 0.2) * DX, 15.2 - h / 2, -2.2 - (i % 3) * 0.5], rot: [Math.PI, 0, 0] }));
   }
   // vloer
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(80, 26), new THREE.MeshStandardMaterial({ map: tex.tiles(18, 6, '#9a8f84', '#5d5349'), roughness: 1 }));
   floor.rotation.x = -Math.PI / 2; floor.position.set(0, -0.31, 3); floor.receiveShadow = true; root.add(floor);
 
   // per kolom: podium, naamplaat, rails, schacht, latei met tandwielen, gloed
-  const glowTex = [players[0].css, players[1].css].map((c) => {
+  const glowTex = players.map((p) => p.css).map((c) => {
     const col = new THREE.Color(c); return glowTexture(`rgb(${Math.round(col.r * 255)}, ${Math.round(col.g * 255)}, ${Math.round(col.b * 255)})`);
   });
   const meters = [];
   const cogs = [];
-  [0, 1].forEach((i) => {
-    const cx = COLX[i], sgn = i === 0 ? -1 : 1, pc = PLAYER_COLORS[i];
+  players.forEach((_, i) => {
+    const cx = colX[i], sgn = i < N / 2 ? -1 : 1, pc = PLAYER_COLORS[i];
     add(mesh(new THREE.BoxGeometry(5.8, 0.32, 4.6), stoneMat(3, 2, 0xd8d0e0), { pos: [cx, -0.16, 1.3] }));
     add(mesh(new THREE.BoxGeometry(5.2, 0.05, 0.16), glow(pc, 1.1), { cast: false, pos: [cx, 0.02, 3.35] }));
     for (const sx of [-1, 1]) add(mesh(new THREE.BoxGeometry(0.2, 0.05, 3.6), glow(pc, 0.8), { cast: false, pos: [cx + sx * 2.6, 0.02, 1.4] }));
     // naamplaat
-    const plate = mesh(new THREE.BoxGeometry(3.4, 0.7, 0.2), new THREE.MeshStandardMaterial({ map: tex.sign(players[i].name, { w: 256, h: 72, size: 40, bg: i ? '#27508f' : '#1f6b3f', fg: '#fff6d0' }), roughness: 0.8 }), { pos: [cx, 0.4, 3.75], rot: [-0.25, 0, 0] });
+    const plate = mesh(new THREE.BoxGeometry(3.4, 0.7, 0.2), new THREE.MeshStandardMaterial({ map: tex.sign(players[i].name, { w: 256, h: 72, size: 40, bg: plateBg(i), fg: '#fff6d0' }), roughness: 0.8 }), { pos: [cx, 0.4, 3.75], rot: [-0.25, 0, 0] });
     add(plate);
     // schacht
     add(mesh(new THREE.BoxGeometry(BW + 0.5, 12.6, 0.3), mat(0x1b1621), { cast: false, pos: [cx, 6.3, -1.3] }));
@@ -209,9 +212,9 @@ export function buildQuarry(ctx) {
       cog.add(mesh(new THREE.CylinderGeometry(0.85, 0.85, 0.3, 14), mat(0x7b7f8a, { metalness: 0.6 }), { rot: [Math.PI / 2, 0, 0] }));
       for (let k = 0; k < 8; k++) { const a = k / 8 * TAU; cog.add(mesh(new THREE.BoxGeometry(0.36, 0.36, 0.3), mat(0x7b7f8a, { metalness: 0.6 }), { pos: [Math.cos(a) * 0.95, Math.sin(a) * 0.95, 0], rot: [0, 0, a] })); }
       cog.add(mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.42, 8), mat(0xe8c24a, { metalness: 0.6 }), { rot: [Math.PI / 2, 0, 0] }));
-      cogs.push({ g: cog, dir: sx * (i ? -1 : 1) });
+      cogs.push({ g: cog, dir: sx * (i % 2 ? -1 : 1) });
     }
-    add(mesh(new THREE.BoxGeometry(2.6, 0.9, 0.2), new THREE.MeshStandardMaterial({ map: tex.sign(players[i].name.toUpperCase(), { w: 256, h: 80, size: 44, bg: i ? '#27508f' : '#1f6b3f', fg: '#ffe9a0' }), roughness: 0.8 }), { pos: [cx, 13.9, 1.9] }));
+    add(mesh(new THREE.BoxGeometry(2.6, 0.9, 0.2), new THREE.MeshStandardMaterial({ map: tex.sign(players[i].name.toUpperCase(), { w: 256, h: 80, size: 44, bg: plateBg(i), fg: '#ffe9a0' }), roughness: 0.8 }), { pos: [cx, 13.9, 1.9] }));
 
     // voortgangsmeter (kristallen)
     const mx = cx + sgn * 3.55;
@@ -228,7 +231,7 @@ export function buildQuarry(ctx) {
 
   // hangende vaandels in het midden + balkon met scheidsrechter
   const flags = [];
-  [0, 1].forEach((i) => {
+  players.forEach((_, i) => {
     const t = canvasTex(128, 320, (g, w, h) => {
       const c = new THREE.Color(PLAYER_COLORS[i]);
       const gr = g.createLinearGradient(0, 0, 0, h); gr.addColorStop(0, `rgb(${c.r * 255 | 0},${c.g * 255 | 0},${c.b * 255 | 0})`); gr.addColorStop(1, `rgb(${c.r * 150 | 0},${c.g * 150 | 0},${c.b * 150 | 0})`);
@@ -239,7 +242,8 @@ export function buildQuarry(ctx) {
       g.font = '60px sans-serif'; g.fillText('⛏', w / 2, 224);
     });
     const f = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 3.25), new THREE.MeshStandardMaterial({ map: t, side: THREE.DoubleSide, roughness: 0.9, transparent: true }));
-    f.position.set(i ? 2.05 : -2.05, 8.7, -3.7); root.add(f); flags.push(f);
+    const fxp = N === 2 ? (i ? 2.05 : -2.05) : (i - (N - 1) / 2) * 1.05; if (N > 2) f.scale.setScalar(0.72);
+    f.position.set(fxp, 8.7, -3.7); root.add(f); flags.push(f);
     add(mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.5, 5), mat(0x4a3220), { cast: false, pos: [f.position.x, 10.4, -3.7], rot: [0, 0, Math.PI / 2] }));
   });
   add(mesh(new THREE.BoxGeometry(3.6, 0.5, 1.8), stoneMat(2, 1, 0xd8d0e0), { pos: [0, 5.75, -3.0] }));
@@ -248,7 +252,7 @@ export function buildQuarry(ctx) {
   const npcs = [];
   const ref = makeNPC('dwarf', { scale: 0.95 }); ref.group.position.set(-0.7, 6.0, -3.0); ref.group.scale.setScalar(1.15); scene.add(ref.group); ref.faceDir(0, 1); npcs.push({ c: ref, t: 0, home: 'point' });
   const jes = makeNPC('jester'); jes.group.position.set(0.9, 6.0, -3.0); jes.group.scale.setScalar(1.1); scene.add(jes.group); jes.faceDir(0, 1); npcs.push({ c: jes, t: 0, home: 'idle' });
-  [[-10.3, 'goblin'], [10.3, 'goblin']].forEach(([x, k], idx) => {
+  [[-10.3 * DX, 'goblin'], [10.3 * DX, 'goblin']].forEach(([x, k], idx) => {
     add(mesh(new THREE.BoxGeometry(2.2, 0.5, 1.6), stoneMat(1, 1, 0xbfb6cc), { pos: [x, 6.4, -2.4] }));
     const n = makeNPC(k, { scale: 0.75 }); n.group.position.set(x, 6.65, -2.4); n.group.scale.setScalar(1.25); scene.add(n.group); n.faceDir(x > 0 ? -0.4 : 0.4, 1); npcs.push({ c: n, t: 0, home: 'idle', phase: idx });
   });
@@ -256,27 +260,27 @@ export function buildQuarry(ctx) {
   // pilaren, fakkels, kristallen, kratten
   const torches = [];
   for (const sx of [-1, 1]) {
-    add(mesh(new THREE.BoxGeometry(1.6, 16, 1.6), stoneMat(1, 6, 0xc8bfd4), { pos: [sx * 10.6, 8, -0.8] }));
-    const t = P.torch(0xffa030); t.position.set(sx * 9.65, 3.6, 0.2); root.add(t); torches.push(t);
+    add(mesh(new THREE.BoxGeometry(1.6, 16, 1.6), stoneMat(1, 6, 0xc8bfd4), { pos: [sx * 10.6 * DX, 8, -0.8] }));
+    const t = P.torch(0xffa030); t.position.set(sx * 9.65 * DX, 3.6, 0.2); root.add(t); torches.push(t);
     t.userData.light.intensity = 1.3; t.userData.light.distance = 14;
-    add(mesh(new THREE.BoxGeometry(0.3, 0.1, 0.5), mat(0x2f2f38, { metalness: 0.5 }), { cast: false, pos: [sx * 9.9, 3.5, 0.25] }));
+    add(mesh(new THREE.BoxGeometry(0.3, 0.1, 0.5), mat(0x2f2f38, { metalness: 0.5 }), { cast: false, pos: [sx * 9.9 * DX, 3.5, 0.25] }));
     for (let k = 0; k < 6; k++) {
       const col = [0x5be8ff, 0xb06bff, 0x7dffb0][k % 3], h = 0.9 + (k % 3) * 0.5;
       const cr = new THREE.Mesh(new THREE.ConeGeometry(0.22 + (k % 2) * 0.08, h, 5), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.9, flatShading: true, transparent: true, opacity: 0.93 }));
-      cr.position.set(sx * (8.2 + k * 0.28), h / 2, -2.8 + (k % 2) * 0.7 + (k > 3 ? 4.2 : 0)); cr.rotation.z = (k - 2.5) * 0.12 * -sx; root.add(cr); anim.push((t2) => { cr.material.emissiveIntensity = 0.75 + Math.sin(t2 * 2 + k) * 0.25; });
+      cr.position.set(sx * (8.2 + k * 0.28) * DX, h / 2, -2.8 + (k % 2) * 0.7 + (k > 3 ? 4.2 : 0)); cr.rotation.z = (k - 2.5) * 0.12 * -sx; root.add(cr); anim.push((t2) => { cr.material.emissiveIntensity = 0.75 + Math.sin(t2 * 2 + k) * 0.25; });
     }
-    const c1 = P.crate(1.2); c1.position.set(sx * 9.5, 0, 3.6); c1.rotation.y = 0.3 * sx; root.add(c1);
-    const c2 = P.crate(0.9); c2.position.set(sx * 8.5, 0, 4.4); c2.rotation.y = -0.2; root.add(c2);
-    const b1 = P.barrel(1.1); b1.position.set(sx * 10.2, 0, 4.5); root.add(b1);
-    const r1 = P.rock(0.8, 0x6e6678); r1.position.set(sx * 8.9, 0, 1.6); root.add(r1);
-    const r2 = P.rock(0.5, 0x7d7488); r2.position.set(sx * 8.4, 0, 2.3); root.add(r2);
+    const c1 = P.crate(1.2); c1.position.set(sx * 9.5 * DX, 0, 3.6); c1.rotation.y = 0.3 * sx; root.add(c1);
+    const c2 = P.crate(0.9); c2.position.set(sx * 8.5 * DX, 0, 4.4); c2.rotation.y = -0.2; root.add(c2);
+    const b1 = P.barrel(1.1); b1.position.set(sx * 10.2 * DX, 0, 4.5); root.add(b1);
+    const r1 = P.rock(0.8, 0x6e6678); r1.position.set(sx * 8.9 * DX, 0, 1.6); root.add(r1);
+    const r2 = P.rock(0.5, 0x7d7488); r2.position.set(sx * 8.4 * DX, 0, 2.3); root.add(r2);
     // houweel in de muur
-    const pick = new THREE.Group(); pick.position.set(sx * 8.7, 6.6, -4.2); pick.rotation.z = 0.5 * sx; root.add(pick);
+    const pick = new THREE.Group(); pick.position.set(sx * 8.7 * DX, 6.6, -4.2); pick.rotation.z = 0.5 * sx; root.add(pick);
     pick.add(mesh(new THREE.CylinderGeometry(0.06, 0.06, 1.6, 5), mat(0x7a5230), { cast: false }));
     pick.add(mesh(new THREE.BoxGeometry(1.1, 0.14, 0.14), mat(0x9a9ea8, { metalness: 0.6 }), { cast: false, pos: [0, 0.78, 0] }));
   }
   // lorrie met edelstenen (decor)
-  const cart = new THREE.Group(); cart.position.set(-6.4, 0, 5.2); cart.rotation.y = 0.25; root.add(cart);
+  const cart = new THREE.Group(); cart.position.set(N > 2 ? -(Math.max(...colX) + 6.2) : -6.4, 0, 5.2); cart.rotation.y = 0.25; root.add(cart);
   cart.add(mesh(new THREE.BoxGeometry(1.9, 0.8, 1.2), mat(0x6e4a2a), { pos: [0, 0.75, 0] }));
   for (const [x, z] of [[-0.7, 0.6], [0.7, 0.6], [-0.7, -0.6], [0.7, -0.6]]) cart.add(mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.12, 10), mat(0x2f2f38), { pos: [x, 0.28, z * 1.05], rot: [Math.PI / 2, 0, 0] }));
   for (let k = 0; k < 7; k++) cart.add(mesh(new THREE.OctahedronGeometry(0.2, 0), glow([0xff6fa5, 0x5be8ff, 0xffe14a, 0x7dffb0][k % 4], 0.7), { cast: false, pos: [-0.6 + (k % 4) * 0.4, 1.25 + (k % 2) * 0.08, (k % 3 - 1) * 0.28] }));

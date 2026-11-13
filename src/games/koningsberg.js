@@ -4,7 +4,7 @@ import { makeBrother, makeDeurman } from '../engine/chars.js';
 import * as P from '../engine/props.js';
 import { buildWorld, crownMesh, KB } from './koningsberg_world.js';
 
-// Koning van de Berg — party-spel voor 3 (Wes, Jor en Juul tegelijk, vrij voor allen).
+// Koning van de Berg — party-spel voor 3 of 4 (Wes, Jor, Juul en Sam tegelijk, vrij voor allen).
 //  * een ronde heuveltop in een lavameer; de gouden kroonzone in het midden geeft punten per seconde aan wie er ALLEEN in staat
 //  * richtingen = lopen, A = sprong (met zet vooruit; wie zweeft ontwijkt duwtjes), B = schouderduw (met cooldown)
 //  * de rand brokkelt af (eerst rood waarschuwen), wie in de lava valt komt na 2 s terug aan de rand (geen eliminatie)
@@ -59,10 +59,10 @@ export default {
   giver: 'Koning Klopper',
   icon: '👑',
   mode: 'pvp',
-  players: [3],
+  players: [3, 4],
   time: TIME,
   music: 'game_fast',
-  blurb: 'Drie broers op een <b>brokkelende heuveltop</b> in de lava! Sta <b>alleen</b> in de gouden kroonzone voor punten, duw de rest de lava in en pas op voor de <b>Deurman</b>. Meeste punten na 75 seconden wint!',
+  blurb: 'Drie of vier broers op een <b>brokkelende heuveltop</b> in de lava! Sta <b>alleen</b> in de gouden kroonzone voor punten, duw de rest de lava in en pas op voor de <b>Deurman</b>. Meeste punten na 75 seconden wint!',
   controls: ['{move} lopen', '{a} springen', '{b} duwen / bom gooien'],
   tip: 'Twee in de kroonzone? Dan scoort niemand. De laatste 15 seconden tellen dubbel!',
 
@@ -78,7 +78,7 @@ export default {
     const splash = (x, z, k = 1) => { fx.particles.burst(x, -2.7, z, { count: Math.round(22 * k), speed: 6, up: 1.8, life: 1.0, size: 0.5, colors: [0xff7a1a, 0xffd23f, 0xff3a10], gravity: 12 }); audio.sfx('splash', { vol: 0.4 * k, rate: 0.8 }); };
 
     // ---------------- spelers ----------------
-    const START = [-Math.PI / 3, Math.PI, Math.PI / 3];   // links-voor, achter, rechts-voor (gelijk verdeeld)
+    const START = n === 4 ? [-3 * Math.PI / 4, 3 * Math.PI / 4, -Math.PI / 4, Math.PI / 4] : [-Math.PI / 3, Math.PI, Math.PI / 3];   // 3: links-voor, achter, rechts-voor; 4: de vier hoeken (links-achter, rechts-achter, links-voor, rechts-voor: zoals de HUD-vakken), gelijk verdeeld
     const pl = players.map((pp, i) => {
       const c = makeBrother(i); scene.add(c.group);
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.95, 1.2, 28), new THREE.MeshBasicMaterial({ color: pp.color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; scene.add(ring);
@@ -98,8 +98,8 @@ export default {
     const stats = { pushes: 0, kos: 0, falls: 0, items: 0, bombs: 0, deur: 0, dodged: 0, crumbles: 0 };
     const crumbles = [];   // lopende waarschuwingen {k:[sectoren], t}
     const items = [];      // pickups op de heuvel
-    const projectiles = Array.from({ length: 4 }, () => ({ on: false, g: (() => { const g = makeBombMesh(1); g.visible = false; scene.add(g); return g; })(), x: 0, z: 0, sx: 0, sz: 0, tx: 0, tz: 0, t: 0, fuse: 0, owner: 0, landed: false }));
-    const itemPool = Array.from({ length: 3 }, () => {
+    const projectiles = Array.from({ length: n === 4 ? 6 : 4 }, () => ({ on: false, g: (() => { const g = makeBombMesh(1); g.visible = false; scene.add(g); return g; })(), x: 0, z: 0, sx: 0, sz: 0, tx: 0, tz: 0, t: 0, fuse: 0, owner: 0, landed: false }));
+    const itemPool = Array.from({ length: n === 4 ? 4 : 3 }, () => {
       const g = new THREE.Group(); const kinds = { boot: makeBootMesh(), shield: makeShieldMesh(), bomb: makeBombMesh(1.4) };
       for (const k in kinds) { kinds[k].visible = false; g.add(kinds[k]); }
       const halo = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.25, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false })); halo.rotation.x = -Math.PI / 2; halo.position.y = 0.06; g.add(halo);
@@ -391,21 +391,20 @@ export default {
       const top = r[0].score > r[1].score + 1 ? r[0] : null;
       if (top && alive(top)) { leaderCrown.visible = true; leaderCrown.userData.who = top.i; } else leaderCrown.visible = false;
     }
-    function pickWinner() {
+    function finalRanking() {
       const rnd = pl.map(() => ctx.rng());   // laatste redmiddel: lot
-      const r = pl.slice().sort((a, b) => (Math.round(b.score) - Math.round(a.score)) || (b.lastCrown - a.lastCrown) || (a.falls - b.falls) || (rnd[b.i] - rnd[a.i]));
-      return r[0].i;
+      return pl.slice().sort((a, b) => (Math.round(b.score) - Math.round(a.score)) || (b.lastCrown - a.lastCrown) || (a.falls - b.falls) || (rnd[b.i] - rnd[a.i]));
     }
     function finish() {
       if (finished) return; finished = true;
-      const w = pickWinner(), sc = pl.map((p) => Math.round(p.score)); slow = 0.5; slowHold = 0.7;
-      hud.showBig(`${names[w]} IS KONING!`, 1800, w === 0 ? '#7dffb0' : w === 1 ? '#8fb8ff' : '#ffb070');
+      const rank = finalRanking(), w = rank[0].i, sc = pl.map((p) => Math.round(p.score)); slow = 0.5; slowHold = 0.7;
+      hud.showBig(`${names[w]} IS KONING!`, 1800, ['#7dffb0', '#8fb8ff', '#ffb070', '#e9a2ff'][players[w].id]);
       audio.sfx('bell', { vol: 0.7 }); ctx.shake(0.5);
       fx.particles.burst(0, 3, 0, { count: 90, speed: 9, up: 1.4, life: 1.6, size: 0.55, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 });
       const jokes = ['De Deurman klapt beleefd mee.', 'De draak is onder de indruk.', 'De kroon past precies. Bijna.', 'Het gras groeit nooit meer op deze berg.', 'De lava is blij met de bezoekers.'];
       const sum = sc[w] <= 0 ? `Niemand durfde de kroon te pakken... de munt besliste: <b>${names[w]}</b> is Koning! ` : `<b>${names[w]}</b> is Koning van de Berg met ${sc[w]} punten! ${pl.map((p) => `${p.pp.name} ${sc[p.i]}`).join(' · ')}.<br>${stats.falls} keer in de lava, ${stats.kos} knock-outs, ${stats.pushes} duwen en ${stats.deur} high-five${stats.deur === 1 ? '' : 's'} van de Deurman. ${jokes[Math.floor(Math.random() * jokes.length)]}`;
       pl.forEach((p) => { p.sz = 1; p.stun = 0; p.lungeT = 0; });
-      ctx.finishPvp({ winner: w, score: sc, delay: 1000, summary: sum });
+      ctx.finishPvp({ winner: w, score: sc, place: rank.map((p) => p.i), delay: 1000, summary: sum });
     }
 
     // ---------------- visuals ----------------
@@ -438,7 +437,7 @@ export default {
       if (!dbl && tleft <= 15) { dbl = true; hud.showBig('✨ DUBBELE KROON! ✨', 1500, '#ffe14a'); audio.sfx('powerup'); W.cheer(3); }
       // brokkelen / items / Deurman
       crumbT -= dt; if (crumbT <= 0 && tleft > 1.5) { startCrumble(); crumbN++; crumbT = Math.max(1.8, 4.2 - crumbN * 0.12) + Math.random() * 1.0; }
-      itemT -= dt; if (itemT <= 0) { if (items.length < 2) spawnItem(); itemT = 6.5 + Math.random() * 2.5; }
+      itemT -= dt; if (itemT <= 0) { if (items.length < (n === 4 ? 3 : 2)) spawnItem(); itemT = 6.5 + Math.random() * 2.5; }
       if (deurIdx < DEUR_TIMES.length && TIME - tleft >= DEUR_TIMES[deurIdx] && !HF.on) { deurIdx++; startHighFive(); }
       updateCrumbles(dt); updateHighFive(dt);
       const sub = 2, h = dt / sub;

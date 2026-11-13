@@ -1,4 +1,4 @@
-// FEESTBORD: Mario Party-achtig bordspel voor Wes en Jor (en Juul bij 3 spelers) op één scherm. Knoopt de duels van de Speelhal aan elkaar.
+// FEESTBORD: Mario Party-achtig bordspel voor Wes en Jor (en Juul bij 3, Sam bij 4 spelers) op één scherm. Knoopt de duels van de Speelhal aan elkaar.
 // Aanroepen: app.goBoard({})  (opts.resume = verder met een lopend potje; opts.result/from/extra komen terug na een duel).
 // De spelstatus staat in de module-variabele BOARD en overleeft de duels (playGame -> goBoard({result})).
 import * as THREE from 'three';
@@ -12,13 +12,13 @@ import { ARCADE_HALLS } from '../games/index.js';
 import { isUnlocked } from '../engine/progress.js';
 import { TWISTS } from '../engine/twist.js';
 import { BoardWorld, TOKEN_S, numSprite, setSpriteText } from './board_scene.js';
-import { BoardHud, Chooser, injectCss, pids, PI, pcss, klabel, cvar } from './board_ui.js';
+import { BoardHud, Chooser, injectCss, pids, PI, pcss, klabel, cvar, PNAMES, DARK } from './board_ui.js';
+import { splitTeams } from '../engine/party.js';
 import * as D from './board_data.js';
 
 let BOARD = null;                        // lopend potje (blijft bewaard tussen duels)
 export const boardState = () => BOARD;
-const NAMES = ['Wes', 'Jor', 'Juul'];
-const DARK = ['#1d9a52', '#2f6fe0', '#d9622a'];   // leesbare tekstkleuren op de lichte kaarten
+const NAMES = PNAMES;   // namen volgen S.names (Wes, Jor, Juul, Sam; in de Gamehal aanpasbaar)
 const pc = () => D.playerCount();
 const CONFETTI = [0xff4a6a, 0xffd23f, 0x3a9aff, 0x4ad86a, 0xb05aff, 0xff8a3a];
 const easeIO = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
@@ -30,7 +30,7 @@ export class BoardMode {
     this.timers = []; this.pressWait = null; this.chooser = null; this.modal = null; this.wait = null; this.dice = null; this.branch = null; this.active = null;
     this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.5, 700);
     this.fx = new Particles(2200); this.scene.add(this.fx.points); this.fx.setViewportHeight(innerHeight); this.texts = new FloatTexts(this.scene);
-    this.world = new BoardWorld(this.scene, { low: S.settings.quality === 'low', n: (BOARD && !BOARD.over && BOARD.n) || pc() });
+    this.world = new BoardWorld(this.scene, { low: S.settings.quality === 'low', n: ((opts.result !== undefined || opts.resume) && BOARD && !BOARD.over && BOARD.n) || pc() });
     this.camPos = new THREE.Vector3(0, 60, 50); this.camLook = new THREE.Vector3(0, 0, 0);
     this.cam = { x: 0, y: 0, z: 1, d: 1, mode: 'overview' };
     this.B = null; this._escHeld = true; this.fxT = 0;
@@ -75,8 +75,8 @@ export class BoardMode {
     return this.world.slotAt(node, grp.indexOf(i), grp.length);
   }
   get n() { return this.B ? this.B.players.length : this.world.tokens.length; }
-  // spelersstatistiek van het bord: wins altijd 3 lang (oude opslag met 2 waarden aanvullen)
-  fixStats() { const A = S.arcade; const bs = (A.board ||= { plays: 0, wins: [0, 0, 0] }); bs.plays ||= 0; bs.wins = [0, 1, 2].map((k) => (bs.wins && bs.wins[k]) || 0); return bs; }
+  // spelersstatistiek van het bord: wins altijd 4 lang (oude opslag met 2 of 3 waarden aanvullen)
+  fixStats() { const A = S.arcade; const bs = (A.board ||= { plays: 0, wins: [0, 0, 0, 0] }); bs.plays ||= 0; bs.wins = [0, 1, 2, 3].map((k) => (bs.wins && bs.wins[k]) || 0); return bs; }
   setActive(i) { this.active = i; this.world.tokens.forEach((tk, k) => { tk.arrow.visible = i === k; }); }
 
   // ------------------------------------------------------------------ hulpjes: tijd, tweens, invoer
@@ -136,12 +136,14 @@ export class BoardMode {
     keys.push('back'); opts.push({ label: '↩ Terug naar de Speelhal' });
     const card = h('div', { class: 'card bd-card bd-grid' },
       h('h2', {}, '🎉 Het Feestbord!'),
-      h('p', { style: { textAlign: 'center' }, html: N === 3
+      h('p', { style: { textAlign: 'center' }, html: N === 4
+        ? `<b>${NAMES[0]}</b>, <b>${NAMES[1]}</b>, <b>${NAMES[2]}</b> en <b>${NAMES[3]}</b> racen over het feesteiland: dobbel om de beurt, hop over de vakjes en verzamel <b>🏆 Trofeeën</b>. Na elke ronde volgt een <b>MINI-SPEL</b> uit de Speelhal: met zijn vieren (of 2 tegen 2), of een duel waarbij de andere twee als toeschouwers raden wie wint (+${D.CFG.spectBonus} munten)!`
+        : N === 3
         ? `<b>${NAMES[0]}</b>, <b>${NAMES[1]}</b> en <b>${NAMES[2]}</b> racen over het feesteiland: dobbel om de beurt, hop over de vakjes en verzamel <b>🏆 Trofeeën</b>. Na elke ronde volgt een <b>MINI-SPEL</b> uit de Speelhal: een 3-speler-spel, of een duel waarbij de derde als toeschouwer raadt wie wint (+${D.CFG.spectBonus} munten)!`
         : `<b>${NAMES[0]}</b> en <b>${NAMES[1]}</b> racen over het feesteiland: dobbel om de beurt, hop over de vakjes en verzamel <b>🏆 Trofeeën</b>. Na elke ronde volgt een <b>MINI-DUEL</b> uit de Speelhal!` }),
-      h('div', { class: 'bd-keys' + (N === 3 ? ' k3' : '') }, ...pids().map((i) => cvar(h('div', { html: `<b>${NAMES[i]}</b>: <kbd>${klabel(i).a}</kbd> stop de dobbelsteen (timing!) · <kbd>${klabel(i).b}</kbd> item gebruiken · <kbd>${klabel(i).move}</kbd> route kiezen` }), pcss(i)))),
+      h('div', { class: 'bd-keys' + (N === 3 ? ' k3' : N === 4 ? ' k4' : '') }, ...pids().map((i) => cvar(h('div', { html: `<b>${NAMES[i]}</b>: <kbd>${klabel(i).a}</kbd> stop de dobbelsteen (timing!) · <kbd>${klabel(i).b}</kbd> item gebruiken · <kbd>${klabel(i).move}</kbd> route kiezen` }), pcss(i)))),
       h('div', { class: 'bd-legend', html: this.legendHtml() }),
-      h('p', { class: 'small-note', html: `Winnen: de meeste 🏆 (${D.CFG.trophyPrice} munten, achterstaanders krijgen korting), dan de meeste munten, dan het lot. Beloning: heitjes voor jullie samen!${N === 3 ? ' Wie achterstaat krijgt hulp van de Feestfee!' : ''} · <kbd>Esc</kbd> = pauze` }));
+      h('p', { class: 'small-note', html: `Winnen: de meeste 🏆 (${D.CFG.trophyPrice} munten, achterstaanders krijgen korting), dan de meeste munten, dan het lot. Beloning: heitjes voor jullie samen!${N >= 3 ? ' Wie achterstaat krijgt hulp van de Feestfee!' : ''} · <kbd>Esc</kbd> = pauze` }));
     const ch = new Chooser({ who: -1, options: opts, plain: true, host: card }); this.chooser = ch; this.wait = { kind: 'intro', n: opts.length };
     const el = ui.overlay(card, 'clear'); el.style.background = 'rgba(20,8,40,.35)'; el.style.alignItems = 'flex-start'; el.style.paddingTop = '2vh';
     const i = await ch.promise; this.chooser = null; this.wait = null; el.remove(); const k = keys[i];
@@ -151,7 +153,7 @@ export class BoardMode {
   }
   async helpCard() {
     const card = h('div', { class: 'card bd-card' }, h('h2', {}, 'Hoe werkt het Feestbord?'),
-      h('p', { html: `Elke ronde dobbelt iedereen één keer. Druk op je actieknop om de draaiende dobbelsteen te <b>stoppen</b>: mik op een hoog getal! Met je B-knop gebruik je eerst een <b>item</b> (🎲 dubbel, 👟 snelschoen, 🌀 teleporteer, 🍌 banaan-val, 🛡️ schild). Na ieders beurt volgt een <b>${this.n === 3 ? 'mini-spel' : 'mini-duel'}</b>: winnaar +${D.CFG.duelWin} munten, verliezer +${D.CFG.duelLose}.${this.n === 3 ? ` Bij een duel raadt de derde speler wie wint: goed geraden is +${D.CFG.spectBonus} munten. Een 3-speler-spel geeft ${D.PLACE_PTS.join(' / ')} munten voor plek 1 / 2 / 3.` : ''}` }),
+      h('p', { html: `Elke ronde dobbelt iedereen één keer. Druk op je actieknop om de draaiende dobbelsteen te <b>stoppen</b>: mik op een hoog getal! Met je B-knop gebruik je eerst een <b>item</b> (🎲 dubbel, 👟 snelschoen, 🌀 teleporteer, 🍌 banaan-val, 🛡️ schild). Na ieders beurt volgt een <b>${this.n >= 3 ? 'mini-spel' : 'mini-duel'}</b>: winnaar +${D.CFG.duelWin} munten, verliezer +${D.CFG.duelLose}.${this.n === 3 ? ` Bij een duel raadt de derde speler wie wint: goed geraden is +${D.CFG.spectBonus} munten. Een 3-speler-spel geeft ${D.PLACE_PTS.join(' / ')} munten voor plek 1 / 2 / 3.` : this.n === 4 ? ` Bij een duel raden de andere twee wie wint: goed geraden is +${D.CFG.spectBonus} munten. Een spel met zijn vieren geeft ${D.PLACE_PTS4.join(' / ')} munten voor plek 1 t/m 4; bij een teamspel krijgt elk lid van het winnende team +${D.CFG.duelWin} en van het andere team +${D.CFG.duelLose}.` : ''}` }),
       h('div', { class: 'bd-legend', html: this.legendHtml() }),
       h('p', { class: 'small-note', html: 'Drukken op een actieknop sluit dit scherm.' }));
     await this.modalCard(card);
@@ -325,7 +327,7 @@ export class BoardMode {
   }
   async party(i) {
     const w = this.world, os = D.others(this.B, i); audio.sfx('win'); this.addCoins(i, 4); os.forEach((k) => this.addCoins(k, 2)); w.tokens.forEach((tk) => { tk.c.pose = 'dance'; this.confetti(tk.pos.clone().add(new THREE.Vector3(0, 2, 0)), 40); });
-    await this.say('⭐ FEEST!', `${pick(D.PARTY_LINES)} ${this.cssName(i)} +4, ${os.map((k) => this.cssName(k)).join(' en ')} +2.`, { icon: '⭐', sec: 2.8 }); w.tokens.forEach((tk) => { tk.c.pose = 'idle'; }); return {};
+    await this.say('⭐ FEEST!', `${pick(D.PARTY_LINES)} ${this.cssName(i)} +4, ${D.joinList(os.map((k) => this.cssName(k)))} +2.`, { icon: '⭐', sec: 2.8 }); w.tokens.forEach((tk) => { tk.c.pose = 'idle'; }); return {};
   }
   async shop(i) {
     const B = this.B, p = B.players[i]; this.camFollow(this.world.tokens[i].pos, 0.8); audio.sfx('bell');
@@ -363,8 +365,8 @@ export class BoardMode {
   async chanceCard(i) {
     const B = this.B, p = B.players[i], w = this.world; const c = (this.force && this.force.card && D.CARDS.find((e) => e.id === this.force.card)) || D.drawCard(B, i); audio.sfx('bell');
     // doelwit onder de anderen (bij 2 spelers: de ander): ruilen/roven = rijkste, cadeau = armste, taart = koploper
-    const tid = D.pickTarget(B, i, { swap: 'rich', robber: 'rich', give: 'poor', pie: 'lead' }[c.id] || 'rand'), o = B.players[tid], three = B.players.length === 3;
-    await this.say(`${c.icon} ${c.title}`, (three && c.text3 ? c.text3 : c.text).replace(/\{o\}/g, this.cssName(tid)), { icon: '❓', sec: 3, color: '#2fc79a' });
+    const tid = D.pickTarget(B, i, { swap: 'rich', robber: 'rich', give: 'poor', pie: 'lead' }[c.id] || 'rand'), o = B.players[tid];
+    await this.say(`${c.icon} ${c.title}`, D.textFor(c, B.players.length).replace(/\{o\}/g, this.cssName(tid)), { icon: '❓', sec: 3, color: '#2fc79a' });
     switch (c.id) {
       case 'egg': this.addCoins(i, 4); await this.sleep(0.7); break;
       case 'duck': await this.loseCoins(i, 2); break;
@@ -390,7 +392,7 @@ export class BoardMode {
     const B = this.B, p = B.players[i], w = this.world; const ev = (this.force && this.force.deur && D.DEUR_EVENTS.find((e) => e.id === this.force.deur)) || D.drawDeur(B, i);
     this.camFollow(w.deurOut, 0.75); await this.sleep(0.4); audio.sfx('creak', { vol: 0.35, rate: 1.5 }); w.openDeur(true, false); await this.sleep(1.1);
     w.openDeur(true, true); await this.sleep(0.9); audio.sfx('bell', { vol: 0.5 });
-    await this.say(`🚪 ${ev.title}`, (B.players.length === 3 && ev.text3) || ev.text, { icon: '🚪', sec: 3.2, color: '#8a5ad8' });
+    await this.say(`🚪 ${ev.title}`, D.textFor(ev, B.players.length), { icon: '🚪', sec: 3.2, color: '#8a5ad8' });
     let again = false;
     switch (ev.id) {
       case 'swap': {
@@ -415,22 +417,27 @@ export class BoardMode {
 
   // ------------------------------------------------------------------ duels
   duelId() { return D.pickDuelId(this.app, { isUnlocked, ARCADE_HALLS }, this.B.lastDuels); }
-  partyId() { return D.pickPartyId(this.app, { isUnlocked, ARCADE_HALLS }, this.B.lastDuels); }
+  partyId(n = 3) { return D.pickPartyId(this.app, { isUnlocked, ARCADE_HALLS }, this.B.lastDuels, n); }
   async tileDuel(i) {
-    const B = this.B; const id = this.duelId(); const def = id && this.app.games[id]; const three = B.players.length === 3;
+    const B = this.B; const id = this.duelId(); const def = id && this.app.games[id]; const multi = B.players.length >= 3;
     if (!def) { await this.say('🎪 Duel-vakje', 'Er staan geen duels aan, dus jullie dansen maar een rondje. Iedereen +2 munten.', { icon: '🎪', sec: 2.4 }); B.players.forEach((q, k) => this.addCoins(k, 2)); return {}; }
     let opp = 1 - i;
-    if (three) {   // bij 3 spelers kiest de uitdager zijn tegenstander; de derde kijkt toe en voorspelt
-      const os = D.others(B, i); const c = await this.choose(i, '🎪 Wie daag je uit?', os.map((k) => ({ label: NAMES[k] })), { sub: 'De derde kijkt toe en raadt wie wint.' }); opp = os[c];
+    if (multi) {   // bij 3 of 4 spelers kiest de uitdager zijn tegenstander; de rest kijkt toe en voorspelt
+      const os = D.others(B, i); const c = await this.choose(i, '🎪 Wie daag je uit?', os.map((k) => ({ label: NAMES[k] })), { sub: os.length > 2 ? 'De anderen kijken toe en raden wie wint.' : 'De derde kijkt toe en raadt wie wint.' }); opp = os[c];
     }
     await this.say('🎪 DUEL!', `${this.cssName(i)} daagt ${this.cssName(opp)} uit voor <b>${def.icon || ''} ${def.name}</b>! Winnaar +${D.CFG.tileWin} munten en misschien een Trofee!`, { icon: '🎪', sec: 3, color: '#ff8a2a' });
     const pd = { kind: 'tile', who: i, id };
-    if (three) { pd.players = [i, opp].sort((x, y) => x - y); pd.spec = [0, 1, 2].find((k) => !pd.players.includes(k)); pd.pred = await this.predict(pd.spec, pd.players); }
+    if (multi) {
+      pd.players = [i, opp].sort((x, y) => x - y); const specs = B.players.map((q, k) => k).filter((k) => !pd.players.includes(k));
+      if (specs.length === 1) { pd.spec = specs[0]; pd.pred = await this.predict(pd.spec, pd.players); }
+      else { pd.specs = specs; pd.preds = await this.predictMany(specs, pd.players); }
+    }
     B.pendingDuel = pd; await this.launchDuel(id); return { duel: true };
   }
   async roundDuel() {
     const B = this.B; this.setActive(null); this.camOverview();
     if (B.players.length === 3) return this.roundMini3();
+    if (B.players.length >= 4) return this.roundMini4();
     const id = this.duelId(); const def = id && this.app.games[id];
     if (!def) { await this.say('🎪 Mini-duel overgeslagen', 'Geen duels beschikbaar (alles staat uit in de Speelhal). Iedereen +3 munten.', { sec: 2.4 }); this.addCoins(0, 3); this.addCoins(1, 3); this.nextRound(); return; }
     this.world.tokens.forEach((tk) => { tk.c.pose = 'wave'; }); audio.sfx('bell');
@@ -442,7 +449,7 @@ export class BoardMode {
   // De toeschouwer wisselt elke ronde (ronde 1: Wes, 2: Jor, 3: Juul, ...), zodat iedereen even vaak kijkt.
   async roundMini3() {
     const B = this.B; const spec = (B.round - 1) % 3, pair = [0, 1, 2].filter((k) => k !== spec);
-    const pid = this.partyId(); const id = pid || this.duelId(); const def = id && this.app.games[id];
+    const pid = this.partyId(3); const id = pid || this.duelId(); const def = id && this.app.games[id];
     if (!def) { await this.say('🎪 Mini-spel overgeslagen', 'Geen spellen beschikbaar (alles staat uit in de Speelhal). Iedereen +3 munten.', { sec: 2.4 }); B.players.forEach((q, k) => this.addCoins(k, 3)); this.nextRound(); return; }
     this.world.tokens.forEach((tk) => { tk.c.pose = 'wave'; }); audio.sfx('bell');
     if (pid) {
@@ -455,31 +462,67 @@ export class BoardMode {
     }
     await this.launchDuel(id);
   }
-  // Toeschouwer-voorspelling (4 s): A / links = de linker speler, B / rechts = de rechter speler. Geeft het gekozen spelers-id of null.
-  predict(spec, pair) {
-    const hud = this.hud; const opts = pair.map((k, q) => cvar(h('div', { class: 'bdp-opt', onClick: () => this.predPick(q) }, NAMES[k], h('small', {}, q ? `${klabel(spec).b} of ▶` : `${klabel(spec).a} of ◀`)), pcss(k)));
-    const bar = h('i'); const el = cvar(h('div', { class: 'bd-pred' }, h('h3', {}, `🔮 ${NAMES[spec]}: wie wint?`),
-      h('p', { html: `Jij kijkt toe! Raad de winnaar: goed geraden = <b>+${D.CFG.spectBonus} munten</b>.` }), h('div', { class: 'bdp-row' }, ...opts), h('div', { class: 'bdp-tm' }, bar)), pcss(spec));
-    hud.root.append(el); audio.sfx('select');
-    return new Promise((res) => { this.pred = { spec, pair, pick: null, t: 4, since: 0, age: 0, el, opts, bar, res }; this.wait = { kind: 'predict', who: spec }; });
+  // Ronde-afsluiting met 4 spelers: bij voorkeur een spel dat alle vier aankunnen (teamspel = 2 tegen 2), anders een 1-tegen-1-duel waarbij de andere
+  // twee toekijken en voorspellen (snel, geen halve finales). Het duel-paar wisselt per ronde (D.PAIRS4), zodat iedereen even vaak speelt.
+  async roundMini4() {
+    const B = this.B; const all = [0, 1, 2, 3];
+    const pid = this.partyId(4); const id = pid || this.duelId(); const def = id && this.app.games[id];
+    if (!def) { await this.say('🎪 Mini-spel overgeslagen', 'Geen spellen beschikbaar (alles staat uit in de Speelhal). Iedereen +3 munten.', { sec: 2.4 }); B.players.forEach((q, k) => this.addCoins(k, 3)); this.nextRound(); return; }
+    this.world.tokens.forEach((tk) => { tk.c.pose = 'wave'; }); audio.sfx('bell');
+    if (pid) {
+      const teams = def.teams ? splitTeams(4) : null;   // slots = spelers-id's (de harness krijgt alle vier in volgorde)
+      const t = teams ? teams.map((tm) => D.joinList(tm.map((k) => this.cssName(k)))) : null;
+      await this.say(`🎪 MINI-SPEL! (ronde ${B.round}/${B.rounds})`, teams
+        ? `Tijd voor <b>${def.icon || ''} ${def.name}</b> in teams! 🤝 ${t[0]} <b>tegen</b> ${t[1]}. Elk lid van het winnende team +${D.CFG.duelWin} munten, het andere team +${D.CFG.duelLose}.`
+        : `Tijd voor <b>${def.icon || ''} ${def.name}</b> met zijn vieren! Plek 1: +${D.PLACE_PTS4[0]} munten, plek 2: +${D.PLACE_PTS4[1]}, plek 3: +${D.PLACE_PTS4[2]}, plek 4: +${D.PLACE_PTS4[3]}.`, { icon: '🎪', sec: 3.2, color: '#ff8a2a' });
+      this.world.tokens.forEach((tk) => { tk.c.pose = 'idle'; }); B.pendingDuel = { kind: 'round', id, party: true, players: all, teams };
+    } else {
+      const pair = D.roundPair4(B.round), specs = all.filter((k) => !pair.includes(k));
+      await this.say(`🎪 MINI-DUEL! (ronde ${B.round}/${B.rounds})`, `${this.cssName(pair[0])} tegen ${this.cssName(pair[1])} in <b>${def.icon || ''} ${def.name}</b>! Winnaar +${D.CFG.duelWin}, verliezer +${D.CFG.duelLose}. ${D.joinList(specs.map((k) => this.cssName(k)))} kijken toe en raden wie wint: goed = +${D.CFG.spectBonus} munten!`, { icon: '🎪', sec: 3.4, color: '#ff8a2a' });
+      this.world.tokens.forEach((tk) => { tk.c.pose = 'idle'; }); const preds = await this.predictMany(specs, pair);
+      B.pendingDuel = { kind: 'round', id, players: pair, specs, preds };
+    }
+    await this.launchDuel(id);
   }
-  predPick(q) { const d = this.pred; if (!d || d.done) return; d.pick = q; d.since = 0; d.opts.forEach((e, k) => e.classList.toggle('on', k === q)); audio.sfx('click'); }
+  // Toeschouwer-voorspelling (4 s): A / links = de linker speler, B / rechts = de rechter speler. Geeft het gekozen spelers-id of null.
+  predict(spec, pair) { return this.predictMany([spec], pair).then((r) => r[spec] ?? null); }
+  // Meerdere toeschouwers tegelijk (bij 4 spelers twee): elk met eigen toetsen. Geeft { spelersId: gekozen spelers-id | null }.
+  predictMany(specs, pair) {
+    const multi = specs.length > 1; const dur = multi ? 5 : 4;
+    const opts = pair.map((k, q) => {
+      const o = cvar(h('div', { class: 'bdp-opt', onClick: () => this.predPick(q, (this.pred && specs.find((s) => this.pred.picks[s] == null)) ?? specs[0]) }, NAMES[k], multi ? h('div', { class: 'bdp-who' }) : h('small', {}, q ? `${klabel(specs[0]).b} of ▶` : `${klabel(specs[0]).a} of ◀`)), pcss(k));
+      return o;
+    });
+    const bar = h('i');
+    const how = multi ? specs.map((sp) => `<b style="color:${DARK[sp]}">${NAMES[sp]}</b>: <kbd>${klabel(sp).a}</kbd>/◀ = links · <kbd>${klabel(sp).b}</kbd>/▶ = rechts`).join('<br>') : '';
+    const el = cvar(h('div', { class: 'bd-pred' }, h('h3', {}, `🔮 ${D.joinList(specs.map((k) => NAMES[k]))}: wie wint?`),
+      h('p', { html: multi ? `Jullie kijken toe! Raad de winnaar: goed geraden = <b>+${D.CFG.spectBonus} munten</b>.<br><small>${how}</small>` : `Jij kijkt toe! Raad de winnaar: goed geraden = <b>+${D.CFG.spectBonus} munten</b>.` }),
+      h('div', { class: 'bdp-row' }, ...opts), h('div', { class: 'bdp-tm' }, bar)), pcss(specs[0]));
+    this.hud.root.append(el); audio.sfx('select');
+    return new Promise((res) => { this.pred = { specs, spec: specs[0], pair, picks: {}, since: 0, t: dur, max: dur, age: 0, el, opts, bar, res }; this.wait = { kind: 'predict', who: specs[0], specs }; });
+  }
+  predPick(q, spec) {
+    const d = this.pred; if (!d || d.done) return; spec ??= d.spec; d.picks[spec] = q; d.since = 0;
+    if (d.specs.length === 1) d.opts.forEach((e, k) => e.classList.toggle('on', k === q));
+    else d.opts.forEach((e, k) => { e.classList.toggle('on', d.specs.some((sp) => d.picks[sp] === k)); const w = e.querySelector('.bdp-who'); if (w) { w.innerHTML = ''; d.specs.filter((sp) => d.picks[sp] === k).forEach((sp) => w.append(cvar(h('i', {}, NAMES[sp]), pcss(sp)))); } });
+    audio.sfx('click');
+  }
   tickPred(dt) {
-    const d = this.pred; if (!d) return; d.age += dt; d.t -= dt; d.bar.style.width = `${Math.max(0, d.t / 4) * 100}%`;
-    const p = PI()[d.spec];
-    if (d.age > 0.3 && p) { if (p.aP || p.leftP) this.predPick(0); else if (p.bP || p.rightP) this.predPick(1); }
-    if (d.pick != null) d.since += dt;
-    if (d.t <= 0 || (d.pick != null && d.since > 1.1)) { this.pred = null; this.wait = null; d.done = true; d.el.remove(); d.res(d.pick != null ? d.pair[d.pick] : null); }
+    const d = this.pred; if (!d) return; d.age += dt; d.t -= dt; d.bar.style.width = `${Math.max(0, d.t / d.max) * 100}%`;
+    for (const sp of d.specs) { const p = PI()[sp]; if (d.age > 0.3 && p) { if (p.aP || p.leftP) this.predPick(0, sp); else if (p.bP || p.rightP) this.predPick(1, sp); } }
+    const all = d.specs.every((sp) => d.picks[sp] != null); if (d.specs.some((sp) => d.picks[sp] != null)) d.since += dt;
+    if (d.t <= 0 || (all && d.since > 1.1)) { this.pred = null; this.wait = null; d.done = true; d.el.remove(); const out = {}; d.specs.forEach((sp) => { out[sp] = d.picks[sp] != null ? d.pair[d.picks[sp]] : null; }); d.res(out); }
   }
   async launchDuel(id) {
     const B = this.B; B.lastDuels = [...B.lastDuels, id].slice(-6); this.leaving = true; audio.sfx('powerup'); await ui.fade(1, 450); persist();
     const pd = B.pendingDuel, extra = { board: true, tourney: true, kind: pd.kind };
-    if (B.players.length === 3) extra.players = pd.players.slice();   // 2 of 3 spelers-id's; de harness vertaalt slots terug
+    if (B.players.length >= 3) extra.players = pd.players.slice();   // 2 tot 4 spelers-id's; de harness vertaalt slots terug
+    if (pd.teams) extra.teams = pd.teams.map((tm) => tm.slice());   // 2 tegen 2 (slots = id's in extra.players)
     this.app.playGame(id, { back: 'board', extra });
     await new Promise(() => {});
   }
   nextRound() { const B = this.B; B.round++; B.turn = 0; B.phase = B.round > B.rounds ? 'end' : 'turn'; this.hud.update(B, null); }
-  // comeback bij 3 spelers: wie duidelijk onderaan staat krijgt een troostprijs na het mini-spel
+  // comeback bij 3 of 4 spelers: wie duidelijk onderaan staat krijgt een troostprijs na het mini-spel
   async comfort() {
     const B = this.B; if (B.players.length < 3) return; const lo = D.lowest(B);
     if (lo == null || !D.isBehind(B, lo)) return;
@@ -489,8 +532,8 @@ export class BoardMode {
   async afterDuel(res) {
     const B = this.B, pd = B.pendingDuel; B.pendingDuel = null; const w = this.world;
     this.camBoth(0.9); this.hud.update(B, null);
-    if (pd.party) return this.afterParty(res, pd);
-    const ids = (res && res.ids) || pd.players || [0, 1], three = B.players.length === 3;
+    if (pd.party) return pd.teams ? this.afterTeams(res, pd) : this.afterParty(res, pd);
+    const ids = (res && res.ids) || pd.players || [0, 1], multi = B.players.length >= 3;
     let win = null;   // spelers-id van de winnaar (de harness levert winnerId; anders vertalen we de slot-winnaar)
     if (res && (res.pvp || res.ids)) { if (res.winnerId != null) win = res.winnerId; else if (res.winner != null) win = ids[res.winner] ?? null; }
     const lose = win == null ? null : ids.find((k) => k !== win);
@@ -500,7 +543,7 @@ export class BoardMode {
     const line = win == null ? 'Gelijkspel! Dat telt voor niemand. Behalve voor de dobbelsteen: die lacht.' : pick(D.WIN_LINES).replace('{w}', NAMES[win]).replace('{l}', NAMES[lose]);
     if (pd.kind === 'round') {
       const dw = D.CFG.duelWin, dl = D.CFG.duelLose;
-      if (win == null) { ids.forEach((k) => this.addCoins(k, 5)); await this.say('🤝 Gelijkspel', `${line} ${three ? 'Allebei' : 'Iedereen'} +5 munten.`, { sec: 2.6 }); }
+      if (win == null) { ids.forEach((k) => this.addCoins(k, 5)); await this.say('🤝 Gelijkspel', `${line} ${multi ? 'Allebei' : 'Iedereen'} +5 munten.`, { sec: 2.6 }); }
       else { this.addCoins(win, dw); this.addCoins(lose, dl); await this.say(`👑 ${NAMES[win]} wint!`, `${line} <b>+${dw}</b> munten voor ${this.cssName(win)}, <b>+${dl}</b> voor ${this.cssName(lose)}.`, { sec: 3.2 }); }
     } else {
       if (win == null) await this.say('🤝 Gelijkspel', line, { sec: 2.4 });
@@ -510,27 +553,56 @@ export class BoardMode {
         if (Math.random() < chance) { await this.say('🧚 Trofee-kans!', `De Trofee-fee zag het hele duel en geeft ${this.cssName(win)} een <b>gratis Trofee</b>!`, { icon: '🏆', sec: 3 }); B.players[win].trophies++; this.hud.update(B, null); audio.sfx('win'); this.confetti(w.tokens[win].pos.clone().add(new THREE.Vector3(0, 2, 0)), 80); await this.sleep(0.6); await this.moveTrophy(); }
       }
     }
-    // de toeschouwer die goed raadde krijgt een bonus
-    if (pd.pred != null && win != null && pd.pred === win && pd.spec != null) { this.addCoins(pd.spec, D.CFG.spectBonus); this.confetti(w.tokens[pd.spec].pos.clone().add(new THREE.Vector3(0, 2, 0)), 30); await this.say('🔮 Goed geraden!', `${this.cssName(pd.spec)} voorspelde ${this.cssName(win)} en had gelijk: <b>+${D.CFG.spectBonus}</b> munten voor de toeschouwer!`, { icon: '🔮', sec: 2.4 }); }
-    else if (pd.spec != null && pd.pred != null && win != null) await this.say('🔮 Net mis', `${this.cssName(pd.spec)} dacht dat ${this.cssName(pd.pred)} zou winnen. Volgende keer beter!`, { icon: '🔮', sec: 1.8 });
+    // de toeschouwer(s) die goed raadden krijgen een bonus (3 spelers: pd.spec/pd.pred; 4 spelers: pd.specs/pd.preds)
+    const specs = pd.specs || (pd.spec != null ? [pd.spec] : []), preds = pd.preds || (pd.spec != null ? { [pd.spec]: pd.pred } : {});
+    if (win != null && specs.length) {
+      const good = specs.filter((k) => preds[k] != null && preds[k] === win), bad = specs.filter((k) => preds[k] != null && preds[k] !== win);
+      if (good.length) {
+        good.forEach((k) => { this.addCoins(k, D.CFG.spectBonus); this.confetti(w.tokens[k].pos.clone().add(new THREE.Vector3(0, 2, 0)), 30); });
+        await this.say('🔮 Goed geraden!', good.length === 1 && specs.length === 1 ? `${this.cssName(good[0])} voorspelde ${this.cssName(win)} en had gelijk: <b>+${D.CFG.spectBonus}</b> munten voor de toeschouwer!` : `${D.joinList(good.map((k) => this.cssName(k)))} voorspelde${good.length > 1 ? 'n' : ''} ${this.cssName(win)} en had${good.length > 1 ? 'den' : ''} gelijk: <b>+${D.CFG.spectBonus}</b> munten voor ${good.length > 1 ? 'elk' : 'de toeschouwer'}!`, { icon: '🔮', sec: 2.4 });
+      }
+      if (bad.length) await this.say('🔮 Net mis', bad.length === 1 && specs.length === 1 ? `${this.cssName(bad[0])} dacht dat ${this.cssName(preds[bad[0]])} zou winnen. Volgende keer beter!` : `${D.joinList(bad.map((k) => `${this.cssName(k)} dacht ${this.cssName(preds[k])}`))}. Volgende keer beter!`, { icon: '🔮', sec: 1.8 });
+    }
     w.tokens.forEach((tk) => { tk.c.pose = 'idle'; });
     if (pd.kind === 'round') { await this.comfort(); this.nextRound(); } else { this.setActive(pd.who); this.endTurn(); }
   }
-  // uitslag van een 3-speler-spel: punten per plek (10 / 6 / 3), bij gelijke stand gedeeld
+  // uitslag van een spel voor alle spelers (3 of 4): punten per plek (10 / 6 / 3, bij vier 10 / 6 / 4 / 2), bij gelijke stand gedeeld
   async afterParty(res, pd) {
-    const B = this.B, w = this.world, ids = (res && res.ids) || [0, 1, 2];
+    const B = this.B, w = this.world, N = B.players.length, all = Array.from({ length: N }, (_, k) => k), ids = (res && res.ids) || all;
     const wid = res ? (res.winnerId != null ? res.winnerId : (res.winner != null ? ids[res.winner] : null)) : null;
-    let keys = [0, 1, 2].map((id) => { const sc = res && res.scoreById ? res.scoreById[id] : res && res.scoreArr ? res.scoreArr[ids.indexOf(id)] : undefined; return Number.isFinite(sc) ? sc : undefined; });
-    if (keys.every((k) => k === undefined)) keys = keys.map((_, id) => (id === wid ? 1 : 0));
-    else keys = keys.map((k, id) => (id === wid ? 1e9 : (k ?? -1e8)));
-    const { pts, place } = D.placePoints(keys); const order = [0, 1, 2].sort((a, b) => place[a] - place[b] || a - b);
-    order.forEach((k) => { const tk = w.tokens[k]; tk.c.pose = place[k] === 1 ? 'cheer' : place[k] === 3 ? 'sad' : 'idle'; });
+    const wids = res && Array.isArray(res.winnerIds) && res.winnerIds.length ? res.winnerIds : wid != null ? [wid] : [];
+    let keys = all.map((id) => { const sc = res && res.scoreById ? res.scoreById[id] : res && res.scoreArr ? res.scoreArr[ids.indexOf(id)] : undefined; return Number.isFinite(sc) ? sc : undefined; });
+    if (keys.every((k) => k === undefined) && res && Array.isArray(res.place) && res.place.length === N) keys = all.map((id) => N - res.place.indexOf(id));   // alleen een volgorde bekend
+    else if (keys.every((k) => k === undefined)) keys = keys.map((_, id) => (wids.includes(id) ? 1 : 0));
+    else keys = keys.map((k, id) => (wids.includes(id) ? 1e9 : (k ?? -1e8)));
+    const { pts, place } = D.placePoints(keys); const order = all.slice().sort((a, b) => place[a] - place[b] || a - b);
+    order.forEach((k) => { const tk = w.tokens[k]; tk.c.pose = place[k] === 1 ? 'cheer' : place[k] === N ? 'sad' : 'idle'; });
     const first = order.filter((k) => place[k] === 1); if (first.length === 1) B.duelsWon[first[0]]++;
     audio.sfx('win'); this.confetti(w.tokens[order[0]].pos.clone().add(new THREE.Vector3(0, 2, 0)), 70, { speed: 9 }); await this.sleep(0.8);
     order.forEach((k) => this.addCoins(k, pts[k]));
-    const lbl = ['🥇', '🥈', '🥉'], tie = new Set(place).size < 3;
+    const lbl = ['🥇', '🥈', '🥉', '4️⃣'], tie = new Set(place).size < N;
     const list = order.map((k) => `${lbl[place[k] - 1]} ${this.cssName(k)} <b>+${pts[k]}</b>`).join(' · ');
-    await this.say(first.length === 1 ? `👑 ${NAMES[first[0]]} wint!` : '🤝 Gedeelde winst!', `${tie ? 'Gelijke stand: de punten worden gedeeld. ' : pick(D.PARTY3_LINES).replace('{a}', NAMES[order[0]]).replace('{b}', NAMES[order[1]]).replace('{c}', NAMES[order[2]]) + ' '}<br>${list}`, { sec: 4 });
+    const fill = (t) => t.replace('{a}', NAMES[order[0]]).replace('{b}', NAMES[order[1]]).replace('{c}', NAMES[order[2]]).replace('{d}', NAMES[order[3]]);
+    await this.say(first.length === 1 ? `👑 ${NAMES[first[0]]} wint!` : '🤝 Gedeelde winst!', `${tie ? 'Gelijke stand: de punten worden gedeeld. ' : fill(pick(N >= 4 ? D.PARTY4_LINES : D.PARTY3_LINES)) + ' '}<br>${list}`, { sec: N >= 4 ? 4.4 : 4 });
+    w.tokens.forEach((tk) => { tk.c.pose = 'idle'; });
+    await this.comfort(); this.nextRound();
+  }
+  // uitslag van een teamspel (4 spelers, 2 tegen 2): elk lid van het winnende team +10, van het andere team +3; gelijkspel: iedereen +5
+  async afterTeams(res, pd) {
+    const B = this.B, w = this.world, N = B.players.length, all = Array.from({ length: N }, (_, k) => k);
+    const wids = res && Array.isArray(res.winnerIds) && res.winnerIds.length ? res.winnerIds.filter((k) => all.includes(k)) : res && res.winnerId != null ? [res.winnerId] : [];
+    const tm = (pd.teams || []).map((t) => t.slice()); const wTeam = wids.length ? tm.find((t) => wids.every((k) => t.includes(k))) : null;
+    const winners = wTeam ? wTeam.slice() : wids.slice(), losers = all.filter((k) => !winners.includes(k)), nm = (list) => D.joinList(list.map((k) => this.cssName(k)));
+    if (!winners.length) {
+      audio.sfx('good'); await this.sleep(0.8); all.forEach((k) => this.addCoins(k, 5));
+      await this.say('🤝 Gelijkspel', `Geen winnaar, dus <b>+5</b> munten voor iedereen. Teamwork was het in elk geval.`, { sec: 2.6 });
+    } else {
+      winners.forEach((k) => { B.duelsWon[k]++; w.tokens[k].c.pose = 'cheer'; }); losers.forEach((k) => { w.tokens[k].c.pose = 'sad'; });
+      audio.sfx('win'); this.confetti(w.tokens[winners[0]].pos.clone().add(new THREE.Vector3(0, 2, 0)), 70, { speed: 9 }); winners.slice(1).forEach((k) => this.confetti(w.tokens[k].pos.clone().add(new THREE.Vector3(0, 2, 0)), 40, { speed: 8 })); await this.sleep(0.8);
+      winners.forEach((k) => this.addCoins(k, D.CFG.duelWin)); losers.forEach((k) => this.addCoins(k, D.CFG.duelLose));
+      const line = pick(D.TEAM_LINES).replace('{w}', winners.map((k) => NAMES[k]).join(' & ')).replace('{l}', losers.map((k) => NAMES[k]).join(' & '));
+      await this.say(`👑 Team ${winners.map((k) => NAMES[k]).join(' & ')} wint!`, `${line} <b>+${D.CFG.duelWin}</b> munten voor ${nm(winners)}, <b>+${D.CFG.duelLose}</b> voor ${nm(losers)}.`, { sec: 3.6 });
+    }
     w.tokens.forEach((tk) => { tk.c.pose = 'idle'; });
     await this.comfort(); this.nextRound();
   }
@@ -542,26 +614,26 @@ export class BoardMode {
     if (P[win].trophies !== P[r1].trophies) why = 'meeste trofeeën'; else if (P[win].coins !== P[r1].coins) why = 'meeste munten'; else why = 'het lot (munt opgegooid!)';
     // podium: plek 1 (hoogst), 2 en 3
     const pod = new THREE.Group(); const px = 0, pz = 15.4;
-    const spots = N === 3 ? [[0, 1.7], [-3.3, 1.0], [3.3, 0.6]] : [[-1.9, 1.7], [1.9, 1.0]], cols = [0xffc21f, 0xb8c0d0, 0xcd7f32];
+    const spots = N >= 4 ? [[-1.65, 1.9], [-4.95, 1.35], [1.65, 0.95], [4.95, 0.55]] : N === 3 ? [[0, 1.7], [-3.3, 1.0], [3.3, 0.6]] : [[-1.9, 1.7], [1.9, 1.0]], cols = [0xffc21f, 0xb8c0d0, 0xcd7f32, 0x7a8aa8];
     const mk = (x, hgt, col, num) => { const m = mesh(new THREE.BoxGeometry(3, hgt, 3), mat(col), { pos: [x, hgt / 2, 0] }); pod.add(m); const s = numSprite(num, '#ffffff', 1.4); s.position.set(x, hgt + 0.2, 1.6); pod.add(s); };
     spots.forEach(([x, hh], r) => mk(x, hh, cols[r], String(r + 1))); pod.position.set(px, 0, pz); this.scene.add(pod);
-    this.cam = N === 3 ? { x: 0, y: 3.4, z: 12.6, d: 1.05, mode: 'follow' } : { x: 0, y: 3.4, z: 14.8, d: 0.85, mode: 'follow' };
-    if (N === 3) this.hud.root.style.visibility = 'hidden';   // bij 3 spelers ligt de eindkaart over de HUD heen
+    this.cam = N >= 4 ? { x: 0, y: 3.4, z: 12.2, d: 1.3, mode: 'follow' } : N === 3 ? { x: 0, y: 3.4, z: 12.6, d: 1.05, mode: 'follow' } : { x: 0, y: 3.4, z: 14.8, d: 0.85, mode: 'follow' };
+    if (N >= 3) this.hud.root.style.visibility = 'hidden';   // bij 3 of 4 spelers ligt de eindkaart over de HUD heen
     const toks = rank.map((k) => w.tokens[k]); toks.forEach((t) => { t.busy = true; }); const fr = toks.map((t) => t.pos.clone());
     const to = spots.map(([x, hh]) => new THREE.Vector3(px + x, hh, pz)); audio.sfx('whoosh');
     await this.tween(1.3, (k) => { toks.forEach((t, r) => { t.pos.lerpVectors(fr[r], to[r], easeIO(k)); t.y = Math.sin(k * Math.PI) * 4; t.c.air = k < 0.9; }); });
-    const poses = N === 3 ? ['cheer', 'wave', 'sad'] : ['cheer', 'sad'];
+    const poses = N >= 4 ? ['cheer', 'wave', 'idle', 'sad'] : N === 3 ? ['cheer', 'wave', 'sad'] : ['cheer', 'sad'];
     toks.forEach((t, r) => { t.y = 0; t.c.air = false; t.c.targetYaw = 0; t.c.group.rotation.y = 0; t.c.pose = poses[r]; t.arrow.visible = false; }); w.setHat(win, 'crown');
     audio.sfx('win'); ui.flash('#fff6c0', 300); this.finale = true;
-    const reward = (N === 3 ? 40 : 30) + 10 * P.reduce((q, p) => q + p.trophies, 0);   // gedeelde pot voor iedereen, niemand verliest
+    const base = 10 * (N + 1), reward = base + 10 * P.reduce((q, p) => q + p.trophies, 0);   // gedeelde pot voor iedereen, niemand verliest (30 / 40 / 50)
     const bs = this.fixStats(); bs.plays++; bs.wins[win]++; S.coins += reward; S.totalEarned += reward; persist();
     const el = h('div', { class: 'card bd-card bd-grid' });
     const add = (html) => { const d = h('div', { html }); el.append(d); audio.sfx('select'); return d; };
     const card = ui.overlay(el, 'clear'); card.style.alignItems = 'flex-start'; card.style.paddingTop = '1.5vh';
     el.append(h('h2', {}, '🎉 Eindstand!'));
     let row;
-    if (N === 3) {
-      const tbl = h('div', { class: 'bd-score3', html: `<div></div>${[0, 1, 2].map((i) => `<div class="nm" style="color:${DARK[i]}">${NAMES[i]}</div>`).join('')}` }); el.append(tbl);
+    if (N >= 3) {
+      const tbl = h('div', { class: 'bd-score3', html: `<div></div>${P.map((_, i) => `<div class="nm" style="color:${DARK[i]}">${NAMES[i]}</div>`).join('')}` }); tbl.style.gridTemplateColumns = `repeat(${N + 1},auto)`; el.append(tbl);
       row = (lab, vals, ic) => { tbl.insertAdjacentHTML('beforeend', `<div class="l">${ic} ${lab}</div>${vals.map((v) => `<div>${v}</div>`).join('')}`); audio.sfx('select'); };
     } else {
       const tbl = h('div', { class: 'bd-score', html: `<div class="n">${NAMES[0]}</div><div></div><div class="n b">${NAMES[1]}</div>` }); el.append(tbl);
@@ -571,9 +643,9 @@ export class BoardMode {
     row('Trofeeën', P.map((p) => p.trophies), '🏆'); await this.sleep(1.2);
     row('Munten', P.map((p) => p.coins), '🪙'); await this.sleep(1.2);
     if (why.startsWith('het lot')) { add(`<p style="text-align:center"><b>🎲 Helemaal gelijk! Het lot beslist...</b></p>`); await this.sleep(1.4); }
-    add(`<div class="bd-win"><span>👑</span>${NAMES[win]} wint het Feestbord!</div><p style="text-align:center">Reden: ${why}. ${N === 3 ? `🥈 ${NAMES[rank[1]]}: "Ik liet hem winnen." 🥉 ${NAMES[rank[2]]}: "Ik ook. Echt."` : `${NAMES[rank[1]]}: "Ik liet hem winnen."`}</p>`);
+    add(`<div class="bd-win"><span>👑</span>${NAMES[win]} wint het Feestbord!</div><p style="text-align:center">Reden: ${why}. ${N >= 4 ? `🥈 ${NAMES[rank[1]]}: "Ik liet hem winnen." 🥉 ${NAMES[rank[2]]}: "Ik ook. Echt." 4️⃣ ${NAMES[rank[3]]}: "Ik deed het expres."` : N === 3 ? `🥈 ${NAMES[rank[1]]}: "Ik liet hem winnen." 🥉 ${NAMES[rank[2]]}: "Ik ook. Echt."` : `${NAMES[rank[1]]}: "Ik liet hem winnen."`}</p>`);
     this.fireworks = true; await this.sleep(1.2);
-    add(`<p class="reward" style="text-align:center;font-size:24px">🪙 +${reward} heitjes voor jullie samen! <small style="font-size:13px;font-weight:400;opacity:.75">(${N === 3 ? 40 : 30} + 10 per Trofee)</small></p>`);
+    add(`<p class="reward" style="text-align:center;font-size:24px">🪙 +${reward} heitjes voor jullie samen! <small style="font-size:13px;font-weight:400;opacity:.75">(${base} + 10 per Trofee)</small></p>`);
     await this.sleep(0.6);
     const ch = new Chooser({ who: -1, plain: true, host: el, options: [{ label: '🎉 Nog een potje!' }, { label: '↩ Terug naar de Speelhal' }] }); this.chooser = ch; this.wait = { kind: 'end', n: 2 };
     const i = await ch.promise; this.chooser = null; this.wait = null; BOARD = null; this.leaving = true; this.finale = false;
@@ -615,6 +687,9 @@ export class BoardMode {
       this.tickTimers(dt); this.tickInput(dt); this.tickPred(dt); this.tickDice(dt);
       if (this.finale) { this.fxT -= dt; if (this.fxT <= 0) { this.fxT = this.fireworks ? 0.45 : 1.2; const p = new THREE.Vector3(rand(-9, 9), rand(6, 13), rand(8, 16)); this.fx.burst(p.x, p.y, p.z, { count: 46, colors: CONFETTI, speed: 8, size: 0.5, life: 1.5, gravity: 3, up: 0.6 }); audio.sfx('pop', { vol: 0.4, rate: 0.7 + Math.random() * 0.6 }); } }
       if (this.B && !this.finale) this.world.tokens.forEach((tk, k) => { if (!tk.busy && this.B.players[k]) tk.pos.lerp(this.spot(k, this.B.players[k].node), 1 - Math.exp(-9 * dt)); });
+      if (this.B && !this.finale && this.B.players.length >= 4) {   // bij 4 spelers: namen boven drie of vier poppetjes op één vakje om en om hoger, zodat ze elkaar niet afdekken
+        const ps = this.B.players; ps.forEach((p, k) => { const cnt = ps.filter((q) => q.node === p.node).length, idx = ps.slice(0, k).filter((q) => q.node === p.node).length, tk = this.world.tokens[k]; tk.lift = damp(tk.lift || 0, cnt >= 3 && idx % 2 ? 0.8 : 0, 10, dt); });
+      }
       this.world.update(dt); this.fx.update(dt); this.texts.update(dt);
     }
     if (this.hud && this.B) this.hud.update(this.B, this.active);

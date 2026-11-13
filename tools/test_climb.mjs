@@ -3,14 +3,17 @@
 //   sim    : laat bots in de pure natuurkunde (zonder lava/gevaren) naar de top klimmen: alle twists-instellingen, beide torens
 //   game   : speelt het echte spel (headless, versneld) met bots: finishPvp wordt altijd aangeroepen, beide spelers kunnen winnen, tijdslimiet
 //   shots  : screenshots (/tmp/climb_*.png)
+//   game4  : vier spelers (?players=4, twee per toren): alle spelers krijgen een bot, uitslag + place volgen, ook 'alleen één klimt' en 'niemand beweegt'
 import * as L from '../src/games/climb_layout.js';
 import { makeBot, botInput } from '../src/games/climb_bot.js';
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath, BROWSER_ARGS } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const argv = process.argv.slice(2);
 const twistArg = (argv.find((a) => a.startsWith('twist=')) || '').slice(6);
 const scen = argv.filter((a) => !a.includes('=')).length ? argv.filter((a) => !a.includes('=')) : ['layout', 'sim', 'game'];
+if (!process.env.NOEXIT) process.on('exit', () => {});
 let failures = 0;
 const check = (ok, msg) => { console.log((ok ? '  OK   ' : '  FAIL ') + msg); if (!ok) failures++; };
 
@@ -66,20 +69,20 @@ async function startServer() {
   });
   await new Promise((r) => server.listen(0, r)); port = server.address().port;
 }
-async function open(twist = 'none', quality = 'low') {
+async function open(twist = 'none', quality = 'low', NP = 2) {
   if (!server) await startServer();
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: chromePath(), args: BROWSER_ARGS });
   const page = await browser.newPage({ viewport: { width: 1000, height: 600 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=climb&quality=${quality}&twist=${twist}`);
+  await page.goto(`http://localhost:${port}/?game=climb&quality=${quality}&twist=${twist}${NP > 2 ? '&players=' + NP : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
   });
@@ -88,14 +91,14 @@ async function open(twist = 'none', quality = 'low') {
     const { makeBot, botInput } = await import('/src/games/climb_bot.js');
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input, dbg = inst.dbg;
     let s = 4242; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    window.__bots = [makeBot(0, { rnd }), makeBot(1, { rnd })]; window.__idle = [false, false]; window.__flip = [false, false];
-    const out = [{}, {}];
+    const NN = m.ids.length; window.__bots = m.ids.map((_, i) => makeBot(i % 2, { rnd })); window.__idle = m.ids.map(() => false); window.__flip = m.ids.map(() => false);
+    const out = m.ids.map(() => ({}));
     window.__run = (n, stop) => {
       const dt = 1 / 60;
       for (let q = 0; q < n && (!m.finished || window.__post); q++) {
         const st = dbg.state(); if (stop && stop(st)) return true;
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
+        for (let i = 0; i < NN; i++) {
+          const v = inp.virtual[m.ids[i]]; v.a = false; v.b = false; v.x = 0; v.y = 0;
           if (window.__bots[i].pushNow) { window.__bots[i].pushNow = false; v.b = true; }
           if (window.__idle[i] || m.state !== 'play') continue;
           const pl = dbg.players[i].pl; botInput(window.__bots[i], pl, dbg.P, st.T, dt, out[i], { dbg });
@@ -113,9 +116,9 @@ async function open(twist = 'none', quality = 'low') {
 const S = (page) => page.evaluate(() => window.__app.mode.instance.dbg.state());
 const hookFinish = (page) => page.evaluate(() => { window.__fin = null; const m = window.__app.mode; const orig = m.finishPvp.bind(m); let called = 0; m.finishPvp = (res) => { called++; window.__fin = { res, called, T: m.instance.dbg.state().T }; return orig(res); }; });
 
-async function gameRun(label, { twist = 'none', idle = [false, false], flip = [false, false], maxFrames = 60 * 130, prep } = {}) {
+async function gameRun(label, { twist = 'none', idle = [false, false], flip = [false, false], maxFrames = 60 * 130, prep, NP = 2 } = {}) {
   console.log(`\n== ${label} (twist ${twist})`);
-  const { browser, page, errors } = await open(twist);
+  const { browser, page, errors } = await open(twist, 'low', NP);
   await hookFinish(page);
   await page.evaluate(([i, f]) => { window.__idle = i; window.__flip = f; }, [idle, flip]);
   if (prep) await prep(page);
@@ -134,6 +137,22 @@ if (scen.includes('game')) {
   const a = await gameRun('alleen Wes klimt', { idle: [false, true] }); check(a.fin && a.fin.res.winner === 0, `Wes wint (${a.fin && a.fin.res.winner})`);
   const b = await gameRun('alleen Jor klimt', { idle: [true, false] }); check(b.fin && b.fin.res.winner === 1, `Jor wint (${b.fin && b.fin.res.winner})`);
   const c = await gameRun('niemand beweegt (tijdslimiet / lava)', { idle: [true, true] }); check(c.fin && c.fin.called === 1, 'einde ook zonder activiteit');
+}
+if (scen.includes('game4')) {
+  const F = false, T_ = true;
+  const place = (r) => (r.fin && r.fin.res.place) || [];
+  const okPlace = (r) => place(r).length === 4 && new Set(place(r)).size === 4;
+  const r1 = await gameRun('4 bots', { NP: 4 });
+  check(r1.fin && r1.fin.T < 85, `potje duurt ${r1.fin ? r1.fin.T.toFixed(1) : '-'} s (< 85)`); check(okPlace(r1), `place compleet (${place(r1)})`);
+  const winners = new Set(r1.fin && r1.fin.res.winner != null ? [r1.fin.res.winner] : []);
+  for (let w = 0; w < 4; w++) {
+    const idle = [T_, T_, T_, T_]; idle[w] = F;
+    const r = await gameRun(`alleen speler ${w} klimt`, { NP: 4, idle });
+    check(r.fin && r.fin.res.winner === w, `speler ${w} wint (${r.fin && r.fin.res.winner})`); check(okPlace(r), `place compleet (${place(r)})`);
+    if (r.fin && r.fin.res.winner != null) winners.add(r.fin.res.winner);
+  }
+  check(winners.size === 4, `alle 4 spelers kunnen winnen (${[...winners].sort()})`);
+  const c = await gameRun('niemand beweegt (tijdslimiet / lava)', { NP: 4, idle: [T_, T_, T_, T_] }); check(c.fin && c.fin.called === 1 && okPlace(c), 'einde ook zonder activiteit');
 }
 if (scen.includes('twists')) {
   for (const t of ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman']) {

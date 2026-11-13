@@ -8,6 +8,7 @@ import { buildClimbWorld } from './climb_world.js';
 
 // De Torenklim — race naar de Kasteeltop op twee naast elkaar liggende torens, terwijl de lava stijgt.
 //   links/rechts = lopen · A = springen (in de lucht nog eens = dubbele sprong) · B = duw je broer van zijn platform!
+//   4 spelers: twee per toren (slot 0+2 links, slot 1+3 rechts), vrij voor allen: wie het eerst boven is wint, jullie kunnen elkaar ook van het platform duwen.
 
 const TIME_LIMIT = 80;
 const LAVA_START = -7;
@@ -20,15 +21,17 @@ export default {
   giver: 'Torenwachter Toon',
   icon: '🧗',
   mode: 'pvp',
+  players: [2, 4],                       // 2 = elk een toren; 4 = twee per toren (3 niet: dan staat er één alleen op een toren)
   time: 70,
   music: 'game_fast',
-  blurb: 'Wie plant als eerste de vlag op de <b>Kasteeltop</b>? Spring omhoog langs vliegende stenen, wolken en trampolines, maar pas op voor <b>stekels</b>, <b>rollende tonnen</b> en een <b>vuurspuwende draak</b>. Onderin stijgt de <b>lava</b>! Duw je broer van zijn platform af voor de winst.',
+  blurb: 'Wie plant als eerste de vlag op de <b>Kasteeltop</b>? Spring omhoog langs vliegende stenen, wolken en trampolines, maar pas op voor <b>stekels</b>, <b>rollende tonnen</b> en een <b>vuurspuwende draak</b>. Onderin stijgt de <b>lava</b>! Duw je broer van zijn platform af voor de winst. Met 4 spelers staan er twee op elke toren en wint wie het eerst boven is.',
   controls: ['{move} lopen', '{a} springen (in de lucht nog eens = dubbele sprong)', '{b} duw je broer weg! (even wachten tussen duwen)'],
   tip: 'Pak de <b>gouden schoen</b> voor extra hoge sprongen. Je mag ook naar het midden springen om je broer te duwen. Valt je broer in de lava? Dan krijgt hij een tijdstraf.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
-    const names = players.map((p) => p.name);
+    const names = players.map((p) => p.name), N = players.length;
+    const ZS = [0.3, -0.15, 0.75, -0.6];                 // diepte per slot (torengenoten staan niet in elkaar)
     ctx.lights('day', { shadow: 30, center: [0, 8, 0], fogNear: 90, fogFar: 260 });
     let sun = null; scene.traverse((o) => { if (o.isDirectionalLight) sun = o; });
     camera.fov = 50; camera.updateProjectionMatrix();
@@ -47,15 +50,16 @@ export default {
       const aura = new THREE.Mesh(new THREE.SphereGeometry(1.5, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.18, depthWrite: false, blending: THREE.AdditiveBlending })); aura.position.y = 1.0 * size; aura.visible = false; holder.add(aura);
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: canvasTex(256, 96, (g, w, hh) => { g.font = 'bold 56px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(10,10,30,.9)'; g.lineJoin = 'round'; g.strokeText(pp.name, w / 2, hh / 2); g.fillStyle = pp.css; g.fillText(pp.name, w / 2, hh / 2); }), transparent: true, depthTest: false }));
       tag.scale.set(2.4, 0.9, 1); tag.renderOrder = 15; scene.add(tag);
-      const st = LY.newPlayer(i);
-      return { i, name: pp.name, css: pp.css, color: PLAYER_COLORS[i], pl: st, ch, holder, boots, aura, tag, size, sp, z: i ? -0.15 : 0.3, pushT: 0, pushCd: 0, inv: 0, knockInv: 0, dead: false, deadT: 0, falls: 0, pushes: 0, hits: 0, blink: 0, burnT: 0, squash: 0, spawnT: 0, maxY: 0, height: 0, hFloor: 0, lastTX: 0, win: false };
+      const tower = i % 2, st = LY.newPlayer(tower);
+      return { i, tower, xoff: N > 2 ? (i < 2 ? -1.6 : 1.6) : 0, name: pp.name, css: pp.css, color: PLAYER_COLORS[i], pl: st, ch, holder, boots, aura, tag, size, sp, z: N === 2 ? (i ? -0.15 : 0.3) : ZS[i], pushT: 0, pushCd: 0, inv: 0, knockInv: 0, dead: false, deadT: 0, falls: 0, pushes: 0, hits: 0, blink: 0, burnT: 0, squash: 0, spawnT: 0, maxY: 0, height: 0, hFloor: 0, lastTX: 0, win: false };
     });
-    pl.forEach((p) => { p.pl.x = LY.towerX(p.i, 0); p.pl.y = 0; p.pl.ground = layout[0]; p.pl.lastStatic = layout[0]; });
+    pl.forEach((p) => { p.pl.x = LY.towerX(p.tower, p.xoff); p.pl.y = 0; p.pl.ground = layout[0]; p.pl.lastStatic = layout[0]; });
 
     // ---------------- toestand ----------------
     let T = 0, simT = 0, done = false, state = 'race', endT = 0, winner = null, lavaY = LAVA_START, lavaMult = 1, bestY = 0, lastProgT = 0, stallMsg = 0, introT = 0, camInit = false;
     const textUp = (t, x, y, z, c = '#ffe14a', s = 1) => fx.texts.add(t, x, y, z, c, s);
-    const other = (p) => pl[1 - p.i];
+    const hiOf = () => pl.reduce((a, b) => (b.pl.y > a.pl.y ? b : a), pl[0]), loOf = () => pl.reduce((a, b) => (b.pl.y < a.pl.y ? b : a), pl[0]);
+    const maxH = () => Math.max(...pl.map((p) => p.height));
 
     // ---------------- hulp: schade en duwen ----------------
     function knock(p, dirX, vx, vy, stun, why, color = '#ff7a5a') {
@@ -73,12 +77,18 @@ export default {
     function doPushes(pushers) {
       const hits = [];
       for (const a of pushers) {
-        const b = other(a), A = a.pl, B = b.pl;
+        const A = a.pl;
         a.pushCd = PUSH_CD; a.pushT = 0.3; a.ch.swing(); audio.sfx('swing', { vol: 0.5 }); A.vx += A.face * 2.2;
-        if (b.dead || b.knockInv > 0 || b.spawnT > 0) { a.pushCd = 0.7; continue; }
-        const dx = B.x - A.x, dy = B.y - A.y, reach = 2.0 * a.size + 0.55 * b.size;
-        if (dx * A.face >= -0.6 && Math.abs(dx) <= reach && Math.abs(dy) < 1.7 * Math.max(a.size, b.size) + 0.2) hits.push([a, b, Math.sign(dx) || A.face]);
-        else a.pushCd = 0.75;
+        // het dichtstbijzijnde doelwit binnen bereik (voor 2 spelers: gewoon de ander)
+        let best = null, bestD = 1e9, anyVuln = false;
+        for (const b of pl) {
+          if (b === a) continue; const B = b.pl;
+          if (b.dead || b.knockInv > 0 || b.spawnT > 0) continue;
+          anyVuln = true;
+          const dx = B.x - A.x, dy = B.y - A.y, reach = 2.0 * a.size + 0.55 * b.size;
+          if (dx * A.face >= -0.6 && Math.abs(dx) <= reach && Math.abs(dy) < 1.7 * Math.max(a.size, b.size) + 0.2 && Math.abs(dx) < bestD) { best = [a, b, Math.sign(dx) || A.face]; bestD = Math.abs(dx); }
+        }
+        if (best) hits.push(best); else a.pushCd = anyVuln ? 0.75 : 0.7;
       }
       for (const [a, b, dir] of hits) {
         const k = clamp(Math.pow(a.size / b.size, 0.5), 0.75, 1.5);
@@ -116,11 +126,13 @@ export default {
     // ---------------- lava ----------------
     function respawnPlatform(p) {
       const q = p.pl, last = q.lastStatic ? q.lastStatic.y0 : 0, minY = lavaY + 3.2;
-      const ok = layout.filter((r) => (r.tower === p.i || r.tower === 2) && !r.spikes && (r.type === 'stone' || r.type === 'bridge' || r.type === 'ground') && r.y0 >= minY && r.w >= 3);
+      const ok = layout.filter((r) => (r.tower === p.tower || r.tower === 2) && !r.spikes && (r.type === 'stone' || r.type === 'bridge' || r.type === 'ground') && r.y0 >= minY && r.w >= 3);
       let c = ok.filter((r) => r.y0 <= Math.max(last, minY) + 0.01);
       if (!c.length) c = ok.sort((a, b) => a.y0 - b.y0).slice(0, 1);
       return c.reduce((a, b) => (b.y0 > a.y0 ? b : a), c[0]);
     }
+    // spelers met de grootste hoogte (binnen 0,3 m): 1 = winnaar, meer = gelijkspel
+    function byHeight() { const m = maxH(); return pl.filter((q) => m - q.height < 0.3); }
     function burn(p) {
       if (p.dead || state !== 'race') return;
       p.dead = true; p.deadT = DEAD_TIME; p.falls++; const q = p.pl;
@@ -128,23 +140,23 @@ export default {
       fx.particles.burst(q.x, lavaY + 0.3, p.z, { count: 40, speed: 7, up: 1.8, life: 1.0, size: 0.6, colors: [0xff7a1a, 0xffe070, 0xff4a1a, 0x444444], gravity: 12 });
       textUp('PSSSSSST!', q.x, lavaY + 2.5, p.z, '#ff8a3a', 1.3); hud.toast(`🔥 ${p.name} valt in de lava!`, 1500);
       p.holder.visible = false; p.tag.visible = false;
-      if (pl.every((r) => r.dead)) endGame(pl[0].height >= pl[1].height ? (Math.abs(pl[0].height - pl[1].height) < 0.3 ? null : pl[0]) : pl[1], 'lava');
+      if (pl.every((r) => r.dead)) { const t = byHeight(); endGame(t.length > 1 ? (N === 2 ? null : t[0]) : t[0], 'lava', t); }
     }
     function respawn(p) {
       const t = respawnPlatform(p), q = p.pl;
-      p.dead = false; p.hFloor = t.y > p.height ? t.y : 0; q.x = t.x; q.y = t.y; q.vx = q.vy = 0; q.ground = t; q.stun = 0; q.jumping = false; p.inv = 1.4; p.spawnT = 0.5; p.knockInv = 0.5;
+      p.dead = false; p.hFloor = t.y > p.height ? t.y : 0; q.x = t.x + p.xoff * 0.4; q.y = t.y; q.vx = q.vy = 0; q.ground = t; q.stun = 0; q.jumping = false; p.inv = 1.4; p.spawnT = 0.5; p.knockInv = 0.5;
       p.holder.visible = true; p.tag.visible = true; audio.sfx('powerup', { vol: 0.5 }); textUp('Terug!', q.x, q.y + 3, p.z, '#7fe8ff', 1);
       fx.particles.burst(q.x, q.y + 0.2, p.z, { count: 22, speed: 5, up: 1.4, life: 0.6, size: 0.4, colors: [0xffe14a, 0xff7a1a, 0xffffff], gravity: 5 });
     }
     function lavaStep(dt) {
-      const maxY = Math.max(pl[0].height, pl[1].height);
+      const maxY = maxH();
       if (maxY > bestY + 1.0) { bestY = maxY; lastProgT = T; }
       const stalled = T - lastProgT > 5.5;
       if (stalled && T - stallMsg > 6) { stallMsg = T; hud.toast('🌋 De lava wordt ongeduldig!', 1500); audio.sfx('creak', { vol: 0.5 }); }
       lavaMult = damp(lavaMult, stalled ? 2.6 : 1, 2, dt);
       let sp = (0.5 + 0.0045 * T) * lavaMult;
       // wie ver voor ligt trekt de lava mee omhoog: nooit meer dan 30 eenheden onder de leider
-      const minY = Math.max(pl[0].height, pl[1].height) - 30;
+      const minY = maxH() - 30;
       lavaY += sp * dt; if (lavaY < minY) lavaY = Math.min(minY, lavaY + 3 * dt);
       for (const p of pl) if (!p.dead && p.pl.y + 0.5 < lavaY) burn(p);
     }
@@ -197,13 +209,13 @@ export default {
     const band = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), bandM); band.visible = false; band.renderOrder = 6; scene.add(band);
     const jetM = new THREE.MeshBasicMaterial({ color: 0xffa020, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
     const jet = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), jetM); jet.visible = false; jet.renderOrder = 7; scene.add(jet);
-    const D = { state: 'wait', t: 12, side: 1, x: 0, y: 0, ty: 0, tower: 0, time: 0, hit: [false, false] };
+    const D = { state: 'wait', t: 12, side: 1, x: 0, y: 0, ty: 0, tower: 0, time: 0, hit: [false, false, false, false] };
     function dragonStep(dt) {
       if (state !== 'race') { dragon.group.visible = false; band.visible = jet.visible = false; return; }
       if (D.state === 'wait') {
         D.t -= dt; if (D.t > 0) return;
-        const leader = pl[0].pl.y >= pl[1].pl.y ? pl[0] : pl[1];
-        D.tower = leader.i; D.side = leader.i === 0 ? -1 : 1; D.state = 'arrive'; D.time = 0; D.x = D.side * 27; D.y = leader.pl.y + 2; D.hit = [false, false];
+        const leader = hiOf();
+        D.tower = leader.i; D.side = leader.tower === 0 ? -1 : 1; D.state = 'arrive'; D.time = 0; D.x = D.side * 27; D.y = leader.pl.y + 2; D.hit = pl.map(() => false);
         dragon.group.visible = true; hud.toast('🐉 De draak kijkt naar de leider...', 1800); audio.sfx('creak', { vol: 0.6 });
       }
       D.time += dt;
@@ -242,7 +254,7 @@ export default {
       if (state !== 'race') return;
       chT -= dt;
       if (chT <= 0) {
-        chT = rand(8, 12); const ref = Math.max(pl[0].pl.y, pl[1].pl.y), side = Math.random() < 0.5 ? -1 : 1, y0 = clamp(ref + rand(-5, 6), 7, LY.TOP_Y - 8);
+        chT = rand(8, 12); const ref = Math.max(...pl.map((p) => p.pl.y)), side = Math.random() < 0.5 ? -1 : 1, y0 = clamp(ref + rand(-5, 6), 7, LY.TOP_Y - 8);
         const c = makeChicken(); c.bar.position.set(side * 19.5, y0 - 1.2, 0.5); c.bar.rotation.z = side * 0.8;
         chickens.push({ ...c, x: side * 19, y0, y: y0, vx: -side * 9, t: 0, dead: false, spin: 0, side, pop: 0.5 });
         audio.sfx('pop', { vol: 0.6 }); hud.toast('🐔 Kip uit het tonnetje!', 1300); fx.particles.burst(side * 19, y0, 0.5, { count: 14, speed: 4, up: 1.2, life: 0.6, size: 0.4, colors: [0xffffff, 0xf2a33a, 0xd8372c], gravity: 6 });
@@ -283,7 +295,7 @@ export default {
     const Tt = { state: 'wait', t: 14, tgt: null, x: 0, y: 0, lockX: 0, time: 0, leadT: 0 };
     function turtleStep(dt) {
       if (state !== 'race') { shell.visible = false; mark.visible = false; return; }
-      const lead = pl[0].pl.y >= pl[1].pl.y ? pl[0] : pl[1], trail = other(lead), gap = lead.pl.y - trail.pl.y;
+      const lead = hiOf(), trail = loOf(), gap = lead.pl.y - trail.pl.y;
       if (Tt.state === 'wait') {
         Tt.t -= dt; Tt.leadT = (gap > 7 && !lead.dead && !trail.dead) ? Tt.leadT + dt : Math.max(0, Tt.leadT - dt);
         if (Tt.t <= 0 && Tt.leadT > 3.5 && lead.pl.y > 14) { Tt.state = 'warn'; Tt.tgt = lead; Tt.time = 0; Tt.x = lead.pl.x; Tt.y = lead.pl.y + 10; hud.showBig('🐢 BLAUWE SCHILDPAD!', 1400, '#6fb4ff'); audio.sfx('creak', { vol: 0.6 }); shell.visible = true; mark.visible = true; }
@@ -367,9 +379,8 @@ export default {
     const camP = new THREE.Vector3(0, 12, 28), camT = new THREE.Vector3(0, 10, 0);
     let camY = 9, camDist = 26;
     function cam(dt, cine = null) {
-      const a = pl[0].pl, b = pl[1].pl;
-      const yA = pl[0].dead ? Math.max(lavaY + 2, a.y) : a.y, yB = pl[1].dead ? Math.max(lavaY + 2, b.y) : b.y;
-      const hi = Math.max(yA, yB), lo = Math.min(yA, yB), gap = hi - lo;
+      const ys = pl.map((p) => (p.dead ? Math.max(lavaY + 2, p.pl.y) : p.pl.y));
+      const hi = Math.max(...ys), lo = Math.min(...ys), gap = hi - lo;
       const need = Math.max(10, gap / 2 + 6.2);
       let dist = need / 0.466; dist = Math.max(dist, 17.8 / (0.466 * Math.max(1.2, camera.aspect)));
       let wantY = (hi + lo) / 2 + 2.2;
@@ -382,15 +393,25 @@ export default {
     }
 
     // ---------------- einde ----------------
-    function endGame(w, why) {
+    function endGame(w, why, tops = null) {
       if (state !== 'race') return;
       state = 'end'; endT = 0; winner = w; if (w) w.win = true;
-      const sc = pl.map((p) => Math.round(p.height)); const loser = w ? other(w) : null;
+      const winSet = tops && tops.length > 1 && N > 2 ? tops : (w ? [w] : []);
+      for (const t of winSet) t.win = true;
+      const sc = pl.map((p) => Math.round(p.height));
+      const order = pl.slice().sort((a, b) => (winSet.includes(b) - winSet.includes(a)) || (b.height - a.height) || (a.i - b.i));
+      const loser = w ? (N === 2 ? pl[1 - w.i] : order[order.length - 1]) : null;
       hud.setHint(null);
       if (w) { hud.showBig(why === 'top' ? '🚩 KASTEELTOP!' : why === 'lava' ? '🌋 LAVA!' : '⏱ TIJD!', 1300, w.css); audio.sfx('win', { vol: 0.6 }); }
       const funny = w ? [`${w.name} plant de vlag op de Kasteeltop!`, `${loser.name} duwde, sprong en viel ${loser.falls}x in de lava...`, `${w.name} duwde ${w.pushes}x en klom als een kasteelgeit.`, `Wat een klim, ${w.name}!`] : ['Even hoog! Lava wint.'];
-      const why2 = why === 'top' ? '' : why === 'tijd' ? 'De tijd is om: ' : 'Allebei in de lava: ';
-      ctx.finishPvp({ winner: w ? w.i : null, score: sc, delay: 3000, summary: `${why2}<b>${w ? w.name + ' komt het hoogst' : 'Gelijkspel'}</b> (${sc[0]} m tegen ${sc[1]} m).<br>${pick(funny)}${pl[0].pushes + pl[1].pushes ? `<br>Duwtjes: ${names[0]} ${pl[0].pushes}, ${names[1]} ${pl[1].pushes}. Lava-duiken: ${pl[0].falls} / ${pl[1].falls}.` : ''}` });
+      const why2 = why === 'top' ? '' : why === 'tijd' ? 'De tijd is om: ' : (N === 2 ? 'Allebei in de lava: ' : 'Allemaal in de lava: ');
+      const pushes = pl.reduce((a, p) => a + p.pushes, 0);
+      const head = winSet.length > 1 ? `${winSet.map((p) => p.name).join(' & ')} komen even hoog` : w ? w.name + ' komt het hoogst' : 'Gelijkspel';
+      const scoreTxt = N === 2 ? `${sc[0]} m tegen ${sc[1]} m` : sc.map((v, k) => `${names[k]} ${v} m`).join(', ');
+      const extra = pushes ? `<br>Duwtjes: ${pl.map((p) => `${names[p.i]} ${p.pushes}`).join(', ')}. Lava-duiken: ${pl.map((p) => p.falls).join(' / ')}.` : '';
+      const args = { winner: w ? w.i : null, score: sc, delay: 3000, summary: `${why2}<b>${head}</b> (${scoreTxt}).<br>${pick(funny)}${extra}` };
+      if (N > 2) { args.place = order.map((p) => p.i); if (winSet.length > 1) { args.winners = winSet.map((p) => p.i); delete args.winner; } }
+      ctx.finishPvp(args);
     }
     function flagCheck() {
       for (const p of pl) {
@@ -429,7 +450,7 @@ export default {
         lavaStep(dt); flagCheck();
       }
       if (state === 'race') { barrelStep(dt); dragonStep(dt); chickenStep(dt); turtleStep(dt); shoeStep(dt); }
-      if (state === 'race' && T >= TIME_LIMIT) { const a = pl[0].height, b = pl[1].height; hud.toast('Tijd is om!', 1300); endGame(Math.abs(a - b) < 0.3 ? null : a > b ? pl[0] : pl[1], 'tijd'); }
+      if (state === 'race' && T >= TIME_LIMIT) { const t = byHeight(); hud.toast('Tijd is om!', 1300); endGame(t.length === 1 ? t[0] : (N === 2 || t.length === N) ? null : t[0], 'tijd', t); }
       finish(dt);
     }
     function finish(dt) {
@@ -438,9 +459,9 @@ export default {
       // lava-bubbels, alleen als de lava in beeld is
       if (camY - camDist * 0.466 < lavaY + 3 && Math.random() < dt * 30) fx.particles.emit(rand(-18, 18), lavaY + 0.2, 1.8, rand(-1, 1), rand(3, 7), 0, { life: 0.8, size: 0.5, color: Math.random() < 0.5 ? 0xff8a1a : 0xffd23f, gravity: 10 });
       // HUD
-      const rank = pl[0].height >= pl[1].height ? 0 : 1;
-      pl.forEach((p) => hud.setPlayerInfo(p.i, `↑ ${Math.round(p.height)} m${p.i === rank && Math.round(pl[0].height) !== Math.round(pl[1].height) ? ' 👑' : ''}${p.dead ? ' 🔥' : ''}${p.pl.shoe > 0 ? ' 👟' : ''}`));
-      hud.setScore(`🧗 ${names[0]} ${Math.round(pl[0].height)} m  –  ${Math.round(pl[1].height)} m ${names[1]}   ·   top ${Math.round(LY.TOP_Y)} m`);
+      const hs = pl.map((p) => Math.round(p.height)), hmax = Math.max(...hs), lone = hs.filter((v) => v === hmax).length === 1, rank = hs.indexOf(hmax);
+      pl.forEach((p) => hud.setPlayerInfo(p.i, `↑ ${Math.round(p.height)} m${p.i === rank && lone ? ' 👑' : ''}${p.dead ? ' 🔥' : ''}${p.pl.shoe > 0 ? ' 👟' : ''}`));
+      hud.setScore(N === 2 ? `🧗 ${names[0]} ${Math.round(pl[0].height)} m  –  ${Math.round(pl[1].height)} m ${names[1]}   ·   top ${Math.round(LY.TOP_Y)} m` : `🧗 top ${Math.round(LY.TOP_Y)} m`);
       hud.setTimer(Math.max(0, TIME_LIMIT - T), 12);
     }
     function introUpdate(dt) {
@@ -459,7 +480,7 @@ export default {
     return {
       update, introUpdate, resultUpdate,
       onStart() { hud.setHint('<b>A</b> = springen (in de lucht nog eens = dubbele sprong) · <b>B</b> = duw je broer · pak de gouden schoen!'); setTimeout(() => hud.setHint(null), 6000); },
-      celebrate(w) { pl.forEach((p) => { p.win = p.i === w; }); },
+      celebrate(w, ws = [w]) { pl.forEach((p) => { p.win = ws.includes(p.i); }); },
       onDeurman(movers) { movers.forEach((m, i) => { if (m && !pl[i].dead) { pl[i].pl.stun = 1.3; textUp('BEWOOOGD!', pl[i].pl.x, pl[i].pl.y + 3, pl[i].z, '#ff5a5a', 1.2); audio.sfx('hurt'); } }); },
       onSwap() { pl.forEach((p) => { fx.particles.ring(p.pl.x, p.pl.y + 1, p.z, { count: 20, speed: 5, color: 0xffe14a, size: 0.4, life: 0.5 }); textUp('WISSEL!', p.pl.x, p.pl.y + 3, p.z, '#ffe14a', 1.2); }); },
       dispose() { /* meshes worden door het raamwerk opgeruimd */ },

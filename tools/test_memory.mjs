@@ -1,6 +1,7 @@
 // Gebruik: node tools/test_memory.mjs [scenario...]   scenario: bots twists shots
 // Versnelde (niet-gerenderde) simulatie van het Geheugen-Duel met bots; 'shots' maakt screenshots van de belangrijkste momenten.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -14,32 +15,34 @@ const server = http.createServer((req, res) => {
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
+const NP = process.env.PLAYERS === '4' ? 4 : process.env.PLAYERS === '3' ? 3 : 2;   // PLAYERS=3|4: alle spelers doen mee (bots voor elke speler)
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'lowgrav', 'bodyswap', 'deurman'];
 
 async function open(twist = 'none') {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=memory&twist=${twist}&quality=${process.env.Q || "low"}`);
+  await page.goto(`http://localhost:${port}/?game=memory&players=${NP}&twist=${twist}&quality=${process.env.Q || "low"}`);
   await page.waitForFunction(() => window.__app && window.__app.mode && window.__app.mode.instance, null, { timeout: 240000 });
   await page.waitForTimeout(800);
-  await page.evaluate(async () => {
+  await page.evaluate(async (NP) => {
     const app = window.__app, mode = app.mode, inp = app.input;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (let q = 0; q < NP; q++) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (let q = 0; q < NP; q++) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
-  });
-  await page.evaluate(() => {
+  }, NP);
+  await page.evaluate((NP) => {
+    const PL = [...Array(NP).keys()];
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 4242; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
     window.__rnd = rnd;
     // skill: mem = kans dat een gezien kaartje onthouden wordt, think = frames bedenktijd, lazy = bot doet niets, want = eerst een speciale kaart
-    window.__sk = [{ mem: 0.7, think: [20, 60], lazy: false, want: null }, { mem: 0.7, think: [20, 60], lazy: false, want: null }];
-    const known = [new Map(), new Map()];       // per bot: uid -> face
-    let seenShuf = [0, 0]; const B = [{ wait: 0, key: '', hold: 0 }, { wait: 0, key: '', hold: 0 }];
+    window.__sk = PL.map(() => ({ mem: 0.7, think: [20, 60], lazy: false, want: null }));
+    const known = PL.map(() => new Map());       // per bot: uid -> face
+    const seenShuf = PL.map(() => 0); const B = PL.map(() => ({ wait: 0, key: '', hold: 0 }));
     const tw = m.twist.id;
     const DIRS = ['L', 'R', 'U', 'D'];
     const phys = (d) => (tw === 'invert' ? { L: 'R', R: 'L', U: 'D', D: 'U' }[d] : d);
@@ -49,8 +52,8 @@ async function open(twist = 'none') {
       const dt = 1 / 60;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) return true;
-        for (const i of [0, 1]) { const v = inp.virtual[i]; v.a = v.b = v.left = v.right = v.up = v.down = false; }
-        for (const bi of [0, 1]) {
+        for (const i of PL) { const v = inp.virtual[i]; v.a = v.b = v.left = v.right = v.up = v.down = false; }
+        for (const bi of PL) {
           const sk = window.__sk[bi], kn = known[bi], b = B[bi];
           if (seenShuf[bi] !== st.shuffles) { seenShuf[bi] = st.shuffles; kn.clear(); }
           // wat is er zichtbaar (open of tijdelijk open)? onthoud met kans mem
@@ -90,7 +93,7 @@ async function open(twist = 'none') {
       }
       return false;
     };
-  });
+  }, NP);
   return { browser, page, errors };
 }
 
@@ -114,7 +117,8 @@ for (const name of scen) {
         return { st: inst.dbg.state(), finished: m.finished, result: m.result };
       });
       console.log(`\n=== ${label} ===`);
-      console.log(`END total=${res.st.total.toFixed(1)}s scores=${res.st.scores} remaining=${res.st.remaining} shuffles=${res.st.shuffles} misses=${res.st.misses} finished=${res.finished} winner=${res.result && res.result.winner}`);
+      console.log(`END total=${res.st.total.toFixed(1)}s scores=${res.st.scores} remaining=${res.st.remaining} shuffles=${res.st.shuffles} misses=${res.st.misses} finished=${res.finished} winner=${res.result && res.result.winner} place=${res.result && res.result.place}`);
+      if (NP > 2 && !(res.finished && res.result.place.length === NP)) { console.log('FAIL: geen volledige plaatsen voor', NP, 'spelers'); process.exitCode = 1; }
       if (res.result) console.log('summary:', res.result.summary.replace(/<[^>]+>/g, ' '));
       console.log(o.errors.length ? 'ERRORS:\n' + o.errors.slice(0, 6).join('\n') : 'NO ERRORS');
       await o.browser.close();

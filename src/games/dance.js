@@ -11,7 +11,7 @@ import { NOTES, BEAT, BAR, SONG_END, LAST_NOTE_T, EVENTS, mtof, sectionAt } from
 //  * comeback: wie achterstaat krijgt gouden pijlen (dubbele punten), meter vult sneller
 //  * winnaar: hoogste score na het nummer (gelijk: meeste perfects, dan langste combo)
 
-const LANE_X = [-6.3, 6.3];
+const LANE_X2 = [-6.3, 6.3], LC = [0x35c46f, 0x4a8cff, 0xff9a3c, 0xd45cf0];
 const AW = 1.1;                           // afstand tussen de vier pijlen
 const REC_Y = 7.0, SPAWN_Y = 1.45;
 const LOOK = 1.5;                         // seconden vooruit zichtbaar
@@ -61,6 +61,7 @@ export default {
   giver: 'Disco-Dino',
   icon: '🪩',
   mode: 'pvp',
+  players: [2, 3, 4],
   time: 80,
   music: 'concert',
   blurb: 'Dans-battle in de disco van het kasteel! Tik de <b>pijlen</b> precies op de lijn: <b>Perfect</b> geeft de meeste punten. Een volle meter laat je met <b>A</b> een gemene <b>sabotage</b> naar je broer sturen. Met <b>B</b> kaats je zo\'n sabotage terug! Wie achterstaat krijgt <b>gouden pijlen</b> (dubbele punten).',
@@ -70,6 +71,9 @@ export default {
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp, names = players.map((p) => p.name), tid = ctx.twist.id;
+    const N = players.length, NIL = (v) => players.map(() => v);   // NIL(0) = array van N nullen
+    // banen: 2 spelers zoals altijd; 3-4 spelers dichter op elkaar (zelfde pijlen-reeks voor iedereen)
+    const LANE_X = N === 2 ? LANE_X2 : N === 3 ? [-5.7, 0, 5.7] : [-8.05, -2.68, 2.68, 8.05];
     const GRAV = pv.gravity || 1, SLIP = pv.slip || 0;
     const tempo = tid === 'turbo' ? 1.24 : tid === 'slowmo' ? 0.86 : 1;
 
@@ -82,7 +86,7 @@ export default {
     // ---------------- banen ----------------
     const lt = laneTex(); const gt = glowTex();
     const lanes = players.map((pp, p) => {
-      const x = LANE_X[p], hex = p ? 0x4a8cff : 0x35c46f;
+      const x = LANE_X[p], hex = LC[pp.id];
       const panelM = new THREE.MeshBasicMaterial({ map: lt.clone(), color: 0xffffff, transparent: true, opacity: 0.93 }); panelM.map.needsUpdate = true; panelM.map.repeat.set(1, 1.5); panelM.map.wrapS = panelM.map.wrapT = THREE.RepeatWrapping;
       const panel = new THREE.Mesh(new THREE.PlaneGeometry(4 * AW + 0.5, 7.5), panelM); panel.position.set(x, 4.75, -0.2); scene.add(panel);
       for (const sx of [-1, 1]) scene.add(mesh(new THREE.BoxGeometry(0.14, 7.7, 0.25), new THREE.MeshBasicMaterial({ color: hex }), { cast: false, pos: [x + sx * (2 * AW + 0.3), 4.75, -0.1] }));
@@ -112,20 +116,20 @@ export default {
     });
     // pijlen: 1 InstancedMesh (+ rand erachter) voor beide banen, en 8 ontvangers
     const AG = arrowGeo(0.9), AGB = arrowGeo(1.12);
-    const ARR_N = 120;
+    const ARR_N = 60 * N;
     const arrows = new THREE.InstancedMesh(AG, new THREE.MeshBasicMaterial({ color: 0xffffff }), ARR_N); arrows.frustumCulled = false; arrows.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     const borders = new THREE.InstancedMesh(AGB, new THREE.MeshBasicMaterial({ color: 0xffffff }), ARR_N); borders.frustumCulled = false; borders.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     arrows.setColorAt(0, new THREE.Color(1, 1, 1)); borders.setColorAt(0, new THREE.Color(1, 1, 1)); arrows.count = borders.count = 0; scene.add(borders, arrows);
-    const recs = new THREE.InstancedMesh(AGB, new THREE.MeshBasicMaterial({ color: 0xffffff }), 8); recs.frustumCulled = false; recs.instanceMatrix.setUsage(THREE.DynamicDrawUsage); recs.setColorAt(0, new THREE.Color(1, 1, 1)); scene.add(recs);
+    const recs = new THREE.InstancedMesh(AGB, new THREE.MeshBasicMaterial({ color: 0xffffff }), 4 * N); recs.frustumCulled = false; recs.instanceMatrix.setUsage(THREE.DynamicDrawUsage); recs.setColorAt(0, new THREE.Color(1, 1, 1)); scene.add(recs);
     const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _e = new THREE.Euler(), _c = new THREE.Color();
     function put(im, i, x, y, z, rot, sc, col, flipY = 1) { _q.setFromEuler(_e.set(0, 0, rot)); _p.set(x, y, z); _s.set(sc, sc * flipY, sc); _m.compose(_p, _q, _s); im.setMatrixAt(i, _m); if (col !== null) im.setColorAt(i, _c.setHex(col)); }
 
     // ---------------- poppetjes op het podium ----------------
     const dancers = players.map((pp, p) => {
       const c = ctx.make.brother(p); const k = 1.75 * pv.size(p); c.group.scale.setScalar(k);
-      const holder = new THREE.Group(); holder.add(c.group); const bx = p ? 2.05 : -2.05; holder.position.set(bx, 0.3, 1.2); scene.add(holder);
-      c.faceDir((p ? -1 : 1) * 0.3, 1); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
-      const pool = new THREE.Mesh(new THREE.CircleGeometry(1.6, 24), new THREE.MeshBasicMaterial({ color: p ? 0x4a8cff : 0x35c46f, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false })); pool.rotation.x = -Math.PI / 2; pool.position.set(bx, 0.33, 1.2); scene.add(pool);
+      const holder = new THREE.Group(); holder.add(c.group); const bx = N === 2 ? (p ? 2.05 : -2.05) : (p - (N - 1) / 2) * (N === 3 ? 3.6 : 3.1); holder.position.set(bx, 0.3, 1.2); scene.add(holder);
+      c.faceDir(-Math.sign(bx || 0.01) * 0.3, 1); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
+      const pool = new THREE.Mesh(new THREE.CircleGeometry(1.6, 24), new THREE.MeshBasicMaterial({ color: LC[pp.id], transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending, depthWrite: false })); pool.rotation.x = -Math.PI / 2; pool.position.set(bx, 0.33, 1.2); scene.add(pool);
       const tagTex = canvasTex(256, 96, (g, w, hh) => { g.font = 'bold 58px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(10,10,30,.9)'; g.lineJoin = 'round'; g.strokeText(pp.name, w / 2, hh / 2); g.fillStyle = pp.css; g.fillText(pp.name, w / 2, hh / 2); });
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false })); tag.scale.set(2.4, 0.9, 1); tag.renderOrder = 15; scene.add(tag);
       return { c, holder, k, bx, tag, pool, J: { lx: 0, rx: 0, alx: 0, arx: 0, alz: 0, arz: 0, tz: 0, tx: 0, hz: 0, hy: 0, by: 0 }, mv: { d: -1, t: 9, gold: false }, spin: 0, stumble: 0, cheer: 0, slideX: 0 };
@@ -133,29 +137,31 @@ export default {
 
     // ---------------- toestand ----------------
     let T = 0, introT = 0, songT = 0, started = false, finished = false, ending = false, endT = 0, beatIdxLast = -1, evI = 0, timeLeft = 80;
-    const score = [0, 0], combo = [0, 0], maxCombo = [0, 0], meter = [0, 0], perfects = [0, 0], goods = [0, 0], misses = [0, 0], golds = [0, 0], hits = [0, 0];
-    const ptr = [0, 0], vptr = [0, 0];
-    const ns = [Array.from({ length: NA }, () => ({ s: 0, init: false, gold: false, flip: false, t0: 0 })), Array.from({ length: NA }, () => ({ s: 0, init: false, gold: false, flip: false, t0: 0 }))];
-    const sab = [{ id: null, t: 0, from: -1 }, { id: null, t: 0, from: -1 }];
-    const shield = [{ on: 0, cd: 0 }, { on: 0, cd: 0 }];
-    const sabQueue = [shuffle(SABS.map((s) => s.id)), shuffle(SABS.map((s) => s.id))];
-    const orbs = []; const speedMul = [1, 1];
-    const aHold = [-1, -1];
-    const flashRec = [[0, 0, 0, 0], [0, 0, 0, 0]], judgeT = [9, 9], sabSent = [0, 0], reflects = [0, 0], blocks = [0, 0];
-    const stats = { total: NA, sabs: [0, 0], reflects: [0, 0], golds: [0, 0], wrong: [0, 0] };
-    let comboDraw = [-1, -1], infoTxt = ['', ''], lastBar = -1, sectionName = '', deurPenalty = [0, 0];
+    const score = NIL(0), combo = NIL(0), maxCombo = NIL(0), meter = NIL(0), perfects = NIL(0), goods = NIL(0), misses = NIL(0), golds = NIL(0), hits = NIL(0);
+    const ptr = NIL(0), vptr = NIL(0);
+    const ns = players.map(() => Array.from({ length: NA }, () => ({ s: 0, init: false, gold: false, flip: false, t0: 0 })));
+    const sab = players.map(() => ({ id: null, t: 0, from: -1 }));
+    const shield = players.map(() => ({ on: 0, cd: 0 }));
+    const sabQueue = players.map(() => shuffle(SABS.map((s) => s.id)));
+    const orbs = []; const speedMul = NIL(1);
+    const aHold = NIL(-1);
+    const flashRec = players.map(() => [0, 0, 0, 0]), judgeT = NIL(9), sabSent = NIL(0), reflects = NIL(0), blocks = NIL(0);
+    const stats = { total: NA, sabs: NIL(0), reflects: NIL(0), golds: NIL(0), wrong: NIL(0) };
+    let comboDraw = NIL(-1), infoTxt = NIL(''), lastBar = -1, sectionName = '', deurPenalty = NIL(0);
 
     // ---------------- hulp ----------------
     const tNow = () => (started ? songT : introT);
-    function behind(p) { const o = score[1 - p], me = score[p]; return o - me > 400 + 0.06 * o; }
+    function behind(p) { const o = Math.max(...score.filter((_, k) => k !== p)), me = score[p]; return o - me > 400 + 0.06 * o; }
+    // sabotage gaat naar de koploper (is dat jijzelf: naar de nummer twee)
+    function targetFor(p) { let b = -1; for (let k = 0; k < N; k++) if (k !== p && (b < 0 || score[k] > score[b] || (score[k] === score[b] && Math.random() < 0.5))) b = k; return b; }
     function dirNow(p, i) { const n = NOTES[i], q = ns[p][i]; return q.flip ? 3 - n.d : n.d; }
     function refreshInfo() {
-      for (let p = 0; p < 2; p++) {
+      for (let p = 0; p < N; p++) {
         const m = Math.floor(meter[p]), sh = shield[p];
-        const txt = `${score[p]} pt · combo ${combo[p]} · ${m >= 100 ? 'A: SABOTAGE!' : `meter ${m}%`}${sh.cd > 0 ? '' : ' · schild klaar'}`;
+        const txt = N > 2 ? `${score[p]} pt · x${combo[p]} · ${m >= 100 ? 'A: SABOTAGE!' : `${m}%`}${sh.cd > 0 ? '' : ' · B✓'}` : `${score[p]} pt · combo ${combo[p]} · ${m >= 100 ? 'A: SABOTAGE!' : `meter ${m}%`}${sh.cd > 0 ? '' : ' · schild klaar'}`;
         if (txt !== infoTxt[p]) { infoTxt[p] = txt; hud.setPlayerInfo(p, txt); }
       }
-      hud.setScore(`${names[0]} ${score[0]} – ${score[1]} ${names[1]}`);
+      hud.setScore(N === 2 ? `${names[0]} ${score[0]} – ${score[1]} ${names[1]}` : null);
     }
     function drawCombo(p) {
       const l = lanes[p], g = l.cctx; g.clearRect(0, 0, 256, 128);
@@ -236,7 +242,7 @@ export default {
       meter[p] = 0; lanes[p].mLabel.visible = false; sabSent[p]++; stats.sabs[p]++;
       if (!sabQueue[p].length) sabQueue[p] = shuffle(SABS.map((s) => s.id));
       const id = sabQueue[p].pop();
-      launchOrb(p, 1 - p, id, false);
+      launchOrb(p, targetFor(p), id, false);
       audio.sfx('whoosh', { vol: 0.7 }); audio.sfx('shoot', { vol: 0.4 });
       react(p, 'point');
     }
@@ -244,7 +250,7 @@ export default {
       const S0 = SABS.find((s) => s.id === id);
       const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: gt, color: parseInt(S0.col.slice(1), 16), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); spr.scale.set(1.9, 1.9, 1); scene.add(spr);
       const core = new THREE.Sprite(new THREE.SpriteMaterial({ map: gt, color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); core.scale.set(0.9, 0.9, 1); scene.add(core);
-      orbs.push({ from, to, id, t: 0, reflected, spr, core, x0: lanes[from].x - (from ? -1 : 1) * 0.0, y0: reflected ? 4.5 : 0.7 });
+      orbs.push({ from, to, id, t: 0, reflected, spr, core, x0: lanes[from].x, y0: reflected ? 4.5 : 0.7 });
       if (!reflected) fx.texts.add(S0.name, lanes[to].x, 8.7, 1, S0.col, 1.15);
     }
     function applySabotage(o) {
@@ -255,7 +261,7 @@ export default {
           setJudge(p, 'back'); audio.sfx('boing', { vol: 0.7 }); audio.sfx('sparkle', { vol: 0.5 }); ctx.shake(0.3);
           fx.particles.burst(lanes[p].x, REC_Y, 0.8, { count: 40, speed: 8, up: 0.6, spread: 1.4, life: 0.8, size: 0.4, colors: [0x6fe8ff, 0xffffff], gravity: 1 });
           fx.texts.add('TERUGGEKAATST!', lanes[p].x, 6.2, 1.2, '#6fe8ff', 1.4); gain(p, 20); react(p, 'cheer');
-          launchOrb(p, 1 - p, o.id, true); return;
+          launchOrb(p, o.from, o.id, true); return;
         }
         blocks[p]++; setJudge(p, 'block'); fx.texts.add('GEBLOKT!', lanes[p].x, 6.2, 1.2, '#6fe8ff', 1.3); audio.sfx('click', { vol: 0.6 }); return;
       }
@@ -301,22 +307,22 @@ export default {
 
     // ---------------- einde ----------------
     function winnerOf() {
-      if (score[0] !== score[1]) return score[0] > score[1] ? 0 : 1;
-      if (perfects[0] !== perfects[1]) return perfects[0] > perfects[1] ? 0 : 1;
-      if (maxCombo[0] !== maxCombo[1]) return maxCombo[0] > maxCombo[1] ? 0 : 1;
-      return Math.random() < 0.5 ? 0 : 1;
+      return ranking()[0];
     }
+    // plaatsen: score, dan de meeste perfects, dan de langste combo, dan toeval
+    function ranking() { const coin = NIL(0).map(() => Math.random()); return NIL(0).map((_, i) => i).sort((a, b) => score[b] - score[a] || perfects[b] - perfects[a] || maxCombo[b] - maxCombo[a] || coin[a] - coin[b]); }
     function endSong() {
       if (finished) return; finished = true;
-      const w = winnerOf(); const tie = score[0] === score[1];
+      const rk = ranking(), w = rk[0], l = rk[N - 1]; const tie = score[rk[1]] === score[w];
       hud.setTimer(null); hud.showBig(`${names[w]} wint!`, 1800, players[w].css);
-      dancers[w].cheer = 99; dancers[1 - w].cheer = -99; S.crowdHype = 1.5; audio.sfx('win'); ctx.shake(0.5);
+      dancers.forEach((D, k) => { D.cheer = k === w ? 99 : -99; }); S.crowdHype = 1.5; audio.sfx('win'); ctx.shake(0.5);
       for (let k = 0; k < 4; k++) setTimeout(() => fx.particles.burst(rand(-6, 6), 8, 1.5, { count: 40, speed: 8, up: 1, life: 1.4, size: 0.5, colors: [0xffe14a, 0xff4fa8, 0x4fd8ff, 0x8dff6a], gravity: 6 }), k * 300);
-      const J = [`${names[w]} is de nieuwe Disco-Koning! ${names[1 - w]} had twee linkervoeten.`, `Het publiek draagt ${names[w]} op handen. ${names[1 - w]} struikelt nog door.`, `${names[w]} danst de sokken van de dino. ${names[1 - w]} danst de schoenen kapot.`, `Disco-Dino geeft ${names[w]} een gouden pijl. ${names[1 - w]} krijgt een pleister.`];
-      const bits = [`${names[0]}: ${perfects[0]} perfect, beste combo ${maxCombo[0]}`, `${names[1]}: ${perfects[1]} perfect, beste combo ${maxCombo[1]}`];
-      if (stats.sabs[0] + stats.sabs[1]) bits.push(`${stats.sabs[0] + stats.sabs[1]} sabotages`);
-      if (stats.reflects[0] + stats.reflects[1]) bits.push(`${stats.reflects[0] + stats.reflects[1]}x teruggekaatst`);
-      ctx.finishPvp({ winner: w, score: [score[0], score[1]], delay: 1400, summary: `${pick(J)}${tie ? ' (Gelijke stand: de meeste perfects besliste.)' : ''} ${bits.join(' · ')}.` });
+      const J = [`${names[w]} is de nieuwe Disco-Koning! ${names[l]} had twee linkervoeten.`, `Het publiek draagt ${names[w]} op handen. ${names[l]} struikelt nog door.`, `${names[w]} danst de sokken van de dino. ${names[l]} danst de schoenen kapot.`, `Disco-Dino geeft ${names[w]} een gouden pijl. ${names[l]} krijgt een pleister.`];
+      const sum = (a) => a.reduce((x, y) => x + y, 0);
+      const bits = players.map((pp, k) => `${names[k]}: ${perfects[k]} perfect, beste combo ${maxCombo[k]}`);
+      if (sum(stats.sabs)) bits.push(`${sum(stats.sabs)} sabotages`);
+      if (sum(stats.reflects)) bits.push(`${sum(stats.reflects)}x teruggekaatst`);
+      ctx.finishPvp({ winner: w, score: score.slice(), place: N > 2 ? rk : undefined, delay: 1400, summary: `${pick(J)}${tie ? ' (Gelijke stand: de meeste perfects besliste.)' : ''} ${bits.join(' · ')}.` });
     }
 
     // ---------------- hoofdlus ----------------
@@ -328,18 +334,18 @@ export default {
         songT += dt * tempo;
         schedule(songT + 0.35);
         // invoer
-        for (let p = 0; p < 2; p++) {
+        for (let p = 0; p < N; p++) {
           const inp = pv.input(p);
           for (const d of readDirs(p)) press(p, d);
           if (inp.aP) fireSabotage(p);
           if (inp.bP) raiseShield(p);
         }
         // te laat voor een pijl = mis
-        for (let p = 0; p < 2; p++) {
+        for (let p = 0; p < N; p++) {
           for (let i = ptr[p]; i < NA; i++) { const q = ns[p][i]; if (q.s !== 0) continue; if (NOTES[i].t < songT - W_GOOD - 0.02) missNote(p, i); else break; }
           while (ptr[p] < NA && ns[p][ptr[p]].s !== 0) ptr[p]++;
         }
-        if (songT > LAST_NOTE_T + 1.2 && ptr[0] >= NA && ptr[1] >= NA || songT > SONG_END - 0.2) { ending = true; endT = 0; endSong(); }
+        if (songT > LAST_NOTE_T + 1.2 && ptr.every((q) => q >= NA) || songT > SONG_END - 0.2) { ending = true; endT = 0; endSong(); }
         timeLeft = Math.max(0, (SONG_END - songT) / tempo);
         hud.setTimer(timeLeft, 10);
       } else endT += dt;
@@ -347,7 +353,7 @@ export default {
       visuals(dt);
     }
     function timers(dt) {
-      for (let p = 0; p < 2; p++) {
+      for (let p = 0; p < N; p++) {
         const sb = sab[p]; if (sb.t > 0) { sb.t -= dt; if (sb.t <= 0) { sb.id = null; lanes[p].chick.group.visible = false; } }
         const sh = shield[p]; if (sh.on > 0) sh.on -= dt; if (sh.cd > 0) sh.cd -= dt; if (sh.cd < 0) sh.cd = 0;
         judgeT[p] += dt;
@@ -423,7 +429,7 @@ export default {
       S.update(dt, T + introT, bp, bi, energy);
       // banen
       let idx = 0;
-      for (let p = 0; p < 2; p++) {
+      for (let p = 0; p < N; p++) {
         const l = lanes[p], sb = sab[p], act = sb.t > 0 ? sb.id : null;
         speedMul[p] = damp(speedMul[p], act === 'turbo' ? 1.75 : 1, 5, dt);
         l.panelM.map.offset.y = (-(bt / BEAT) * 0.5) % 1;
@@ -479,19 +485,19 @@ export default {
       arrows.count = borders.count = idx; arrows.instanceMatrix.needsUpdate = borders.instanceMatrix.needsUpdate = true; if (arrows.instanceColor) { arrows.instanceColor.needsUpdate = borders.instanceColor.needsUpdate = true; }
       recs.instanceMatrix.needsUpdate = true; recs.instanceColor.needsUpdate = true;
       // dansers
-      for (let p = 0; p < 2; p++) pose(p, dt, T + introT, bi, bp);
+      for (let p = 0; p < N; p++) pose(p, dt, T + introT, bi, bp);
       refreshInfo();
       placeCamera();
     }
 
     // ---------------- camera ----------------
     const camTgt = new THREE.Vector3(0, 4.3, 0), camBase = new THREE.Vector3(), camTmp = new THREE.Vector3();
-    const fitPts = [[-LANE_X[1] - 2.5, 0.0, 1.5], [LANE_X[1] + 2.5, 0.0, 1.5], [-LANE_X[1] - 2.5, 8.7, 0], [LANE_X[1] + 2.5, 8.7, 0]];
+    const LX = LANE_X[N - 1], fitPts = [[-LX - 2.5, 0.0, 1.5], [LX + 2.5, 0.0, 1.5], [-LX - 2.5, 8.7, 0], [LX + 2.5, 8.7, 0]];
     function fitCamera() {
       const dir = new THREE.Vector3(0, 0.1, 1).normalize(), v = new THREE.Vector3(); let lo = 8, hi = 80;
       for (let it = 0; it < 22; it++) {
         const d = (lo + hi) / 2; camera.position.copy(camTgt).addScaledVector(dir, d); camera.lookAt(camTgt); camera.updateMatrixWorld(); camera.updateProjectionMatrix();
-        let ok = true; for (const q of fitPts) { v.set(q[0], q[1], q[2]).project(camera); if (Math.abs(v.x) > 0.98 || v.y > 0.66 || v.y < -0.92) { ok = false; break; } }
+        let ok = true; for (const q of fitPts) { v.set(q[0], q[1], q[2]).project(camera); if (Math.abs(v.x) > 0.98 || v.y > (N > 2 ? 0.56 : 0.66) || v.y < -0.92) { ok = false; break; } }
         if (ok) hi = d; else lo = d;
       }
       camBase.copy(camTgt).addScaledVector(dir, hi);
@@ -511,17 +517,17 @@ export default {
       resultUpdate, introUpdate,
       onStart() { try { audio.stopMusic(); } catch (e) { /* geen audio */ } started = true; songT = 0; },
       onResize() { camera.updateProjectionMatrix(); fitCamera(); },
-      onSwap(sw) { for (let p = 0; p < 2; p++) fx.particles.burst(dancers[p].holder.position.x, 3, 1.5, { count: 24, speed: 4, up: 1, life: 0.8, size: 0.4, colors: [0xffe14a, 0xffffff], gravity: 2 }); hud.toast(sw ? '🔄 Wissel! Wes bestuurt de baan van Jor en andersom' : '🔄 Terug naar je eigen baan!', 2200); },
+      onSwap(sw) { for (let p = 0; p < N; p++) fx.particles.burst(dancers[p].holder.position.x, 3, 1.5, { count: 24, speed: 4, up: 1, life: 0.8, size: 0.4, colors: [0xffe14a, 0xffffff], gravity: 2 }); hud.toast(sw ? '🔄 Wissel! Sommigen bestuurden nu de baan van een ander' : '🔄 Terug naar je eigen baan!', 2200); },
       onDeurman(movers) {
         movers.forEach((m, p) => { if (!m) return; combo[p] = 0; drawCombo(p); score[p] = Math.max(0, score[p] - 400); meter[p] = Math.max(0, meter[p] - 30); dancers[p].stumble = 1.2; fx.texts.add('DEURMAN! -400', dancers[p].bx, 5.6, 1.8, '#ff6a4a', 1.3); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); });
       },
-      celebrate(w) { dancers[w].cheer = 99; dancers[1 - w].cheer = -99; S.crowdHype = 1.5; },
+      celebrate(w) { dancers.forEach((D, k) => { D.cheer = k === w ? 99 : -99; }); S.crowdHype = 1.5; },
       dispose() { for (const o of orbs) { o.spr.material.dispose(); o.core.material.dispose(); } },
       dbg: {
         state: () => ({ songT, T, started, finished, ending, score: [...score], combo: [...combo], maxCombo: [...maxCombo], meter: meter.map((m) => +m.toFixed(1)), perfects: [...perfects], goods: [...goods], misses: [...misses], golds: [...golds], hits: [...hits], ptr: [...ptr], sab: sab.map((s) => ({ ...s })), shield: shield.map((s) => ({ ...s })), orbs: orbs.length, stats: { ...stats }, behind: [behind(0), behind(1)], timeLeft, tempo, NA, sabSent: [...sabSent], reflects: [...reflects], blocks: [...blocks] }),
         // volgende onbeslisten pijl van speler p: { t, d (huidige richting), i }
         next(p) { for (let i = ptr[p]; i < NA; i++) if (ns[p][i].s === 0) return { i, t: NOTES[i].t, d: dirNow(p, i), flip: ns[p][i].flip, gold: ns[p][i].gold }; return null; },
-        setMeter(p, v) { meter[p] = v; }, setScore(a, b) { score[0] = a; score[1] = b; }, jumpTo(t) { songT = t; evI = EVENTS.findIndex((e) => e[0] >= t); if (evI < 0) evI = EVENTS.length; for (let p = 0; p < 2; p++) for (let i = 0; i < NA; i++) if (NOTES[i].t < t - 0.3 && ns[p][i].s === 0) { ns[p][i].s = 2; } },
+        setMeter(p, v) { meter[p] = v; }, setScore(a, b, c, d) { [a, b, c, d].forEach((v, k) => { if (v != null && k < N) score[k] = v; }); }, jumpTo(t) { songT = t; evI = EVENTS.findIndex((e) => e[0] >= t); if (evI < 0) evI = EVENTS.length; for (let p = 0; p < N; p++) for (let i = 0; i < NA; i++) if (NOTES[i].t < t - 0.3 && ns[p][i].s === 0) { ns[p][i].s = 2; } },
         orbsInfo: () => orbs.map((o) => ({ from: o.from, to: o.to, id: o.id, t: o.t, reflected: o.reflected })),
         notes: NOTES,
       },

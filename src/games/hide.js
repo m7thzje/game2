@@ -23,15 +23,19 @@ export default {
   giver: 'Kermisbaas Kees',
   icon: '🎪',
   mode: 'pvp',
+  players: [2, 3, 4],   // 2 = twee rondes met rolwissel; 4 = vier rondes, elk poppetje is één keer verstopper tegen drie zoekers
   time: 75,
   music: 'tense',
-  blurb: 'Nacht op de <b>kermis</b>! De <b>verstopper</b> verkleedt zich als voorwerp terwijl de zoeker <b>ogen dicht</b> heeft. De <b>zoeker</b> heeft een lantaarn. Na 28 s wisselen jullie! Punten: ongezien blijven of snel vinden.',
+  blurb: 'Met <b>4 spelers</b> is elke ronde één verstopper tegen <b>drie zoekers</b> (vier rondes, iedereen verstopt zich één keer; de snelste vinder pakt de punten). Nacht op de <b>kermis</b>! De <b>verstopper</b> verkleedt zich als voorwerp terwijl de zoeker <b>ogen dicht</b> heeft. De <b>zoeker</b> heeft een lantaarn. Na 28 s wisselen jullie! Punten: ongezien blijven of snel vinden.',
   controls: ['{move} lopen (als voorwerp: schuifelen)', 'Zoeker: {a} tik · {b} scan', 'Verstopper: {a} ontkleden · {b} afleiding'],
   tip: 'Pas op voor de verraderkip en de Deurman: stil staan!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud, renderer } = ctx;
     const pv = ctx.pvp, names = players.map((p) => p.name), tw = ctx.twist.id;
+    const N = players.length, NS = N - 1;   // NS = aantal zoekers per ronde
+    const HUNT_T = N > 2 ? 24 : 28;         // bij 4 spelers iets korter (vier rondes)
+    const ROUNDS = N === 2 ? 2 : N;
     const L = ctx.lights('night', { shadows: false, fogNear: 55, fogFar: 150, center: [0, 0, 0] });
     camera.fov = 44; camera.updateProjectionMatrix();
     const W = buildPlaza(ctx, L);
@@ -60,9 +64,9 @@ export default {
       return { i, c, holder, lan, tag, ring, shadow, x: 0, z: 0, vx: 0, vz: 0, yaw: 0, k, vis: true, y: 0, vy: 0 };
     });
     // lantaarn-licht + lichtvlek op de grond
-    const lamp = new THREE.PointLight(0xffd9a0, 0, 16, 2); scene.add(lamp);
+    const lamps = Array.from({ length: NS }, () => { const l = new THREE.PointLight(0xffd9a0, 0, 16, 2); scene.add(l); return l; });
     const poolTex = canvasTex(128, 128, (g) => { const gr = g.createRadialGradient(64, 64, 4, 64, 64, 62); gr.addColorStop(0, 'rgba(255,225,150,.55)'); gr.addColorStop(0.6, 'rgba(255,200,110,.2)'); gr.addColorStop(1, 'rgba(255,190,100,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 128); });
-    const pool = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: poolTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); pool.rotation.x = -Math.PI / 2; pool.position.y = 0.05; pool.scale.setScalar(14); scene.add(pool);
+    const pools = Array.from({ length: NS }, () => { const pool = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: poolTex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); pool.rotation.x = -Math.PI / 2; pool.position.y = 0.05; pool.scale.setScalar(14); scene.add(pool); return pool; });
 
     // ---------------- verraderkip ----------------
     const hen = new Animal('chicken'); hen.group.scale.setScalar(1.5); scene.add(hen.group); hen.group.visible = false;
@@ -73,27 +77,33 @@ export default {
     // ---------------- glinster-effecten ----------------
     const starTex = canvasTex(128, 128, (g) => { g.translate(64, 64); const gr = g.createRadialGradient(0, 0, 2, 0, 0, 60); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.3, 'rgba(255,240,150,.7)'); gr.addColorStop(1, 'rgba(255,220,100,0)'); g.fillStyle = gr; g.fillRect(-64, -64, 128, 128); g.fillStyle = 'rgba(255,255,255,.95)'; for (let k = 0; k < 4; k++) { g.rotate(Math.PI / 4); g.beginPath(); g.moveTo(-60, 0); g.lineTo(0, -4); g.lineTo(60, 0); g.lineTo(0, 4); g.closePath(); g.fill(); } });
     const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, transparent: true, depthTest: false, blending: THREE.AdditiveBlending })); halo.renderOrder = 17; halo.visible = false; scene.add(halo);
-    const scanRing = new THREE.Mesh(new THREE.RingGeometry(0.93, 1.0, 48), new THREE.MeshBasicMaterial({ color: 0xffe9a0, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })); scanRing.rotation.x = -Math.PI / 2; scanRing.position.y = 0.1; scene.add(scanRing);
+    const scanRings = Array.from({ length: NS }, () => { const r = new THREE.Mesh(new THREE.RingGeometry(0.93, 1.0, 48), new THREE.MeshBasicMaterial({ color: 0xffe9a0, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })); r.rotation.x = -Math.PI / 2; r.position.y = 0.1; scene.add(r); return r; });
 
     // ---------------- toestand ----------------
-    const S = { phase: 'idle', round: 0, first: Math.random() < 0.5 ? 0 : 1, hider: 0, t: 0, left: HUNT_T, prepT: PREP_T, started: false, help: -1, over: false, results: [], stats: { found: 0, wrong: 0, scans: 0, decoys: 0, pops: 0, deur: 0, clucks: 0 } };
-    const pts = [0, 0]; let finished = false, Tm = 0, introT = 0, camFocusK = 0, flashT = 0;
+    const order0 = players.map((_, i) => i); for (let i = order0.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [order0[i], order0[j]] = [order0[j], order0[i]]; }   // volgorde van de verstoppers
+    const S = { phase: 'idle', round: 0, order: order0, get first() { return this.order[0]; }, set first(v) { this.order = N === 2 ? [v, 1 - v] : [v, ...this.order.filter((q) => q !== v)]; }, hider: 0, t: 0, left: HUNT_T, prepT: PREP_T, started: false, help: -1, over: false, results: [], stats: { found: 0, wrong: 0, scans: 0, decoys: 0, pops: 0, deur: 0, clucks: 0 } };
+    const pts = new Array(N).fill(0); let finished = false, Tm = 0, introT = 0, camFocusK = 0, flashT = 0;
     const H = { dis: false, prop: null, kind: '', x: 0, z: 0, vx: 0, vz: 0, popped: false, cdPop: 0, cdDecoy: 0, reveal: 0, disT: 0, stepT: 0, sparkT: 0, hopT: 0 };
-    const Sk = { x: 0, z: 0, vx: 0, vz: 0, yaw: 0, stun: 0, tapCd: 0, scanCd: 0, chances: CHANCES, scanBoost: 0 };
+    const K = Array.from({ length: NS }, (_, j) => ({ j, slot: -1, x: 0, z: 0, vx: 0, vz: 0, yaw: 0, stun: 0, tapCd: 0, scanCd: 0, chances: CHANCES, scanBoost: 0, out: false }));   // de zoekers van deze ronde
+    const Sk = K[0];   // (N=2: de enige zoeker)
     const D = { state: 'idle', t: 0, next: 12, punished: false };
     const decoy = { x: 0, z: 0, t: 0 };
-    let scanFx = null; const shaking = [];
-    const hiI = () => S.hider, seI = () => 1 - S.hider;
+    const scanFxs = new Array(NS).fill(null); const shaking = [];
+    const hiI = () => S.hider, seI = () => (N === 2 ? 1 - S.hider : -1);
+    const seekSlots = () => players.map((_, i) => i).filter((i) => i !== S.hider);
+    const kOf = (slot) => K.find((k) => k.slot === slot) || null;
+    const nameList = (slots) => slots.map((i) => names[i]).join(' & ');
     const role = (i) => (i === S.hider ? 'verstopper' : 'zoeker');
     const colCss = players.map((p) => p.css);
 
     // ---------------- overlay (donker scherm / lantaarn) ----------------
-    let ov = null, vig = null, msg = null, lastVig = '';
+    let ov = null, vig = null, msg = null, lastVig = '', cv = null, cg = null;
     function ensureOv() {
       if (ov && ov.isConnected) return true;
       const hudEl = document.getElementById('hud'); if (!hudEl) return false;
       ov = document.createElement('div'); ov.style.cssText = 'position:absolute;inset:0;pointer-events:none;overflow:hidden';
       vig = document.createElement('div'); vig.style.cssText = 'position:absolute;inset:0'; ov.append(vig);
+      if (N > 2) { cv = document.createElement('canvas'); cv.width = 440; cv.height = 260; cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%'; ov.append(cv); cg = cv.getContext('2d'); }   // meerdere lantaarns: donkere laag met gaten
       msg = document.createElement('div'); msg.style.cssText = 'position:absolute;left:0;right:0;top:14%;text-align:center;font-family:MedievalSharp,serif;color:#ffe9a0;text-shadow:0 4px 0 #000,0 0 24px rgba(255,200,80,.6);line-height:1.05';
       ov.append(msg); hudEl.prepend(ov); lastVig = ''; return true;
     }
@@ -101,6 +111,25 @@ export default {
       if (!ensureOv()) return;
       const s = `radial-gradient(circle at ${cx.toFixed(0)}px ${cy.toFixed(0)}px, rgba(4,6,20,${a0}) ${r0.toFixed(0)}px, rgba(4,6,20,${a1}) ${r1.toFixed(0)}px, rgba(4,6,20,${rest}) ${(r1 * 2.1).toFixed(0)}px)`;
       if (s !== lastVig) { vig.style.background = s; lastVig = s; }
+    }
+    // holes = [{ cx, cy, r0, r1, a0, a1 }] (schermpixels); rest = donkerte buiten de gaten. Bij 4 spelers op een canvas (meerdere lantaarns), bij 2 spelers het oude CSS-verloop.
+    function setDark(holes, rest) {
+      if (N === 2) { const h = holes[0]; if (h) setVig(h.cx, h.cy, h.r0, h.r1, h.a0, h.a1, rest); else setVig(0, 0, 9999, 9999, 0, 0, rest); return; }
+      if (!ensureOv() || !cg) return;
+      const cw = renderer.domElement.clientWidth || 1100, chh = renderer.domElement.clientHeight || 650, sx = cv.width / cw, sy = cv.height / chh;
+      const sig = rest + '|' + holes.map((h) => [h.cx, h.cy, h.r0, h.r1, h.a1].map((v) => Math.round(v)).join(',')).join(';');
+      if (sig === lastVig) return; lastVig = sig;
+      cg.globalCompositeOperation = 'source-over'; cg.clearRect(0, 0, cv.width, cv.height);
+      if (rest <= 0) return;
+      cg.fillStyle = `rgba(4,6,20,${rest})`; cg.fillRect(0, 0, cv.width, cv.height);
+      cg.globalCompositeOperation = 'destination-out';
+      for (const h of holes) {
+        const gr = cg.createRadialGradient(h.cx * sx, h.cy * sy, 0, h.cx * sx, h.cy * sy, h.r1 * 2.1 * sx);
+        const f0 = Math.min(0.999, h.r0 / (h.r1 * 2.1)), f1 = Math.min(0.999, h.r1 / (h.r1 * 2.1));
+        gr.addColorStop(0, `rgba(0,0,0,${1 - h.a0 / rest})`); gr.addColorStop(f0, `rgba(0,0,0,${1 - h.a0 / rest})`); gr.addColorStop(f1, `rgba(0,0,0,${Math.max(0, 1 - h.a1 / rest)})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        cg.fillStyle = gr; cg.fillRect(0, 0, cv.width, cv.height);
+      }
+      cg.globalCompositeOperation = 'source-over';
     }
     function setMsg(html, size = 64) { if (!ensureOv()) return; if (msg.dataset.h !== html) { msg.dataset.h = html; msg.innerHTML = html; } msg.style.fontSize = size + 'px'; msg.style.display = html ? 'block' : 'none'; }
     const tv = new THREE.Vector3();
@@ -120,46 +149,52 @@ export default {
     // ---------------- ronde-flow ----------------
     function clearHider() { if (H.prop) { W.removeInstance(H.prop); H.prop = null; } H.dis = false; H.popped = false; H.reveal = 0; }
     function startRound(r) {
-      S.round = r; S.hider = r === 0 ? S.first : 1 - S.first; S.phase = 'intro'; S.t = 0; S.left = HUNT_T; S.prepT = PREP_T; S.over = false;
+      S.round = r; S.hider = S.order[r]; S.phase = 'intro'; S.t = 0; S.left = HUNT_T; S.prepT = PREP_T; S.over = false;
       clearHider(); H.cdPop = 0; H.cdDecoy = 0; H.vx = H.vz = 0;
       const p0 = pick(W.props); const a = Math.random() * TAU; H.x = clamp(p0.x + Math.cos(a) * 2.6, -PLAZA.X + 2, PLAZA.X - 2); H.z = clamp(p0.z + Math.sin(a) * 2.6, -PLAZA.Z + 2, PLAZA.Z - 2); pushOut(H, 0.6);
-      Sk.x = 0; Sk.z = PLAZA.Z - 1.3; Sk.vx = Sk.vz = 0; Sk.stun = 0; Sk.tapCd = 0; Sk.scanCd = 2.5; Sk.chances = CHANCES; Sk.scanBoost = 0;
-      D.state = 'idle'; D.next = 9 + Math.random() * 4; decoy.t = 0; CH.on = false; CH.mode = 'wait'; CH.decoyT = 0; scanFx = null; scanRing.material.opacity = 0; halo.visible = false; excl.visible = false;
-      // comeback in ronde 2: wie achterstaat krijgt hulp
-      S.help = -1; if (r === 1) { if (pts[0] < pts[1] - 4) S.help = 0; else if (pts[1] < pts[0] - 4) S.help = 1; }
-      const hi = S.hider, se = 1 - S.hider;
-      P[hi].lan.visible = false; P[se].lan.visible = true; P[hi].c.pose = 'idle'; P[se].c.pose = 'scared'; P[hi].vis = P[se].vis = true;
-      P[se].x = Sk.x; P[se].z = Sk.z; P[hi].x = H.x; P[hi].z = H.z; P[se].yaw = Math.PI; P[hi].yaw = 0;
-      P[se].c.faceDir(0, -1); P[hi].c.faceDir(0, 1);
+      const ss = seekSlots();
+      K.forEach((k, j) => { k.slot = ss[j]; k.x = (j - (NS - 1) / 2) * 3.4; k.z = PLAZA.Z - 1.3; k.vx = k.vz = 0; k.stun = 0; k.tapCd = 0; k.scanCd = 2.5; k.chances = CHANCES; k.scanBoost = 0; k.out = false; scanFxs[j] = null; scanRings[j].material.opacity = 0; });
+      D.state = 'idle'; D.next = 9 + Math.random() * 4; decoy.t = 0; CH.on = false; CH.mode = 'wait'; CH.decoyT = 0; halo.visible = false; excl.visible = false;
+      // comeback in ronde 2 (alleen bij 2 spelers): wie achterstaat krijgt hulp
+      S.help = -1; if (N === 2 && r === 1) { if (pts[0] < pts[1] - 4) S.help = 0; else if (pts[1] < pts[0] - 4) S.help = 1; }
+      const hi = S.hider;
+      P[hi].lan.visible = false; P[hi].c.pose = 'idle'; P[hi].vis = true;
+      for (const k of K) { P[k.slot].lan.visible = true; P[k.slot].c.pose = 'scared'; P[k.slot].vis = true; P[k.slot].x = k.x; P[k.slot].z = k.z; P[k.slot].yaw = Math.PI; P[k.slot].c.faceDir(0, -1); }
+      P[hi].x = H.x; P[hi].z = H.z; P[hi].yaw = 0; P[hi].c.faceDir(0, 1);
       hud.setTimer(null); refreshHud();
-      hud.showBig(`Ronde ${r + 1}/2`, 1500, '#ffe14a');
-      hud.toast(`${names[hi]} verstopt zich, ${names[se]} zoekt!`, 2000);
-      if (S.help >= 0) setTimeout(() => hud.toast(`Hulp voor ${names[S.help]}: ${S.help === se ? 'toverlantaarn (grotere scan)' : 'slimme afleiding (kip loopt trager)'}!`, 2600), 1300);
+      hud.showBig(`Ronde ${r + 1}/${ROUNDS}`, 1500, '#ffe14a');
+      hud.toast(`${names[hi]} verstopt zich, ${nameList(ss)} ${ss.length > 1 ? 'zoeken' : 'zoekt'}!`, 2000);
+      if (S.help >= 0) setTimeout(() => hud.toast(`Hulp voor ${names[S.help]}: ${S.help === seI() ? 'toverlantaarn (grotere scan)' : 'slimme afleiding (kip loopt trager)'}!`, 2600), 1300);
       audio.sfx('door', { vol: 0.4 });
     }
     function enterPrep() {
       S.phase = 'prep'; S.t = 0; S.prepT = PREP_T; S.disT = 0; hud.showBig('', 1);
-      hud.setHint(`<b>${names[hiI()]}</b>: loop naar een voorwerp en druk <b>A</b> om je te verkleden!  ·  ${names[seI()]}: ogen dicht!`);
+      hud.setHint(`<b>${names[hiI()]}</b>: loop naar een voorwerp en druk <b>A</b> om je te verkleden!  ·  ${nameList(seekSlots())}: ogen dicht!`);
       audio.sfx('creak', { vol: 0.2, rate: 1.5 });
     }
     function enterHunt() {
       if (!H.dis) autoDisguise();
       S.phase = 'hunt'; S.t = 0; flashT = 0.5; H.popped = false; P[hiI()].vis = false;
-      P[seI()].c.pose = 'carry'; P[hiI()].c.pose = 'idle';
+      for (const k of K) P[k.slot].c.pose = 'carry'; P[hiI()].c.pose = 'idle';
       // kip start ver weg
       const far = [[-PLAZA.X + 2, -PLAZA.Z + 2], [PLAZA.X - 2, -PLAZA.Z + 2], [-PLAZA.X + 2, PLAZA.Z - 2], [PLAZA.X - 2, PLAZA.Z - 2]].sort((a, b) => Math.hypot(b[0] - H.x, b[1] - H.z) - Math.hypot(a[0] - H.x, a[1] - H.z))[0];
       CH.x = far[0]; CH.z = far[1]; CH.on = true; CH.mode = 'walk'; CH.cluck = 1; hen.group.visible = true;
-      setMsg(''); hud.setHint(`Zoeker <b>${names[seI()]}</b>: <b>A</b> = tik · <b>B</b> = scan  ·  Verstopper <b>${names[hiI()]}</b>: <b>A</b> = ontkleden · <b>B</b> = afleiding`);
+      setMsg(''); hud.setHint(`${NS > 1 ? 'Zoekers' : 'Zoeker'} <b>${nameList(seekSlots())}</b>: <b>A</b> = tik · <b>B</b> = scan  ·  Verstopper <b>${names[hiI()]}</b>: <b>A</b> = ontkleden · <b>B</b> = afleiding`);
       hud.showBig('OGEN OPEN!', 900, '#ffe14a'); audio.sfx('go', { vol: 0.4 }); audio.sfx('whoosh', { vol: 0.4 });
-      fx.particles.burst(Sk.x, 1.5, Sk.z, { count: 30, speed: 6, up: 1, life: 0.8, size: 0.4, colors: [0xffe9a0, 0xffffff], gravity: 3 });
+      for (const k of K) fx.particles.burst(k.x, 1.5, k.z, { count: 30, speed: 6, up: 1, life: 0.8, size: 0.4, colors: [0xffe9a0, 0xffffff], gravity: 3 });
     }
     function autoDisguise() { const p = nearestProp(H.x, H.z, 99); if (p) { H.x = p.x + (H.x < p.x ? -1 : 1) * (p.r + 0.9); H.z = p.z + 0.4; } disguiseAs(p); }
     function refreshHud() {
-      hud.setScore(`Ronde ${Math.min(2, S.round + 1)}/2 · ${names[0]} ${Math.round(pts[0])} – ${Math.round(pts[1])} ${names[1]}`);
-      for (let i = 0; i < 2; i++) {
+      if (N === 2) hud.setScore(`Ronde ${Math.min(2, S.round + 1)}/2 · ${names[0]} ${Math.round(pts[0])} – ${Math.round(pts[1])} ${names[1]}`);
+      else hud.setScore(`Ronde ${Math.min(ROUNDS, S.round + 1)}/${ROUNDS}`);
+      for (let i = 0; i < N; i++) {
         let tx;
         if (i === S.hider) tx = S.phase === 'hunt' || S.phase === 'prep' ? `Verstopper · ${H.dis ? KINDS[H.kind].name : 'zonder voorwerp'} · afleiding ${H.cdDecoy > 0 ? Math.ceil(H.cdDecoy) + 's' : 'klaar'}` : 'Verstopper';
-        else tx = `Zoeker · kansen: ${Sk.chances} · scan ${Sk.scanCd > 0 ? Math.ceil(Sk.scanCd) + 's' : 'klaar'}`;
+        else { const k = kOf(i); tx = k ? `Zoeker · kansen: ${k.chances} · scan ${k.scanCd > 0 ? Math.ceil(k.scanCd) + 's' : 'klaar'}` : 'Zoeker'; }
+        if (N > 2) {   // compacte tekst voor de vier vakjes
+          const k = kOf(i);
+          tx = `${Math.round(pts[i])} pnt · ` + (i === S.hider ? (S.phase === 'hunt' || S.phase === 'prep' ? `verstopt${H.dis ? ': ' + KINDS[H.kind].name : ''}` : 'verstopper') : (k ? `zoekt · ${k.chances}♥ · ${k.scanCd > 0 ? 'scan ' + Math.ceil(k.scanCd) + 's' : 'scan klaar'}` : 'zoeker'));
+        }
         hud.setPlayerInfo(i, tx);
       }
     }
@@ -190,41 +225,43 @@ export default {
     }
 
     // ---------------- zoeker: tikken en scannen ----------------
-    function onFound() {
+    function onFound(k) {
       if (S.phase !== 'hunt') return;
-      const hiP = Math.max(0, HUNT_T - S.left), seP = Math.max(0, S.left); endRound('found', hiP, seP);
+      const hiP = Math.max(0, HUNT_T - S.left), seP = Math.max(0, S.left); endRound('found', hiP, seP, k.slot);
     }
-    function wrongTap(best) {
-      Sk.stun = 1.15; Sk.chances--; S.left -= 2; S.stats.wrong++;
-      P[seI()].c.pose = 'scared'; ctx.shake(0.35); audio.sfx('hurt', { vol: 0.5 }); audio.sfx('thud', { vol: 0.5 });
+    function wrongTap(k, best) {
+      const p = P[k.slot];
+      k.stun = 1.15; k.chances--; if (N === 2) S.left -= 2; S.stats.wrong++;
+      p.c.pose = 'scared'; ctx.shake(0.35); audio.sfx('hurt', { vol: 0.5 }); audio.sfx('thud', { vol: 0.5 });
       let txt;
       if (best.type === 'prop') { best.obj.shake = 1.0; txt = pick(BAD_TAPS).replace('{k}', KINDS[best.obj.kind].name); }
       else if (best.type === 'npc') { crowd.hop(best.obj); txt = `Hé! Dat is ${pick(NPC_NAMES)}!`; audio.sfx('hit', { vol: 0.4, rate: 0.7 }); }
       else { CH.hop = 0.7; txt = 'De kip pikt je in je teen!'; }
-      fx.texts.add(txt, best.x, 2.6, best.z, '#ff8a8a', 1.3); hud.toast(`${txt}  (-2 s, nog ${Sk.chances} kansen)`, 1600);
+      fx.texts.add(txt, best.x, 2.6, best.z, '#ff8a8a', 1.3); hud.toast(N === 2 ? `${txt}  (-2 s, nog ${k.chances} kansen)` : `${names[k.slot]}: ${txt}  (nog ${k.chances} kansen)`, 1600);
       burst(best.x, 1.2, best.z, 12, [0xffe14a, 0xffffff], 3, 1.2);
-      for (let k = 0; k < 3; k++) fx.particles.emit(Sk.x + rand(-0.4, 0.4), 2.2, Sk.z + rand(-0.4, 0.4), rand(-1, 1), 0.5, rand(-1, 1), { life: 0.8, size: 0.35, color: 0xffe14a, gravity: 0 });
-      if (Sk.chances <= 0) endRound('chances', HUNT_T, 0);
+      for (let q = 0; q < 3; q++) fx.particles.emit(k.x + rand(-0.4, 0.4), 2.2, k.z + rand(-0.4, 0.4), rand(-1, 1), 0.5, rand(-1, 1), { life: 0.8, size: 0.35, color: 0xffe14a, gravity: 0 });
+      if (k.chances <= 0) { k.out = true; p.c.pose = 'sad'; if (K.every((q) => q.chances <= 0)) endRound('chances', HUNT_T, 0); }
       else if (S.left <= 0) endRound('time', HUNT_T, 0);
     }
-    function tap() {
-      Sk.tapCd = 0.45; P[seI()].c.swing(); audio.sfx('swing', { vol: 0.4 });
-      const reach = TAP_REACH * pv.size(seI()) * (S.help === seI() ? 1.3 : 1);
+    function tap(k) {
+      const p = P[k.slot];
+      k.tapCd = 0.45; p.c.swing(); audio.sfx('swing', { vol: 0.4 });
+      const reach = TAP_REACH * pv.size(k.slot) * (S.help === k.slot ? 1.3 : 1);
       let best = null, bd = 1e9;
-      const consider = (type, obj, x, z, r) => { const d = Math.hypot(Sk.x - x, Sk.z - z) - r; if (d < reach && d < bd) { bd = d; best = { type, obj, x, z }; } };
-      for (const p of W.props) consider('prop', p, p.x, p.z, p.r);
+      const consider = (type, obj, x, z, r) => { const d = Math.hypot(k.x - x, k.z - z) - r; if (d < reach && d < bd) { bd = d; best = { type, obj, x, z }; } };
+      for (const q of W.props) consider('prop', q, q.x, q.z, q.r);
       if (H.dis && H.prop) consider('hider', H, H.x, H.z, H.prop.r); else if (!H.dis && P[hiI()].vis) consider('hider', H, H.x, H.z, 0.55);
-      const nn = crowd.nearest(Sk.x, Sk.z, reach); if (nn && nn.d < bd) { bd = nn.d; best = { type: 'npc', obj: nn.o, x: nn.o.x, z: nn.o.z }; }
+      const nn = crowd.nearest(k.x, k.z, reach); if (nn && nn.d < bd) { bd = nn.d; best = { type: 'npc', obj: nn.o, x: nn.o.x, z: nn.o.z }; }
       if (CH.on) consider('chicken', CH, CH.x, CH.z, 0.5);
-      if (!best) { fx.particles.dust(Sk.x + Math.sin(P[seI()].yaw) * 1.2, 0.1, Sk.z + Math.cos(P[seI()].yaw) * 1.2, 3); return; }
-      if (best.type === 'hider') onFound(); else wrongTap(best);
+      if (!best) { fx.particles.dust(k.x + Math.sin(p.yaw) * 1.2, 0.1, k.z + Math.cos(p.yaw) * 1.2, 3); return; }
+      if (best.type === 'hider') onFound(k); else wrongTap(k, best);
     }
-    function scan() {
-      const R = SCAN_R * (S.help === seI() ? 1.35 : 1);
-      Sk.scanCd = SCAN_CD * (S.help === seI() ? 0.7 : 1); S.stats.scans++;
-      scanFx = { t: 0, x: Sk.x, z: Sk.z, R, hit: false }; Sk.scanBoost = 1;
+    function scan(k) {
+      const R = SCAN_R * (S.help === k.slot ? 1.35 : 1);
+      k.scanCd = SCAN_CD * (S.help === k.slot ? 0.7 : 1); S.stats.scans++;
+      scanFxs[k.j] = { t: 0, x: k.x, z: k.z, R, hit: false }; k.scanBoost = 1;
       audio.sfx('sparkle', { vol: 0.7 }); audio.tone(660, 0.5, { type: 'sine', vol: 0.12, slide: 1320 }); ctx.shake(0.1);
-      P[seI()].c.swing();
+      P[k.slot].c.swing();
     }
 
     // ---------------- verstopper: afleiding ----------------
@@ -240,34 +277,48 @@ export default {
     }
 
     // ---------------- einde van een ronde ----------------
-    function endRound(kind, hiP, seP) {
+    function endRound(kind, hiP, seP, finder = -1) {
       if (S.phase !== 'hunt') return;
       S.phase = 'found'; S.t = 0; S.over = true; hud.setTimer(null);
-      const hi = hiI(), se = seI(); pts[hi] += hiP; pts[se] += seP; S.results.push({ kind, hider: hi, hiP, seP });
+      const hi = hiI(), se = finder >= 0 ? finder : (N === 2 ? seI() : -1); pts[hi] += hiP; if (se >= 0 && kind === 'found') pts[se] += seP; else if (N === 2) pts[seI()] += seP; S.results.push({ kind, hider: hi, hiP, seP, finder: se });
       if (kind === 'found') S.stats.found++;
       // onthullen
       const x = H.x, z = H.z; if (H.dis) undisguise(); P[hi].vis = true; P[hi].x = x; P[hi].z = z;
       if (kind === 'found') {
-        P[se].c.pose = 'cheer'; P[hi].c.pose = 'sad'; hud.showBig('GEVONDEN!', 1500, '#ffe14a'); audio.sfx('win', { vol: 0.6 }); audio.sfx('bell', { vol: 0.5 });
+        for (const k of K) P[k.slot].c.pose = k.slot === se ? 'cheer' : 'sad';
+        P[hi].c.pose = 'sad'; hud.showBig('GEVONDEN!', 1500, '#ffe14a'); audio.sfx('win', { vol: 0.6 }); audio.sfx('bell', { vol: 0.5 });
         fx.particles.burst(x, 1.4, z, { count: 60, speed: 8, up: 1.4, life: 1.2, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 }); ctx.shake(0.6);
         hud.toast(`${names[se]} vond ${names[hi]} na ${hiP.toFixed(1)} s!  ${names[hi]} +${Math.round(hiP)} · ${names[se]} +${Math.round(seP)}`, 2600);
       } else {
-        P[hi].c.pose = 'cheer'; P[se].c.pose = 'sad'; hud.showBig(kind === 'chances' ? 'GEEN KANSEN MEER!' : 'NIET GEVONDEN!', 1500, '#8dff9a'); audio.sfx('win', { vol: 0.5 });
+        P[hi].c.pose = 'cheer'; for (const k of K) P[k.slot].c.pose = 'sad'; hud.showBig(kind === 'chances' ? 'GEEN KANSEN MEER!' : 'NIET GEVONDEN!', 1500, '#8dff9a'); audio.sfx('win', { vol: 0.5 });
         hud.toast(`${names[hi]} bleef ${Math.round(HUNT_T)} s ongezien!  +${Math.round(hiP)} punten`, 2600);
         fx.particles.burst(x, 1.4, z, { count: 40, speed: 7, up: 1.4, life: 1.1, size: 0.45, colors: [0x8dff9a, 0xffffff, 0xffe14a], gravity: 5 }); ctx.shake(0.3);
       }
-      halo.visible = false; excl.visible = false; scanRing.material.opacity = 0; D.state === 'stare' && (W.gate.target = 0); W.gate.target = 0; D.state = 'idle';
+      halo.visible = false; excl.visible = false; for (const r of scanRings) r.material.opacity = 0; scanFxs.fill(null); W.gate.target = 0; D.state = 'idle';
       refreshHud();
     }
     function finishMatch() {
       if (finished) return; finished = true;
-      let w = pts[0] === pts[1] ? -1 : pts[0] > pts[1] ? 0 : 1, coin = false; if (Math.abs(pts[0] - pts[1]) < 0.05) { w = Math.random() < 0.5 ? 0 : 1; coin = true; }
-      const l = 1 - w, diff = Math.abs(pts[0] - pts[1]);
-      const jokes = [`${names[w]} is de meester-verkleder van de kermis! ${names[l]} tikte nog een ton aan voor de zekerheid.`, `${names[w]} verdween tussen de kermisspullen als een echte tonnenspion. ${names[l]} zoekt nog.`, `Gevonden of niet: ${names[w]} had de beste neus en het beste verstopje.`, `De kip keek tevreden naar ${names[w]}. ${names[l]} kreeg een veertje als troostprijs.`];
-      const extra = coin ? ' Precies gelijk! De kip koos zelf de winnaar.' : diff < 3 ? ' Dat was op het nippertje!' : '';
-      ctx.finishPvp({ winner: w, score: [Math.round(pts[0]), Math.round(pts[1])], delay: 700, summary: `${pick(jokes)}${extra} (gevonden: ${S.stats.found} van 2, ${S.stats.wrong} foute tikken, ${S.stats.decoys} afleidingen).` });
-      P[w].c.pose = 'cheer'; P[l].c.pose = 'sad'; P[0].vis = P[1].vis = true; P[w].lan.visible = false; P[l].lan.visible = false; setMsg(''); setVig(0, 0, 9999, 9999, 0, 0, 0);
-      P[w].x = -2.2 + 4.4 * w; P[l].x = -2.2 + 4.4 * l; P[w].z = P[l].z = 3; clearHider();
+      if (N === 2) {
+        let w = pts[0] === pts[1] ? -1 : pts[0] > pts[1] ? 0 : 1, coin = false; if (Math.abs(pts[0] - pts[1]) < 0.05) { w = Math.random() < 0.5 ? 0 : 1; coin = true; }
+        const l = 1 - w, diff = Math.abs(pts[0] - pts[1]);
+        const jokes = [`${names[w]} is de meester-verkleder van de kermis! ${names[l]} tikte nog een ton aan voor de zekerheid.`, `${names[w]} verdween tussen de kermisspullen als een echte tonnenspion. ${names[l]} zoekt nog.`, `Gevonden of niet: ${names[w]} had de beste neus en het beste verstopje.`, `De kip keek tevreden naar ${names[w]}. ${names[l]} kreeg een veertje als troostprijs.`];
+        const extra = coin ? ' Precies gelijk! De kip koos zelf de winnaar.' : diff < 3 ? ' Dat was op het nippertje!' : '';
+        ctx.finishPvp({ winner: w, score: [Math.round(pts[0]), Math.round(pts[1])], delay: 700, summary: `${pick(jokes)}${extra} (gevonden: ${S.stats.found} van 2, ${S.stats.wrong} foute tikken, ${S.stats.decoys} afleidingen).` });
+        P[w].c.pose = 'cheer'; P[l].c.pose = 'sad'; P[0].vis = P[1].vis = true; P[w].lan.visible = false; P[l].lan.visible = false; setMsg(''); setDark([], 0);
+        P[w].x = -2.2 + 4.4 * w; P[l].x = -2.2 + 4.4 * l; P[w].z = P[l].z = 3; clearHider();
+        return;
+      }
+      // 4 spelers: hoogste totaal wint, gelijk = de kip kiest (willekeurig tussen de gedeelde koppositie)
+      const rp = pts.map((v) => Math.round(v * 10) / 10), top = Math.max(...rp), tied = rp.map((v, i) => (v === top ? i : -1)).filter((i) => i >= 0);
+      const w = tied.length > 1 ? pick(tied) : tied[0], coin = tied.length > 1;
+      const order = players.map((_, i) => i).sort((a, b) => (b === w) - (a === w) || rp[b] - rp[a] || a - b);
+      const jokes = [`${names[w]} is de meester-verkleder van de kermis!`, `${names[w]} verdween tussen de kermisspullen als een echte tonnenspion.`, `Gevonden of niet: ${names[w]} had de beste neus en het beste verstopje.`, `De kip keek tevreden naar ${names[w]}.`];
+      const extra = coin ? ' Precies gelijk! De kip koos zelf de winnaar.' : '';
+      ctx.finishPvp({ winner: w, score: rp.map((v) => Math.round(v)), place: order, delay: 700, summary: `${pick(jokes)}${extra} (gevonden: ${S.stats.found} van ${ROUNDS}, ${S.stats.wrong} foute tikken, ${S.stats.decoys} afleidingen).` });
+      for (const p of P) { p.vis = true; p.lan.visible = false; }
+      setMsg(''); setDark([], 0); clearHider();
+      order.forEach((q, r) => { P[q].c.pose = r === 0 ? 'cheer' : 'sad'; P[q].x = (r - (N - 1) / 2) * 2.6; P[q].z = 3; P[q].vx = P[q].vz = 0; });
     }
 
     // ---------------- hoofdlus ----------------
@@ -275,7 +326,7 @@ export default {
       dt = Math.min(dt, 0.05); Tm += dt; S.t += dt;
       if (!S.started) { S.started = true; startRound(0); }
       if (Tm > 260 && !finished && S.phase !== 'end') { S.phase = 'end'; finishMatch(); }
-      const hi = hiI(), se = seI(), inH = pv.input(hi), inS = pv.input(se);
+      const hi = hiI(), inH = pv.input(hi);
       let freeze = false;
       if (S.phase === 'intro') { if (S.t > INTRO_T) enterPrep(); }
       else if (S.phase === 'prep') {
@@ -284,21 +335,22 @@ export default {
         if (H.dis) { H.vx = H.vz = 0; if (S.t - H.disT > 2.0 || S.prepT <= 0) enterHunt(); }
         else if (S.prepT <= 0) enterHunt();
         const left = Math.max(0, Math.ceil(S.prepT));
-        setMsg(`<div style="font-size:60px">${names[se]}: OGEN DICHT!</div><div style="font-size:30px;color:#fff;margin-top:6px">${names[hi]} verstopt zich... ${left}</div>`, 60);
+        setMsg(`<div style="font-size:60px">${nameList(seekSlots())}: OGEN DICHT!</div><div style="font-size:30px;color:#fff;margin-top:6px">${names[hi]} verstopt zich... ${left}</div>`, 60);
       } else if (S.phase === 'hunt') {
-        updateHunt(dt, inH, inS); freeze = D.state === 'stare';
+        updateHunt(dt, inH); freeze = D.state === 'stare';
       } else if (S.phase === 'found') {
-        if (S.t > FOUND_T) { if (S.round === 0) startRound(1); else { S.phase = 'end'; finishMatch(); } }
+        if (S.t > FOUND_T) { if (S.round < ROUNDS - 1) startRound(S.round + 1); else { S.phase = 'end'; finishMatch(); } }
       }
-      crowd.update(dt, freeze, [{ x: Sk.x, z: Sk.z, r: 0.6 }, ...(P[hi].vis ? [{ x: H.x, z: H.z, r: 0.6 }] : [])], Tm);
+      crowd.update(dt, freeze, [...K.map((k) => ({ x: k.x, z: k.z, r: 0.6 })), ...(P[hi].vis ? [{ x: H.x, z: H.z, r: 0.6 }] : [])], Tm);
       refreshHud();
       visuals(dt);
     }
 
-    function updateHunt(dt, inH, inS) {
-      const hi = hiI(), se = seI();
+    function updateHunt(dt, inH) {
+      const hi = hiI();
       S.left -= dt; hud.setTimer(Math.max(0, S.left), 8);
-      Sk.tapCd = Math.max(0, Sk.tapCd - dt); Sk.scanCd = Math.max(0, Sk.scanCd - dt); H.cdPop = Math.max(0, H.cdPop - dt); H.cdDecoy = Math.max(0, H.cdDecoy - dt); H.reveal = Math.max(0, H.reveal - dt); Sk.scanBoost = Math.max(0, Sk.scanBoost - dt * 1.4);
+      for (const k of K) { k.tapCd = Math.max(0, k.tapCd - dt); k.scanCd = Math.max(0, k.scanCd - dt); k.scanBoost = Math.max(0, k.scanBoost - dt * 1.4); }
+      H.cdPop = Math.max(0, H.cdPop - dt); H.cdDecoy = Math.max(0, H.cdDecoy - dt); H.reveal = Math.max(0, H.reveal - dt);
       decoy.t = Math.max(0, decoy.t - dt); CH.decoyT = Math.max(0, CH.decoyT - dt);
       if (S.left <= 0) { endRound('time', HUNT_T, 0); return; }
       // Deurman-poort
@@ -307,14 +359,19 @@ export default {
       else if (D.state === 'warn') { if (D.t > 0.9) { D.state = 'stare'; D.t = 0; D.punished = false; S.stats.deur++; audio.sfx('heartbeat', { vol: 0.6 }); hud.showBig('NIET BEWEGEN!', 900, '#ff6a6a'); ctx.shake(0.3); } }
       else if (D.state === 'stare') { if (D.t > 1.7) { D.state = 'idle'; D.next = 11 + Math.random() * 4; W.gate.target = 0; audio.sfx('door', { vol: 0.5 }); } }
       const frozen = D.state === 'stare';
-      // ----- zoeker -----
-      if (Sk.stun > 0) { Sk.stun -= dt; if (Sk.stun <= 0) P[se].c.pose = 'carry'; }
-      if (Sk.stun <= 0 && !frozen) {
-        moveWith(Sk, inS, SEEK_SPEED * pv.speed(se), dt); pushOut(Sk, 0.5); pushOutProps(Sk, 0.35);
-        if (inS.aP && Sk.tapCd <= 0) tap();
-        if (inS.bP && Sk.scanCd <= 0) scan();
-      } else { Sk.vx = Sk.vz = 0; if (frozen) P[se].c.pose = 'scared'; }
-      if (!frozen && Sk.stun <= 0 && P[se].c.pose === 'scared') P[se].c.pose = 'carry';
+      // ----- zoekers -----
+      for (const k of K) {
+        if (S.phase !== 'hunt') break;   // een vorige zoeker beëindigde de ronde net
+        const inS = pv.input(k.slot), pp = P[k.slot];
+        if (k.stun > 0) { k.stun -= dt; if (k.stun <= 0 && !k.out) pp.c.pose = 'carry'; }
+        if (k.stun <= 0 && !frozen && !k.out) {
+          moveWith(k, inS, SEEK_SPEED * pv.speed(k.slot), dt); pushOut(k, 0.5); pushOutProps(k, 0.35);
+          if (inS.aP && k.tapCd <= 0) tap(k);
+          if (S.phase === 'hunt' && inS.bP && k.scanCd <= 0) scan(k);
+        } else { k.vx = k.vz = 0; if (frozen && !k.out) pp.c.pose = 'scared'; }
+        if (!frozen && k.stun <= 0 && !k.out && pp.c.pose === 'scared') pp.c.pose = 'carry';
+      }
+      if (S.phase !== 'hunt') return;
       // ----- verstopper -----
       const moveMag = Math.hypot(inH.x, inH.y);
       if (frozen && !D.punished && (moveMag > 0.2 || inH.aP || inH.bP) && S.phase === 'hunt') {
@@ -331,7 +388,7 @@ export default {
           }
           if (inH.aP && H.cdPop <= 0) { S.stats.pops++; undisguise(); H.popped = true; H.hopT = 0; P[hi].vis = true; hud.toast(`${names[hi]} sprint weg! Druk A bij een voorwerp om je te verstoppen`, 1500); }
           else if (inH.aP) { fx.texts.add('wacht even...', H.x, 2.2, H.z, '#cfcfcf', 0.9); }
-          H.sparkT -= dt; const dd = Math.hypot(Sk.x - H.x, Sk.z - H.z);
+          H.sparkT -= dt; const dd = Math.min(...K.map((k) => Math.hypot(k.x - H.x, k.z - H.z)));
           if (dd < 3.4 && H.sparkT <= 0) { H.sparkT = 0.8 + Math.random() * 0.5; fx.particles.emit(H.x + rand(-0.3, 0.3), 1.4, H.z + rand(-0.3, 0.3), 0, 0.8, 0, { life: 0.6, size: 0.22, color: 0xfff0a0, gravity: 0 }); }
         } else {
           moveWith(H, inH, RUN_SPEED * pv.speed(hi), dt); pushOut(H, 0.5); P[hi].x = H.x; P[hi].z = H.z;
@@ -339,13 +396,14 @@ export default {
         }
         if (H.dis && inH.bP && H.cdDecoy <= 0) doDecoy(); else if (!H.dis && inH.bP && H.cdDecoy <= 0) doDecoy();
       } else { H.vx = H.vz = 0; }
-      // ----- scan-flits -----
-      if (scanFx) {
+      // ----- scan-flitsen -----
+      scanFxs.forEach((scanFx, j) => {
+        if (!scanFx) return; const scanRing = scanRings[j];
         scanFx.t += dt; const u = clamp(scanFx.t / 0.9, 0, 1), r = scanFx.R * (1 - Math.pow(1 - u, 2));
         scanRing.position.set(scanFx.x, 0.1, scanFx.z); scanRing.scale.setScalar(Math.max(0.1, r)); scanRing.material.opacity = (1 - u) * 0.9;
         if (!scanFx.hit && H.dis && Math.hypot(H.x - scanFx.x, H.z - scanFx.z) <= r) { scanFx.hit = true; H.reveal = 2.2; audio.sfx('ding', { vol: 0.8 }); fx.texts.add('GLINSTER!', H.x, 2.6, H.z, '#fff08a', 1.6); burst(H.x, 1.0, H.z, 24, [0xfff08a, 0xffffff], 3, 1.5); }
-        if (u >= 1) { scanFx = null; scanRing.material.opacity = 0; }
-      }
+        if (u >= 1) { scanFxs[j] = null; scanRing.material.opacity = 0; }
+      });
       // ----- verraderkip -----
       updateChicken(dt);
       // ----- schuddende voorwerpen -----
@@ -360,7 +418,7 @@ export default {
       else {
         CH.mode = 'betray'; hen.speed = 0; hen.targetYaw = Math.atan2(dx, dz);
         CH.cluck -= dt; if (CH.cluck <= 0) {
-          CH.cluck = 1.2; S.stats.clucks++; const ds = Math.hypot(Sk.x - CH.x, Sk.z - CH.z); const v = clamp(0.55 - ds * 0.02, 0.18, 0.55);
+          CH.cluck = 1.2; S.stats.clucks++; const ds = Math.min(...K.map((k) => Math.hypot(k.x - CH.x, k.z - CH.z))); const v = clamp(0.55 - ds * 0.02, 0.18, 0.55);
           audio.tone(520, 0.1, { type: 'square', vol: 0.12 * v / 0.4, slide: 900 }); audio.tone(780, 0.12, { type: 'square', vol: 0.1 * v / 0.4, slide: 380, delay: 0.1 }); audio.tone(620, 0.1, { type: 'square', vol: 0.1 * v / 0.4, slide: 300, delay: 0.24 });
           fx.texts.add(Math.random() < 0.5 ? 'KOKOKO!' : 'KO-KO-KOEK!', CH.x, 2.3, CH.z, '#fff6a8', 1.3); CH.hop = 1;
           fx.particles.burst(CH.x, 0.9, CH.z, { count: 8, speed: 3, up: 1.4, life: 0.8, size: 0.28, colors: [0xffffff, 0xf6f1e4], gravity: 3 });
@@ -396,21 +454,26 @@ export default {
     }
     function placePuppet(p, dt, speedFrac) {
       const c = p.c; p.holder.visible = p.vis;
-      const mvx = p === P[seI()] ? Sk.vx : (p === P[hiI()] ? H.vx : 0), mvz = p === P[seI()] ? Sk.vz : (p === P[hiI()] ? H.vz : 0);
+      const kk = kOf(p.i), mvx = kk ? kk.vx : (p === P[hiI()] ? H.vx : 0), mvz = kk ? kk.vz : (p === P[hiI()] ? H.vz : 0);
       p.holder.position.set(p.x, p.y, p.z); c.speed = clamp(Math.hypot(mvx, mvz) / 6.5, 0, 1) * speedFrac; if (Math.hypot(mvx, mvz) > 0.3) c.faceDir(mvx, mvz); c.update(dt);
       p.tag.visible = p.vis; p.tag.position.set(p.x, 2.7 * pv.size(p.i) * (1.7 / 1.84) + 0.2, p.z); p.ring.visible = p.vis; p.ring.position.set(p.x, 0.06, p.z); p.shadow.visible = p.vis; p.shadow.position.set(p.x, 0.03, p.z);
     }
     function visuals(dt) {
-      const hi = hiI(), se = seI();
-      // zoeker volgt Sk, verstopper-poppetje volgt H
-      P[se].x = Sk.x; P[se].z = Sk.z; if (S.phase !== 'found' && S.phase !== 'end') { P[hi].x = H.x; P[hi].z = H.z; }
+      const hi = hiI();
+      // zoekers volgen hun K, verstopper-poppetje volgt H
+      for (const k of K) { P[k.slot].x = k.x; P[k.slot].z = k.z; }
+      if (S.phase !== 'found' && S.phase !== 'end') { P[hi].x = H.x; P[hi].z = H.z; }
       const idleSeeker = S.phase === 'prep' || S.phase === 'intro';
-      placePuppet(P[se], dt, 1); placePuppet(P[hi], dt, 1);
-      if (idleSeeker) P[se].c.faceDir(0, -1);
-      // lantaarnlicht en -vlek
-      const seekerOn = S.phase === 'hunt' || S.phase === 'found';
-      const lampI = S.phase === 'hunt' ? 55 : S.phase === 'found' ? 25 : 8; lamp.intensity = damp(lamp.intensity, D.state === 'warn' || D.state === 'stare' ? lampI * (Math.random() < 0.5 ? 0.2 : 1) : lampI, 20, dt);
-      lamp.position.set(Sk.x, 2.1, Sk.z); pool.position.set(Sk.x, 0.05, Sk.z); pool.scale.setScalar(S.phase === 'hunt' ? 12 + Sk.scanBoost * 8 : 7); pool.material.opacity = S.phase === 'hunt' ? 0.9 : 0.3;
+      for (const k of K) placePuppet(P[k.slot], dt, 1);
+      placePuppet(P[hi], dt, 1);
+      if (idleSeeker) for (const k of K) P[k.slot].c.faceDir(0, -1);
+      // lantaarnlicht en -vlek (per zoeker)
+      const lampI = (S.phase === 'hunt' ? 55 : S.phase === 'found' ? 25 : 8) * (N > 2 ? 0.75 : 1);
+      K.forEach((k, j) => {
+        const lamp = lamps[j], pool = pools[j], on = !k.out;
+        lamp.intensity = damp(lamp.intensity, !on ? 0 : D.state === 'warn' || D.state === 'stare' ? lampI * (Math.random() < 0.5 ? 0.2 : 1) : lampI, 20, dt);
+        lamp.position.set(k.x, 2.1, k.z); pool.position.set(k.x, 0.05, k.z); pool.scale.setScalar(S.phase === 'hunt' ? 12 + k.scanBoost * 8 : 7); pool.material.opacity = on ? (S.phase === 'hunt' ? 0.9 : 0.3) : 0;
+      });
       // voorwerpen: verstopper ademt/wobbelt
       if (H.prop) { H.prop.x = H.x; H.prop.z = H.z; if (H.prop.shake > 0) H.prop.shake = Math.max(0, H.prop.shake - dt * 2); W.writeProp(H.prop, Tm); }
       // glinstering (onthulling)
@@ -432,23 +495,23 @@ export default {
       const cw = renderer.domElement.clientWidth || 1100, ch = renderer.domElement.clientHeight || 650;
       if (S.phase === 'prep') {
         const [sx, sy] = toScreen(H.x, 0.8, H.z); const ppu = pxPerUnit(H.x, H.z);
-        setVig(sx, sy, ppu * 3.2, ppu * 5.2, 0, 0.55, 0.97);
+        setDark([{ cx: sx, cy: sy, r0: ppu * 3.2, r1: ppu * 5.2, a0: 0, a1: 0.55 }], 0.97);
       } else if (S.phase === 'hunt' || S.phase === 'found') {
-        const [sx, sy] = toScreen(Sk.x, 0.8, Sk.z); const ppu = pxPerUnit(Sk.x, Sk.z); const R = (S.phase === 'found' ? 14 : 5.3 * (S.help === hiI() ? 0.85 : 1) + Sk.scanBoost * 4) * ppu;
         const fl = D.state === 'warn' || D.state === 'stare' ? (Math.random() < 0.3 ? 0.97 : 0.8) : 0.76;
-        setVig(sx, sy, R * 0.55, R, 0, 0.42, S.phase === 'found' ? 0 : fl);
+        const holes = K.filter((k) => !k.out || N === 2).map((k) => { const [sx, sy] = toScreen(k.x, 0.8, k.z); const ppu = pxPerUnit(k.x, k.z); const R = (S.phase === 'found' ? 14 : 5.3 * (S.help === hiI() ? 0.85 : 1) + k.scanBoost * 4) * ppu; return { cx: sx, cy: sy, r0: R * 0.55, r1: R, a0: 0, a1: 0.42 }; });
+        setDark(holes, S.phase === 'found' ? 0 : fl);
         if (flashT > 0) { flashT -= dt; }
-      } else if (S.phase === 'intro') { setVig(cw / 2, ch / 2, 9999, 9999, 0, 0, 0); }
+      } else if (S.phase === 'intro') { setDark([], 0); }
       if (S.phase !== 'prep' && S.phase !== 'hunt') setMsg('');
       if (S.phase === 'hunt') setMsg('');
     }
     function introUpdate(dt) {
       introT += dt; Tm += dt;
-      if (!S.started) { for (const p of P) { p.c.pose = 'idle'; } P[0].x = -3; P[0].z = 6; P[1].x = 3; P[1].z = 6; P[0].c.faceDir(0.4, 1); P[1].c.faceDir(-0.4, 1); P[0].yaw = P[0].c.targetYaw; P[1].yaw = P[1].c.targetYaw; for (const p of P) { p.vis = true; p.holder.visible = true; } }
-      crowd.update(dt, false, [{ x: P[0].x, z: P[0].z, r: 1 }, { x: P[1].x, z: P[1].z, r: 1 }], Tm);
+      if (!S.started) { for (const p of P) { p.c.pose = 'idle'; } P.forEach((p, i) => { p.x = N === 2 ? (i ? 3 : -3) : (i - (N - 1) / 2) * 2.8; p.z = 6; p.c.faceDir(N === 2 ? (i ? -0.4 : 0.4) : -(i - (N - 1) / 2) * 0.15, 1); p.yaw = p.c.targetYaw; }); for (const p of P) { p.vis = true; p.holder.visible = true; } }
+      crowd.update(dt, false, P.map((p) => ({ x: p.x, z: p.z, r: 1 })), Tm);
       for (const p of P) { p.holder.position.set(p.x, 0, p.z); p.c.update(dt); p.tag.position.set(p.x, 2.7, p.z); p.ring.position.set(p.x, 0.06, p.z); p.shadow.position.set(p.x, 0.03, p.z); }
       crowd.npcs.forEach((o, i) => { dummy.position.set(o.x, 0.03, o.z); dummy.scale.setScalar(0.6 * o.scale); dummy.updateMatrix(); npcBlobs.setMatrixAt(i, dummy.matrix); }); npcBlobs.instanceMatrix.needsUpdate = true;
-      W.update(Tm, dt); updateCamera(dt); lamp.intensity = 0; pool.visible = false; setVig(0, 0, 9999, 9999, 0, 0, 0.0);
+      W.update(Tm, dt); updateCamera(dt); for (const l of lamps) l.intensity = 0; for (const pl of pools) pl.visible = false; setDark([], 0);
     }
     function resultUpdate(dt) {
       Tm += dt; crowd.update(dt, false, [], Tm); for (const p of P) { p.holder.position.set(p.x, 0, p.z); p.c.update(dt); p.tag.position.set(p.x, 2.7, p.z); p.ring.position.set(p.x, 0.06, p.z); p.shadow.position.set(p.x, 0.03, p.z); }
@@ -457,20 +520,20 @@ export default {
     refreshHud();
 
     return {
-      update: (dt) => { if (finished) { resultUpdate(dt); return; } if (!pool.visible) pool.visible = true; update(dt); },
+      update: (dt) => { if (finished) { resultUpdate(dt); return; } for (const pl of pools) if (!pl.visible) pl.visible = true; update(dt); },
       introUpdate, resultUpdate,
       onResize() { lastAspect = 0; },
       onSwap() { for (const p of P) burst(p.x, 1.5, p.z, 16, [0xffe14a, 0xffffff], 4, 1); },
       onDeurman(movers) {
-        movers.forEach((m, i) => { if (m) { pts[i] -= 3; fx.texts.add('-3 DEURMAN!', i === hiI() ? H.x : Sk.x, 2.8, i === hiI() ? H.z : Sk.z, '#ff6a6a', 1.6); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
+        movers.forEach((m, i) => { if (m) { pts[i] -= 3; const kk = kOf(i); fx.texts.add('-3 DEURMAN!', i === hiI() || !kk ? H.x : kk.x, 2.8, i === hiI() || !kk ? H.z : kk.z, '#ff6a6a', 1.6); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
         refreshHud();
       },
-      celebrate(w) { P[w].c.pose = 'cheer'; P[1 - w].c.pose = 'sad'; },
+      celebrate(w, winners = [w]) { P.forEach((p, i) => { p.c.pose = winners.includes(i) ? 'cheer' : 'sad'; }); },
       dispose() { if (ov) ov.remove(); crowd.dispose(); },
       dbg: {
-        state: () => ({ T: Tm, phase: S.phase, round: S.round, hider: S.hider, left: S.left, prepT: S.prepT, pts: [...pts], chances: Sk.chances, help: S.help, finished, results: S.results.map((r) => ({ ...r })), stats: { ...S.stats },
+        state: () => ({ T: Tm, phase: S.phase, round: S.round, hider: S.hider, left: S.left, prepT: S.prepT, pts: [...pts], chances: Sk.chances, K: K.map((k) => ({ slot: k.slot, x: k.x, z: k.z, chances: k.chances, stun: k.stun, scanCd: k.scanCd, out: k.out })), order: S.order.slice(), help: S.help, finished, results: S.results.map((r) => ({ ...r })), stats: { ...S.stats },
           H: { dis: H.dis, kind: H.kind, x: H.x, z: H.z, popped: H.popped, cdPop: H.cdPop, cdDecoy: H.cdDecoy, reveal: H.reveal }, Sk: { x: Sk.x, z: Sk.z, stun: Sk.stun, scanCd: Sk.scanCd, tapCd: Sk.tapCd }, D: D.state, chicken: { x: CH.x, z: CH.z, mode: CH.mode }, props: W.props.length, npcs: crowd.npcs.length }),
-        setLeft: (t) => { S.left = t; }, setPts: (a, b) => { pts[0] = a; pts[1] = b; }, startDeur: () => { D.next = 0; }, doScan: () => scan(), doDecoy: () => doDecoy(), skipPrep: () => { if (S.phase === 'prep') S.prepT = 0.01; },
+        setLeft: (t) => { S.left = t; }, setPts: (a, b, c, d) => { pts[0] = a; pts[1] = b; if (N > 2) { pts[2] = c ?? 0; pts[3] = d ?? 0; } }, startDeur: () => { D.next = 0; }, doScan: (j = 0) => scan(K[j]), doDecoy: () => doDecoy(), skipPrep: () => { if (S.phase === 'prep') S.prepT = 0.01; },
         W, H, Sk, S, crowd, CH,
       },
     };

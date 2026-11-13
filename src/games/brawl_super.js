@@ -74,15 +74,15 @@ export function createSupers(G) {
       if (Math.random() < 0.5) fx.particles.emit(f.x + rand(-1.5, 1.5), f.y + rand(0, f.hh), 0.5, rand(-3, 3), rand(-1, 3), 0, { life: 0.4, size: 0.5, color: pick([0xffffff, f.col, 0xffe14a]), gravity: 0 });
       if (s.hitT <= 0) {
         s.hitT = 0.17; G.slash(f.x, f.y + f.hh / 2, 5.4 * f.size, 3.2 * f.size, s.t * 40, 0xffffff); audio.sfx('swing', { vol: 0.4, rate: 1.3 + Math.random() * 0.4 });
-        if (o.st !== 'dead' && Math.abs(o.x - f.x) < 2.7 * f.size + o.hw && Math.abs(o.y + o.hh / 2 - (f.y + f.hh / 2)) < 2.6 * f.size + o.hh / 2) {
-          const ok = G.hurt(o, { dmg: 3.2, bkb: 3, kbg: 0.0, ang: 70, dirx: sgn(o.x - f.x), att: f, x: o.x, y: o.y + o.hh / 2, hs: 0.012, sup: 1 });
-          if (ok && o.st === 'hit') { o.vx = (f.x - o.x) * 5; o.vy = 5; s.n++; }
+        for (const q of G.foes(f)) if (q.st !== 'dead' && Math.abs(q.x - f.x) < 2.7 * f.size + q.hw && Math.abs(q.y + q.hh / 2 - (f.y + f.hh / 2)) < 2.6 * f.size + q.hh / 2) {
+          const ok = G.hurt(q, { dmg: 3.2, bkb: 3, kbg: 0.0, ang: 70, dirx: sgn(q.x - f.x), att: f, x: q.x, y: q.y + q.hh / 2, hs: 0.012, sup: 1 });
+          if (ok && q.st === 'hit') { q.vx = (f.x - q.x) * 5; q.vy = 5; s.n++; }
         }
       }
       if (s.t >= s.dur) {
-        if (o.st !== 'dead' && Math.abs(o.x - f.x) < 3.4 * f.size + o.hw) {
-          G.hurt(o, { dmg: 11, bkb: 16, kbg: 0.2, ang: 40, dirx: sgn(o.x - f.x) || f.face, att: f, x: o.x, y: o.y + o.hh / 2, big: 1, hs: 0.2, snd: 'explode', sup: 1 });
-          G.say('FINALE!', o.x, o.y + o.hh + 1, '#ffe14a', 1.8);
+        for (const q of G.foes(f)) if (q.st !== 'dead' && Math.abs(q.x - f.x) < 3.4 * f.size + q.hw) {
+          G.hurt(q, { dmg: 11, bkb: 16, kbg: 0.2, ang: 40, dirx: sgn(q.x - f.x) || f.face, att: f, x: q.x, y: q.y + q.hh / 2, big: 1, hs: 0.2, snd: 'explode', sup: 1 });
+          G.say('FINALE!', q.x, q.y + q.hh + 1, '#ffe14a', 1.8);
         }
         fx.particles.ring(f.x, f.y + f.hh / 2, 0.8, { count: 30, speed: 14, color: 0xffffff, size: 0.5, life: 0.5 }); finish(f);
       }
@@ -125,7 +125,7 @@ export function createSupers(G) {
         }
       }
       if (s.n >= s.total && s.next <= 0.1 || s.t > s.dur) {
-        const st = G.S().start(f.i); const sp = st.x + (f.i ? 1 : -1) * 0.5;
+        const st = G.S().start(f.i, G.fs.length); const sp = st.x + (f.i ? 1 : -1) * 0.5;
         fx.particles.burst(f.x, f.y + f.hh / 2, 0.5, { count: 20, speed: 5, up: 0.6, life: 0.6, size: 0.7, colors: [0x2a2438, 0x6a5a88, 0xffffff], gravity: -1 });
         f.x = clamp(o.st !== 'dead' ? o.x : sp, st.x - 7, st.x + 7); f.y = Math.max(G.surfaceBelow(f.x, 30, f.hw) ?? st.y, st.y); f.vx = f.vy = 0; finish(f);
         fx.particles.burst(f.x, f.y + f.hh / 2, 0.5, { count: 20, speed: 6, up: 0.8, life: 0.6, size: 0.7, colors: [0xffffff, f.col], gravity: 2 }); G.say('Hihi!', f.x, f.y + f.hh + 1, '#bff8e8', 1.3);
@@ -136,15 +136,16 @@ export function createSupers(G) {
   }
 
   function impact(f) {
-    const o = G.opp(f), s = f.sup;
+    const s = f.sup;
     G.shake(1.0); G.camPunch(1); audio.sfx('explode', { vol: 1, rate: 0.6 }); audio.sfx('thud', { vol: 0.9, rate: 0.5 });
     G.say('AARDBEVING!', f.x, f.y + f.hh + 1.4, '#ffb070', 1.9);
     for (let k = -1; k <= 1; k += 2) for (let i = 0; i < 14; i++) fx.particles.emit(f.x + k * (0.5 + i * 0.35), f.y + 0.3, 0.5, k * rand(10, 16), rand(1, 5), 0, { life: 0.6, size: 0.7, color: pick([0xd8c8a8, 0xa89878, 0xffb070]), gravity: 10 });
     fx.particles.ring(f.x, f.y + 0.4, 0.8, { count: 40, speed: 16, color: 0xffd0a0, size: 0.5, life: 0.5 });
-    if (o.st !== 'dead' && Math.abs(o.y - f.y) < 1.5 && Math.abs(o.x - f.x) < 15) {
-      const wasS = o.st === 'shield';
-      G.hurt(o, { dmg: 16, bkb: 14, kbg: 0.17, ang: 76, dirx: sgn(o.x - f.x) || f.face, att: f, x: o.x, y: o.y + 1, big: 1, hs: 0.2, snd: 'explode', sup: 1, quake: 1 });
-    } else if (o.st !== 'dead' && Math.abs(o.x - f.x) < 15) G.say('Gemist!', o.x, o.y + o.hh + 1, '#ffffff', 1.2);
+    for (const q of G.foes(f)) {
+      if (q.st !== 'dead' && Math.abs(q.y - f.y) < 1.5 && Math.abs(q.x - f.x) < 15) {
+        G.hurt(q, { dmg: 16, bkb: 14, kbg: 0.17, ang: 76, dirx: sgn(q.x - f.x) || f.face, att: f, x: q.x, y: q.y + 1, big: 1, hs: 0.2, snd: 'explode', sup: 1, quake: 1 });
+      } else if (q.st !== 'dead' && Math.abs(q.x - f.x) < 15) G.say('Gemist!', q.x, q.y + q.hh + 1, '#ffffff', 1.2);
+    }
     f.c.squash = 0.3; f.sup.phase = 'done'; finish(f); f.lag = 0.4;
   }
 
@@ -153,7 +154,7 @@ export function createSupers(G) {
     for (const r of rains) {
       r.t += dt; r.next -= dt;
       if (r.next <= 0 && r.t < r.dur) {
-        r.next = 0.2; r.n++; const o = G.opp(r.owner), S = G.S(), cb = S.camBase();
+        r.next = 0.2; r.n++; const fl = G.foes(r.owner), o = (fl.length ? fl[r.n % fl.length] : G.opp(r.owner)), S = G.S(), cb = S.camBase();   // bij meer tegenstanders om de beurt een ander doelwit
         let tx;
         if (o.st !== 'dead' && (r.n % 3 !== 0)) tx = o.x + o.vx * 0.5 + rand(-2.4, 2.4); else tx = rand(cb.x0 + 1, cb.x1 - 1);
         const ty = G.surfaceBelow(tx, o.st !== 'dead' && Math.abs(tx - o.x) < 3 ? o.y + o.hh : 30, 0) ?? (o.st !== 'dead' ? o.y : 0);

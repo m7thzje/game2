@@ -24,15 +24,25 @@ export default {
   giver: 'Burchtheer Bonk',
   icon: '🏰',
   mode: 'pvp',
+  players: [2, 4],   // 2 = twee katapulten; 4 = 2 tegen 2: elk team verdedigt één kasteel met twee katapulten
+  teams: true,
   time: 90,
   music: 'game_fast',
-  blurb: 'Twee kastelen, twee <b>katapulten</b> en in elk kasteel een bange <b>koning</b>. Schiet <b>tegelijk</b>, stort zijn torentje in of raak de koning! Pas op voor <b>wind</b>, <b>draak</b> en <b>ballonkist</b>.',
+  blurb: 'Met <b>4 spelers</b> is het <b>2 tegen 2</b>: elk team heeft twee katapulten voor één kasteel. Twee kastelen, twee <b>katapulten</b> en in elk kasteel een bange <b>koning</b>. Schiet <b>tegelijk</b>, stort zijn torentje in of raak de koning! Pas op voor <b>wind</b>, <b>draak</b> en <b>ballonkist</b>.',
   controls: ['{move} hoek (omhoog/omlaag)', '{a} houden = kracht, loslaten = schieten', '{b} munitie (houden = repareren)'],
   tip: 'Taart = glad, vuurbal = brand, kip = stuiter. Wie achterstaat mag repareren!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp; const names = players.map((p) => p.name);
+    const N = players.length;
+    const teamOf = ctx.teams ? ctx.teamOf.slice() : players.map((_, i) => i);   // team = kasteel (0 links, 1 rechts)
+    const members = [0, 1].map((t) => players.map((_, i) => i).filter((i) => teamOf[i] === t));
+    const teamName = (t) => members[t].map((i) => names[i]).join(' & ');
+    const teamCss = (t) => (ctx.teams ? ctx.teamInfo[t].css : players[t].css);
+    // katapultposities: bij 4 spelers staan er per kasteel twee (binnen: eerste teamlid, buiten: tweede), elk met een eigen z-laag
+    const CATX = players.map((_, i) => { const t = teamOf[i], mi = members[t].indexOf(i), sg = t ? 1 : -1; return N > 2 ? sg * (mi ? 9.0 : 3.2) : CAT_X[i]; });
+    const CATZ = players.map((_, i) => (N > 2 ? (members[teamOf[i]].indexOf(i) ? -1.3 : 1.3) : 0));
     const tw = ctx.twist.id;
     const GM = pv.gravity || 1;                       // zwaartekrachtfactor
     const VK = Math.sqrt(GM);                         // lanceersnelheid mee-schalen: zelfde banen, alleen trager
@@ -60,8 +70,9 @@ export default {
     // ---------------- visuals: kasteelversiering ----------------
     const flags = [], kings = [];
     castles.forEach((c, i) => {
-      const f = makeFlag(i ? 0x3a78e0 : 0x2f9e5b); scene.add(f); flags.push(f);
-      const kg = makeKing(i ? 0x3a78e0 : 0x2f9e5b); scene.add(kg.holder); kings.push(kg);
+      const tcol = ctx.teams ? ctx.teamInfo[i].color : i ? 0x3a78e0 : 0x2f9e5b;
+      const f = makeFlag(tcol); scene.add(f); flags.push(f);
+      const kg = makeKing(tcol); scene.add(kg.holder); kings.push(kg);
       kg.c.faceDir(0, 1);
     });
     const wsprite = windSprite(); wsprite.position.set(0, 27.5, 3); scene.add(wsprite);
@@ -70,25 +81,28 @@ export default {
     const cats = [], ops = [];
     const CSS = players.map((p) => p.css);
     const colorsHex = [0x2f9e5b, 0x3a78e0];
+    const TM = [0, 1].map(() => ({ tokens: 0, lastTok: 100, pct: 100 }));   // per kasteel (team): herstelpunten en schade
     const ST = players.map((pp, i) => {
-      const dir = i === 0 ? 1 : -1;
-      const cat = makeCatapult(colorsHex[i]); cat.position.set(CAT_X[i], 0, 0); cat.rotation.y = i === 0 ? 0 : Math.PI; scene.add(cat); cats.push(cat);
+      const side = teamOf[i], dir = side === 0 ? 1 : -1, ccol = N > 2 ? pp.color : colorsHex[i];
+      const cat = makeCatapult(ccol); cat.position.set(CATX[i], 0, CATZ[i]); cat.rotation.y = side === 0 ? 0 : Math.PI; scene.add(cat); cats.push(cat);
       const c = makeBrother(i); const holder = new THREE.Group(); holder.add(c.group);
-      const k = (3.5 * lerp(1, pv.size(i), 0.5)) / c.height; holder.scale.setScalar(k); holder.position.set(CAT_X[i] - dir * 3.9, 0, 1.8); scene.add(holder);
+      const k = (3.5 * lerp(1, pv.size(i), 0.5)) / c.height; holder.scale.setScalar(k); holder.position.set(CATX[i] - dir * 3.9, 0, N > 2 ? 3.4 : 1.8); scene.add(holder);
       c.faceDir(dir, 0.3); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw; ops.push({ c, holder });
-      const tag = labelSprite(pp.name, pp.css, 4.6); tag.position.set(CAT_X[i] - dir * 3.9, 3.5 * 1.25 * lerp(1, pv.size(i), 0.5) + 1.2, 1.8); scene.add(tag);
+      const tag = labelSprite(pp.name, pp.css, 4.6); tag.position.set(CATX[i] - dir * 3.9, 3.5 * 1.25 * lerp(1, pv.size(i), 0.5) + 1.2, N > 2 ? 3.4 : 1.8); scene.add(tag);
       // kracht/laadbalk
-      const bar = new THREE.Group(); bar.position.set(CAT_X[i], 8.4, 2.2);
+      const bar = new THREE.Group(); bar.position.set(CATX[i], 8.4, 2.2);
       const bg = mesh(new THREE.PlaneGeometry(6.2, 0.95), new THREE.MeshBasicMaterial({ color: 0x120a22, transparent: true, opacity: 0.8, depthTest: false }), { cast: false, receive: false }); bg.renderOrder = 12;
       const fill = mesh(new THREE.PlaneGeometry(6.0, 0.7), new THREE.MeshBasicMaterial({ color: 0x8dff6a, depthTest: false }), { cast: false, receive: false }); fill.renderOrder = 13; fill.position.z = 0.01;
-      bar.add(bg, fill); scene.add(bar);
-      const am = ammoSprite(pp.css); am.position.set(CAT_X[i], 10.9, 2.2); scene.add(am);
-      const rep = labelSprite('REPAREER!', '#ffe14a', 4.4); rep.position.set(CAT_X[i], 12.6, 2.2); rep.visible = false; scene.add(rep);
+      bar.add(bg, fill); if (N > 2) bar.scale.setScalar(0.8); scene.add(bar);
+      const am = ammoSprite(pp.css); am.position.set(CATX[i], 10.9, 2.2); scene.add(am);
+      const rep = labelSprite('REPAREER!', '#ffe14a', 4.4); rep.position.set(CATX[i], 12.6, 2.2); rep.visible = false; scene.add(rep);
       // richtstippen
-      const N = 22, pp3 = new Float32Array(N * 3);
+      const NP = 22, pp3 = new Float32Array(NP * 3);
       const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pp3, 3));
-      const pts = new THREE.Points(pg, new THREE.PointsMaterial({ color: colorsHex[i] === 0x2f9e5b ? 0x9dffb8 : 0xa6c6ff, size: 0.8, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false })); pts.renderOrder = 11; pts.frustumCulled = false; scene.add(pts);
-      return { i, dir, cat, c, holder, tag, bar, fill, am, rep, pts, pp3, N, aim: 0.78, power: 0, charging: false, cd: 2.0, cdMax: 2.0, arm: Math.PI + 0.25, armT: 0, swing: 0, ammo: 0, mega: false, rapid: 0, tokens: 0, lastTok: 100, bDown: false, bT: 0, bUsed: false, repP: 0, stuck: 0, shots: 0, hits: 0, comeback: 0, pct: 100, lastAmmoDraw: -1 };
+      const pts = new THREE.Points(pg, new THREE.PointsMaterial({ color: N > 2 ? new THREE.Color(ccol).lerp(new THREE.Color(0xffffff), 0.5) : colorsHex[i] === 0x2f9e5b ? 0x9dffb8 : 0xa6c6ff, size: 0.8, transparent: true, opacity: 0.85, depthTest: false, depthWrite: false })); pts.renderOrder = 11; pts.frustumCulled = false; scene.add(pts);
+      const st = { i, side, dir, cat, c, holder, tag, bar, fill, am, rep, pts, pp3, N: NP, aim: 0.78, power: 0, charging: false, cd: 2.0, cdMax: 2.0, arm: Math.PI + 0.25, armT: 0, swing: 0, ammo: 0, mega: false, rapid: 0, bDown: false, bT: 0, bUsed: false, repP: 0, stuck: 0, shots: 0, hits: 0, comeback: 0, lastAmmoDraw: -1 };
+      for (const k of ['tokens', 'lastTok', 'pct']) Object.defineProperty(st, k, { get: () => TM[side][k], set: (v) => { TM[side][k] = v; }, enumerable: true });   // herstelpunten/schade horen bij het kasteel
+      return st;
     });
     const flagPos = (i) => { const top = castles[i].blocks.find((b) => b.user.sy === 7.9 && b.alive); return top; };
 
@@ -96,7 +110,7 @@ export default {
     let T = 0, started = false, finished = false, ended = false, endT = 0, timeScale = 1, introT = 0;
     let wind = 0, windTarget = 0, windT = 3;
     const projs = [];
-    const stats = { shots: [0, 0], blocks: [0, 0], balloons: 0, dragons: 0, bonus: [0, 0], repairs: [0, 0], hitKing: 0 };
+    const stats = { shots: players.map(() => 0), blocks: [0, 0], balloons: 0, dragons: 0, bonus: players.map(() => 0), repairs: players.map(() => 0), hitKing: 0 };
     let result = null;
     const dragon = { on: false, t: 0, dir: 1, y: 17, target: 0, breathed: false, mesh: makeFlyingDragon(), next: 17 + Math.random() * 6, breath: 0 };
     dragon.mesh.g.visible = false; scene.add(dragon.mesh.g);
@@ -108,7 +122,7 @@ export default {
     const pctOf = (i) => { let s = 0; for (const e of entries) if (e.side === i && e.body && e.body.alive) s += (e.body.user.hp / e.body.user.maxHp) * e.area; return Math.round(s / totalArea[i] * 100); };
     const kingHp = (i) => castles[i].king.user.hp;
     function refreshHud() {
-      hud.setScore(`${names[0]} ${ST[0].pct}%  –  ${ST[1].pct}% ${names[1]}`);
+      hud.setScore(N === 2 ? `${names[0]} ${TM[0].pct}%  –  ${TM[1].pct}% ${names[1]}` : `${TM[0].pct}%  –  ${TM[1].pct}%`);
     }
     function infoTxt(p) { const a = AMMO[p.ammo]; return `${a.name}${p.mega ? ' MEGA' : ''} · ${Math.round(p.aim * 180 / Math.PI)}°${p.tokens ? ` · 🔧×${p.tokens}` : ''}${p.rapid > 0 ? ' · ⚡' : ''}`; }
 
@@ -202,25 +216,25 @@ export default {
       const p = ST[i], am = AMMO[ammoIdx];
       const mega = p.mega; p.mega = false;
       const sz = lerp(1, pv.size(i), 0.5); const rr = am.r * (mega ? 1.55 : 1) * sz; const mass = am.mass * (mega ? 2.6 : 1) * sz * sz;
-      const af = 0.9; const x0 = CAT_X[i] + p.dir * ARM * Math.cos(af), y0 = PIVOT_Y + ARM * Math.sin(af);
+      const af = 0.9; const x0 = CATX[i] + p.dir * ARM * Math.cos(af), y0 = PIVOT_Y + ARM * Math.sin(af);
       const b = new Body({ shape: 'circle', r: rr, mass, x: x0, y: y0, mu: 0.5, e: am.e });
       const v = launchVel(p, power);
       b.vx = p.dir * Math.cos(aim) * v; b.vy = Math.sin(aim) * v; b.av = -p.dir * 6 * (am.id === 'chicken' ? 2 : 1); b.noSleep = true; b.damp = 0.03; b.roll = am.id === 'chicken' ? 0.8 : 1.6;
       const pm = projMeshes[ammoIdx].find((m) => !m.visible) || projMeshes[ammoIdx][0]; pm.visible = true; pm.scale.setScalar(rr / am.r);
       b.user = { kind: 'proj', t: ammoIdx, owner: i, mega, mesh: pm, age: 0, rest: 0, touch: 0, trail: 0 };
       world.add(b); projs.push(b);
-      p.cd = p.cdMax = am.cd / (pv.speed(i) * (p.rapid > 0 ? 2 : 1)); p.swing = 0.14; p.power = 0; p.charging = false; p.shots++; stats.shots[i]++;
+      p.cd = p.cdMax = am.cd * (N > 2 ? 1.3 : 1) / (pv.speed(i) * (p.rapid > 0 ? 2 : 1)); p.swing = 0.14; p.power = 0; p.charging = false; p.shots++; stats.shots[i]++;
       ops[i].c.swing();
       sfx('whoosh', { vol: 0.5, rate: 0.8 }); sfx('throw', { vol: 0.5 }); audio.tone(110, 0.25, { type: 'triangle', vol: 0.25, slide: -60 });
       fx.particles.burst(x0, y0, 2, { count: 14, speed: 5, up: 0.6, life: 0.5, size: 0.5, colors: [0xffffff, 0xd8c8a8], gravity: 4 });
       ctx.shake(0.12 + power * 0.1);
       return b;
     }
-    function cycleAmmo(i) { const p = ST[i]; p.ammo = (p.ammo + 1) % AMMO.length; sfx('click', { vol: 0.5, rate: 1.2 }); fx.texts.add(AMMO[p.ammo].name.toUpperCase(), CAT_X[i], 13.4, 2.4, AMMO[p.ammo].col, 1.3); }
+    function cycleAmmo(i) { const p = ST[i]; p.ammo = (p.ammo + 1) % AMMO.length; sfx('click', { vol: 0.5, rate: 1.2 }); fx.texts.add(AMMO[p.ammo].name.toUpperCase(), CATX[i], 13.4, 2.4, AMMO[p.ammo].col, 1.3); }
     function repair(i) {
       const p = ST[i]; let n = 0;
-      const lost = entries.filter((e) => e.side === i && !e.body).sort((a, b) => a.proto.sy - b.proto.sy);
-      if (!lost.length) { fx.texts.add('Niks stuk!', CX[i], 6, 3, '#fff', 1.0); p.tokens++; return; }
+      const lost = entries.filter((e) => e.side === p.side && !e.body).sort((a, b) => a.proto.sy - b.proto.sy);
+      if (!lost.length) { fx.texts.add('Niks stuk!', CX[p.side], 6, 3, '#fff', 1.0); p.tokens++; return; }
       for (const e of lost) {
         if (n >= 3) break;
         const u = e.proto; if (!u) continue;
@@ -232,7 +246,7 @@ export default {
         fx.particles.burst(x, y, 2, { count: 16, speed: 4, up: 1, life: 0.8, size: 0.5, colors: [0xffe14a, 0xffffff, 0x9fe8ff], gravity: -1 });
       }
       stats.repairs[i] += n;
-      fx.texts.add('GEREPAREERD!', CX[i], 11, 3, '#8dff6a', 1.6); sfx('powerup', { vol: 0.7 }); sfx('wood', { vol: 0.6 });
+      fx.texts.add('GEREPAREERD!', CX[p.side], 11, 3, '#8dff6a', 1.6); sfx('powerup', { vol: 0.7 }); sfx('wood', { vol: 0.6 });
       ops[i].c.pose = 'cheer'; setTimeout(() => { if (!finished) ops[i].c.pose = 'carry'; }, 900);
     }
     // sla de sjablonen op zodat blokken later hersteld kunnen worden
@@ -243,7 +257,7 @@ export default {
       if (ended) return; ended = true; endT = 0; result = { winner, how, what };
       timeScale = 0.3;
       const loser = 1 - winner;
-      ops[winner].c.pose = 'cheer'; ops[loser].c.pose = 'sad';
+      ops.forEach((o, i) => { o.c.pose = teamOf[i] === winner ? 'cheer' : 'sad'; });
       hud.setTimer(null);
       const msg = how === 'time' ? 'TIJD OM!' : how === 'direct' ? 'KONING GERAAKT!' : how === 'fall' ? 'TORENTJE INGESTORT!' : 'KONING PLATGEDRUKT!';
       hud.showBig(msg, 2200, '#ff6a4a'); sfx('explode', { vol: 0.7 }); sfx('bell', { vol: 0.6 });
@@ -255,15 +269,21 @@ export default {
     function finishGame() {
       if (finished) return; finished = true;
       const w = result.winner, l = 1 - w;
-      const how = result.how;
-      const joke = how === 'direct' ? [`Een ${result.what.toLowerCase()} op de kroon! De koning van ${names[l]} ziet sterretjes.`, `${names[l]}s koning werd vol geraakt en tolt als een tol door zijn eigen kasteel.`]
-        : how === 'fall' ? [`Het torentje van ${names[l]} stortte in. De koning viel van zijn troon (en zijn trap).`, `Alles stortte in bij ${names[l]}! De koning zit nu in de kelder.`]
-          : how === 'crush' ? [`De koning van ${names[l]} werd door zijn eigen dak geplet. Au!`]
-            : [`Tijd om! Het kasteel van ${names[w]} stond er nog het best bij (${ST[w].pct}% tegen ${ST[l].pct}%).`, `Na 90 seconden bouwwerkzaamheden won ${names[w]} met het mooiste kasteel.`];
-      ctx.finishPvp({ winner: w, score: [ST[0].pct, ST[1].pct], delay: 600, summary: `${pick(joke)} ${stats.shots[0] + stats.shots[1]} schoten, ${stats.blocks[0] + stats.blocks[1]} blokken kapot.${stats.balloons ? ` ${stats.balloons} ballonkist(en) leeggeschoten.` : ''}` });
+      const how = result.how, WN = teamName(w), LN = teamName(l), pl = members[l].length > 1;
+      const joke = how === 'direct' ? [`Een ${result.what.toLowerCase()} op de kroon! De koning van ${LN} ziet sterretjes.`, `${pl ? 'De koning van ' + LN : LN + 's koning'} werd vol geraakt en tolt als een tol door zijn eigen kasteel.`]
+        : how === 'fall' ? [`Het torentje van ${LN} stortte in. De koning viel van zijn troon (en zijn trap).`, `Alles stortte in bij ${LN}! De koning zit nu in de kelder.`]
+          : how === 'crush' ? [`De koning van ${LN} werd door zijn eigen dak geplet. Au!`]
+            : [`Tijd om! Het kasteel van ${WN} stond er nog het best bij (${TM[w].pct}% tegen ${TM[l].pct}%).`, `Na 90 seconden bouwwerkzaamheden won ${WN} met het mooiste kasteel.`];
+      const sum = (a) => a.reduce((x, y) => x + y, 0);
+      const summary = `${pick(joke)} ${sum(stats.shots)} schoten, ${stats.blocks[0] + stats.blocks[1]} blokken kapot.${stats.balloons ? ` ${stats.balloons} ballonkist(en) leeggeschoten.` : ''}`;
+      if (N === 2) ctx.finishPvp({ winner: w, score: [TM[0].pct, TM[1].pct], delay: 600, summary });
+      else {
+        const order = players.map((_, i) => i).sort((a, b) => (teamOf[b] === w) - (teamOf[a] === w) || ST[b].hits - ST[a].hits);   // winnend team eerst, daarbinnen de meeste treffers
+        ctx.finishPvp({ winners: members[w].slice(), score: players.map((_, i) => TM[teamOf[i]].pct), place: order, delay: 600, summary });
+      }
     }
     function timeUp() {
-      const a = ST[0].pct, b = ST[1].pct; let w;
+      const a = TM[0].pct, b = TM[1].pct; let w;
       if (a !== b) w = a > b ? 0 : 1; else if (Math.abs(kingHp(0) - kingHp(1)) > 0.5) w = kingHp(0) > kingHp(1) ? 0 : 1; else w = Math.random() < 0.5 ? 0 : 1;
       endGame(w, 'time');
     }
@@ -289,15 +309,15 @@ export default {
       }
       // comeback: herstelpunten + schadebonus
       const pct = p.pct;
-      if (pct <= p.lastTok - 18 && p.tokens < 3) { p.tokens++; p.lastTok = pct; fx.texts.add('REPARATIE!', CX[i], 12, 3, '#ffe14a', 1.4); hud.toast(`${names[i]} mag repareren! Houd B ingedrukt.`, 2200); sfx('powerup', { vol: 0.5 }); }
+      if (pct <= p.lastTok - 18 && p.tokens < 3) { p.tokens++; p.lastTok = pct; fx.texts.add('REPARATIE!', CX[p.side], 12, 3, '#ffe14a', 1.4); hud.toast(`${N > 2 ? teamName(p.side) : names[i]} ${N > 2 ? 'mogen' : 'mag'} repareren! Houd B ingedrukt.`, 2200); sfx('powerup', { vol: 0.5 }); }
       else if (pct <= p.lastTok - 18) p.lastTok = pct;
-      p.comeback = ST[1 - i].pct - pct >= 25 ? 0.25 : 0;
+      p.comeback = TM[1 - p.side].pct - pct >= 25 ? 0.25 : 0;
     }
 
     // ---------------- evenementen ----------------
     function startDragon() {
       if (dragon.on) return; dragon.on = true; dragon.t = 0; dragon.dir = Math.random() < 0.5 ? 1 : -1; dragon.y = 15 + Math.random() * 5; dragon.breathed = false; dragon.breath = 0; stats.dragons++;
-      const a = ST[0].pct, b = ST[1].pct; dragon.target = Math.abs(a - b) >= 3 ? (a > b ? 0 : 1) : (Math.random() < 0.5 ? 0 : 1);
+      const a = TM[0].pct, b = TM[1].pct; dragon.target = Math.abs(a - b) >= 3 ? (a > b ? 0 : 1) : (Math.random() < 0.5 ? 0 : 1);
       dragon.mesh.g.visible = true; hud.toast('🐉 Een draak vliegt over! Hij eet projectielen en spuwt vuur op de leider!', 2600); sfx('creak', { vol: 0.6 }); audio.tone(90, 0.8, { type: 'sawtooth', vol: 0.2, slide: 60 });
     }
     function startBalloon() {
@@ -315,7 +335,7 @@ export default {
     }
     function dragonBreath() {
       const ci = dragon.target; const tgt = CX[ci]; dragon.breath = 1.3; dragon.breathed = true;
-      hud.toast(`🔥 De draak spuwt vuur op het kasteel van ${names[ci]}!`, 2200); sfx('explode', { vol: 0.6 }); audio.tone(80, 0.9, { type: 'sawtooth', vol: 0.25, slide: 40 }); ctx.shake(0.4);
+      hud.toast(`🔥 De draak spuwt vuur op het kasteel van ${teamName(ci)}!`, 2200); sfx('explode', { vol: 0.6 }); audio.tone(80, 0.9, { type: 'sawtooth', vol: 0.25, slide: 40 }); ctx.shake(0.4);
       const bl = world.bodies.filter((b) => b.user && b.user.kind === 'block' && b.user.side === ci && Math.abs(b.x - tgt) < 9).sort((a, b) => b.y - a.y);
       for (let k = 0; k < Math.min(4, bl.length); k++) { const b = bl[k]; ignite(b); if (k === 0) dmgBlock(b, 70); else dmgBlock(b, 14); }
       for (const b of bl.slice(0, 4)) b.wake();
@@ -361,11 +381,12 @@ export default {
           // katapult geraakt?
           for (const q of ST) {
             if (q.i === u.owner && u.age < 0.6) continue;
-            if (Math.abs(pr.x - CAT_X[q.i]) < 2.2 && pr.y < 5.2 && pr.y > 0 && sp > 3) {
+            if (N > 2 && teamOf[q.i] === teamOf[u.owner]) continue;   // eigen team: de schoten vliegen over de eigen katapulten heen
+            if (Math.abs(pr.x - CATX[q.i]) < 2.2 && pr.y < 5.2 && pr.y > 0 && sp > 3) {
               q.stuck += AMMO[u.t].id === 'cake' ? 2.4 : 1.4; if (q.cd > 0) q.cd += AMMO[u.t].id === 'cake' ? 2.4 : 1.4; else { q.cd = q.cdMax = 1.4; }
               q.charging = false; q.power = 0;
               fx.particles.burst(pr.x, pr.y, 2, { count: 20, speed: 6, up: 1, life: 0.7, size: 0.5, colors: AMMO[u.t].id === 'cake' ? [0xff8ac0, 0xffffff] : [0xc08a52, 0xffffff], gravity: 8 });
-              fx.texts.add(AMMO[u.t].id === 'cake' ? 'KLEF!' : 'KATAPULT KAPOT!', CAT_X[q.i], 7, 3, '#ffd24a', 1.2); sfx('wood', { vol: 0.7 }); ctx.shake(0.3);
+              fx.texts.add(AMMO[u.t].id === 'cake' ? 'KLEF!' : 'KATAPULT KAPOT!', CATX[q.i], 7, 3, '#ffd24a', 1.2); sfx('wood', { vol: 0.7 }); ctx.shake(0.3);
               if (AMMO[u.t].id === 'fire') igniteArea(pr.x, pr.y, 1.5);
               killProj(pr, false); break;
             }
@@ -395,7 +416,7 @@ export default {
           if (k.y < u.startY - 2.9 || k.y < 1.2) { kingHitBy(i, 'fall'); break; }
         }
         // percentages
-        for (const p of ST) p.pct = pctOf(p.i);
+        for (let t = 0; t < 2; t++) TM[t].pct = pctOf(t);
         // draak vliegt
         if (dragon.on) {
           dragon.t += dt; const u = dragon.t / 9.5; const x = lerp(-62, 62, dragon.dir > 0 ? u : 1 - u);
@@ -465,7 +486,7 @@ export default {
         ops[i].holder.position.y = p.charging ? Math.sin(tt * 40) * 0.03 : 0;
         // stippen
         const a = AMMO[p.ammo]; const v = launchVel(p, ready ? Math.max(0.05, p.power || 0.45) : 0.45);
-        let px = CAT_X[i] + p.dir * ARM * Math.cos(0.9), py = PIVOT_Y + ARM * Math.sin(0.9), vx = p.dir * Math.cos(p.aim) * v, vy = Math.sin(p.aim) * v;
+        let px = CATX[i] + p.dir * ARM * Math.cos(0.9), py = PIVOT_Y + ARM * Math.sin(0.9), vx = p.dir * Math.cos(p.aim) * v, vy = Math.sin(p.aim) * v;
         const ax = wind * WIND_K * a.windK * (p.mega ? 0.6 : 1), ay = -20 * GM;
         for (let k = 0; k < p.N; k++) { p.pp3[k * 3] = px; p.pp3[k * 3 + 1] = py; p.pp3[k * 3 + 2] = 1.5; for (let s = 0; s < 6; s++) { vx += ax * 0.02; vy += ay * 0.02; px += vx * 0.02; py += vy * 0.02; } }
         p.pts.geometry.attributes.position.needsUpdate = true; p.pts.visible = !ended && ready;
@@ -501,19 +522,19 @@ export default {
     return {
       update: (dt) => { if (finished) { resultUpdate(dt); return; } update(dt); },
       resultUpdate, introUpdate,
-      onSwap() { for (const p of ST) fx.particles.burst(CAT_X[p.i], 6, 2, { count: 24, speed: 5, up: 1, life: 0.7, size: 0.5, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
+      onSwap() { for (const p of ST) fx.particles.burst(CATX[p.i], 6, 2, { count: 24, speed: 5, up: 1, life: 0.7, size: 0.5, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) {
-        movers.forEach((m, i) => { if (m) { const p = ST[i]; p.stuck += 3; p.cd = Math.max(p.cd, 3.2); p.cdMax = Math.max(p.cdMax, 3.2); p.charging = false; p.power = 0; fx.texts.add('KATAPULT KLEMT!', CAT_X[i], 8, 3, '#ff8a6a', 1.3); sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
+        movers.forEach((m, i) => { if (m) { const p = ST[i]; p.stuck += 3; p.cd = Math.max(p.cd, 3.2); p.cdMax = Math.max(p.cdMax, 3.2); p.charging = false; p.power = 0; fx.texts.add('KATAPULT KLEMT!', CATX[i], 8, 3, '#ff8a6a', 1.3); sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
       },
-      celebrate(w) { ops[w].c.pose = 'cheer'; ops[1 - w].c.pose = 'sad'; },
+      celebrate(w, winners = [w]) { ops.forEach((o, i) => { o.c.pose = winners.includes(i) ? 'cheer' : 'sad'; }); },
       dispose() {},
       dbg: {
         world, ST, entries, log: dbgLog, castles, projs, stats, AMMO, dragon, balloon,
         state: () => ({
           T, ended, finished, wind, left: MATCH_TIME - T, pct: ST.map((p) => p.pct), kingHp: [kingHp(0), kingHp(1)], kingY: castles.map((c) => +c.king.y.toFixed(2)),
-          p: ST.map((p) => ({ aim: +p.aim.toFixed(3), power: +p.power.toFixed(2), cd: +p.cd.toFixed(2), ammo: p.ammo, tokens: p.tokens, mega: p.mega, charging: p.charging, rapid: p.rapid, shots: p.shots, hits: p.hits })),
+          p: ST.map((p) => ({ side: p.side, aim: +p.aim.toFixed(3), power: +p.power.toFixed(2), cd: +p.cd.toFixed(2), ammo: p.ammo, tokens: p.tokens, mega: p.mega, charging: p.charging, rapid: p.rapid, shots: p.shots, hits: p.hits })),
           projs: projs.length, bodies: world.bodies.length, awake: world.bodies.filter((b) => !b.asleep && !b.static).length, dragon: dragon.on, balloon: balloon.on ? { x: balloon.mesh.position.x, y: balloon.mesh.position.y } : null, stats, result,
-          kings: castles.map((c) => ({ x: c.king.x, y: c.king.y })), cats: CAT_X,
+          kings: castles.map((c) => ({ x: c.king.x, y: c.king.y })), cats: CATX, tpct: [TM[0].pct, TM[1].pct],
         }),
         fire, setTime: (t) => { T = MATCH_TIME - t; }, setWind: (w) => { wind = windTarget = w; windT = 99; }, startDragon, startBalloon, balloonPop, repair,
         killKing: (i) => { castles[i].king.user.hp = -1; }, damageSide: (i, frac) => { for (const e of entries) if (e.side === i && e.body && e.mat !== 'stone') dmgBlock(e.body, e.body.user.maxHp * frac); },

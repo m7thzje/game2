@@ -10,6 +10,7 @@ import * as P from '../engine/props.js';
 import { h, rand, damp } from '../engine/util.js';
 import { buildGate, partyHat } from './opening.js';
 import { nPlayers, activeIds, anyP, pcss, pname, klabel, Menu3 } from './players3.js';
+import { GAMEHAL } from '../variant.js';
 
 // Deurman-gedrag (S.settings.scare 0-3): hoe vaak de grapjas langskomt
 const HY = -0.36;   // draairichting van het schuurtje (kijkt naar de camera)
@@ -27,11 +28,15 @@ export function openSettings(onClose) {
   const close = () => { ui.activeMenus = ui.activeMenus.filter((m) => m !== menu); el.remove(); persist(); onClose && onClose(); };
   const note = h('div', { class: 'small-note' }, '');
   const menu = new Menu3([
-    { label: () => `Derde speler Juul: ${S.settings.players === 3 ? 'AAN (IJKL + U/O)' : 'uit'}`, cycle: true, onSelect: () => { S.settings.players = S.settings.players === 3 ? 2 : 3; persist(); } },
+    GAMEHAL
+      ? { label: () => `Aantal spelers: ${S.settings.players}`, cycle: true, onSelect: (d) => { S.settings.players = 2 + ((S.settings.players - 2 + (d || 1) + 3) % 3); persist(); } }
+      : { label: () => `Derde speler Juul: ${S.settings.players === 3 ? 'AAN (IJKL + U/O)' : 'uit'}`, cycle: true, onSelect: () => { S.settings.players = S.settings.players === 3 ? 2 : 3; persist(); } },
     { label: () => { note.textContent = SCARE_TXT[S.settings.scare] || ''; return `Deurman-gedrag: ${SCARE_LABELS[S.settings.scare]}`; }, cycle: true, onSelect: (d) => { S.settings.scare = (S.settings.scare + (d || 1) + 4) % 4; } },
     { label: () => `Flitsvrij: ${S.settings.flashFree ? 'AAN (geen felle flitsen)' : 'uit'}`, cycle: true, onSelect: () => { S.settings.flashFree = !S.settings.flashFree; } },
-    { label: () => `Alles ontgrendeld: ${S.settings.unlockAll ? 'AAN (alle hallen open)' : 'uit'}`, cycle: true, onSelect: () => { S.settings.unlockAll = !S.settings.unlockAll; } },
-    { label: () => `Sneller beginnen: ${S.settings.quickStart ? 'AAN (opening overslaan)' : 'uit'}`, cycle: true, onSelect: () => { S.settings.quickStart = !S.settings.quickStart; } },
+    ...(GAMEHAL ? [] : [
+      { label: () => `Alles ontgrendeld: ${S.settings.unlockAll ? 'AAN (alle hallen open)' : 'uit'}`, cycle: true, onSelect: () => { S.settings.unlockAll = !S.settings.unlockAll; } },
+      { label: () => `Sneller beginnen: ${S.settings.quickStart ? 'AAN (opening overslaan)' : 'uit'}`, cycle: true, onSelect: () => { S.settings.quickStart = !S.settings.quickStart; } },
+    ]),
     { label: () => `Muziek: ${Math.round(S.settings.music * 10)}/10`, cycle: true, onSelect: (d) => { S.settings.music = Math.min(1, Math.max(0, S.settings.music + 0.1 * (d || 1))); audio.musicVol = S.settings.music; if (audio.musG) audio.musG.gain.value = S.settings.music * 0.5; } },
     { label: () => `Geluidseffecten: ${Math.round(S.settings.sfx * 10)}/10`, cycle: true, onSelect: (d) => { S.settings.sfx = Math.min(1, Math.max(0, S.settings.sfx + 0.1 * (d || 1))); audio.sfxVol = S.settings.sfx; if (audio.sfxG) audio.sfxG.gain.value = S.settings.sfx; audio.sfx('coin'); } },
     { label: () => `Kwaliteit: ${S.settings.quality === 'low' ? 'Laag (snel)' : 'Hoog'} (pas na herladen)`, cycle: true, onSelect: () => { S.settings.quality = S.settings.quality === 'low' ? 'high' : 'low'; } },
@@ -40,28 +45,9 @@ export function openSettings(onClose) {
   const card = h('div', { class: 'card', style: { width: 'min(640px,94vw)' } }, h('h2', {}, 'Instellingen'), menu.el, note, h('div', { class: 'small-note' }, 'Links/rechts verandert een waarde.'));
   el = ui.overlay(card); ui.activeMenus.push(menu);
 }
-// Online spelen: jij bent de host (Wes), je broer doet mee als Jor via een link of code
-export function openOnline(app, onClose) {
-  const host = app.net; let el;
-  const statusEl = h('p', { style: { textAlign: 'center', fontWeight: 700, fontSize: '20px' } }, 'Verbinding maken…');
-  const codeEl = h('div', { style: { textAlign: 'center', fontSize: '54px', fontFamily: 'MedievalSharp,serif', letterSpacing: '6px', margin: '4px 0' } }, '······');
-  const linkEl = h('div', { style: { textAlign: 'center', fontSize: '16px', wordBreak: 'break-all', background: 'rgba(255,255,255,.55)', borderRadius: '10px', padding: '8px 12px', margin: '6px 0' } }, '');
-  const warnEl = h('p', { class: 'small-note' }, '');
-  let copied = false;
-  const copy = async () => { try { await navigator.clipboard.writeText(host.link()); copied = true; } catch (e) { copied = false; } };
-  const close = () => { off(); ui.activeMenus = ui.activeMenus.filter((m) => m !== menu); el.remove(); onClose && onClose(); };
-  const menu = new Menu([{ label: () => (copied ? 'Link gekopieerd ✓' : 'Link kopiëren'), onSelect: copy }, { label: () => (host.status === 'connected' ? 'Klaar — spelen maar!' : 'Terug'), onSelect: close }]);
-  const render = () => {
-    const st = host.status;
-    statusEl.textContent = st === 'connected' ? '✅ Jor is verbonden! Jullie kunnen nu samen spelen.' : st === 'waiting' ? '⏳ Wachten tot Jor meedoet…' : st === 'lost' ? '⚠️ Jor is weggevallen. Laat hem de link opnieuw openen.' : st === 'error' ? '❌ Geen verbinding met de signaalserver. Heb je internet?' : 'Verbinding maken…';
-    if (host.code) { codeEl.textContent = host.code; linkEl.textContent = host.link(); }
-    const loc = location.hostname; warnEl.textContent = /^(localhost|127\.|192\.168\.|10\.|172\.)/.test(loc) ? 'Let op: dit spel draait op jouw eigen computer. Je broer kan die link alleen openen als hij op hetzelfde netwerk zit. Zet het spel online (bijv. GitHub Pages, zie README) om over internet te spelen.' : 'Stuur de link naar je broer (appen, mailen...). Hij hoeft niets te installeren: een computer met Chrome of Edge is genoeg.';
-  };
-  const off = host.on(render);
-  const card = h('div', { class: 'card', style: { width: 'min(680px,94vw)' } }, h('h2', {}, '🌐 Online spelen'), h('p', { style: { textAlign: 'center' }, html: 'Jij bent <b>Wes</b>. Je broer speelt mee als <b>Jor</b> op zijn eigen computer.' }), codeEl, linkEl, statusEl, menu.el, warnEl);
-  el = ui.overlay(card); ui.activeMenus.push(menu); render();
-  host.start().then(render).catch((e) => { statusEl.textContent = '❌ ' + (e.message || 'Mislukt'); });
-}
+// Online spelen: de actuele host-dialoog (1, 2 of 3 gasten) staat in src/net/online_ui.js
+export { openOnline } from '../net/online_ui.js';
+import { openOnline } from '../net/online_ui.js';
 function howToPlay(onClose) {
   const card = h('div', { class: 'card', style: { maxHeight: '92vh', overflow: 'auto' } }, h('h2', {}, 'Hoe werkt het?'),
     h('p', { html: '' + (nPlayers() === 3 ? 'Wes, Jor en Juul' : 'Wes en Jor') + ' runnen de <b>Speelhal</b> van Koning Klopper! Loop naar een kast en druk op je actieknop voor een <b>duel</b>: 1 tegen 1 op hetzelfde scherm. Wie wint? Dat bepaal jij.' }),

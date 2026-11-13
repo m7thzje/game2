@@ -9,7 +9,7 @@ import * as WD from './boog_world.js';
 //  * wind duwt de pijl, gewone ringen 2-10, ballonnen +3 (goud +5 + speciale pijl), kip +5, draak +10; laatste pijl telt dubbel
 //  * gelijkspel: één beslissende pijl. De Deurman kijkt vanuit de tribune en roept soms "HÉ!" (iedereen schrikt: richtkruis wiebelt)
 
-const { AX, ZA, TXC, TY, TR, ZT, ZB, RINGS } = WD;
+const { ZA, TY, TR, ZT, ZB, RINGS } = WD;
 const ARROWS = 10, MATCH_TIME = 80, DRAW_T = 1.35, SWEET0 = 0.82, SWEET1 = 0.97, OVER_MAX = 1.3;
 const V_REF = 34, G0 = 4.0, WIND_K = 2.2, REACH_X = 10, RET_SPEED = 8.5;
 const SPECIALS = { fire: { name: 'VUURPIJL', col: '#ff8a3a', ico: '🔥', desc: 'dubbele punten' }, trio: { name: 'TRIO-PIJL', col: '#6fe8ff', ico: '➰', desc: 'drie pijlen tegelijk' }, plof: { name: 'PLOF-PIJL', col: '#d9a8ff', ico: '💨', desc: 'rookwolk op het doel van de ander' } };
@@ -24,21 +24,23 @@ export default {
   giver: 'Robin van de Hooiberg',
   icon: '🏹',
   mode: 'pvp',
+  players: [2, 3, 4],
   time: 80,
   music: 'game',
-  blurb: 'Boogschieten op het toernooiveld! Je doel <b>schuift, draait en duikt weg</b>. Span je boog en laat los in de <b>groene zone</b> = PERFECT. Let op de <b>wind</b>! Ballonnen +3, kip +5, draak +10. Laatste pijl <b>dubbel</b>.',
+  blurb: 'Boogschieten op het toernooiveld (2 tot 4 schutters, tegelijk)! Je doel <b>schuift, draait en duikt weg</b>. Span je boog en laat los in de <b>groene zone</b> = PERFECT. Let op de <b>wind</b>! Ballonnen +3, kip +5, draak +10. Laatste pijl <b>dubbel</b>.',
   controls: ['{move} richten (wiebelt!)', '{a} spannen, loslaten = schieten', '{b} adem inhouden, tik = special'],
   tip: 'Gouden ballon = speciale pijl. Gelijkspel? Eén beslissende pijl!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp; const names = players.map((p) => p.name); const tw = ctx.twist.id;
+    const N = players.length, NIL = (v) => players.map(() => v); const { AX, TXC } = WD.LAYOUT[N];
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const TEMPO = tw === 'turbo' || tw === 'slowmo' ? (ctx.twist.speed || 1) : 1;
     const L = ctx.lights('day', { shadow: 26, center: [0, 0, -8], fogNear: 110, fogFar: 260 });
     L.hemi.intensity = 1.2; L.sun.intensity = 2.4; L.sun.position.set(-18, 40, 14);
     camera.fov = 40; camera.updateProjectionMatrix();
-    const W = WD.buildWorld(ctx, L);
+    const W = WD.buildWorld(ctx, L, N);
     const rnd = Math.random;
 
     // ---------------- doelen ----------------
@@ -100,8 +102,11 @@ export default {
 
     // ---------------- toestand ----------------
     let T0 = 0, introT = 0, started = false, finished = false, slow = 1, slowHold = 0, gt = 0, timeLeft = MATCH_TIME, hudTimer = -1;
-    const S = { st: 'init', t: 0, winner: -1, sdResolved: false, tie: false, timeUp: false };
-    let wind = 0, windTarget = 0.6, windT = 5; const stats = { bull: [0, 0], balloons: [0, 0], chicken: [0, 0], dragon: [0, 0], perfect: [0, 0], specials: [0, 0], plof: 0 };
+    const S = { st: 'init', t: 0, winner: -1, sdResolved: false, tie: false, timeUp: false, sdSet: [] };
+    let wind = 0, windTarget = 0.6, windT = 5; const stats = { bull: NIL(0), balloons: NIL(0), chicken: NIL(0), dragon: NIL(0), perfect: NIL(0), specials: NIL(0), plof: 0 };
+    const sum = (a) => a.reduce((x, y) => x + y, 0);
+    // doelwit van een plof-pijl: de tegenstander met de meeste punten (tegenstander bij 2 spelers)
+    const plofTarget = (o) => { let b = -1; for (let k = 0; k < N; k++) if (k !== o && (b < 0 || archers[k].score > archers[b].score || (archers[k].score === archers[b].score && Math.random() < 0.5))) b = k; return b; };
     let cineX = 0, cineK = 0, cineT = 0, lastFov = 40;
     let dropNext = 22, dropT = -1, dropWarned = false, patName = 'still';
     let balloonT = 2.2, balloonN = 0, chickenT = 8, dragonT = 24, deurT = 13, deurShout = 0;
@@ -117,9 +122,9 @@ export default {
     const dragon = new Dragon(0x4cb04a, 0.62); dragon.group.visible = false; scene.add(dragon.group);
     const DR = { on: false, x: 0, dir: -1, hit: 0, t: 0, y: 9.5, roll: 0, fireT: 0 };
 
-    const lead = (i) => archers[1 - i].score - archers[i].score;      // >0: i staat achter
+    const lead = (i) => Math.max(...archers.filter((q) => q.i !== i).map((q) => q.score)) - archers[i].score;      // >0: i staat achter
     function refreshHud() {
-      hud.setScore(`${names[0]} ${archers[0].score} – ${archers[1].score} ${names[1]}${S.st === 'sudden' ? '  (BESLISSENDE PIJL)' : ''}`);
+      hud.setScore(N === 2 ? `${names[0]} ${archers[0].score} – ${archers[1].score} ${names[1]}${S.st === 'sudden' ? '  (BESLISSENDE PIJL)' : ''}` : (S.st === 'sudden' ? 'BESLISSENDE PIJL' : null));
       for (const a of archers) {
         const sp = a.special ? ` · ${SPECIALS[a.special].ico}${a.armed ? '!' : ''}` : '';
         hud.setPlayerInfo(a.i, `${a.score} pt · ${S.st === 'sudden' ? 'beslissende pijl' : a.left + ' pijlen'}${sp}`);
@@ -141,7 +146,7 @@ export default {
       if (S.st === 'play' && gt >= dropNext && dropT < 0) { dropT = 0; audio.sfx('whoosh', { vol: 0.5, rate: 0.7 }); }
       if (dropT >= 0) { dropT += dt; hid = smoothstep(0, 0.5, dropT) * (1 - smoothstep(2.9, 3.4, dropT)); if (dropT > 3.4) { dropT = -1; dropNext = gt + 22 + rnd() * 6; dropWarned = false; audio.sfx('boing', { vol: 0.4 }); } }
       T.forEach((t, i) => {
-        t.x = TXC[i] + (i ? -dx : dx); t.hidden = hid; t.y = TY + dy - hid * (TY + TR + 0.8);
+        t.x = TXC[i] + (N > 2 ? dx * 0.6 : (i ? -dx : dx)); t.hidden = hid; t.y = TY + dy - hid * (TY + TR + 0.8);
         t.root.position.set(t.x, t.y, ZT);
         const H = Math.max(0.05, t.y - TR * 0.95); t.pole.scale.y = H; t.pole.position.y = -TR * 0.95 - H / 2; t.pole.visible = H > 0.1;
         if (t.smokeT > 0) { t.smokeT -= dt; t.smoke = smoothstep(0, 0.5, 6 - t.smokeT) * Math.min(1, t.smokeT / 0.8); } else t.smoke = 0;
@@ -175,7 +180,7 @@ export default {
       let mult = isLast ? 2 : 1; const ax_ = a.aim[0], ay_ = a.aim[1];
       const perfOpts = { perfect, windMul: perfect ? 0.45 : 1, cine, mult };
       if (kind === 'trio') { for (const dx of [-1.7, 0, 1.7]) fireArrow(a, ax_ + dx, ay_ + (dx ? 0.35 : 0), s, { ...perfOpts, kind: 'trio' }); }
-      else if (kind === 'plof') { const o = T[1 - a.i]; fireArrow(a, o.x, o.y, 1, { kind: 'plof', perfect: true, windMul: 0, mult: 1, cine: false }); }
+      else if (kind === 'plof') { const o = T[plofTarget(a.i)]; fireArrow(a, o.x, o.y, 1, { kind: 'plof', perfect: true, windMul: 0, mult: 1, cine: false }); }
       else fireArrow(a, ax_, ay_, s, { ...perfOpts, kind });
       if (a.armed) { a.armed = false; a.special = null; stats.specials[a.i]++; }
       else { a.left--; a.shot++; }
@@ -231,12 +236,12 @@ export default {
     function resolveTarget(ar, x, y) {
       ar.targetDone = true;
       if (ar.kind === 'plof') {   // rookwolk op het doel van de ander
-        const t = T[1 - ar.owner]; t.smokeT = 6.5; stats.plof++; ar.on = false; ar.m.visible = false; ar.st = 'dead';
+        const po = plofTarget(ar.owner), t = T[po]; t.smokeT = 6.5; stats.plof++; ar.on = false; ar.m.visible = false; ar.st = 'dead';
         fx.particles.burst(t.x, t.y, ZT + 1, { count: 50, speed: 5, up: 0.3, life: 1.4, size: 1.1, colors: [0xffffff, 0xd8d0f0, 0xc8b8ff], gravity: -0.5 });
-        say('PLOF!', t.x, t.y + 2, '#d9a8ff', 2.2, ZT + 1); hud.toast(`💨 ${names[1 - ar.owner]} ziet niks meer! Plof-pijl van ${names[ar.owner]}`, 2200); audio.sfx('explode', { vol: 0.35, rate: 1.4 }); audio.sfx('pop', { vol: 0.6, rate: 0.6 }); ctx.shake(0.3); return;
+        say('PLOF!', t.x, t.y + 2, '#d9a8ff', 2.2, ZT + 1); hud.toast(`💨 ${names[po]} ziet niks meer! Plof-pijl van ${names[ar.owner]}`, 2200); audio.sfx('explode', { vol: 0.35, rate: 1.4 }); audio.sfx('pop', { vol: 0.6, rate: 0.6 }); ctx.shake(0.3); return;
       }
       const a = archers[ar.owner];
-      for (let j = 0; j < 2; j++) {
+      for (let j = 0; j < N; j++) {
         const t = T[j]; const d = Math.hypot(x - t.x, y - t.y);
         if (t.hidden > 0.25 || d > TR) continue;
         const f = d / TR; let k = 0; while (k < RINGS.length - 1 && f > RINGS[k][0]) k++;
@@ -289,40 +294,41 @@ export default {
     const aDone = (a) => a.left <= 0 && !a.special;
     function startSudden() {
       S.st = 'sudden'; S.t = 0; S.tie = true; slow = 1;
-      for (const a of archers) { a.left = 1; a.special = null; a.armed = false; a.st = 'nock'; a.nockT = 1.2; a.tension = 0; a.lastPts = 0; a.lastDist = 99; a.sdIdle = 0; a.bx = TXC[a.i]; a.by = TY; a.vx = a.vy = 0; }
-      hud.showBig('GELIJK! BESLISSENDE PIJL', 2000, '#ffd23f'); hud.toast('⚖️ Eén pijl elk: dichtst bij de roos wint', 2400); audio.sfx('bell', { vol: 0.8 }); W.cheerCrowd(2.5, 1);
+      { const top = Math.max(...archers.map((q) => q.score)); S.sdSet = archers.filter((q) => q.score === top).map((q) => q.i); }
+      for (const a of archers) { a.left = S.sdSet.includes(a.i) ? 1 : 0; a.special = null; a.armed = false; a.st = 'nock'; a.nockT = 1.2; a.tension = 0; a.lastPts = 0; a.lastDist = 99; a.sdIdle = 0; a.bx = TXC[a.i]; a.by = TY; a.vx = a.vy = 0; }
+      hud.showBig('GELIJK! BESLISSENDE PIJL', 2000, '#ffd23f'); hud.toast(N > 2 && S.sdSet.length < N ? `⚖️ ${S.sdSet.map((k) => names[k]).join(' en ')}: één pijl, dichtst bij de roos wint` : '⚖️ Eén pijl elk: dichtst bij de roos wint', 2400); audio.sfx('bell', { vol: 0.8 }); W.cheerCrowd(2.5, 1);
       hud.setTimer(null); refreshHud();
     }
     function finishMatch(winner) {
       if (finished) return; finished = true;
-      const w = winner, l = winner == null ? null : 1 - winner;
+      const order = winner == null ? null : [winner, ...archers.map((q) => q.i).filter((i) => i !== winner).sort((a, b) => archers[b].score - archers[a].score || a - b)];
+      const w = winner, l = winner == null ? null : order[N - 1];
       const jokes = w == null ? ['Precies gelijk! Robin Hood krabt zich verbaasd achter zijn oor.'] : [`${names[w]} schiet als Robin Hood! ${names[l]} schoot vooral gaten in de lucht.`, `${names[w]} raakt alles. ${names[l]} raakt vooral de grond.`, `De menigte juicht voor ${names[w]}. ${names[l]} zoekt zijn pijlen nog.`, `${names[w]} is de Koning van het Toernooi! ${names[l]} mag de kip troosten.`];
       const bits = [];
-      if (stats.bull[0] + stats.bull[1]) bits.push(`${stats.bull[0] + stats.bull[1]}× in de roos`);
-      if (stats.balloons[0] + stats.balloons[1]) bits.push(`${stats.balloons[0] + stats.balloons[1]} ballonnen geknapt`);
-      if (stats.chicken[0] + stats.chicken[1]) bits.push(`${stats.chicken[0] + stats.chicken[1]}× kip geraakt`);
-      if (stats.dragon[0] + stats.dragon[1]) bits.push(`${stats.dragon[0] + stats.dragon[1]}× draak geraakt`);
-      ctx.finishPvp({ winner: w, score: [archers[0].score, archers[1].score], delay: 900, summary: `${pick(jokes)}${S.tie ? ' De beslissende pijl gaf de doorslag.' : ''}${bits.length ? ' (' + bits.join(', ') + ')' : ''}` });
+      if (sum(stats.bull)) bits.push(`${sum(stats.bull)}× in de roos`);
+      if (sum(stats.balloons)) bits.push(`${sum(stats.balloons)} ballonnen geknapt`);
+      if (sum(stats.chicken)) bits.push(`${sum(stats.chicken)}× kip geraakt`);
+      if (sum(stats.dragon)) bits.push(`${sum(stats.dragon)}× draak geraakt`);
+      ctx.finishPvp({ winner: w, score: archers.map((q) => q.score), place: N > 2 && order ? order : undefined, delay: 900, summary: `${pick(jokes)}${S.tie ? ' De beslissende pijl gaf de doorslag.' : ''}${bits.length ? ' (' + bits.join(', ') + ')' : ''}` });
     }
     function endMatch(winner) {
       S.st = 'end'; S.t = 0; S.winner = winner; slow = 1; hud.setTimer(null);
       for (const a of archers) { a.armed = false; a.st = 'nock'; a.bw.rig.visible = false; a.c.faceDir(0, 1); }
-      if (winner != null) { archers[winner].c.pose = 'cheer'; archers[1 - winner].c.pose = 'sad'; hud.showBig(`${names[winner]} WINT!`, 1500, winner ? '#8fb8ff' : '#7dffb0'); W.cheerCrowd(5, 1); audio.sfx('win', { vol: 0.6 }); }
+      if (winner != null) { for (const q of archers) q.c.pose = q.i === winner ? 'cheer' : 'sad'; hud.showBig(`${names[winner]} WINT!`, 1500, players[winner].css); W.cheerCrowd(5, 1); audio.sfx('win', { vol: 0.6 }); }
       else hud.showBig('GELIJKSPEL!', 1400, '#ffd23f');
     }
     function checkEnd() {
       if (flying() || S.st === 'end') return;
       if (S.st === 'play') {
         if (!archers.every(aDone)) return;
-        const d = archers[0].score - archers[1].score;
-        if (d !== 0) endMatch(d > 0 ? 0 : 1); else startSudden();
+        const top = Math.max(...archers.map((q) => q.score)), tops = archers.filter((q) => q.score === top);
+        if (tops.length === 1) endMatch(tops[0].i); else startSudden();
       } else if (S.st === 'sudden') {
         if (!archers.every((a) => a.left <= 0)) return;
-        let w;
-        if (archers[0].lastPts !== archers[1].lastPts) w = archers[0].lastPts > archers[1].lastPts ? 0 : 1;
-        else if (archers[0].lastDist !== archers[1].lastDist) w = archers[0].lastDist < archers[1].lastDist ? 0 : 1;
-        else w = rnd() < 0.5 ? 0 : 1;
-        endMatch(w);
+        const set = archers.filter((q) => S.sdSet.includes(q.i));
+        const bp = Math.max(...set.map((q) => q.lastPts)); let c = set.filter((q) => q.lastPts === bp);
+        if (c.length > 1) { const bd = Math.min(...c.map((q) => q.lastDist)); c = c.filter((q) => q.lastDist === bd); }
+        endMatch(c[Math.floor(rnd() * c.length)].i);
       }
     }
 
@@ -377,7 +383,7 @@ export default {
     function spawnBalloon() {
       const b = balloons.find((q) => !q.on); if (!b) return;
       balloonN++; const gold = balloonN % 5 === 3;
-      const trail = archers[0].score === archers[1].score ? -1 : (archers[0].score < archers[1].score ? 0 : 1);
+      const mn = Math.min(...archers.map((q) => q.score)), trail = mn === Math.max(...archers.map((q) => q.score)) ? -1 : archers.find((q) => q.score === mn).i;
       let x = rand(-15, 15); if (trail >= 0 && rnd() < 0.55) x = TXC[trail] + rand(-6, 6);
       Object.assign(b, { on: true, x, y: -0.6, vy: rand(1.5, 2.3) * (GRAV < 1 ? 0.7 : 1), gold, ph: rnd() * 6 });
       b.m.color.setHex(gold ? 0xffd23f : pick(BALLOON_COLS)); b.m.emissive = new THREE.Color(gold ? 0xff9a10 : 0x000000); b.m.emissiveIntensity = gold ? 0.55 : 0;
@@ -463,7 +469,7 @@ export default {
       for (const q of arrows) if (q.on && q.st === 'fly' && q.cine && q.z < -2 && q.z > ZT - 1) cine = q;
       cineK = damp(cineK, cine ? 1 : 0, cine ? 5 : 3, dt); if (cine) cineX = cine.x;
       const fov = lerp(40, 31, cineK); if (Math.abs(fov - lastFov) > 0.02) { lastFov = fov; camera.fov = fov; camera.updateProjectionMatrix(); }
-      const tanH = Math.tan(THREE.MathUtils.degToRad(fov / 2)); const depth = Math.max(35, 19.5 / (tanH * asp));
+      const tanH = Math.tan(THREE.MathUtils.degToRad(fov / 2)); const depth = Math.max(N === 2 ? 35 : N === 3 ? 39 : 42, 19.5 / (tanH * asp));
       const fxx = cineX * 0.35 * cineK, sway = Math.sin((T0 + introT) * 0.3) * 0.25;
       camera.position.set(fxx * 0.5 + sway, 3.9 + cineK * 0.6, ZT + depth);
       camera.lookAt(fxx, 4.3 + cineK * 0.5, ZT);
@@ -478,7 +484,7 @@ export default {
       let cineArrow = false; for (const q of arrows) if (q.on && q.st === 'fly' && q.cine && q.z < -4 && q.z > ZT) cineArrow = true;
       if (cineArrow) { slow = 0.32; slowHold = 0.15; }
       const sdt = dt * slow;
-      if (T0 > 240 && !finished && S.st !== 'end') endMatch(archers[0].score === archers[1].score ? (rnd() < 0.5 ? 0 : 1) : (archers[0].score > archers[1].score ? 0 : 1));
+      if (T0 > 240 && !finished && S.st !== 'end') { const mx = Math.max(...archers.map((q) => q.score)), c = archers.filter((q) => q.score === mx); endMatch(c[Math.floor(rnd() * c.length)].i); }
       if (S.st === 'play' || S.st === 'sudden') gt += sdt;
       updateWind(sdt); updateTargets(sdt);
       for (const a of archers) updateArcher(a, sdt);
@@ -516,12 +522,12 @@ export default {
         W.deurman.glitch = 0.8;
         movers.forEach((m, i) => { if (!m || S.st === 'end') return; const a = archers[i]; a.score = Math.max(0, a.score - 5); a.st = 'nock'; a.nockT = 1.4; a.tension = 0; say('KNAP! -5', a.ax, 5, '#ff7a7a', 1.6, ZA - 3); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.3); refreshHud(); });
       },
-      celebrate(w) { for (const a of archers) { a.react = 0; a.bw.rig.visible = false; a.c.faceDir(0, 1); } archers[w].c.pose = 'cheer'; archers[1 - w].c.pose = 'sad'; W.cheerCrowd(6, 1); },
+      celebrate(w) { for (const a of archers) { a.react = 0; a.bw.rig.visible = false; a.c.faceDir(0, 1); } archers.forEach((q, k) => { q.c.pose = k === w ? 'cheer' : 'sad'; }); W.cheerCrowd(6, 1); },
       dispose() {},
       dbg: {
         state: () => ({ T: T0, st: S.st, timeLeft, score: archers.map((a) => a.score), left: archers.map((a) => a.left), special: archers.map((a) => a.special), armed: archers.map((a) => a.armed), wind, finished,
           a: archers.map((a) => ({ st: a.st, tension: a.tension, bx: a.bx, by: a.by, aim: [...a.aim], breath: a.breath, shot: a.shot, lastPts: a.lastPts })), tg: T.map((t) => ({ x: t.x, y: t.y, hidden: t.hidden, smoke: t.smoke })), flying: arrows.filter((q) => q.on && q.st === 'fly').length, stats, balloons: balloons.filter((b) => b.on).length, ch: CH.on, dr: DR.on, pat: patName }),
-        setTime: (t) => { timeLeft = t; }, setScore: (a, b) => { archers[0].score = a; archers[1].score = b; refreshHud(); },
+        setTime: (t) => { timeLeft = t; }, setScore: (a, b, c, d) => { [a, b, c, d].forEach((v, k) => { if (v != null && archers[k]) archers[k].score = v; }); refreshHud(); },
         give: (i, k) => { archers[i].special = null; grantSpecial(archers[i], ''); archers[i].special = k; },
         spawnBalloon, forceChicken: () => { chickenT = 0; }, forceDragon: () => { dragonT = 0; }, forceDrop: () => { dropNext = gt; }, forceShout: () => { deurT = 0; },
         setPhase: (t) => { gt = t; }, archers, T, balloons, arrows,

@@ -22,7 +22,7 @@ function inst(geo, material, n, { cast = true, receive = true, dyn = false } = {
 }
 
 // vloer: tegels van 64px per cel, startvelden in spelerskleur, gouden ster in het midden
-const PAD_COL = ['rgba(60,220,120,.38)', 'rgba(80,150,255,.38)', 'rgba(255,150,60,.42)'];   // startvelden per spelers-id: Wes groen, Jor blauw, Juul oranje
+const PAD_COL = ['rgba(60,220,120,.38)', 'rgba(80,150,255,.38)', 'rgba(255,150,60,.42)', 'rgba(212,92,240,.42)'];   // startvelden per spelers-id: Wes groen, Jor blauw, Juul oranje, Sam paars
 function floorTexture(ids) {
   const S = 64;
   return canvasTex(B.COLS * S, B.ROWS * S, (g, w, h) => {
@@ -37,7 +37,7 @@ function floorTexture(ids) {
     }
     // startvelden
     const pad = (c, rr, col) => { const x = c * S, y = rr * S; g.fillStyle = col; g.fillRect(x, y, S, S); g.strokeStyle = 'rgba(255,255,255,.7)'; g.lineWidth = 4; g.strokeRect(x + 8, y + 8, S - 16, S - 16); };
-    const PADS = ids.length === 3 ? [[[0, 4], [0, 3], [0, 5], [1, 4]], [[12, 4], [12, 3], [12, 5], [11, 4]], [[6, 10], [5, 10], [7, 10], [6, 9]]] : [[[0, 0], [1, 0], [0, 1]], [[12, 10], [11, 10], [12, 9]]];
+    const PADS = ids.length === 4 ? [[[0, 0], [1, 0], [0, 1]], [[12, 0], [11, 0], [12, 1]], [[0, 10], [1, 10], [0, 9]], [[12, 10], [11, 10], [12, 9]]] : ids.length === 3 ? [[[0, 4], [0, 3], [0, 5], [1, 4]], [[12, 4], [12, 3], [12, 5], [11, 4]], [[6, 10], [5, 10], [7, 10], [6, 9]]] : [[[0, 0], [1, 0], [0, 1]], [[12, 10], [11, 10], [12, 9]]];
     PADS.forEach((cells, slot) => { for (const [c, rr] of cells) pad(c, rr, PAD_COL[ids[slot]]); });
     // ster in het midden (gouden krat staat erop)
     g.translate(6.5 * S, 5.5 * S); g.fillStyle = 'rgba(255,215,80,.35)'; g.beginPath();

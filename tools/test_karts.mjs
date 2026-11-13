@@ -1,9 +1,11 @@
 // Gebruik: node tools/test_karts.mjs [scenario...] [twist=<id>]
+//   Achtervoegsel 4 (race4, both4, timeout4, idle4, grid4, twists4, shots4) = 4 spelers (?players=4, Sam = slot 3, 2 x 2 startvakken); all4 = alle 4-speler-scenario's.
 //   Achtervoegsel 3 (race3, both3, timeout3, idle3, items3, twists3, shots3) = 3 spelers (?players=3, Juul = slot 2); all3 = alle 3-speler-scenario's.
 //   scenario: race (bot-race, versneld, geen renderen), both (beide spelers winnen), timeout (tijdslimiet), idle (niemand rijdt),
 //             items (alle voorwerpen/gimmicks), shots (screenshots), twists (alle twists een stukje racen)
 // Versneld (zonder renderen) potjes Kasteel-Kartrace laten spelen door bots; rapporteert winnaar, tijden, en of finishPvp wordt aangeroepen.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -19,18 +21,19 @@ const port = server.address().port;
 const argv = process.argv.slice(2);
 const twistArg = (argv.find((a) => a.startsWith('twist=')) || '').slice(6);
 let scen = argv.filter((a) => !a.includes('=')).length ? argv.filter((a) => !a.includes('=')) : ['race', 'both', 'timeout', 'idle', 'items'];
+if (scen.includes('all4')) scen = ['race4', 'both4', 'timeout4', 'idle4', 'grid4', 'twists4'];
 if (scen.includes('all3')) scen = ['race3', 'both3', 'timeout3', 'idle3', 'items3', 'twists3'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 let failures = 0;
 const check = (ok, msg) => { console.log((ok ? '  OK   ' : '  FAIL ') + msg); if (!ok) failures++; };
 
 async function open(twist, quality = 'low', np = 2) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1000, height: 600 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=karts&quality=${quality}${np === 3 ? '&players=3' : ''}${twist ? '&twist=' + twist : ''}`);
+  await page.goto(`http://localhost:${port}/?game=karts&quality=${quality}${np >= 3 ? '&players=' + np : ''}${twist ? '&twist=' + twist : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async (np) => {
@@ -97,17 +100,18 @@ async function raceScenario(name, { twist = 'none', skill0, skill1, skills, maxS
 }
 
 for (const raw of scen) {
-  const np = raw.endsWith('3') ? 3 : 2, name = raw.replace(/3$/, '');
+  const np = raw.endsWith('4') ? 4 : raw.endsWith('3') ? 3 : 2, name = raw.replace(/[34]$/, '');
   if (name === 'race') {
     const f = await raceScenario('race', { label: `bots (gelijk, ${np} spelers)`, np });
+    if (np === 4 && f) { check(JSON.stringify(f.res.score.slice().sort((a, b) => b - a)) === '[10,6,3,1]' && f.res.place && f.res.place.length === 4 && new Set(f.res.place).size === 4, `positiepunten 10/6/3/1 + plaatsen (${JSON.stringify(f.res.score)} ${f.res.place})`); }
     if (np === 3 && f) { check(f.res.score.slice().sort().join() === '10,3,6'.split(',').sort().join() || JSON.stringify(f.res.score.slice().sort((a, b) => b - a)) === '[10,6,3]', `positiepunten 10/6/3 (${JSON.stringify(f.res.score)})`); }
     check(f && f.t > 35 && f.t < 105, `racetijd ${f ? f.t.toFixed(1) : '-'} s ligt in 35-105 s`);
   } else if (name === 'both') {
     const w = [];
-    const good = { err: 0 }, bad = { look: np === 3 ? 4 : 5, drift: 0 };
-    const cfgs = np === 3 ? [[good, bad, bad], [bad, good, bad], [bad, bad, good]] : [[good, bad], [bad, good]];
+    const good = { err: 0 }, bad = { look: np >= 3 ? 4 : 5, drift: 0 };
+    const cfgs = np === 4 ? [[good, bad, bad, bad], [bad, good, bad, bad], [bad, bad, good, bad], [bad, bad, bad, good]] : np === 3 ? [[good, bad, bad], [bad, good, bad], [bad, bad, good]] : [[good, bad], [bad, good]];
     for (const [target, sk] of cfgs.entries()) {   // de goede bot hoort te winnen; door de loting van de banen en de items mag een tweede/derde poging
-      for (let poging = 0; poging < (np === 3 ? 3 : 1); poging++) { const f = await raceScenario('both', { skills: sk, label: `wie wint? slot ${target} rijdt goed (${np} spelers)`, np }); if (f && (f.res.winner === target || poging === (np === 3 ? 2 : 0))) { w.push(f.res.winner); break; } }
+      for (let poging = 0; poging < (np >= 3 ? 3 : 1); poging++) { const f = await raceScenario('both', { skills: sk, label: `wie wint? slot ${target} rijdt goed (${np} spelers)`, np }); if (f && (f.res.winner === target || poging === (np >= 3 ? 2 : 0))) { w.push(f.res.winner); break; } }
     }
     check(Array.from({ length: np }, (_, i) => w.includes(i)).every(Boolean), `alle spelers kunnen winnen (winnaars: ${w.join(',')})`);
   } else if (name === 'timeout') {
@@ -116,10 +120,10 @@ for (const raw of scen) {
     const { browser, page, errors } = await open('none', 'low', np);
     await page.evaluate(() => { window.__mode = 'idle'; window.__fin = null; const m = window.__app.mode; const orig = m.finishPvp.bind(m); let called = 0; m.finishPvp = (res) => { called++; window.__fin = { res, called }; return orig(res); }; m.ctx.finishPvp = (res) => m.finishPvp(res); });
     // één kart rijdt heel even zodat er een winnaar op voorsprong is
-    await page.evaluate((np) => { window.__app.mode.instance.dbg.warp(np === 3 ? 2 : 1, 40, 0, 0); }, np);
+    await page.evaluate((np) => { window.__app.mode.instance.dbg.warp(np - 1, 40, 0, 0); }, np);
     for (let c = 0; c < 14 && !(await page.evaluate(() => window.__app.mode.finished)); c++) await page.evaluate(() => window.__run(600));
     const fin = await page.evaluate(() => window.__fin);
-    check(fin && fin.called === 1 && fin.res.winner === (np === 3 ? 2 : 1), `bij tijdslimiet wint de leider (winnaar ${fin && fin.res.winner}, aantal ${fin && fin.called})`);
+    check(fin && fin.called === 1 && fin.res.winner === np - 1, `bij tijdslimiet wint de leider (winnaar ${fin && fin.res.winner}, aantal ${fin && fin.called})`);
     check(errors.length === 0, 'geen console-fouten' + (errors.length ? '\n' + errors.join('\n') : ''));
     await browser.close();
   } else if (name === 'idle') {
@@ -129,6 +133,14 @@ for (const raw of scen) {
     for (let c = 0; c < 14 && !(await page.evaluate(() => window.__app.mode.finished)); c++) await page.evaluate(() => window.__run(600));
     const fin = await page.evaluate(() => window.__fin);
     check(fin && fin.called === 1, `finishPvp aangeroepen (winnaar ${fin && fin.res.winner})`);
+    check(errors.length === 0, 'geen console-fouten' + (errors.length ? '\n' + errors.join('\n') : ''));
+    await browser.close();
+  } else if (name === 'grid' && np === 4) {
+    console.log('\n== startgrid met 4 karts: 2 x 2 vakken, geen overlap');
+    const { browser, page, errors } = await open('none', 'low', 4);
+    const g0 = await page.evaluate(() => { window.__mode = 'idle'; const d = window.__app.mode.instance.dbg; return d.state().k.map((k) => ({ x: k.x, z: k.z, prog: k.prog })); });
+    const dmin = Math.min(...g0.flatMap((a, i) => g0.slice(i + 1).map((b) => Math.hypot(a.x - b.x, a.z - b.z))));
+    check(new Set(g0.map((g) => Math.round(g.prog))).size === 2 && dmin > 2.4, `twee rijen, minimale onderlinge afstand ${dmin.toFixed(2)} (${JSON.stringify(g0.map((g) => g.prog))})`);
     check(errors.length === 0, 'geen console-fouten' + (errors.length ? '\n' + errors.join('\n') : ''));
     await browser.close();
   } else if (name === 'items' && np === 3) {
@@ -202,7 +214,7 @@ for (const raw of scen) {
       check(!!f, `twist ${t}: afgerond`);
     }
   } else if (name === 'shots') {
-    const tag = (twistArg || 'none') + (np === 3 ? '_3sp' : '');
+    const tag = (twistArg || 'none') + (np >= 3 ? '_' + np + 'sp' : '');
     const { browser, page, errors } = await open(twistArg || 'none', process.env.Q || 'low', np);
     const snap = async (n) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.screenshot({ path: `/tmp/karts_${tag}_${n}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); };
     await page.evaluate(() => window.__run(60 * 5)); await snap('start');

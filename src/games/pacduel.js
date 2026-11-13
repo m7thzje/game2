@@ -54,16 +54,19 @@ export default {
   icon: '👻',
   mode: 'pvp',
   time: 90,
+  players: [2, 3, 4],                    // 2 spelers (duel, spiegel-doolhof) of 3-4 spelers (vrij voor allen, vier-hoeken-doolhof)
   music: 'game_fast',
-  blurb: 'Pac-Man voor twee in een <b>neon-doolhof</b>! Eet de meeste <b>munten</b>. Met een <b>krachtbol</b> word je spook-jager en steel je de helft van je broers munten. Pas op voor de <b>spookjes</b> en de <b>Deurman</b>!',
+  blurb: 'Pac-Man voor twee tot vier spelers in een <b>neon-doolhof</b>! Eet de meeste <b>munten</b>. Met een <b>krachtbol</b> word je spook-jager en steel je de helft van de munten van wie je aantikt. Pas op voor de <b>spookjes</b> en de <b>Deurman</b>!',
   controls: ['{move} lopen door het doolhof', '{a} sprint (even wachten)', '{b} gelei-blok achter je: sluit de gang!'],
-  tip: 'Een blok in een smalle gang houdt een jager of spook tegen. Wie achterstaat krijgt langere jacht-tijd en snellere sprint.',
+  tip: 'Een blok in een smalle gang houdt een jager of spook tegen. Wie achterstaat krijgt langere jacht-tijd en snellere sprint. Met 4 spelers start ieder in een hoek en staan er 4 krachtbollen; bij gelijkspel beslist de gouden munt tussen wie gelijk staat.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
-    const names = players.map((p) => p.name);
+    const N = players.length, four = N > 2, names = players.map((p) => p.name);
     const tw = ctx.twist.id;
+    const LC = players.map((_, i) => new THREE.Color(PLAYER_COLORS[i]).lerp(new THREE.Color(0xffffff), 0.45).getHex());   // lichte spelerskleur voor effecten
+    const LCs = LC.map((c) => '#' + c.toString(16).padStart(6, '0'));
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const GSPEED = 1 + ((ctx.twist.speed || 1) - 1) * 0.6;
 
@@ -72,8 +75,8 @@ export default {
     L.sun.color.set(0xd8c8ff); L.sun.intensity = 1.35; L.sun.position.set(-8, 34, 16);
     camera.fov = 50; camera.updateProjectionMatrix();
 
-    const maze = buildMaze();
-    const colorsCss = ['#35c46f', '#4a8cff'];
+    const maze = buildMaze(four);
+    const colorsCss = players.map((p) => p.css);
     const Wd = buildWorld(ctx, maze, names, colorsCss);
     const idx = (x, z) => z * W + x;
 
@@ -137,20 +140,20 @@ export default {
       const shadow = P.shadowBlob(0.8); scene.add(shadow);
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.8, 24), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; scene.add(ring);
       return { i, c, holder, k, tag, aura, shadow, ring, x: s[0], z: s[1], dx: 0, dz: 0, wx: 0, wz: 0, wantT: 0, coins: 0, eaten: 0, hunter: 0, stun: 0, inv: 0, resp: 0, sprint: 0, sprintCd: 0, bombCd: 0, sf: 1,
-        prevC: null, curC: s.slice(), combo: 0, comboT: 0, bumpCd: 0, steals: 0, hits: 0, fruit: 0, ghostsEaten: 0, blockCell: null, txt: '', pulse: 0, moving: false, hop: 0 };
+        out: false, prevC: null, curC: s.slice(), combo: 0, comboT: 0, bumpCd: 0, steals: 0, hits: 0, fruit: 0, ghostsEaten: 0, blockCell: null, txt: '', pulse: 0, moving: false, hop: 0 };
     });
     pl.forEach((p) => { p.c.faceDir(0, -1); p.c.yaw = p.c.targetYaw; });
 
     // ---------------- spookjes ----------------
-    const ghosts = [0xff6ad0, 0xffa23a].map((col, n) => {
+    const ghosts = [0xff6ad0, 0xffa23a, 0x4adcff].slice(0, N === 4 ? 3 : 2).map((col, n) => {
       const g = makeGhost(col); scene.add(g); const sh = P.shadowBlob(0.7); scene.add(sh);
-      return { n, g, sh, x: maze.ghost[0], z: maze.ghost[1], dx: n ? 1 : -1, dz: 0, wx: 0, wz: 0, mode: 'chase', dead: 0, wait: 1.5 + n * 1.5, col, face: 0, mood: 0 };
+      return { n, g, sh, x: maze.ghost[0], z: maze.ghost[1], dx: n === 1 ? 1 : -1, dz: 0, wx: 0, wz: 0, mode: 'chase', dead: 0, wait: n === 2 ? 3 : 1.5 + n * 1.5, col, face: 0, mood: 0 };
     });
     // gelei-blokken (max 1 per speler)
-    const blocks = [0, 1].map((i) => { const m = mesh(new THREE.BoxGeometry(CELL * 0.88, 1.0, CELL * 0.88), new THREE.MeshStandardMaterial({ color: PLAYER_COLORS[i], emissive: PLAYER_COLORS[i], emissiveIntensity: 0.35, transparent: true, opacity: 0.82, roughness: 0.15 }), { pos: [0, 0.5, 0] }); m.visible = false; scene.add(m); return { m, cell: null, t: 0 }; });
+    const blocks = players.map((_, i) => { const m = mesh(new THREE.BoxGeometry(CELL * 0.88, 1.0, CELL * 0.88), new THREE.MeshStandardMaterial({ color: PLAYER_COLORS[i], emissive: PLAYER_COLORS[i], emissiveIntensity: 0.35, transparent: true, opacity: 0.82, roughness: 0.15 }), { pos: [0, 0.5, 0] }); m.visible = false; scene.add(m); return { m, cell: null, t: 0 }; });
     // fruit
     const fruits = [];
-    for (let i = 0; i < 4; i++) { const g = makeFruit(); scene.add(g); fruits.push({ g, on: false, x: 0, z: 0, t: 0, type: FRUITS[0] }); }
+    for (let i = 0; i < (four ? 8 : 4); i++) { const g = makeFruit(); scene.add(g); fruits.push({ g, on: false, x: 0, z: 0, t: 0, type: FRUITS[0] }); }
     // gouden munt (sudden death)
     const gold = new THREE.Group(); gold.visible = false; scene.add(gold);
     { const gm = new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xffb010, emissiveIntensity: 1.0, roughness: 0.25, metalness: 0.7 }); const cg = new THREE.CylinderGeometry(0.7, 0.7, 0.16, 18); cg.rotateX(Math.PI / 2); gold.add(mesh(cg, gm, { cast: false, pos: [0, 1.0, 0] }));
@@ -159,11 +162,15 @@ export default {
 
     // ---------------- toestand ----------------
     let T = 0, introT = 0, started = false, finished = false;
-    const G = { state: 'init', t: 0, timeLeft: MATCH, sd: false, sdT: 0, winner: -1, double: false, nextFruit: 7, nextGate: 13, nextOrbHint: 0, scatter: 0, scatterIn: 16, deur: null, refills: 0, doorEvents: 0, ghostHits: [0, 0], goldCell: maze.ghost.slice(), end: false, banner: 0 };
-    const stats = { steals: [0, 0], fruit: [0, 0], ghostHits: [0, 0], ghostsEaten: [0, 0] };
-    const lead = (i) => pl[1 - i].coins - pl[i].coins;     // >0: i staat achter
+    const G = { state: 'init', t: 0, timeLeft: MATCH, sd: false, sdT: 0, winner: -1, double: false, nextFruit: 7, nextGate: 13, nextOrbHint: 0, scatter: 0, scatterIn: 16, deur: null, refills: 0, doorEvents: 0, ghostHits: players.map(() => 0), goldCell: maze.ghost.slice(), end: false, banner: 0 };
+    const zeros = () => players.map(() => 0);
+    const stats = { steals: zeros(), fruit: zeros(), ghostHits: zeros(), ghostsEaten: zeros() };
+    const lead = (i) => Math.max(...pl.filter((q) => q.i !== i).map((q) => q.coins)) - pl[i].coins;     // >0: i staat achter (t.o.v. de beste van de rest)
+    const others = (p) => pl.filter((q) => q !== p && !q.out);
     function refreshHud() {
-      hud.setScore(`${names[0]} ${pl[0].coins} – ${pl[1].coins} ${names[1]}${G.sd ? '  (GOUDEN MUNT)' : ''}`);
+      if (N === 2) { hud.setScore(`${names[0]} ${pl[0].coins} – ${pl[1].coins} ${names[1]}${G.sd ? '  (GOUDEN MUNT)' : ''}`); return; }
+      const m = Math.max(...pl.map((q) => q.coins)), top = pl.filter((q) => q.coins === m);
+      hud.setScore(G.sd ? '(GOUDEN MUNT)' : top.length === 1 ? `${names[top[0].i]} staat voorop met ${m}` : `gelijk aan kop met ${m}`);
     }
     const wx = (x) => cx2w(x), wz = (z) => cz2w(z);
     const addMoney = (p, n, pop = true) => { p.coins += n; p.pulse = 1; };
@@ -212,10 +219,10 @@ export default {
     }
     function startSprint(p) {
       p.sprint = SPRINT_T; p.sprintCd = SPRINT_CD * (lead(p.i) >= 8 ? 0.65 : 1);
-      audio.sfx('whoosh', { vol: 0.6, rate: 1.4 }); fx.particles.burst(wx(p.x), 0.5, wz(p.z), { count: 12, speed: 3, up: 0.6, life: 0.4, size: 0.3, colors: [0xffffff, p.i ? 0x8fb8ff : 0x7dffb0], gravity: 2 });
+      audio.sfx('whoosh', { vol: 0.6, rate: 1.4 }); fx.particles.burst(wx(p.x), 0.5, wz(p.z), { count: 12, speed: 3, up: 0.6, life: 0.4, size: 0.3, colors: [0xffffff, LC[p.i]], gravity: 2 });
     }
     function entityNear(cx, cz, r) {
-      for (const p of pl) if (p.resp <= 0 && Math.hypot(p.x - cx, p.z - cz) < r) return true;
+      for (const p of pl) if (p.resp <= 0 && !p.out && Math.hypot(p.x - cx, p.z - cz) < r) return true;
       for (const g of ghosts) if (g.dead <= 0 && g.wait <= 0 && Math.hypot(g.x - cx, g.z - cz) < r) return true;
       return false;
     }
@@ -233,8 +240,8 @@ export default {
       b.cell = c; b.t = BLOCK_T; blk[idx(c[0], c[1])] = BLOCK_T; p.bombCd = BOMB_CD;
       b.m.position.set(wx(c[0]), 0.5, wz(c[1])); b.m.visible = true; b.m.scale.set(0.2, 0.2, 0.2);
       audio.sfx('pop', { vol: 0.7, rate: 0.8 }); audio.sfx('boing', { vol: 0.4, rate: 0.6 });
-      fx.particles.burst(wx(c[0]), 0.6, wz(c[1]), { count: 16, speed: 3, up: 1, life: 0.6, size: 0.35, colors: [p.i ? 0x8fb8ff : 0x7dffb0, 0xffffff], gravity: 5 });
-      fx.texts.add('GELEI-BLOK!', wx(c[0]), 2.2, wz(c[1]), p.i ? '#8fb8ff' : '#7dffb0', 1.0);
+      fx.particles.burst(wx(c[0]), 0.6, wz(c[1]), { count: 16, speed: 3, up: 1, life: 0.6, size: 0.35, colors: [LC[p.i], 0xffffff], gravity: 5 });
+      fx.texts.add('GELEI-BLOK!', wx(c[0]), 2.2, wz(c[1]), LCs[p.i], 1.0);
     }
     function onPlayerCenter(p, cx, cz) {
       if (!p.curC || p.curC[0] !== cx || p.curC[1] !== cz) { p.prevC = p.curC; p.curC = [cx, cz]; }
@@ -247,7 +254,7 @@ export default {
       if (p.stun > 0) { p.stun -= dt; if (Math.random() < dt * 14) fx.particles.emit(wx(p.x) + (Math.random() - 0.5) * 0.8, 2.0, wz(p.z) + (Math.random() - 0.5) * 0.8, 0, 0.5, 0, { life: 0.5, size: 0.3, color: 0xffe14a, gravity: 0 }); p.moving = false; return; }
       if (G.state !== 'play' && G.state !== 'sudden') { p.moving = false; return; }
       readInput(p, dt);
-      if (p.sprint > 0) { p.sprint -= dt; if (Math.random() < dt * 40) fx.particles.emit(wx(p.x) - p.dx * 0.5, 0.4, wz(p.z) - p.dz * 0.5, 0, 0.2, 0, { life: 0.35, size: 0.45, color: p.i ? 0x8fb8ff : 0x7dffb0, gravity: 0 }); }
+      if (p.sprint > 0) { p.sprint -= dt; if (Math.random() < dt * 40) fx.particles.emit(wx(p.x) - p.dx * 0.5, 0.4, wz(p.z) - p.dz * 0.5, 0, 0.2, 0, { life: 0.35, size: 0.45, color: LC[p.i], gravity: 0 }); }
       p.sf = damp(p.sf, 1, lerp(26, 2.4, SLIP), dt);
       const v = V * pv.speed(p.i) * (p.hunter > 0 ? 1.08 : 1) * (p.sprint > 0 ? 1.75 : 1) * (SLIP > 0.3 ? Math.max(0.35, p.sf) : 1);
       const total = v * dt, n = Math.max(1, Math.ceil(total / 0.2)), d1 = total / n;
@@ -263,7 +270,7 @@ export default {
     }
     function respawn(p) {
       const s = maze.starts[p.i]; p.x = s[0]; p.z = s[1]; p.dx = p.dz = p.wx = p.wz = 0; p.inv = 3; p.prevC = null; p.curC = s.slice(); p.hunter = 0; p.stun = 0; p.sf = 1;
-      p.holder.visible = true; fx.particles.burst(wx(p.x), 0.6, wz(p.z), { count: 24, speed: 4, up: 1.4, life: 0.8, size: 0.4, colors: [0xffffff, p.i ? 0x8fb8ff : 0x7dffb0], gravity: 3 }); audio.sfx('sparkle', { vol: 0.6 });
+      p.holder.visible = true; fx.particles.burst(wx(p.x), 0.6, wz(p.z), { count: 24, speed: 4, up: 1.4, life: 0.8, size: 0.4, colors: [0xffffff, LC[p.i]], gravity: 3 }); audio.sfx('sparkle', { vol: 0.6 });
     }
 
     // ---------------- oprapen / botsen ----------------
@@ -292,7 +299,7 @@ export default {
       audio.sfx('powerup', { vol: 0.9 }); audio.sfx('sparkle', { vol: 0.5 }); ctx.shake(0.3);
       fx.particles.burst(wx(o.x), 0.8, wz(o.z), { count: 40, speed: 6, up: 1.3, life: 1.0, size: 0.4, colors: [0xff5ad8, 0xffffff, 0xff9af0], gravity: 3 });
       fx.texts.add(bonus ? 'SUPER-JAGER!' : 'SPOOK-JAGER!', wx(p.x), 3.2, wz(p.z), '#ff5ad8', 1.5);
-      hud.toast(`${names[p.i]} is spook-jager! ${names[1 - p.i]}: ren weg!`, 2200);
+      hud.toast(N === 2 ? `${names[p.i]} is spook-jager! ${names[1 - p.i]}: ren weg!` : `${names[p.i]} is spook-jager! Iedereen: ren weg!`, 2200);
       for (const g of ghosts) if (g.dead <= 0 && g.mode !== 'scared') { g.mode = 'scared'; g.dx = -g.dx; g.dz = -g.dz; }
     }
     function takeFruit(p, f) {
@@ -324,9 +331,10 @@ export default {
         } else if (p.inv <= 0 && p.stun <= 0 && p.hunter <= 0) ghostHit(p, g);
       }
       // de andere speler
-      const o = pl[1 - p.i];
-      if (p.hunter > 0 && o.hunter <= 0 && o.inv <= 0 && o.resp <= 0 && Math.hypot(o.x - p.x, o.z - p.z) < 0.65 + 0.25 * (pv.size(p.i) + pv.size(o.i)) / 2) steal(p, o);
-      else if (p.hunter > 0 && o.hunter > 0 && Math.hypot(o.x - p.x, o.z - p.z) < 0.6 && p.bumpCd <= 0) { p.bumpCd = o.bumpCd = 0.8; audio.sfx('boing', { vol: 0.5 }); fx.texts.add('BONK!', wx(p.x), 2.6, wz(p.z), '#ffffff', 1); p.dx = -p.dx; p.dz = -p.dz; }
+      for (const o of others(p)) {
+        if (p.hunter > 0 && o.hunter <= 0 && o.inv <= 0 && o.resp <= 0 && Math.hypot(o.x - p.x, o.z - p.z) < 0.65 + 0.25 * (pv.size(p.i) + pv.size(o.i)) / 2) { steal(p, o); break; }
+        else if (p.hunter > 0 && o.hunter > 0 && Math.hypot(o.x - p.x, o.z - p.z) < 0.6 && p.bumpCd <= 0) { p.bumpCd = o.bumpCd = 0.8; audio.sfx('boing', { vol: 0.5 }); fx.texts.add('BONK!', wx(p.x), 2.6, wz(p.z), '#ffffff', 1); p.dx = -p.dx; p.dz = -p.dz; }
+      }
     }
     function steal(h, v) {
       const n = v.coins >= 2 ? Math.floor(v.coins / 2) : v.coins;
@@ -367,7 +375,7 @@ export default {
         let tx, tz;
         if (G.scatter > 0) { tx = g.n ? W - 2 : 1; tz = g.n ? H - 2 : 1; }
         else {
-          const cand = pl.filter((q) => q.resp <= 0); const leader = pl[0].coins === pl[1].coins ? pick(pl) : (pl[0].coins > pl[1].coins ? pl[0] : pl[1]);
+          const cand = pl.filter((q) => q.resp <= 0 && !q.out); const mx = Math.max(...pl.map((q) => q.coins)), tops = pl.filter((q) => q.coins === mx && !q.out); const leader = N === 2 ? (pl[0].coins === pl[1].coins ? pick(pl) : (pl[0].coins > pl[1].coins ? pl[0] : pl[1])) : pick(tops.length ? tops : pl);
           const near = cand.length ? cand.reduce((b, q) => (Math.hypot(q.x - cx, q.z - cz) < Math.hypot(b.x - cx, b.z - cz) ? q : b)) : leader;
           const tgt = g.n === 0 ? (Math.random() < 0.7 ? leader : near) : near;
           tx = tgt.x + tgt.dx * 3 * (g.n === 1 ? 0 : 1); tz = tgt.z + tgt.dz * 3 * (g.n === 1 ? 0 : 1);
@@ -395,12 +403,13 @@ export default {
     // ---------------- evenementen ----------------
     function pickFruitType() { const tot = FRUITS.reduce((a, f) => a + f.w, 0); let r = Math.random() * tot; for (const f of FRUITS) { r -= f.w; if (r <= 0) return f; } return FRUITS[0]; }
     function spawnFruit() {
-      const free2 = fruits.filter((f) => !f.on); if (free2.length < 2) return;
+      const free2 = fruits.filter((f) => !f.on); if (free2.length < (four ? 4 : 2)) return;
       const type = pickFruitType();
       for (let tries = 0; tries < 30; tries++) {
-        const [x, z] = pick(maze.cells); if (x >= 10 || special[idx(x, z)] || (x < 2) || pl.some((p) => Math.hypot(p.x - x, p.z - z) < 3 || Math.hypot(p.x - (W - 1 - x), p.z - z) < 3)) continue;
-        for (const [fx2, f] of [[x, free2[0]], [W - 1 - x, free2[1]]]) { f.on = true; f.x = fx2; f.z = z; f.t = 0; f.type = type; f.g.visible = true; f.g.position.set(wx(fx2), 0, wz(z)); f.g.userData.kers.visible = type.id === 'kers'; f.g.userData.druif.visible = type.id === 'druif'; f.g.userData.ster.visible = type.id === 'ster'; f.g.userData.halo.visible = type.id === 'ster'; fx.particles.burst(wx(fx2), 0.8, wz(z), { count: 16, speed: 3, up: 1.2, life: 0.6, size: 0.35, colors: [0xffffff, 0xffd23f], gravity: 3 }); }
-        audio.sfx('sparkle', { vol: 0.5 }); hud.toast(`Fruit! ${type.name} (+${type.pts}) ligt aan allebei de kanten`, 1800);
+        const [x, z] = pick(maze.cells); if (x >= 10 || special[idx(x, z)] || (x < 2) || (four && z === (H - 1) / 2) || pl.some((p) => Math.hypot(p.x - x, p.z - z) < 3 || Math.hypot(p.x - (W - 1 - x), p.z - z) < 3 || (four && Math.hypot(p.x - x, p.z - (H - 1 - z)) < 3) || (four && Math.hypot(p.x - (W - 1 - x), p.z - (H - 1 - z)) < 3))) continue;
+        const spots = four ? [[x, z, free2[0]], [W - 1 - x, z, free2[1]], [x, H - 1 - z, free2[2]], [W - 1 - x, H - 1 - z, free2[3]]] : [[x, z, free2[0]], [W - 1 - x, z, free2[1]]];   // gespiegeld: eerlijk
+        for (const [fx2, fz2, f] of spots) { f.on = true; f.x = fx2; f.z = fz2; f.t = 0; f.type = type; f.g.visible = true; f.g.position.set(wx(fx2), 0, wz(fz2)); f.g.userData.kers.visible = type.id === 'kers'; f.g.userData.druif.visible = type.id === 'druif'; f.g.userData.ster.visible = type.id === 'ster'; f.g.userData.halo.visible = type.id === 'ster'; fx.particles.burst(wx(fx2), 0.8, wz(fz2), { count: 16, speed: 3, up: 1.2, life: 0.6, size: 0.35, colors: [0xffffff, 0xffd23f], gravity: 3 }); }
+        audio.sfx('sparkle', { vol: 0.5 }); hud.toast(four ? `Fruit! ${type.name} (+${type.pts}) ligt in alle vier de hoeken` : `Fruit! ${type.name} (+${type.pts}) ligt aan allebei de kanten`, 1800);
         return;
       }
     }
@@ -440,16 +449,17 @@ export default {
     // ---------------- einde / sudden death ----------------
     function finishMatch(winner) {
       if (finished) return; finished = true;
-      const a = pl[0].coins, b = pl[1].coins;
-      const jokes = winner == null ? ['Precies gelijk! De spookjes weten niet wie ze moeten uitlachen.'] : [`${names[winner]} is de Spook-Koning${''}! ${names[1 - winner]} ziet nog steeds sterretjes.`, `${names[winner]} smulde het doolhof leeg. ${names[1 - winner]} zoekt zijn munten nog.`, `De spookjes joelen voor ${names[winner]}. ${names[1 - winner]} heeft het nakijken.`];
+      const ol = winner == null ? '' : N === 2 ? names[1 - winner] : 'De rest';
+      const jokes = winner == null ? ['Precies gelijk! De spookjes weten niet wie ze moeten uitlachen.'] : [`${names[winner]} is de Spook-Koning${''}! ${ol} ${N === 2 ? 'ziet' : 'zien'} nog steeds sterretjes.`, `${names[winner]} smulde het doolhof leeg. ${ol} ${N === 2 ? 'zoekt zijn' : 'zoeken hun'} munten nog.`, `De spookjes joelen voor ${names[winner]}. ${ol} ${N === 2 ? 'heeft' : 'hebben'} het nakijken.`];
       const extra = [];
       if (stats.steals[0] + stats.steals[1]) extra.push(`Er werd ${stats.steals[0] + stats.steals[1]}x gestolen`);
       if (stats.ghostHits[0] + stats.ghostHits[1]) extra.push(`de spookjes pakten ${stats.ghostHits[0] + stats.ghostHits[1]}x munten af`);
-      ctx.finishPvp({ winner, score: [a, b], delay: 800, summary: `${pick(jokes)}${G.sdWon ? ' Beslist met de gouden munt!' : ''}${G.coinFlip ? ' (Even zonder gouden munt... het muntje beslist.)' : ''}${extra.length ? ' ' + extra.join(', ') + '.' : ''}` });
+      ctx.finishPvp({ winner, score: pl.map((p) => p.coins), delay: 800, summary: `${pick(jokes)}${G.sdWon ? ' Beslist met de gouden munt!' : ''}${G.coinFlip ? ' (Even zonder gouden munt... het muntje beslist.)' : ''}${extra.length ? ' ' + extra.join(', ') + '.' : ''}` });
     }
     function endMatch(winner) {
       G.state = 'end'; G.t = 0; G.winner = winner; hud.setTimer(null);
-      if (winner != null) { pl[winner].c.pose = 'cheer'; pl[1 - winner].c.pose = 'sad'; hud.showBig(`${names[winner]} WINT!`, 1500, winner ? '#8fb8ff' : '#7dffb0'); audio.sfx('bell', { vol: 0.9 }); }
+      for (const q of pl) if (q.out) { q.out = false; q.resp = 0; q.holder.visible = true; }
+      if (winner != null) { for (const q of pl) q.c.pose = q.i === winner ? 'cheer' : 'sad'; hud.showBig(`${names[winner]} WINT!`, 1500, LCs[winner]); audio.sfx('bell', { vol: 0.9 }); }
       else hud.showBig('GELIJKSPEL!', 1400, '#ffd23f');
       for (const p of pl) { p.poseT = 99; }
     }
@@ -458,17 +468,25 @@ export default {
       for (const [x, z] of coinCells) setCoin(x, z, false); for (const o of orbs) { o.on = false; o.g.visible = false; } for (const f of fruits) { f.on = false; f.g.visible = false; }
       for (let k = 0; k < W * H; k++) blk[k] = 0; for (const b of blocks) { b.cell = null; b.m.visible = false; }
       for (const g of ghosts) { g.dead = 999; g.g.visible = false; g.sh.visible = false; }
-      for (const p of pl) { p.hunter = 0; p.stun = 0; p.resp = 0; p.inv = 0; respawn(p); p.inv = 0; p.holder.visible = true; p.c.pose = 'idle'; }
+      // gouden munt: alleen wie bovenaan staat doet mee (bij 3-4 spelers kijkt de rest toe)
+      const best = Math.max(...pl.map((q) => q.coins));
+      for (const p of pl) { p.out = N > 2 && p.coins !== best; p.hunter = 0; p.stun = 0; p.resp = 0; p.inv = 0; respawn(p); p.inv = 0; p.holder.visible = !p.out; p.c.pose = 'idle'; if (p.out) p.resp = 1e9; }
       G.goldTaker = null; gold.position.set(wx(G.goldCell[0]), 0, wz(G.goldCell[1])); gold.visible = true;
       hud.showBig('GOUDEN MUNT!', 1600, '#ffd23f'); hud.toast('Gelijkspel! Wie pakt als eerste de gouden munt?', 2600); audio.sfx('bell', { vol: 0.9 }); refreshHud();
     }
 
+    // beste speler: strict = alleen bij een alleenstaande kop (anders null); anders bij gelijkstand een muntje (of op 'eaten' bij sudden)
+    function bestSlot(strict, byEaten = false) {
+      const val = (q) => (byEaten ? q.eaten : q.coins), pool = pl.filter((q) => !q.out), m = Math.max(...pool.map(val)), tops = pool.filter((q) => val(q) === m);
+      if (tops.length === 1) return tops[0].i;
+      return strict ? null : pick(tops).i;
+    }
     // ---------------- hoofd-update ----------------
     let lastTimeRefresh = -1;
     function update(dt) {
       dt = Math.min(dt, 0.05); T += dt; G.t += dt;
       if (!started) { started = true; G.state = 'play'; G.t = 0; fillCoins(false); refreshHud(); }
-      if (T > 220 && !finished && G.state !== 'end') endMatch(pl[0].coins === pl[1].coins ? Math.floor(Math.random() * 2) : (pl[0].coins > pl[1].coins ? 0 : 1));
+      if (T > 220 && !finished && G.state !== 'end') endMatch(bestSlot(false));
       for (const p of pl) if (p.poseT > 0) { p.poseT -= dt; if (p.poseT <= 0 && G.state !== 'end') p.c.pose = 'idle'; }
 
       if (G.state === 'play') {
@@ -481,14 +499,14 @@ export default {
         if (G.timeLeft <= 0) {
           G.timeLeft = 0; hud.setTimer(0);
           audio.sfx('bell', { vol: 1 });
-          if (pl[0].coins !== pl[1].coins) endMatch(pl[0].coins > pl[1].coins ? 0 : 1); else startSudden();
+          if (bestSlot(true) != null) endMatch(bestSlot(true)); else startSudden();
         }
       } else if (G.state === 'suddenIntro') {
         if (G.t > 1.6) { G.state = 'sudden'; G.t = 0; audio.sfx('go', { vol: 0.5 }); }
       } else if (G.state === 'sudden') {
         G.sdT += dt; hud.setTimer(Math.max(0, SD_MAX - G.sdT), 8);
         if (G.goldTaker != null) { const w = G.goldTaker; G.sdWon = true; fx.particles.burst(wx(G.goldCell[0]), 1, wz(G.goldCell[1]), { count: 50, speed: 7, up: 1.3, life: 1.2, size: 0.5, colors: [0xffd23f, 0xffffff, 0xff7ad8], gravity: 5 }); gold.visible = false; addMoney(pl[w], 1); refreshHud(); audio.sfx('win', { vol: 0.6 }); endMatch(w); }
-        else if (G.sdT > SD_MAX) { const a = pl[0].eaten, b = pl[1].eaten; G.coinFlip = true; endMatch(a === b ? Math.floor(Math.random() * 2) : (a > b ? 0 : 1)); }
+        else if (G.sdT > SD_MAX) { G.coinFlip = true; endMatch(bestSlot(false, true)); }
       }
       if (G.state === 'end') { if (G.t > (G.winner == null ? 1.6 : 2.4) && !finished) finishMatch(G.winner); }
 
@@ -546,11 +564,11 @@ export default {
         if (p.dx || p.dz) c.faceDir(p.dx, p.dz);
         c.speed = p.stun > 0 || G.state === 'end' ? 0 : (p.moving ? (p.sprint > 0 ? 1 : 0.7) : 0);
         c.air = GRAV < 1 && p.hop > 0.3;
-        if (G.state !== 'end' && p.poseT <= 0) c.pose = p.hunter > 0 ? 'push' : p.stun > 0 ? 'scared' : (pl[1 - p.i].hunter > 0 && p.resp <= 0 ? 'scared' : 'idle');
+        if (G.state !== 'end' && p.poseT <= 0) c.pose = p.hunter > 0 ? 'push' : p.stun > 0 ? 'scared' : (pl.some((q) => q !== p && q.hunter > 0) && p.resp <= 0 ? 'scared' : 'idle');
         c.update(dt);
         if (p.inv > 0 && p.resp <= 0) h.visible = Math.sin(tt * 40) > -0.3; else if (p.resp <= 0) h.visible = true;
         p.tag.position.set(px, 3.5 * sizeScale(p.i) + p.hop, pz + 0.3); p.ring.position.set(px, 0.07, pz); p.ring.scale.setScalar(sizeScale(p.i)); p.ring.visible = p.resp <= 0 && h.visible; p.tag.visible = h.visible && p.resp <= 0;
-        p.shadow.position.set(px, 0.04, pz); p.shadow.scale.setScalar(sizeScale(p.i) * (1 - Math.min(0.4, p.hop * 0.3))); p.shadow.visible = p.resp <= 0;
+        p.shadow.position.set(px, 0.04, pz); p.shadow.scale.setScalar(sizeScale(p.i) * (1 - Math.min(0.4, p.hop * 0.3))); p.shadow.visible = p.resp <= 0 && !p.out;
         p.aura.visible = p.hunter > 0 && p.resp <= 0;
         if (p.aura.visible) { p.aura.position.set(px, 0.08, pz); p.aura.scale.setScalar(sizeScale(p.i) * (1 + Math.sin(tt * 9) * 0.12)); p.aura.material.color.setHex(p.hunter < 2 && Math.sin(tt * 24) > 0 ? 0xffffff : 0xff3a2a); if (Math.random() < dt * 30) fx.particles.emit(px + (Math.random() - 0.5) * 0.8, 0.3, pz + (Math.random() - 0.5) * 0.8, 0, 1.6, 0, { life: 0.5, size: 0.4, color: Math.random() < 0.5 ? 0xff5a2a : 0xffd23f, gravity: -2 }); }
         // HUD-tekst
@@ -588,7 +606,7 @@ export default {
       onDeurman(movers) {
         movers.forEach((m, i) => { if (!m) return; const p = pl[i]; const lose = Math.min(p.coins, 3); p.coins -= lose; if (lose) scatter(p, lose); p.stun = Math.max(p.stun, 1.0); fx.texts.add(lose ? `DEURMAN! -${lose}` : 'DEURMAN!', wx(p.x), 3.0, wz(p.z), '#ff9a9a', 1.3); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); }); refreshHud();
       },
-      celebrate(w) { pl[w].c.pose = 'cheer'; pl[1 - w].c.pose = 'sad'; for (const p of pl) p.poseT = 99; },
+      celebrate(w) { for (const q of pl) q.c.pose = q.i === w ? 'cheer' : 'sad'; for (const p of pl) p.poseT = 99; },
       dispose() {},
       dbg: {
         state: () => ({ T, gstate: G.state, timeLeft: G.timeLeft, sd: G.sd, finished, double: G.double, coinsLeft, refills: G.refills, doorEvents: G.doorEvents, gates: { ...gateOpen }, scatter: G.scatter,

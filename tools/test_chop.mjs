@@ -1,6 +1,8 @@
 // Gebruik: node tools/test_chop.mjs [scenario...]   scenario: bots (standaard), twists, shots, edge
+//   bots3 / bots4 = drie / vier spelers (vrij voor allen, ?players=N): alle spelers krijgen input, uitslag volgt, plaatsen kloppen.
 // Laat Houthakkers-Duel versneld (zonder renderen) door bots spelen: bewijst dat finishPvp altijd komt en dat beide spelers kunnen winnen.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath, BROWSER_ARGS } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -16,27 +18,29 @@ const port = server.address().port;
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const ID = 'chop';
 
-async function open(twist = '') {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+async function open(twist = '', N = 2) {
+  const browser = await chromium.launch({ executablePath: chromePath(), args: BROWSER_ARGS });
   const page = await browser.newPage({ viewport: { width: 1000, height: 600 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=${ID}&quality=${process.env.Q || 'low'}${twist ? '&twist=' + twist : ''}`);
+  await page.goto(`http://localhost:${port}/?game=${ID}&quality=${process.env.Q || 'low'}${twist ? '&twist=' + twist : ''}${N > 2 ? '&players=' + N : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
   });
+  const nn = await page.evaluate(() => window.__app.mode.ids.length);
+  if (nn !== N) throw new Error(`verwacht ${N} spelers, kreeg ${nn}`);
   await page.evaluate(() => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 4242; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    window.__prof = ['pro', 'pro'];
-    const B = [0, 1].map(() => ({ next: 0.3, pend: 0 }));
+    const NN = m.ids.length; window.__prof = Array(NN).fill('pro');
+    const B = m.ids.map(() => ({ next: 0.3, pend: 0 }));
     // gem. seconden tussen acties, kans op een fout (verkeerde kant)
     const GAP = { pro: 0.2, kid: 0.34, slow: 0.5, mash: 0.08, idle: 1e9 };
     const ERR = { pro: 0.02, kid: 0.12, slow: 0.08, mash: 0.5, idle: 0 };
@@ -44,8 +48,8 @@ async function open(twist = '') {
       const dt = 1 / 60; const tw = new URLSearchParams(location.search).get('twist');
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) return true;
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i], b = B[i], prof = window.__prof[i];
+        for (let i = 0; i < NN; i++) {
+          const v = inp.virtual[m.ids[i]], b = B[i], prof = window.__prof[i];
           v.a = false; v.b = false; v.left = false; v.right = false;
           if (prof === 'idle') continue;
           b.next -= dt; if (b.next > 0 || st.stun[i] > 0) continue;
@@ -83,6 +87,21 @@ for (const name of scen) {
       if (errors.length) console.log('ERRORS:\n' + errors.slice(0, 5).join('\n'));
       await browser.close();
     }
+  } else if (name === 'bots3' || name === 'bots4') {
+    const N = name === 'bots4' ? 4 : 3, winners = new Set();
+    const P = N === 4 ? [['pro', 'kid', 'slow', 'kid'], ['kid', 'pro', 'kid', 'slow'], ['slow', 'kid', 'pro', 'kid'], ['kid', 'slow', 'kid', 'pro'], ['pro', 'pro', 'pro', 'pro'], ['idle', 'idle', 'idle', 'idle'], ['mash', 'idle', 'slow', 'idle']] : [['pro', 'kid', 'slow'], ['kid', 'pro', 'kid'], ['slow', 'kid', 'pro'], ['idle', 'idle', 'idle']];
+    for (const profs of P) {
+      const { browser, page, errors } = await open('', N);
+      const r = await runGame(page, profs);
+      const fin = await page.evaluate(() => { const m = window.__app.mode; return m.result ? { place: m.result.place, ids: m.result.ids, winnerIds: m.result.winnerIds, n: m.ids.length } : null; });
+      console.log(profs.join('/').padEnd(22), summarize(r), 'place=' + (fin && fin.place));
+      if (!fin || !r.fin) { console.log('FAIL: niet afgelopen'); process.exitCode = 1; }
+      else { if (fin.place.length !== N || new Set(fin.place).size !== N) { console.log('FAIL: place ongeldig'); process.exitCode = 1; } for (const w of fin.winnerIds) winners.add(w); }
+      if (errors.length) { console.log('ERRORS:\n' + errors.slice(0, 5).join('\n')); process.exitCode = 1; }
+      await browser.close();
+    }
+    console.log('winnaars (spelers-id):', [...winners].sort().join(','));
+    if (winners.size < Math.min(N, 3)) { console.log('FAIL: te weinig verschillende winnaars'); process.exitCode = 1; }
   } else if (name === 'twists') {
     for (const tw of ['none', 'invert', 'swapab', 'drunk', 'bodyswap', 'turbo', 'slowmo', 'deurman']) {
       const { browser, page, errors } = await open(tw);

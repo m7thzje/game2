@@ -1,9 +1,11 @@
 // Gebruik: node tools/test_paint.mjs [scenario...]
 // scenario: bots (normaal potje), p0/p1/p2 (alleen die speler speelt), idle (niemand; verlenging/gelijkspel), twists (alle twists, kort),
 //           shots (screenshots van sponge/emmer/finale), deurman (onDeurman direct aanroepen), tie (gelijkspel-regels)
+// Achtervoegsel "4" (bots4, p3_4, idle4, twists4, deurman4, tie4, shots4) = 4 spelers (?players=4, Sam = slot 3); "all4" = alle 4-speler-scenario's.
 // Achtervoegsel "3" (bots3, p2_3, idle3, twists3, deurman3, tie3, shots3) = 3 spelers (?players=3, Juul = slot 2). "all3" = alle 3-speler-scenario's.
 // Versneld (zonder renderen) potjes Verfgevecht spelen met bots; controleert dat finishPvp altijd precies 1x wordt aangeroepen.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -17,6 +19,7 @@ const server = http.createServer((req, res) => {
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
 let scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots', 'bots3'];
+if (scen.includes('all4')) scen = ['bots4', 'p0_4', 'p1_4', 'p2_4', 'p3_4', 'idle4', 'tie4', 'deurman4', 'twists4'];
 if (scen.includes('all3')) scen = ['bots3', 'p0_3', 'p1_3', 'p2_3', 'idle3', 'tie3', 'deurman3', 'twists3'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 let failed = 0; const check = (ok, msg) => { console.log(`${ok ? 'OK  ' : 'FAIL'} ${msg}`); if (!ok) failed++; };
@@ -26,7 +29,7 @@ async function open(browser, twist, np) {
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=paint&quality=low&scare=0${np === 3 ? '&players=3' : ''}${twist ? '&twist=' + twist : ''}`);
+  await page.goto(`http://localhost:${port}/?game=paint&quality=low&scare=0${np >= 3 ? '&players=' + np : ''}${twist ? '&twist=' + twist : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async (np) => {
@@ -70,14 +73,14 @@ async function open(browser, twist, np) {
 }
 
 const RUN = `const m = window.__app.mode; let g = 0; while (!m.finished && g++ < 60 * 200) window.__bot(1);`;
-const info = `const st = m.instance.dbg.state(); return { fin: m.finished, nfin: window.__fin.length, T: +st.T.toFixed(1), sc: st.sc, cnt: st.cnt, w: m.result && m.result.winner, wid: m.result && m.result.winnerId, scoreArr: m.result && m.result.scoreArr, tw: m.twist.id, over: st.over, stats: st.stats, sum: m.result && m.result.summary.replace(/<[^>]+>/g, ' ') };`;
+const info = `const st = m.instance.dbg.state(); return { fin: m.finished, nfin: window.__fin.length, T: +st.T.toFixed(1), sc: st.sc, cnt: st.cnt, w: m.result && m.result.winner, place: m.result && m.result.place, wid: m.result && m.result.winnerId, scoreArr: m.result && m.result.scoreArr, tw: m.twist.id, over: st.over, stats: st.stats, sum: m.result && m.result.summary.replace(/<[^>]+>/g, ' ') };`;
 const runFn = new Function(`${RUN} ${info}`);
 const wins = {};   // winnaar-slots per scenario-familie
 
 for (const raw of scen) {
-  const np = raw.endsWith('3') ? 3 : 2, name = raw.replace(/_?3$/, '');
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
-  const tag = `${name}${np === 3 ? '/3sp' : ''}`;
+  const np = raw.endsWith('4') ? 4 : raw.endsWith('3') ? 3 : 2, name = raw.replace(/_?[34]$/, '');
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const tag = `${name}${np >= 3 ? '/' + np + 'sp' : ''}`;
   if (name === 'twists') {
     for (const tw of (process.env.TWL ? process.env.TWL.split(',') : TWISTS)) {
       const { page, errors } = await open(browser, tw, np);
@@ -86,23 +89,24 @@ for (const raw of scen) {
       check(res.fin && res.nfin === 1, `${tag} twist ${tw}: finishPvp 1x`); check(!errors.length, `${tag} twist ${tw}: geen console-errors${errors.length ? ' ' + errors.slice(0, 3).join('|') : ''}`);
       await page.close();
     }
-  } else if (['bots', 'p0', 'p1', 'p2', 'idle'].includes(name)) {
-    if (name === 'p2' && np === 2) { await browser.close(); continue; }
+  } else if (['bots', 'p0', 'p1', 'p2', 'p3', 'idle'].includes(name)) {
+    if ((name === 'p2' && np === 2) || (name === 'p3' && np < 4)) { await browser.close(); continue; }
     for (const run of [0, 1, 2]) {
       const { page, errors } = await open(browser, run === 0 ? null : TWISTS[run * 3], np);
       await page.evaluate(([nm, np]) => {
         window.__mode = nm === 'idle' ? 'idle' : 'bots';
-        const only = { p0: 0, p1: 1, p2: 2 }[nm]; if (only != null) window.__skill = window.__skill.map((_, i) => (i === only ? 1.3 : 0));
+        const only = { p0: 0, p1: 1, p2: 2, p3: 3 }[nm]; if (only != null) window.__skill = window.__skill.map((_, i) => (i === only ? 1.3 : 0));
         // bij "bots" wisselen de vaardigheden per run, zodat elk slot kan winnen
       }, [name, np]);
       const res = await page.evaluate(runFn);
       console.log(tag, 'run', run, JSON.stringify(res));
       check(res.fin && res.nfin === 1, `${tag} run ${run}: finishPvp precies 1x`);
       check(!errors.length, `${tag} run ${run}: geen console-errors${errors.length ? ' ' + errors.slice(0, 3).join('|') : ''}`);
-      const only = { p0: 0, p1: 1, p2: 2 }[name];
+      const only = { p0: 0, p1: 1, p2: 2, p3: 3 }[name];
       if (only != null) check(res.w === only, `${tag} run ${run}: ${name} wint als alleen die speelt (winnaar-slot ${res.w})`);
       if (name === 'idle') check(res.w == null || res.sc.every((v) => v === 0) || res.w >= 0, `${tag} run ${run}: idle eindigt (w=${res.w})`);
       if (name === 'bots') (wins[tag] ||= new Set()).add(res.w);
+      if (np === 4) check(res.place && res.place.length === 4 && new Set(res.place).size === 4, `${tag} run ${run}: plaatsen 1e-4e (${res.place})`);
       await page.close();
     }
   } else if (name === 'deurman') {
@@ -110,18 +114,18 @@ for (const raw of scen) {
     const res = await page.evaluate((np) => {
       window.__bot(60 * 20); const i = window.__app.mode.instance, d = i.dbg;
       const count = () => { const c = new Array(np + 1).fill(0); for (const o of d.owner) c[o]++; return c; };
-      const a = count(); i.onDeurman(np === 3 ? [true, false, true] : [true, false]); const b = count();
+      const a = count(); i.onDeurman(np === 4 ? [true, false, true, false] : np === 3 ? [true, false, true] : [true, false]); const b = count();
       window.__bot(2); return { a, b };
     }, np);
     console.log('deurman', JSON.stringify(res));
     // wie bewoog verliest tot 6 tegels, de rest blijft staan
-    check(res.a[1] - res.b[1] === Math.min(6, res.a[1]) && res.b[2] === res.a[2] && (np === 2 || res.a[3] - res.b[3] === Math.min(6, res.a[3])), `${tag}: onDeurman(${np} booleans): alleen bewegers verliezen 6 tegels`); check(!errors.length, `${tag}: geen console-errors ${errors.join('|')}`);
+    check(res.a[1] - res.b[1] === Math.min(6, res.a[1]) && res.b[2] === res.a[2] && (np === 2 || res.a[3] - res.b[3] === Math.min(6, res.a[3])) && (np < 4 || res.b[4] === res.a[4]), `${tag}: onDeurman(${np} booleans): alleen bewegers verliezen 6 tegels`); check(!errors.length, `${tag}: geen console-errors ${errors.join('|')}`);
   } else if (name === 'tie') {
     const { page, errors } = await open(browser, 'none', np);
     const res = await page.evaluate((np) => {
       window.__skill = new Array(np).fill(0); const m = window.__app.mode, d = m.instance.dbg;
       window.__bot(60 * 59.5);
-      d.noBonus(); d.owner.fill(0); d.tp(0, -3.75, 3.75); d.tp(1, 3.75, 3.75); if (np === 3) d.tp(2, 0.75, -3.75); d.sp.on = false; d.sp.spawnT = 999;
+      d.noBonus(); d.owner.fill(0); d.tp(0, -3.75, 3.75); d.tp(1, 3.75, 3.75); if (np === 3) d.tp(2, 0.75, -3.75); if (np === 4) { d.tp(2, -3.75, -3.75); d.tp(3, 3.75, -3.75); } d.sp.on = false; d.sp.spawnT = 999;
       let g = 0; while (!m.finished && g++ < 60 * 40) window.__bot(1);
       const st = d.state(); return { fin: m.finished, nfin: window.__fin.length, T: +st.T.toFixed(1), sc: st.sc, over: st.over, w: m.result && m.result.winner, sum: m.result && m.result.summary };
     }, np);
@@ -144,7 +148,7 @@ for (const raw of scen) {
     check(!errors.length, `${tag}: geen console-errors ${errors.join('|')}`);
   } else if (name === 'shots') {
     const { page, errors } = await open(browser, process.env.TW || null, np);
-    const shot = async (t) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(700); await page.screenshot({ path: `/tmp/paint${np === 3 ? '3' : ''}_${t}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', t); };
+    const shot = async (t) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(700); await page.screenshot({ path: `/tmp/paint${np >= 3 ? np : ''}_${t}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', t); };
     await page.evaluate(() => window.__bot(60 * 6)); await shot('early');
     await page.evaluate(() => { const d = window.__app.mode.instance.dbg; const p = d.pl[1]; d.setSponge(p.x - 5, p.z, 9, 0); window.__bot(40); }); await shot('sponge');
     await page.evaluate(() => window.__bot(60 * 12, (s) => s.bucket.on)); await shot('bucket');
@@ -154,6 +158,7 @@ for (const raw of scen) {
   }
   await browser.close();
 }
+if (wins['bots/4sp']) check(wins['bots/4sp'].size >= 1, `4sp bots: winnaar-slots ${[...wins['bots/4sp']]}`);
 if (wins['bots/3sp']) check(wins['bots/3sp'].size >= 1, `3sp bots: winnaar-slots ${[...wins['bots/3sp']]}`);
 server.close();
 console.log(failed ? `\n${failed} CONTROLES MISLUKT` : '\nALLE CONTROLES OK'); process.exit(failed ? 1 : 0);

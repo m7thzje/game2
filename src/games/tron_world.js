@@ -6,7 +6,7 @@ import { skyTexture } from '../engine/lights.js';
 // krimpende lava-muren, kasteeltorens aan de horizon, zwevende neonvormen. Sporen, obstakels en vuur zijn InstancedMeshes.
 
 export const T = { W: 40, H: 30, CAP: 1700 };   // arena-afmeting: 40 x 30 (2 spelers) of 46 x 34 (3 spelers, zie setArena)
-export function setArena(n) { T.W = n === 3 ? 46 : 40; T.H = n === 3 ? 34 : 30; }
+export function setArena(n) { T.W = n === 4 ? 40 : n === 3 ? 46 : 40; T.H = n === 4 ? 40 : n === 3 ? 34 : 30; }   // 4 spelers: vierkant (kwartslag-symmetrisch, dus eerlijk)
 export const cellX = (c) => c - T.W / 2 + 0.5, cellZ = (r) => r - T.H / 2 + 0.5;
 const Y = new THREE.Vector3(0, 1, 0);
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _p = new THREE.Vector3(), _qx = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), -Math.PI / 2);
@@ -17,16 +17,16 @@ export function inst(geo, material, n, { cast = false, dyn = true } = {}) {
   for (let i = 0; i < n; i++) setI(m, i, 0, -50, 0, 0);
   return m;
 }
-export const NEON = [0x3dff8f, 0x3ab4ff, 0xff9a3c];      // spoorkleuren: Wes groen, Jor blauw, Juul oranje
-export const NEON_CSS = ['#3dff8f', '#3ab4ff', '#ff9a3c'];
-const NEON_RGB = ['61,255,143', '58,180,255', '255,154,60'];
+export const NEON = [0x3dff8f, 0x3ab4ff, 0xff9a3c, 0xd45cf0];      // spoorkleuren: Wes groen, Jor blauw, Juul oranje, Sam paars
+export const NEON_CSS = ['#3dff8f', '#3ab4ff', '#ff9a3c', '#d45cf0'];
+const NEON_RGB = ['61,255,143', '58,180,255', '255,154,60', '212,92,240'];
 
 function floorTexture(starts, ids) {
   const S = 32;
   return canvasTex(T.W * S, T.H * S, (g, w, h) => {
     const bg = g.createRadialGradient(w / 2, h / 2, 40, w / 2, h / 2, w * 0.62); bg.addColorStop(0, '#1a1040'); bg.addColorStop(1, '#07031a'); g.fillStyle = bg; g.fillRect(0, 0, w, h);
     // startzones in spelerskleur
-    if (starts && starts.length === 3) {
+    if (starts && starts.length >= 3) {
       starts.forEach(([sc, sr, sd], i) => {
         const x = (sc + 0.5) * S, y = (sr + 0.5) * S, col = NEON_RGB[ids[i]], gr = g.createRadialGradient(x, y, 10, x, y, 8 * S); gr.addColorStop(0, `rgba(${col},.34)`); gr.addColorStop(1, `rgba(${col},0)`); g.fillStyle = gr; g.fillRect(x - 8 * S, y - 8 * S, 16 * S, 16 * S);
       });
@@ -37,7 +37,7 @@ function floorTexture(starts, ids) {
     // middencirkel + chevrons
     g.strokeStyle = 'rgba(255,120,220,.65)'; g.lineWidth = 5; g.beginPath(); g.arc(w / 2, h / 2, 5 * S, 0, TAU); g.stroke(); g.lineWidth = 3; g.beginPath(); g.arc(w / 2, h / 2, 5.6 * S, 0, TAU); g.stroke();
     g.fillStyle = 'rgba(255,120,220,.5)'; for (let k = 0; k < 8; k++) { g.save(); g.translate(w / 2, h / 2); g.rotate(k / 8 * TAU); g.fillRect(5.9 * S, -4, 22, 8); g.restore(); }
-    if (starts && starts.length === 3) {     // pijlen in kijkrichting vanaf elk startveld
+    if (starts && starts.length >= 3) {     // pijlen in kijkrichting vanaf elk startveld
       starts.forEach(([sc, sr, sd], i) => { g.save(); g.translate((sc + 0.5) * S, (sr + 0.5) * S); g.rotate(sd * Math.PI / 2); g.strokeStyle = `rgba(${NEON_RGB[ids[i]]},.85)`; g.lineWidth = 6; for (let k = 0; k < 3; k++) { const x = 2.2 * S + k * 22; g.beginPath(); g.moveTo(x, -30); g.lineTo(x + 18, 0); g.lineTo(x, 30); g.stroke(); } g.restore(); });
     } else
     for (const [x, dir, col] of [[3.5 * S, 1, `rgba(${NEON_RGB[ids[0]]},.8)`], [w - 3.5 * S, -1, `rgba(${NEON_RGB[ids[1]]},.8)`]]) { g.strokeStyle = col; g.lineWidth = 6; for (let k = 0; k < 3; k++) { g.beginPath(); g.moveTo(x + dir * (k * 22), h / 2 - 30); g.lineTo(x + dir * (k * 22 + 18), h / 2); g.lineTo(x + dir * (k * 22), h / 2 + 30); g.stroke(); } }
@@ -142,7 +142,7 @@ export function buildWorld(ctx, L, starts, ids = starts.map((_, i) => i)) {
   // grote glim-lampen op de hoeken van het veld
   W.lamps = [];
   for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
-    const lampCol = starts.length === 3 ? NEON[ids[sz > 0 ? (sx < 0 ? 0 : 1) : 2]] : NEON[ids[sx < 0 ? 0 : 1]];   // 3 spelers: onder links/rechts = slot 0/1, boven = slot 2
+    const lampCol = starts.length === 4 ? NEON[ids[sz < 0 ? (sx < 0 ? 0 : 1) : (sx > 0 ? 2 : 3)]] : starts.length === 3 ? NEON[ids[sz > 0 ? (sx < 0 ? 0 : 1) : 2]] : NEON[ids[sx < 0 ? 0 : 1]];   // 3 spelers: onder links/rechts = slot 0/1, boven = slot 2
     const pole = mesh(new THREE.CylinderGeometry(0.2, 0.3, 4, 6), mat(0x2a1a4a, { metalness: 0.6 }), { cast: false, pos: [sx * (AX / 2 + 2.2), 2, sz * (AZ / 2 + 2.2)] }); scene.add(pole);
     const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: lampCol, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending })); s.position.set(sx * (AX / 2 + 2.2), 4.4, sz * (AZ / 2 + 2.2)); s.scale.set(6, 6, 1); scene.add(s); W.lamps.push(s);
   }

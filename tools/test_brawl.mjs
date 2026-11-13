@@ -1,8 +1,10 @@
 // Gebruik: node tools/test_brawl.mjs [scenario...]
 //   scenario: bots | twists | idle | timeout | sd | rage | both | matrix | sym | select | perf | looks | supershots | ko | items | supers | stages | grab | specials | shots
+//   4 / 3 spelers (vrij voor allen): four | three (volledige potjes, alle spelers bots, plaatsen 1e-4e) | four-timeout (tijd op: levens/schade, gelijkstand -> sudden death voor de gelijkstaanden) | four-ko (laatste overlevende wint) | four-select | four-shots (screenshots /tmp/bw4_*.png)
 //   TW=<twist-id> kiest een twist. ST=island|dragon|volcano kiest het podium. Q=low|high kwaliteit. N=aantal potjes (bots/both).
 // Bots kiezen zelf een vechter (via de echte invoer), spelen versneld (zonder renderen) hele potjes en rapporteren winnaar (finishPvp precies 1x) en console-fouten.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -21,13 +23,13 @@ const TYPES = ['sword', 'mage', 'giant', 'ninja'], STAGES = ['island', 'dragon',
 let fails = 0;
 const check = (ok, msg) => { console.log((ok ? 'OK   ' : 'FAIL ') + msg); if (!ok) fails++; };
 
-async function open(twist, stage) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+async function open(twist, stage, np = 2) {
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=brawl&quality=${process.env.Q || 'low'}&twist=${twist || process.env.TW || 'none'}&stage=${stage || process.env.ST || 'island'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=brawl&quality=${process.env.Q || 'low'}&twist=${twist || process.env.TW || 'none'}&stage=${stage || process.env.ST || 'island'}&scare=0&players=${np}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
@@ -35,8 +37,8 @@ async function open(twist, stage) {
     mode.paused = false;
     // finishPvp tellen
     const ctxFin = mode.ctx.finishPvp; window.__fin = 0; mode.ctx.finishPvp = (r) => { window.__fin++; window.__finRes = r; return ctxFin(r); };
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -50,7 +52,7 @@ async function installBots(page, cfg) {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 4242; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
     const TY = ['sword', 'mage', 'giant', 'ninja'];
-    const B = [0, 1].map(() => ({ hold: 0, think: 0, grab: 0, want: -1, f: 0 }));
+    const NP = m.ids.length, B = m.ids.map(() => ({ hold: 0, think: 0, grab: 0, want: -1, f: 0 }));
     window.__cfg = cfg; window.__rnd = rnd; window.__B = B;
     // dichtstbijzijnde oppervlak voor herstel
     const surf = (me, st) => {
@@ -64,10 +66,11 @@ async function installBots(page, cfg) {
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
-        B[0].f++; B[1].f++;
+        for (const b0 of B) b0.f++;
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i], b = B[i], c = window.__cfg[i], me = st.f[i], en = st.f[1 - i];
+        for (let i = 0; i < NP; i++) {
+          const v = inp.virtual[m.ids[i]], b = B[i], c = window.__cfg[i] || window.__cfg[0], me = st.f[i];
+          let en = null, ed = 1e9; st.f.forEach((q, k) => { if (k === i || q.st === 'dead' || q.stocks <= 0) return; const dd = Math.abs(q.x - me.x) + Math.abs(q.y - me.y) * 0.8; if (dd < ed) { ed = dd; en = q; } }); if (!en) en = st.f[(i + 1) % NP];
           if (c.style === 'manual') continue;
           v.left = v.right = v.up = v.down = v.a = v.b = false;
           if (st.phase === 'select') {
@@ -172,7 +175,75 @@ const matchChecks = (res, errors) => {
 const A = { skill: 0.9, aggr: 0.1, style: 'attack' }, Bw = { skill: 0.6, aggr: 0.05, style: 'attack' };
 const winners = [];
 
+async function runN(np, twist, stage, cfg, pre, label) {
+  const { browser, page, errors } = await open(twist, stage, np);
+  await installBots(page, cfg);
+  if (pre) await page.evaluate(pre);
+  const t0 = Date.now();
+  const res = await runMatch(page);
+  const r = res.result;
+  console.log(`\n=== ${label} (${np} spelers, twist=${res.twist}, stage=${stage}) ${((Date.now() - t0) / 1000).toFixed(0)}s ===`);
+  console.log(res.log.slice(-6).join('\n'));
+  console.log('end ' + sum(res));
+  if (r) console.log(`RESULT winner=${r.winner} ids=${r.ids} place=${r.place} score=${r.scoreArr} :: ${r.summary.replace(/<[^>]+>/g, ' ')}`);
+  check(res.finished && res.fin === 1, `${label}: finishPvp precies 1x (fin=${res.fin}, finished=${res.finished})`);
+  check(r && r.winner != null && r.ids.length === np && r.place.length === np && new Set(r.place).size === np && r.scoreArr.length === np && r.place[0] === r.ids[r.winner], `${label}: winnaar + volledige plaatsen (place=${r && r.place})`);
+  check(errors.length === 0, errors.length ? 'console-errors:\n' + errors.slice(0, 6).join('\n') : `${label}: geen console-errors`);
+  await browser.close();
+  return res;
+}
 for (const name of scen) {
+  if (name === 'four' || name === 'three') {
+    const np = name === 'four' ? 4 : 3;
+    const cfgOf = (k) => Array.from({ length: np }, (_, j) => ({ ...(j % 2 ? Bw : A), type: TYPES[(k + j) % 4] }));
+    const runs = process.env.TW ? process.env.TW.split(',').map((t, k) => [t, STAGES[k % 3]]) : [['none', 'island'], ['bodyswap', 'dragon'], ['giant', 'volcano'], ['deurman', 'island']];
+    for (const [k, [tw, stg]] of runs.entries()) await runN(np, tw, stg, cfgOf(k), null, `${name} ${tw}/${stg}`);
+    continue;
+  }
+  if (name === 'four-timeout') {
+    // tijd bijna op: ongelijk -> winnaar op levens/schade; dan een gelijkstand tussen drie -> sudden death (alleen de drie)
+    await runN(4, 'none', 'dragon', [{ ...A, type: 'sword' }, { ...Bw, type: 'mage' }, { ...Bw, type: 'giant' }, { ...A, type: 'ninja' }], () => { const d = window.__app.mode.instance.dbg; d.setTime(8); }, 'four-timeout (levens/schade)');
+    const res = await runN(4, 'none', 'dragon', Array(4).fill({ skill: 0.9, aggr: 0, style: 'dodge', type: 'ninja' }), () => { const d = window.__app.mode.instance.dbg; d.setTime(3); }, 'four-sd (niemand raakt: sudden death)');
+    check(res.st.sd, 'sudden death is gestart (gelijkstand aan kop)');
+    continue;
+  }
+  if (name === 'four-ko') {
+    // drie spelers staan op 1 leven: eentje vliegt eraf; de laatste overlevende wint direct
+    const { browser, page, errors } = await open('none', 'island', 4);
+    await installBots(page, Array(4).fill({ style: 'idle', type: 'sword' }));
+    const r = await page.evaluate(() => {
+      const m = window.__app.mode, d = m.instance.dbg; d.pick(0, 'sword'); d.pick(1, 'sword'); d.pick(2, 'sword'); d.pick(3, 'sword'); d.finishSelect(); window.__bot(60 * 4);
+      d.setStocks(0, 1); d.setStocks(1, 1); d.setStocks(2, 1); d.setStocks(3, 2);
+      const log = [];
+      for (const k of [0, 1, 2]) { d.setPos(k, 0, -40); window.__bot(60 * 2.5); log.push(`na KO ${k}: over=${d.over} stocks=${d.state().f.map((f) => f.stocks)} st=${d.state().f.map((f) => f.st)}`); }
+      window.__bot(60 * 6);
+      return { log, over: d.over, fin: m.finished, res: m.result };
+    });
+    console.log(r.log.join('\n'));
+    check(r.over && r.res && r.res.winner === 3 && r.res.place[0] === r.res.ids[3] && r.res.place.length === 4, `laatste overlevende (slot 3) wint; plaatsen ${r.res && r.res.place}`);
+    check(r.log[0].includes('over=false') && r.log[1].includes('over=false') && r.log[2].includes('over=true'), 'het potje loopt door tot er nog maar één over is');
+    check(errors.length === 0, errors.length ? errors.join('\n') : 'geen console-errors'); await browser.close(); continue;
+  }
+  if (name === 'four-select') {
+    const { browser, page, errors } = await open('none', 'island', 4);
+    await page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.pick(0, 'sword', false); d.pick(1, 'mage', true); d.pick(2, 'giant', false); d.pick(3, 'ninja', true); });
+    await page.waitForTimeout(800); await page.screenshot({ path: '/tmp/bw4_select.png' });
+    const st = await page.evaluate(() => window.__app.mode.instance.dbg.state());
+    check(st.phase === 'select' && st.sel.length === 4, `keuzescherm met 4 vakken (phase=${st.phase}, sel=${st.sel && st.sel.length})`);
+    console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'geen console-errors'); if (errors.length) fails++; await browser.close(); continue;
+  }
+  if (name === 'four-shots') {
+    const { browser, page, errors } = await open('none', process.env.ST || 'island', 4);
+    await installBots(page, [{ ...A, type: 'sword' }, { ...Bw, type: 'mage' }, { ...Bw, type: 'giant' }, { ...A, type: 'ninja' }]);
+    const snap = async (tag) => { await page.waitForTimeout(500); await page.screenshot({ path: `/tmp/bw4_${tag}.png`, timeout: 180000 }); console.log('shot', tag); };
+    await page.evaluate(() => window.__bot(30)); await snap('select');
+    await page.evaluate(() => window.__bot(60 * 4)); await snap('start');
+    await page.evaluate(() => window.__bot(60 * 14)); await snap('play');
+    await page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.setMeter(0, 100); d.setMeter(1, 100); d.spawnItem('hammer'); d.spawnItem('bomb'); window.__bot(60 * 6); }); await snap('play2');
+    await page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.setStocks(2, 1); d.setPos(2, 0, -40); window.__bot(60 * 3); }); await snap('ko');
+    console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS'); if (errors.length) fails++;
+    await browser.close(); continue;
+  }
   if (['bots', 'twists', 'timeout', 'idle', 'sd', 'rage', 'both', 'matrix', 'sym', 'balance'].includes(name)) {
     const N = +(process.env.N || 0);
     let list;

@@ -50,15 +50,18 @@ export default {
   giver: 'De Deurman',
   icon: '✍️',
   mode: 'pvp',
+  players: [2, 3, 4],   // 2 = duel; 4 = iedereen tegen iedereen (vier hoeken, blaadjes in vier gespiegelde kopieën)
   time: 80,
   music: 'game_fast',
-  blurb: 'Op de kermis vliegen <b>handtekening-blaadjes</b> rond! Verzamel er zoveel mogelijk. Toetert de <b>Deurman</b> en kijkt hij? Dan <b>STIL STAAN</b>: wie beweegt, verliest blaadjes aan de ander. Gooi bananen, pak power-ups en jaag op de <b>superster</b> (+10)!',
+  blurb: 'Met <b>2 of 4 spelers</b> (bij vier: iedereen tegen iedereen). Op de kermis vliegen <b>handtekening-blaadjes</b> rond! Verzamel er zoveel mogelijk. Toetert de <b>Deurman</b> en kijkt hij? Dan <b>STIL STAAN</b>: wie beweegt, verliest blaadjes aan de ander. Gooi bananen, pak power-ups en jaag op de <b>superster</b> (+10)!',
   controls: ['{move} rennen', '{a} sprint · {b} gooi banaan'],
   tip: 'Toeter = STOP! De Deurman kijkt vaker naar de leider. Wie achterstaat krijgt vaker power-ups.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp; const names = players.map((p) => p.name); const tw = ctx.twist.id;
+    const N = players.length;
+    const START = (i) => (N === 2 ? [i ? 12 : -12, 0] : [(i % 2 ? 1 : -1) * 10, (i < 2 ? -1 : 1) * 3.2]);   // startplekken: 2 spelers links/rechts, 4 spelers in de vier hoeken
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
 
     const L = ctx.lights('day', { shadow: 26, center: [0, 0, 0], fogNear: 90, fogFar: 220 });
@@ -71,7 +74,7 @@ export default {
     const pl = players.map((pp, i) => {
       const c = makeBrother(i); const sz = pv.size(i); const bs = 2.7 / c.height * sz;
       c.group.traverse((o) => { if (o.isMesh && o.material && !Array.isArray(o.material)) o.material = o.material.clone(); });   // eigen materialen (voor de onzichtbaarheidsmantel)
-      const g = new THREE.Group(); g.add(c.group); g.scale.setScalar(bs); const x0 = i ? 12 : -12; g.position.set(x0, 0, 0); scene.add(g);
+      const g = new THREE.Group(); g.add(c.group); g.scale.setScalar(bs); const [x0, z0] = START(i); g.position.set(x0, 0, z0); scene.add(g);
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.95, 1.2, 28), new THREE.MeshBasicMaterial({ color: pp.color, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; scene.add(ring);
       const tagTex = canvasTex(256, 96, (cc, w, hh) => { cc.font = 'bold 58px Fredoka, Arial Black, sans-serif'; cc.textAlign = 'center'; cc.textBaseline = 'middle'; cc.lineWidth = 12; cc.strokeStyle = 'rgba(10,10,30,.9)'; cc.lineJoin = 'round'; cc.strokeText(pp.name, w / 2, hh / 2); cc.fillStyle = pp.css; cc.fillText(pp.name, w / 2, hh / 2); });
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false })); tag.scale.set(2.6, 0.97, 1); tag.renderOrder = 15; scene.add(tag);
@@ -83,9 +86,9 @@ export default {
       const penM = new THREE.Group(); penM.add(mesh(new THREE.CylinderGeometry(0.07, 0.07, 1.0, 6), mat(0xffd23f, { metalness: 0.5 }), { cast: false }), mesh(new THREE.ConeGeometry(0.07, 0.22, 6), mat(0x222222), { cast: false, pos: [0, -0.6, 0] })); penM.visible = false; scene.add(penM);
       const magM = new THREE.Group(); magM.add(mesh(new THREE.TorusGeometry(0.34, 0.1, 6, 12, Math.PI), mat(0xe8302a, { flatShading: false }), { cast: false }), mesh(new THREE.BoxGeometry(0.2, 0.18, 0.2), mat(0xdddddd), { cast: false, pos: [-0.34, -0.05, 0] }), mesh(new THREE.BoxGeometry(0.2, 0.18, 0.2), mat(0xdddddd), { cast: false, pos: [0.34, -0.05, 0] })); magM.visible = false; scene.add(magM);
       const field = new THREE.Mesh(new THREE.RingGeometry(7.6, 8.0, 40), new THREE.MeshBasicMaterial({ color: 0xff6a8a, transparent: true, opacity: 0.3, side: THREE.DoubleSide, depthWrite: false })); field.rotation.x = -Math.PI / 2; field.position.y = 0.07; field.visible = false; scene.add(field);
-      return { i, c, g, bs, sz, r: 0.95 * sz, ring, tag, bars, excl, shadow, penM, magM, field, x: x0, z: 0, vx: 0, vz: 0, fx: i ? -1 : 1, fz: 0, stamina: 1, tired: false, sprint: false, regenT: 0, cd: 0, stun: 0, immune: 0, spin: 0, slideX: 0, slideZ: 0, pts: 0, pen: 0, magnet: 0, cloak: 0, caught: false, moveT: 0, pose: 'idle', moodT: 0, chain: 0, chainT: 0, info: '', hop: 0 };
+      return { i, c, g, bs, sz, r: 0.95 * sz, ring, tag, bars, excl, shadow, penM, magM, field, x: x0, z: z0, vx: 0, vz: 0, fx: x0 > 0 ? -1 : 1, fz: 0, stamina: 1, tired: false, sprint: false, regenT: 0, cd: 0, stun: 0, immune: 0, spin: 0, slideX: 0, slideZ: 0, pts: 0, pen: 0, magnet: 0, cloak: 0, caught: false, moveT: 0, pose: 'idle', moodT: 0, chain: 0, chainT: 0, info: '', hop: 0 };
     });
-    pl.forEach((p) => { p.g.rotation.y = p.i ? -Math.PI / 2 : Math.PI / 2; p.c.targetYaw = 0; });
+    pl.forEach((p) => { p.g.rotation.y = p.x > 0 ? -Math.PI / 2 : Math.PI / 2; p.c.targetYaw = 0; });
 
     // ------------------------------------------------------------------ Deurman
     const D = makeDeurman(2.0); const Dg = new THREE.Group(); Dg.add(D.group); scene.add(Dg);
@@ -99,19 +102,20 @@ export default {
     const Dm = { x: 0, z: -6.2, wp: 4, dir: 1, mode: 'walk', t: 0, nextLook: LOOK_FIRST, lookT: 2.1, target: 0, yaw: 0, hornN: 0, looks: 0, lookDone: 0 };
 
     // ------------------------------------------------------------------ blaadjes (instanced)
-    const PAPER_N = 56;
+    const PAPER_N = N > 2 ? 110 : 56, GOLD_N = N > 2 ? 40 : 20;
     const pgeo = new THREE.PlaneGeometry(1.6, 2.0).rotateX(-Math.PI / 2);
     const papI = new THREE.InstancedMesh(pgeo, new THREE.MeshBasicMaterial({ map: paperTex(false), side: THREE.DoubleSide, transparent: true, alphaTest: 0.1 }), PAPER_N);
-    const goldI = new THREE.InstancedMesh(pgeo, new THREE.MeshBasicMaterial({ map: paperTex(true), side: THREE.DoubleSide, transparent: true, alphaTest: 0.1 }), 20);
+    const goldI = new THREE.InstancedMesh(pgeo, new THREE.MeshBasicMaterial({ map: paperTex(true), side: THREE.DoubleSide, transparent: true, alphaTest: 0.1 }), GOLD_N);
     papI.frustumCulled = goldI.frustumCulled = false; papI.count = goldI.count = 0; scene.add(papI, goldI);
-    const papers = Array.from({ length: PAPER_N + 20 }, () => ({ on: false }));
+    const papers = Array.from({ length: PAPER_N + GOLD_N }, () => ({ on: false }));
     const glowSpr = (col) => new THREE.Sprite(new THREE.SpriteMaterial({ map: canvasTex(64, 64, (cc) => { const gr = cc.createRadialGradient(32, 32, 1, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,255,.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); cc.fillStyle = gr; cc.fillRect(0, 0, 64, 64); }), color: col, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     const fliers = [];   // verzameld voor sparkles (niet gebruikt voor logica)
     const M4 = new THREE.Matrix4(), Q4 = new THREE.Quaternion(), E4 = new THREE.Euler(), V3 = new THREE.Vector3(), S3 = new THREE.Vector3();
 
     // ------------------------------------------------------------------ toestand
     const G = { state: 'init', t: 0, clock: MATCH_TIME, sd: false, sdLeft: SD_MAX, sdLeaf: null, spawnT: 0.2, starT: 17, pwT: 7, winner: -1, why: '', end: false, final: false, nearEnd: false, starPlanned62: false };
-    const stats = { caught: [0, 0], slips: [0, 0], stars: [0, 0], pw: [0, 0], stolen: [0, 0], hits: [0, 0], looks: 0, papers: [0, 0] };
+    const z0 = () => players.map(() => 0);
+    const stats = { caught: z0(), slips: z0(), stars: z0(), pw: z0(), stolen: z0(), hits: z0(), looks: 0, papers: z0() };
     let T = 0, introT = 0, started = false, finished = false;
     const star = { on: false, ph: 'off', t: 0, x: 0, z: 0, mesh: null, mark: null };
     star.mesh = new THREE.Mesh(starGeo().rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xff9a10, emissiveIntensity: 0.7, metalness: 0.5, roughness: 0.35 })); star.mesh.scale.setScalar(2.6); star.mesh.visible = false; star.mesh.castShadow = true; scene.add(star.mesh);
@@ -128,13 +132,14 @@ export default {
     }
     const bananas = Array.from({ length: 4 }, () => { const m = bananaMesh(); m.visible = false; scene.add(m); return { on: false, m, sx: 0, sz: 0, tx: 0, tz: 0, t: 0, dur: 0.5, owner: 0 }; });
     const peels = Array.from({ length: 8 }, () => { const m = peelMesh(); m.visible = false; scene.add(m); return { on: false, m, x: 0, z: 0, life: 0, owner: 0, grace: 0 }; });
-    const lead = () => (pl[0].pts === pl[1].pts ? -1 : pl[0].pts > pl[1].pts ? 0 : 1);
-    const gap = () => Math.abs(pl[0].pts - pl[1].pts);
-    const trailI = () => { const l = lead(); return l < 0 ? -1 : 1 - l; };
+    const sorted = () => pl.map((p) => p.pts).sort((a, b) => b - a);
+    const lead = () => { const s = sorted(); return s[0] === s[1] ? -1 : pl.findIndex((p) => p.pts === s[0]); };            // de (enige) koploper of -1
+    const gap = () => { const s = sorted(); return s[0] - s[1]; };                                                       // voorsprong van de koploper op de nummer twee
+    const trailI = () => { const s = sorted(), lo = s[N - 1]; if (s[0] === lo) return -1; return N === 2 ? 1 - lead() : (s.filter((v) => v === lo).length === 1 ? pl.findIndex((p) => p.pts === lo) : -1); };   // de (enige) achterligger of -1
     const mult = (p) => (p.pen > 0 ? 2 : 1) * (G.final ? 2 : 1);
 
     function refreshHud() {
-      hud.setScore(`${names[0]} ${pl[0].pts} – ${pl[1].pts} ${names[1]}${G.sd ? '  (GOUDEN BLAADJE!)' : ''}`);
+      hud.setScore(N === 2 ? `${names[0]} ${pl[0].pts} – ${pl[1].pts} ${names[1]}${G.sd ? '  (GOUDEN BLAADJE!)' : ''}` : (G.sd ? 'GOUDEN BLAADJE!' : null));
       for (const p of pl) {
         const fxs = [p.pen > 0 ? `PEN ${Math.ceil(p.pen)}s` : '', p.magnet > 0 ? `MAGNEET ${Math.ceil(p.magnet)}s` : '', p.cloak > 0 ? `MANTEL ${Math.ceil(p.cloak)}s` : ''].filter(Boolean).join(' ');
         const t = `${p.pts} blaadjes${fxs ? ' · ' + fxs : ''}`; if (t !== p.info) { p.info = t; hud.setPlayerInfo(p.i, t); }
@@ -152,10 +157,14 @@ export default {
       return q;
     }
     function spawnPair() {
-      const live = papers.filter((p) => p.on && p.homing < 0).length; if (live > 26) return;
+      const live = papers.filter((p) => p.on && p.homing < 0).length; if (live > (N > 2 ? 46 : 26)) return;
       const [x, z] = freeSpot(3); const kind = Math.random() < 0.13 ? 'g' : 'p'; const ang = rand(0, TAU), sp = rand(1.3, 2.6);
       addPaper(x, z, kind, { ang, sp }); addPaper(-x, z, kind, { ang: Math.PI - ang, sp });     // gespiegeld: eerlijk!
       fx.particles.burst(x, 1, z, { count: 6, speed: 2, up: 1, life: 0.5, size: 0.3, colors: [0xffffff, 0xffe14a], gravity: 2 }); fx.particles.burst(-x, 1, z, { count: 6, speed: 2, up: 1, life: 0.5, size: 0.3, colors: [0xffffff, 0xffe14a], gravity: 2 });
+      if (N > 2) {   // vier hoeken: ook boven/onder gespiegeld (het plein is in beide richtingen symmetrisch)
+        addPaper(x, -z, kind, { ang: -ang, sp }); addPaper(-x, -z, kind, { ang: Math.PI + ang, sp });
+        fx.particles.burst(x, 1, -z, { count: 6, speed: 2, up: 1, life: 0.5, size: 0.3, colors: [0xffffff, 0xffe14a], gravity: 2 }); fx.particles.burst(-x, 1, -z, { count: 6, speed: 2, up: 1, life: 0.5, size: 0.3, colors: [0xffffff, 0xffe14a], gravity: 2 });
+      }
     }
     function collect(p, q) {
       q.on = false;
@@ -163,21 +172,22 @@ export default {
       const v = q.val * mult(p); p.pts += v; stats.papers[p.i] += v;
       p.chain = p.chainT > 0 ? p.chain + 1 : 0; p.chainT = 0.7;
       audio.sfx(q.kind === 'g' ? 'powerup' : 'coin', { vol: 0.5, rate: 1 + Math.min(p.chain, 6) * 0.07 });
-      fx.texts.add(`+${v}`, q.x, 2.8, q.z, q.kind === 'g' ? '#ffd23f' : p.i ? '#8fb8ff' : '#7dffb0', q.kind === 'g' ? 1.2 : 0.85);
-      fx.particles.burst(q.x, 1.2, q.z, { count: q.kind === 'g' ? 22 : 10, speed: 4, up: 1.2, life: 0.6, size: 0.35, colors: q.kind === 'g' ? [0xffd23f, 0xffffff, 0xff9a10] : [0xffffff, p.i ? 0x8fb8ff : 0x7dffb0], gravity: 5 });
+      fx.texts.add(`+${v}`, q.x, 2.8, q.z, q.kind === 'g' ? '#ffd23f' : players[p.i].css, q.kind === 'g' ? 1.2 : 0.85);
+      fx.particles.burst(q.x, 1.2, q.z, { count: q.kind === 'g' ? 22 : 10, speed: 4, up: 1.2, life: 0.6, size: 0.35, colors: q.kind === 'g' ? [0xffd23f, 0xffffff, 0xff9a10] : [0xffffff, players[p.i].color], gravity: 5 });
       p.moodT = 0.4; p.pose = 'cheer'; refreshHud();
     }
-    function sendPapers(from, n) {   // blaadjes vliegen van `from` naar de ander
-      const to = 1 - from; n = Math.min(n, pl[from].pts); if (n <= 0) return 0;
+    function sendPapers(from, n) {   // blaadjes vliegen van `from` naar de ander (bij 4 spelers: verdeeld over de anderen, bij voorkeur wie níet bewoog)
+      let to = pl.filter((p) => p.i !== from); if (N > 2) { const still = to.filter((p) => !p.caught); if (still.length) to = still; }
+      n = Math.min(n, pl[from].pts); if (n <= 0) return 0;
       pl[from].pts -= n; stats.stolen[from] += 0;
-      for (let k = 0; k < n; k++) addPaper(pl[from].x + rand(-0.4, 0.4), pl[from].z + rand(-0.4, 0.4), 'p', { homing: to, delay: 0.15 + k * 0.07, sp: 0, h: 2.2 + k * 0.1, life: 9 });
+      for (let k = 0; k < n; k++) addPaper(pl[from].x + rand(-0.4, 0.4), pl[from].z + rand(-0.4, 0.4), 'p', { homing: to[k % to.length].i, delay: 0.15 + k * 0.07, sp: 0, h: 2.2 + k * 0.1, life: 9 });
       refreshHud(); return n;
     }
 
     // ------------------------------------------------------------------ Deurman: wandelen, toeteren, kijken
     function startWarn() {
       Dm.mode = 'warn'; Dm.t = 0; Dm.hornN = 0; Dm.looks++; stats.looks++;
-      const l = lead(); Dm.target = l >= 0 ? l : (Math.hypot(pl[0].x - Dm.x, pl[0].z - Dm.z) < Math.hypot(pl[1].x - Dm.x, pl[1].z - Dm.z) ? 0 : 1);
+      const l = lead(); Dm.target = l >= 0 ? l : pl.reduce((a, q) => (Math.hypot(q.x - Dm.x, q.z - Dm.z) < Math.hypot(a.x - Dm.x, a.z - Dm.z) ? q : a), pl[0]).i;
       hud.showBig('STIL STAAN!', 1500, '#ffe14a'); hud.setHint('👀 De Deurman toetert! Straks kijkt hij: <b>NIET BEWEGEN!</b>');
       audio.sfx('creak', { vol: 0.2 });
     }
@@ -250,20 +260,24 @@ export default {
     // ------------------------------------------------------------------ eind
     function finishMatch(winner) {
       if (finished) return; finished = true;
-      const w = winner, l = 1 - winner;
+      const w = winner, l = N === 2 ? 1 - winner : pl.filter((p) => p.i !== w).sort((a, b) => a.pts - b.pts)[0].i;
       const jokes = [`${names[w]} jaagt blaadjes als een echte handtekeningen-jager! ${names[l]} schrijft zijn eigen naam nog steeds op een bananenschil.`, `${names[w]} vangt de laatste handtekening en de Deurman geeft hem een high-five. ${names[l]} staat nog stil omdat de Deurman toeterde.`, `${names[w]} wint het kermisplein! ${names[l]} glijdt nog tevreden na op een banaan.`];
       const bits = G.why === 'sd' ? 'Het gouden blaadje besliste het. ' : G.why === 'near' ? 'De Deurman wees de dichtstbijzijnde aan. ' : '';
-      ctx.finishPvp({ winner, score: [pl[0].pts, pl[1].pts], delay: 700, summary: `${pick(jokes)}<br><small>${bits}Betrapt door de Deurman: ${names[0]} ${stats.caught[0]}x, ${names[1]} ${stats.caught[1]}x · uitgegleden: ${stats.slips[0]}–${stats.slips[1]} · supersterren: ${stats.stars[0]}–${stats.stars[1]}</small>` });
+      const summary = `${pick(jokes)}<br><small>${bits}Betrapt door de Deurman: ${names.map((n, i) => `${n} ${stats.caught[i]}x`).join(', ')} · uitgegleden: ${stats.slips.join('–')} · supersterren: ${stats.stars.join('–')}</small>`;
+      if (N === 2) ctx.finishPvp({ winner, score: [pl[0].pts, pl[1].pts], delay: 700, summary });
+      else ctx.finishPvp({ winner, score: pl.map((p) => p.pts), place: pl.map((p) => p.i).sort((a, b) => (b === w) - (a === w) || pl[b].pts - pl[a].pts), delay: 700, summary });
     }
     function endMatch(winner, why) {
       if (G.end) return; G.end = true; G.state = 'end'; G.t = 0; G.winner = winner; G.why = why; hud.setTimer(null); hud.setHint(null);
-      pl[winner].pose = 'cheer'; pl[winner].moodT = 99; pl[1 - winner].pose = 'sad'; pl[1 - winner].moodT = 99; D.pose = 'cheer'; Dm.mode = 'cheer';
-      hud.showBig(`${names[winner]} WINT!`, 1800, winner ? '#8fb8ff' : '#7dffb0'); audio.sfx('win', { vol: 0.7 }); audio.sfx('bell', { vol: 0.5 }); A.cheer(6); ctx.shake(0.5);
+      pl.forEach((p) => { p.pose = p.i === winner ? 'cheer' : 'sad'; p.moodT = 99; }); D.pose = 'cheer'; Dm.mode = 'cheer';
+      hud.showBig(`${names[winner]} WINT!`, 1800, players[winner].css); audio.sfx('win', { vol: 0.7 }); audio.sfx('bell', { vol: 0.5 }); A.cheer(6); ctx.shake(0.5);
       for (let k = 0; k < 4; k++) fx.particles.burst(pl[winner].x + rand(-3, 3), 4 + rand(0, 3), pl[winner].z + rand(-3, 3), { count: 30, speed: 7, up: 1.2, life: 1.4, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 });
       refreshHud();
     }
     function timeUp() {
-      if (pl[0].pts !== pl[1].pts) { audio.sfx('bell', { vol: 1 }); hud.showBig('TIJD!', 1000, '#ffd23f'); return endMatch(pl[0].pts > pl[1].pts ? 0 : 1, 'punten'); }
+      { const top = Math.max(...pl.map((p) => p.pts)), tied = pl.filter((p) => p.pts === top);
+        if (tied.length === 1) { audio.sfx('bell', { vol: 1 }); hud.showBig('TIJD!', 1000, '#ffd23f'); return endMatch(tied[0].i, 'punten'); }
+        G.sdSet = new Set(tied.map((p) => p.i)); }   // sudden death: alleen de gelijkstaanden mogen het gouden blaadje pakken
       // sudden death: één gouden blaadje midden op het plein
       G.sd = true; G.sdLeft = SD_MAX; hud.setTimer(null); hud.showBig('GOUDEN BLAADJE!', 1600, '#ffd23f'); hud.toast('Gelijk! Wie het gouden blaadje pakt wint', 2400); audio.sfx('bell', { vol: 0.9 });
       for (const q of papers) q.on = false; star.on = false; star.ph = 'off'; star.mesh.visible = star.glow.visible = star.mark.visible = false; box.on = false; box.g.visible = box.label.visible = false;
@@ -275,7 +289,7 @@ export default {
     function update(dt) {
       dt = Math.min(dt, 0.05); T += dt;
       if (!started) { started = true; G.state = 'play'; refreshHud(); hud.setTimer(MATCH_TIME, 10); for (let k = 0; k < 11; k++) spawnPair(); }
-      if (T > 240 && !G.end) endMatch(pl[0].pts === pl[1].pts ? (Math.random() < 0.5 ? 0 : 1) : pl[0].pts > pl[1].pts ? 0 : 1, 'punten');
+      if (T > 240 && !G.end) { const top = Math.max(...pl.map((p) => p.pts)); endMatch(pl.find((p) => p.pts === top).i, 'punten'); }
       G.t += dt;
       const playing = G.state === 'play';
       // klok
@@ -286,7 +300,7 @@ export default {
         if (G.clock <= 0) timeUp();
       } else if (playing && G.sd) {
         G.sdLeft -= dt; hud.setTimer(Math.max(0, G.sdLeft), 8);
-        if (G.sdLeft <= 0 && !G.end) { const l = G.sdLeaf; const d0 = l ? Math.hypot(pl[0].x - l.x, pl[0].z - l.z) : 0, d1 = l ? Math.hypot(pl[1].x - l.x, pl[1].z - l.z) : 1; endMatch(d0 <= d1 ? 0 : 1, 'near'); }
+        if (G.sdLeft <= 0 && !G.end) { const l = G.sdLeaf, cand = pl.filter((p) => !G.sdSet || G.sdSet.has(p.i)); const best = cand.reduce((a, q) => ((l ? Math.hypot(q.x - l.x, q.z - l.z) : 0) < (l ? Math.hypot(a.x - l.x, a.z - l.z) : 1) ? q : a), cand[0]); endMatch(best.i, 'near'); }
       }
       if (playing) {
         // spawners (niet in sudden death)
@@ -348,7 +362,7 @@ export default {
         if (playing && !stunned && !G.end && inp.bP && p.cd <= 0) throwBanana(p);
         else if (playing && inp.bP && p.cd > 0) audio.sfx('click', { vol: 0.12, rate: 0.6 });
       }
-      { const a = pl[0], b = pl[1]; const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz), mm = a.r + b.r; if (d < mm && d > 1e-4) { const o = (mm - d) / 2; a.x -= dx / d * o; a.z -= dz / d * o; b.x += dx / d * o; b.z += dz / d * o; } }
+      for (let ai = 0; ai < N; ai++) for (let bi = ai + 1; bi < N; bi++) { const a = pl[ai], b = pl[bi]; const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz), mm = a.r + b.r; if (d < mm && d > 1e-4) { const o = (mm - d) / 2; a.x -= dx / d * o; a.z -= dz / d * o; b.x += dx / d * o; b.z += dz / d * o; } }
       // ---- blaadjes bewegen en worden gepakt
       for (const q of papers) {
         if (!q.on) continue;
@@ -376,6 +390,7 @@ export default {
           for (const p of pl) {
             const rr = (1.55 + (trailI() === p.i ? 0.25 : 0)) * p.sz; if (p.stun > 0) continue;
             if (Math.hypot(p.x - q.x, p.z - q.z) < rr) {
+              if (G.sd && G.sdSet && !G.sdSet.has(p.i)) continue;   // sudden death: alleen de gelijkstaanden
               if (G.sd && q === G.sdLeaf) { q.on = false; p.pts++; fx.particles.burst(q.x, 1.2, q.z, { count: 40, speed: 6, up: 1.2, life: 1, size: 0.5, colors: [0xffd23f, 0xffffff], gravity: 4 }); audio.sfx('powerup', { vol: 0.8 }); return endMatch(p.i, 'sd'); }
               collect(p, q); break;
             }
@@ -412,8 +427,8 @@ export default {
         const x = lerp(b.sx, b.tx, u), z = lerp(b.sz, b.tz, u), y = 0.6 + Math.sin(Math.PI * u) * 2.6;
         b.m.position.set(x, y, z); b.m.rotation.set(0, u * 14, 0.5); b.m.scale.setScalar(1.5);
         fx.particles.emit(x, y, z, rand(-1, 1), rand(0, 1.5), rand(-1, 1), { life: 0.5, size: 0.3, color: [0xff4a6a, 0xffd23f, 0x4ac8ff, 0x8dff9a][(Math.random() * 4) | 0], gravity: 3 });
-        const o = pl[1 - b.owner];
-        if (u > 0.25 && o.stun <= 0 && o.immune <= 0 && Math.hypot(o.x - x, o.z - z) < o.r + 0.9) { b.on = false; b.m.visible = false; stats.hits[b.owner]++; slip(o, 'hit'); continue; }
+        const o = pl.find((q) => q.i !== b.owner && u > 0.25 && q.stun <= 0 && q.immune <= 0 && Math.hypot(q.x - x, q.z - z) < q.r + 0.9);
+        if (o) { b.on = false; b.m.visible = false; stats.hits[b.owner]++; slip(o, 'hit'); continue; }
         if (u >= 1) {
           b.on = false; b.m.visible = false; const f = peels.find((q) => !q.on) || peels[0];
           Object.assign(f, { on: true, x: b.tx, z: b.tz, life: 10, owner: b.owner, grace: 1.2 }); f.m.visible = true; f.m.position.set(b.tx, 0, b.tz); f.m.rotation.y = Math.random() * 6; f.m.scale.setScalar(1.4);
@@ -443,7 +458,7 @@ export default {
       camera.position.set(camX + sway, 23.4 * k * zoom, 16.2 * k * zoom + camZ + 1.5);
       camera.lookAt(camX, 0, camZ + 1.4);
     }
-    const sparkT = [0, 0];
+    const sparkT = players.map(() => 0);
     function visuals(dt) {
       const tt = T + introT;
       // sfeer-licht tijdens kijkmoment
@@ -483,7 +498,7 @@ export default {
         const hopY = GRAV < 1 ? Math.abs(Math.sin(tt * 3 + p.i)) * 0.9 * clamp(spd / 8, 0.15, 1) + 0.15 : 0;
         g.position.set(p.x, hopY, p.z);
         if (spd > 0.6 && !stunned) { const ty = Math.atan2(p.vx, p.vz); p.faceY = p.faceY == null ? ty : p.faceY; let d = ty - p.faceY; d = Math.atan2(Math.sin(d), Math.cos(d)); p.faceY += d * Math.min(1, dt * 14); }
-        if (p.faceY == null) p.faceY = p.i ? -Math.PI / 2 : Math.PI / 2;
+        if (p.faceY == null) p.faceY = p.fx < 0 ? -Math.PI / 2 : Math.PI / 2;
         g.rotation.y = p.faceY + p.spin;
         c.speed = stunned ? 0 : clamp(spd / BASE_SPEED, 0, 1.1); c.air = stunned || hopY > 0.4;
         p.moodT -= dt; let pose = p.moodT > 0 ? p.pose : (p.sprint ? 'push' : 'idle'); if (stunned) pose = 'scared';
@@ -492,7 +507,7 @@ export default {
         if (p.cloak > 0) { const a = p.cloak < 1.5 ? 0.25 + Math.abs(Math.sin(tt * 14)) * 0.5 : 0.22; for (const m of cloakMats(p)) { m.transparent = true; m.opacity = a; } }
         p.shadow.position.set(p.x, 0.04, p.z); p.shadow.scale.setScalar(p.r * 1.2); p.shadow.visible = p.cloak <= 0;
         p.ring.position.set(p.x, 0.06, p.z); const ringS = p.r * 1.25 * (1 + Math.sin(tt * 6 + p.i) * 0.03);
-        let rc = p.i ? 0x3a78e0 : 0x2f9e5b, ro = 0.8;
+        let rc = players[p.i].color, ro = 0.8;
         if (Dm.mode === 'warn') { rc = 0xffe14a; ro = 0.7 + Math.sin(tt * 14) * 0.25; } else if (Dm.mode === 'look') { rc = p.caught ? 0xff3a3a : 0x6fff8a; ro = 0.9; }
         p.ring.material.color.setHex(rc); p.ring.material.opacity = ro; p.ring.scale.setScalar(ringS * (Dm.mode === 'look' && p.caught ? 1.25 : 1));
         const top = 2.7 * p.sz + 1.0;
@@ -516,14 +531,14 @@ export default {
       resultUpdate, introUpdate,
       onSwap() { for (const p of pl) fx.particles.burst(p.x, 1.5, p.z, { count: 22, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) { movers.forEach((m, i) => { if (m && !finished) { fx.texts.add('BEWOGEN!', pl[i].x, 4, pl[i].z, '#9fe8ff', 1.3); sendPapers(i, 3); audio.sfx('static', { vol: 0.4 }); } }); },
-      celebrate(w) { pl[w].pose = 'cheer'; pl[w].moodT = 99; pl[1 - w].pose = 'sad'; pl[1 - w].moodT = 99; A.cheer(8); },
+      celebrate(w, winners = [w]) { pl.forEach((p) => { p.pose = winners.includes(p.i) ? 'cheer' : 'sad'; p.moodT = 99; }); A.cheer(8); },
       dispose() { hud.setHint(null); },
       dbg: {
         state: () => ({ T, gstate: G.state, clock: G.clock, sd: G.sd, sdLeft: G.sdLeft, final: G.final, finished, winner: G.winner, why: G.why, look: Dm.mode, lookT: Dm.t, target: Dm.target, looks: Dm.looks, lookDone: Dm.lookDone,
           pl: pl.map((p) => ({ x: p.x, z: p.z, pts: p.pts, st: p.stamina, cd: p.cd, stun: p.stun, pen: p.pen, magnet: p.magnet, cloak: p.cloak, caught: p.caught, r: p.r })),
           papers: papers.filter((q) => q.on && q.homing < 0 && q.delay <= 0).map((q) => ({ x: q.x, z: q.z, v: q.val })), star: star.on && star.ph === 'rest' ? { x: star.x, z: star.z } : null, starPh: star.ph, box: box.on ? { x: box.x, z: box.z, type: box.type } : null,
           peels: peels.filter((f) => f.on).map((f) => ({ x: f.x, z: f.z })), leaf: G.sdLeaf && G.sdLeaf.on ? { x: G.sdLeaf.x, z: G.sdLeaf.z } : null, stats }),
-        setTime: (t) => { G.clock = t; }, setPts: (a, b) => { pl[0].pts = a; pl[1].pts = b; refreshHud(); },
+        setTime: (t) => { G.clock = t; }, setPts: (...v) => { v.forEach((x, i) => { if (i < N) pl[i].pts = x; }); refreshHud(); },
         forceLook: () => { Dm.nextLook = 0; }, planStar: () => planStar(), spawnBox: (n) => spawnBox(n ?? -1), giveBox: (i, type) => { box.type = type; box.on = true; takeBox(pl[i]); },
         tp: (i, x, z) => { pl[i].x = x; pl[i].z = z; }, slip: (i) => slip(pl[i], 'peel'), throwB: (i) => throwBanana(pl[i]), pl,
       },

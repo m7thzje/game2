@@ -69,7 +69,7 @@ export function glowSprite(color = 0xffaa40, scale = 2, opacity = 1) {
 // ---------------------------------------------------------------------------------
 export const FLOOR_X = 15.6, FLOOR_Z = 9.7;
 
-export function buildCourt(ctx, { HX, HZ }) {
+export function buildCourt(ctx, { HX, HZ }, opt = {}) {   // opt.labels / opt.colors (css, 2x): teamnamen en -kleuren bij 2 tegen 2
   const { scene, fx, players } = ctx;
   const root = new THREE.Group(); scene.add(root);
   const rng = mulberry32(777);
@@ -93,8 +93,8 @@ export function buildCourt(ctx, { HX, HZ }) {
     }
     for (let i = 0; i < 160; i++) { g.fillStyle = `rgba(40,30,20,${0.05 + r() * 0.08})`; g.beginPath(); g.ellipse(r() * w, r() * h, 4 + r() * 18, 2 + r() * 8, r() * 3, 0, TAU); g.fill(); }
     // helften kleuren
-    g.fillStyle = 'rgba(47,158,91,.30)'; g.fillRect(0, 0, w / 2, h);
-    g.fillStyle = 'rgba(58,120,224,.30)'; g.fillRect(w / 2, 0, w / 2, h);
+    g.fillStyle = opt.colors ? opt.colors[0] : 'rgba(47,158,91,.30)'; g.fillRect(0, 0, w / 2, h);
+    g.fillStyle = opt.colors ? opt.colors[1] : 'rgba(58,120,224,.30)'; g.fillRect(w / 2, 0, w / 2, h);
     // veldlijnen (speelveld = HX/HZ, vloer is iets groter)
     const k = w / (FLOOR_X * 2); // pixels per eenheid
     const ex = HX * k + 14, ez = HZ * k + 14;
@@ -105,8 +105,9 @@ export function buildCourt(ctx, { HX, HZ }) {
       g.strokeStyle = 'rgba(255,248,230,.55)'; g.lineWidth = 6; g.beginPath(); g.arc(cx, cy, 120, 0, TAU); g.stroke();
       g.lineWidth = 3; g.beginPath(); g.arc(cx, cy, 150, 0, TAU); g.stroke();
       for (let q = 0; q < 8; q++) { const a = q / 8 * TAU; g.beginPath(); g.moveTo(cx + Math.cos(a) * 120, cy + Math.sin(a) * 120); g.lineTo(cx + Math.cos(a) * 150, cy + Math.sin(a) * 150); g.stroke(); }
-      g.save(); g.translate(cx, cy); g.fillStyle = 'rgba(255,255,255,.55)'; g.font = 'bold 74px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(String(players[s].name).toUpperCase().slice(0, 7), 0, 0); g.restore();
+      const lab = opt.labels ? String(opt.labels[s]).toUpperCase() : String(players[s].name).toUpperCase().slice(0, 7);
+      g.save(); g.translate(cx, cy); g.fillStyle = 'rgba(255,255,255,.55)'; g.font = `bold ${lab.length > 7 ? 46 : 74}px Fredoka, Arial Black, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText(lab, 0, 0, 270); g.restore();
     }
     // middenlijn (gloeiend)
     g.save(); g.shadowColor = '#ff8a2a'; g.shadowBlur = 22; g.strokeStyle = '#ffb347'; g.lineWidth = 12; g.beginPath(); g.moveTo(w / 2, h / 2 - ez - 4); g.lineTo(w / 2, h / 2 + ez + 4); g.stroke(); g.restore();

@@ -24,7 +24,7 @@ function duckGeo() {
 // Eend: { group (positie/heading), tilt (rol/squash), body, wings[], rider (Character) }
 export function makeDuck(i, { gold = false, rider = true } = {}) {
   const G = duckGeo(); const pc = PLAYER_COLORS[i];
-  const bodyC = gold ? 0xffc928 : [0x62d94a, 0x3b82ff][i];
+  const bodyC = gold ? 0xffc928 : [0x62d94a, 0x3b82ff, 0xff9a3c, 0xd45cf0][i];
   const bm = SH(bodyC, { roughness: 0.45, emissive: gold ? 0xff9a10 : 0x000000, emissiveIntensity: gold ? 0.55 : 0 });
   const group = new THREE.Group(), tilt = new THREE.Group(); group.add(tilt);
   const add = (geo, m, p, s, r) => { const o = mesh(geo, m, { cast: false, receive: false, pos: p, scale: s, rot: r }); tilt.add(o); return o; };

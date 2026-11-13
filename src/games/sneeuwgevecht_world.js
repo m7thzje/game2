@@ -6,7 +6,8 @@ import { drawDeurFace } from '../engine/chars.js';
 
 // De wereld van de Sneeuwballen-Slag: ronde sneeuwarena, drie sneeuwforten (driehoek), bomen en sneeuwmannen als dekking,
 // een Deurman-sneeuwpop in het midden, een yeti-model, sneeuwvlokken, stapels sneeuwballen en de pickup-visuals.
-export const RA = 12.6, FORT_R = 8.9, FORT_ANG = [150, 30, -90];   // slot 0 linksonder, slot 1 rechtsonder, slot 2 boven
+export const RA = 12.6, FORT_R = 8.9, FORT_ANG = [150, 30, -90];   // 3 spelers: slot 0 linksonder, slot 1 rechtsonder, slot 2 boven
+export const FORT_ANG4 = [225, 315, 135, 45];   // 4 spelers: de vier hoeken (0 linksboven, 1 rechtsboven, 2 linksonder, 3 rechtsonder: zoals de HUD-vakken)
 export const pol = (r, deg) => [Math.cos(deg * Math.PI / 180) * r, Math.sin(deg * Math.PI / 180) * r];
 const SNOW = 0xf4f9ff, SHADE = 0xc9dcef;
 
@@ -38,7 +39,7 @@ export function buildWorld(ctx) {
   // ---- forten ----
   const fort = [];   // {x,z,dx,dz (richting naar het midden)}
   for (let i = 0; i < n; i++) {
-    const [fx, fz] = pol(FORT_R, FORT_ANG[i]), l = Math.hypot(fx, fz), dx = -fx / l, dz = -fz / l, wx = -dz, wz = dx, col = players[i].color;
+    const [fx, fz] = pol(FORT_R, (n === 4 ? FORT_ANG4 : FORT_ANG)[i]), l = Math.hypot(fx, fz), dx = -fx / l, dz = -fz / l, wx = -dz, wz = dx, col = players[i].color;
     fort.push({ x: fx, z: fz, dx, dz, col });
     const addWall = (cx, cz, axX, axZ, hl, ht, h) => {
       const ang = Math.atan2(axZ, axX);
@@ -60,18 +61,19 @@ export function buildWorld(ctx) {
   }
 
   // ---- dekking (3-voudig symmetrisch rond het midden) ----
-  const sectors = [-30, 90, 210];   // in het midden tussen twee forten
-  const cover = [[6.5, -17, 'snowman'], [6.9, 15, 'pine'], [10.3, 0, 'pine'], [3.8, -4, 'rock'], [10.8, -37, 'rock'], [10.8, 39, 'pine']];
+  const sectors = n === 4 ? [0, 90, 180, 270] : [-30, 90, 210];   // in het midden tussen twee forten (4 spelers: 4 sectoren van 90 graden, dekking iets smaller en schaarser)
+  const SK = n === 4 ? 0.7 : 1;
+  const cover = n === 4 ? [[6.5, -17, 'snowman'], [10.3, 0, 'pine'], [3.8, -4, 'rock'], [10.8, -37, 'rock'], [10.8, 39, 'pine']] : [[6.5, -17, 'snowman'], [6.9, 15, 'pine'], [10.3, 0, 'pine'], [3.8, -4, 'rock'], [10.8, -37, 'rock'], [10.8, 39, 'pine']];
   for (const s0 of sectors) for (const [r, da, kind] of cover) {
-    const [x, z] = pol(r, s0 + da);
-    if (kind === 'pine') { pineAt(x, z, 5.4); circles.push({ x, z, r: 0.85, h: 4.6, kind: 'tree' }); }
+    const [x, z] = pol(r, s0 + da * SK);
+    if (kind === 'pine') { pineAt(x, z, n === 4 ? 3.9 : 5.4); circles.push({ x, z, r: 0.85, h: n === 4 ? 3.4 : 4.6, kind: 'tree' }); }   // 4 spelers: lagere dennen, zodat de voorste forten zichtbaar blijven
     else if (kind === 'rock') { mb.add(new THREE.DodecahedronGeometry(1.05, 0), 0x9aa6b5, x, 0.55, z, 0, rng() * 3, 0, 1, 0.75, 0.9); mb.add(new THREE.DodecahedronGeometry(0.8, 0), 0xffffff, x, 1.0, z, 0, 0, 0, 1, 0.5, 0.8); circles.push({ x, z, r: 1.0, h: 1.3, kind: 'rock' }); }
-    else { mb.sph(0.95, 0xffffff, x, 0.8, z, 1, 0.9, 1, 9, 7); mb.sph(0.72, 0xffffff, x, 2.0, z, 1, 1, 1, 9, 7); mb.sph(0.52, 0xffffff, x, 2.95, z, 1, 1, 1, 9, 7); mb.cone(0.08, 0.42, 0xff8a1a, x, 2.95, z + 0.5, 5, Math.PI / 2); mb.cyl(0.38, 0.38, 0.5, 0x2a2a34, x, 3.55, z, 8); mb.cyl(0.56, 0.56, 0.07, 0x2a2a34, x, 3.3, z, 8); mb.cyl(0.62, 0.62, 0.14, [0xe5484d, 0x4ac8ff, 0xffd23f][sectors.indexOf(s0)], x, 2.45, z, 9); circles.push({ x, z, r: 0.95, h: 3.0, kind: 'snowman' }); }
+    else { mb.sph(0.95, 0xffffff, x, 0.8, z, 1, 0.9, 1, 9, 7); mb.sph(0.72, 0xffffff, x, 2.0, z, 1, 1, 1, 9, 7); mb.sph(0.52, 0xffffff, x, 2.95, z, 1, 1, 1, 9, 7); mb.cone(0.08, 0.42, 0xff8a1a, x, 2.95, z + 0.5, 5, Math.PI / 2); mb.cyl(0.38, 0.38, 0.5, 0x2a2a34, x, 3.55, z, 8); mb.cyl(0.56, 0.56, 0.07, 0x2a2a34, x, 3.3, z, 8); mb.cyl(0.62, 0.62, 0.14, [0xe5484d, 0x4ac8ff, 0xffd23f, 0x8a6aff][sectors.indexOf(s0)], x, 2.45, z, 9); circles.push({ x, z, r: 0.95, h: 3.0, kind: 'snowman' }); }
   }
   const decor = mb.build({ cast: true, receive: true }); root.add(decor);
 
   // ---- sneeuwstapels (munitie op de grond), geinstantieerd ----
-  const pileSpots = []; for (const s0 of sectors) for (const da of [-24, 28]) { const [x, z] = pol(5.0, s0 + da); pileSpots.push({ x, z, on: true, t: 0 }); }
+  const pileSpots = []; for (const s0 of sectors) for (const da of [-24, 28]) { const [x, z] = pol(5.0, s0 + da * SK); pileSpots.push({ x, z, on: true, t: 0 }); }
   const pileIM = new THREE.InstancedMesh(new THREE.SphereGeometry(0.32, 8, 6), mat(0xffffff), pileSpots.length * 4);
   const pm = new THREE.Matrix4(), pq = new THREE.Quaternion(), pp = new THREE.Vector3(), ps = new THREE.Vector3();
   const pileOff = [[0, 0.3, 0.35], [0.4, 0.28, -0.2], [-0.4, 0.28, -0.15], [0, 0.78, 0]];
@@ -145,7 +147,7 @@ export function buildWorld(ctx) {
 
   // ---- power-up visuals (pool van 3) ----
   const pick = [];
-  for (let q = 0; q < 3; q++) {
+  for (let q = 0; q < (n === 4 ? 4 : 3); q++) {
     const g = new THREE.Group(); g.visible = false; root.add(g);
     const ice = mesh(new THREE.IcosahedronGeometry(0.75, 0), new THREE.MeshStandardMaterial({ color: 0x7ad8ff, emissive: 0x2a8ac8, emissiveIntensity: 0.8, roughness: 0.2, flatShading: true }), { pos: [0, 1.6, 0], cast: false });
     const giant = new THREE.Group(); giant.position.y = 1.7;

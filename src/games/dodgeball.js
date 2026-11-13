@@ -23,10 +23,11 @@ export default {
   giver: 'Koning Klopper',
   icon: '🔥',
   mode: 'pvp',
+  players: [2, 4], teams: true,   // 1 tegen 1, of met 4 spelers 2 tegen 2 (elk een eigen hartjes; een team is uit als beide spelers KO zijn)
   time: 90,
   twists: ['invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'],
   music: 'game_fast',
-  blurb: 'In het kasteelhof van Koning Klopper vliegen <b>vuurballen</b>! Ieder heeft een eigen helft. Raak je broer en hij verliest een <b>hartje</b>; wie er 3 kwijt is, verliest. Pas op voor de <b>bom-bal</b>, de <b>gouden bal</b> die terugstuitert en de <b>reuzenpompoen</b>. Na 80 seconden: <b>sudden death</b>!',
+  blurb: 'In het kasteelhof van Koning Klopper vliegen <b>vuurballen</b>! Ieder heeft een eigen helft (met vier spelers: <b>2 tegen 2</b>, een team is uit als beiden KO zijn). Raak je broer en hij verliest een <b>hartje</b>; wie er 3 kwijt is, verliest. Pas op voor de <b>bom-bal</b>, de <b>gouden bal</b> die terugstuitert en de <b>reuzenpompoen</b>. Na 80 seconden: <b>sudden death</b>!',
   controls: ['{move} lopen en richten', '{a} gooien (ingedrukt = harder)', '{a} vlak voor een inslag = VANGEN', '{b} wegduiken'],
   tip: 'Vang je een bal precies op tijd, dan is hij van jou én verliest je broer een hartje. Wie nog maar 1 hartje heeft, krijgt een schild en vuurwoede!',
 
@@ -34,6 +35,11 @@ export default {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
+    const NP = players.length, TM = NP === 4 && ctx.teams ? ctx.teams : null;          // TM = 2 tegen 2 (slots per team), anders 1 tegen 1
+    const teamOf = (i) => (TM ? ctx.teamOf[i] : i);
+    const tNames = [0, 1].map((t) => (TM ? ctx.teamInfo[t].name : names[t]));
+    const tHex = [0, 1].map((t) => (TM ? ctx.teamInfo[t].color : PLAYER_COLORS[t]));
+    const memberIdx = [0, 0];
     const tid = ctx.twist.id;
     const grav = pv.gravity;
     const tempo = tid === 'turbo' ? 1.25 : tid === 'slowmo' ? 0.8 : 1;
@@ -41,13 +47,14 @@ export default {
     L.sun.position.set(14, 36, 18); L.sun.intensity = 1.9; L.sun.color.set(0xffd9a8);
     L.hemi.intensity = 1.25; L.hemi.color.set(0xc8b8ff); L.hemi.groundColor.set(0x7a5a4a);
     camera.fov = 46; camera.updateProjectionMatrix();
-    const world = buildCourt(ctx, { HX, HZ });
+    const hexA = (h, a) => `rgba(${(h >> 16) & 255},${(h >> 8) & 255},${h & 255},${a})`;
+    const world = buildCourt(ctx, { HX, HZ }, TM ? { labels: tNames, colors: [hexA(tHex[0], 0.3), hexA(tHex[1], 0.3)] } : {});
 
     // ---------------- toestand ----------------
     let T = 0, clock = 0, done = false, over = false, freeze = 0, sd = false, deathmatch = false, introT = 0;
     const ext = { x: HX, z: HZ };
     let supplyT = 0.8, specialT = 8, specialN = 0, rainT = 0, rainN = 0, koT = 0, camK = 0, koFocus = null;
-    const stat = { hits: [0, 0], catches: [0, 0], dodges: [0, 0], goldHits: 0, pump: 0, bombs: 0, own: 0 };
+    const stat = { hits: new Array(NP).fill(0), catches: new Array(NP).fill(0), dodges: new Array(NP).fill(0), goldHits: 0, pump: 0, bombs: 0, own: 0 };
 
     // ---------------- camera past altijd om het hele veld ----------------
     const tgt = new THREE.Vector3(0, 1.0, 0.6), camBase = new THREE.Vector3(), camDir = new THREE.Vector3(0, Math.sin(PITCH), Math.cos(PITCH));
@@ -88,19 +95,20 @@ export default {
       p.labelTx.needsUpdate = true;
     }
     const pl = players.map((pp, i) => {
+      const t = teamOf(i), kIn = memberIdx[t]++;
       const c = ctx.make.brother(i); const sz = pv.size(i);
       const holder = new THREE.Group(), pivot = new THREE.Group(); pivot.rotation.order = 'YXZ'; pivot.position.y = 0.95; c.group.position.y = -0.95; pivot.add(c.group); holder.add(pivot); scene.add(holder);
       const bubble = new THREE.Mesh(new THREE.SphereGeometry(1.35, 16, 12), new THREE.MeshBasicMaterial({ color: 0x7ad8ff, transparent: true, opacity: 0.25, depthWrite: false, blending: THREE.AdditiveBlending })); bubble.position.y = 1.0; bubble.visible = false; holder.add(bubble);
       const rage = glowSprite(0xff3a1a, 4.4, 0.7); rage.position.y = 1.0; rage.visible = false; holder.add(rage);
-      const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; scene.add(ring);
+      const ring = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: tHex[t], transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; scene.add(ring);
       const catchRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xfff2a0, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })); catchRing.rotation.x = -Math.PI / 2; catchRing.visible = false; scene.add(catchRing);
       const aimRing = new THREE.Mesh(ringGeo, new THREE.MeshBasicMaterial({ color: 0xffd24a, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })); aimRing.rotation.x = -Math.PI / 2; aimRing.visible = false; scene.add(aimRing);
       const aimDisc = new THREE.Mesh(discGeo, new THREE.MeshBasicMaterial({ color: 0xff5a20, transparent: true, opacity: 0.3, depthWrite: false })); aimDisc.rotation.x = -Math.PI / 2; aimDisc.visible = false; scene.add(aimDisc);
       const dots = new THREE.InstancedMesh(new THREE.SphereGeometry(0.2, 6, 4), new THREE.MeshBasicMaterial({ color: 0xffe9a0 }), 16); dots.count = 0; dots.frustumCulled = false; scene.add(dots);
       const blob = mkBlob();
       const p = {
-        i, c, holder, pivot, bubble, rage, ring, catchRing, aimRing, aimDisc, dots, blob, sz,
-        label: null, x: START[i], z: 0, y: 0, vy: 0, vx: 0, vz: 0, face: i ? -Math.PI / 2 : Math.PI / 2, yaw: i ? -Math.PI / 2 : Math.PI / 2,
+        i, t, kIn, c, holder, pivot, bubble, rage, ring, catchRing, aimRing, aimDisc, dots, blob, sz,
+        label: null, x: START[t], z: TM ? (kIn ? 3.2 : -3.2) : 0, y: 0, vy: 0, vx: 0, vz: 0, face: t ? -Math.PI / 2 : Math.PI / 2, yaw: t ? -Math.PI / 2 : Math.PI / 2,
         hearts: HEART_MAX, inv: 0, stun: 0, roll: 0, rollCd: 0, rdx: 0, rdz: 0, flip: 0, catchT: 0, catchCd: 0, ball: null, charging: false, charge: 0, holdT: 0,
         shield: 0, rageOn: false, throwT: 0, ko: false, cheer: false, tickT: 0, hitFlash: 0,
       };
@@ -109,13 +117,22 @@ export default {
       holder.scale.setScalar(VIS * sz);
       return p;
     });
-    const opp = (p) => pl[1 - p.i];
+    const memb = [0, 1].map((t) => pl.filter((p) => p.t === t));
+    const teamHearts = (t) => memb[t].reduce((a, p) => a + p.hearts, 0);
+    const teamHits = (t) => memb[t].reduce((a, p) => a + stat.hits[p.i], 0);
+    const teamAlive = (t) => memb[t].some((p) => !p.ko);
+    // tegenstander om op te richten: de levende vijand die het best in je kijkrichting staat
+    const opp = (p) => {
+      const ax = Math.sin(p.face), az = Math.cos(p.face); let best = null, bs = -9;
+      for (const q of pl) { if (q.t === p.t || q.ko) continue; const dx = q.x - p.x, dz = q.z - p.z, dl = Math.hypot(dx, dz) || 1, sc = (ax * dx + az * dz) / dl - dl * 0.004; if (sc > bs) { bs = sc; best = q; } }
+      return best || pl.find((q) => q.t !== p.t);
+    };
 
     // ---------------- ballen ----------------
     const balls = [];
     function newBall(type) {
       const v = createBall(type); v.group.visible = false; scene.add(v.group);
-      const b = { type, v, r: v.r, blob: mkBlob(), state: 'off', x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, owner: -1, thrower: -1, holder: null, live: false, contacts: 0, rolling: false, returning: false, fuse: 3, armed: false, hitCool: [0, 0], g: G0 * grav, age: 0 };
+      const b = { type, v, r: v.r, blob: mkBlob(), state: 'off', x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, owner: -1, thrower: -1, holder: null, live: false, contacts: 0, rolling: false, returning: false, fuse: 3, armed: false, hitCool: new Array(NP).fill(0), g: G0 * grav, age: 0 };
       balls.push(b); return b;
     }
     const fire = Array.from({ length: FIRE_N }, () => newBall('fire'));
@@ -138,13 +155,13 @@ export default {
     const sfx = (n, o) => audio.sfx(n, o);
     const hpStr = (p) => '❤️'.repeat(p.hearts) + '🖤'.repeat(Math.max(0, HEART_MAX - p.hearts));
     function refreshHud() {
-      hud.setPlayerInfo(0, hpStr(pl[0]) + (pl[0].shield > 0 ? ' 🛡️' : '')); hud.setPlayerInfo(1, hpStr(pl[1]) + (pl[1].shield > 0 ? ' 🛡️' : ''));
-      hud.setScore(deathmatch ? 'EERSTE TREFFER WINT!' : sd ? '🔥 SUDDEN DEATH 🔥' : `${stat.hits[0]} treffers – ${stat.hits[1]} treffers`);
+      for (const p of pl) hud.setPlayerInfo(p.i, hpStr(p) + (p.shield > 0 ? ' 🛡️' : '') + (p.ko ? ' 💀' : ''));
+      hud.setScore(deathmatch ? 'EERSTE TREFFER WINT!' : sd ? '🔥 SUDDEN DEATH 🔥' : `${teamHits(0)} treffers – ${teamHits(1)} treffers`);
     }
     const pickable = (b) => b.state === 'rest' || (b.state === 'air' && !b.live && b.y < b.r + 0.8 && Math.hypot(b.vx, b.vz) < 5.5);
     function playerBounds(p) {
       const r = PR * p.sz;
-      const lo = p.i ? MID + r : -ext.x + r, hi = p.i ? ext.x - r : -MID - r;
+      const lo = p.t ? MID + r : -ext.x + r, hi = p.t ? ext.x - r : -MID - r;
       return [lo, hi, -ext.z + r, ext.z - r];
     }
     function spark(x, y, z, n, cols, sp = 5) { fx.particles.burst(x, y, z, { count: n, speed: sp, up: 1.2, life: 0.7, size: 0.4, colors: cols, gravity: 9 }); }
@@ -152,7 +169,7 @@ export default {
 
     // ---------------- ballen neerzetten ----------------
     function placeRest(b, x, z, extraVx = 0, extraVz = 0) {
-      b.state = 'rest'; b.x = x; b.z = z; b.y = b.r; b.vx = extraVx; b.vy = 0; b.vz = extraVz; b.live = false; b.rolling = true; b.owner = -1; b.holder = null; b.contacts = 1; b.returning = false; b.g = G0 * grav;
+      b.state = 'rest'; b.x = x; b.z = z; b.y = b.r; b.vx = extraVx; b.vy = 0; b.vz = extraVz; b.live = false; b.rolling = true; b.owner = -1; b.thrower = -1; b.holder = null; b.contacts = 1; b.returning = false; b.g = G0 * grav;
       if (b.type === 'bomb') { b.armed = true; b.fuse = 3; }
       b.v.group.visible = true; b.blob.visible = true;
     }
@@ -163,7 +180,7 @@ export default {
     }
     // laat een bal uit de lucht vallen
     function dropBall(b, x, z, o = {}) {
-      b.state = 'drop'; b.x = x; b.z = z; b.live = false; b.vx = b.vy = b.vz = 0; b.holder = null; b.owner = -1; b.contacts = 0; b.rolling = false; b.returning = false; b.g = G0 * grav; b.armed = false;
+      b.state = 'drop'; b.x = x; b.z = z; b.live = false; b.vx = b.vy = b.vz = 0; b.holder = null; b.owner = -1; b.thrower = -1; b.contacts = 0; b.rolling = false; b.returning = false; b.g = G0 * grav; b.armed = false;
       b.v.group.visible = true; b.blob.visible = true; b.v.group.scale.setScalar(1);
       const d = { kind: o.kind || 'supply', b, x, z, t: FALL_T, aoe: o.aoe || 0, ring: warnRing(x, z, o.aoe || Math.max(1.0, b.r * 1.3), FALL_T, o.col || (o.aoe ? 0xff3a20 : 0xffffff)) };
       drops.push(d); b.y = b.r + 0.5 * G0 * FALL_T * FALL_T;
@@ -242,7 +259,7 @@ export default {
       const b = p.ball; if (!b) return;
       const t = trajectory(p, charge, b);
       b.state = 'air'; b.live = true; b.owner = p.i; b.thrower = p.i; b.contacts = 0; b.rolling = false; b.returning = false; b.holder = null; b.g = t.g;
-      b.x = t.sx; b.y = t.y0; b.z = t.sz; b.vx = t.ax * t.vh; b.vz = t.az * t.vh; b.vy = t.vy; b.hitCool[0] = b.hitCool[1] = 0; b.v.group.scale.setScalar(1);
+      b.x = t.sx; b.y = t.y0; b.z = t.sz; b.vx = t.ax * t.vh; b.vz = t.az * t.vh; b.vy = t.vy; b.hitCool.fill(0); b.v.group.scale.setScalar(1);
       p.ball = null; p.charging = false; p.charge = 0; p.throwT = 0.28; p.c.swing(); p.holdT = 0;
       sfx('throw', { vol: 0.5 + 0.5 * charge, rate: 0.85 + 0.4 * charge + (b.type === 'pumpkin' ? -0.3 : 0) });
       spark(b.x, b.y, b.z, 10 + Math.round(charge * 14), b.type === 'gold' ? GOLD_COLS : FIRE_COLS, 3 + charge * 3);
@@ -271,7 +288,7 @@ export default {
       const dx = p.x - src.x, dz = p.z - src.z, dl = Math.hypot(dx, dz) || 1, kb = o.kb != null ? o.kb : 6;
       p.vx = dx / dl * kb; p.vz = dz / dl * kb;
       if (p.ball) { const b = p.ball; b.state = 'air'; b.holder = null; b.live = false; b.x = p.x; b.y = 3; b.z = p.z; b.vx = rand(-3, 3); b.vz = rand(-3, 3); b.vy = 6; b.contacts = 1; b.rolling = false; b.owner = -1; p.ball = null; }
-      if (src.by != null && src.by >= 0 && src.by !== p.i) stat.hits[src.by]++; else if (src.by === p.i) stat.own++;
+      if (src.by != null && src.by >= 0 && src.by !== p.i && pl[src.by].t !== p.t) stat.hits[src.by]++; else if (src.by >= 0 && pl[src.by] && pl[src.by].t === p.t) stat.own++;
       spark(p.x, 2, p.z, 36, FIRE_COLS, 7); spark(p.x, 2.2, p.z, 10, SMOKE, 3);
       fx.texts.add(o.catch ? 'AUW! VANGST!' : pick(['AUW!', 'AU!', 'AAAH!', 'HEET!']), p.x, 4.4 * p.sz + 0.6, p.z, '#ff6a4a', 1.2);
       sfx('hurt', { vol: 0.9 }); sfx('hit', { vol: 0.8 }); ctx.shake(o.big ? 0.8 : 0.5); freeze = Math.max(freeze, 0.09); world.cheer(1);
@@ -286,35 +303,42 @@ export default {
       sfx('powerup', { vol: 0.9 }); spark(p.x, 1.5, p.z, 40, [0x7ad8ff, 0xffffff, 0xff9a30], 7);
     }
     function ko(p) {
-      over = true; p.ko = true; p.koVy = 11; p.koT = 0; koFocus = p;
-      const w = opp(p);
-      p.vx = (p.x - w.x) * 0.6 + (p.i ? 5 : -5); p.vz = rand(-3, 3);
-      sfx('lose', { vol: 0.8 }); ctx.shake(1); freeze = 0.18;
+      p.ko = true; p.koVy = 11; p.koT = 0;
+      const et = 1 - p.t, ex = memb[et].reduce((a, q) => a + q.x, 0) / memb[et].length;
+      p.vx = (p.x - ex) * 0.6 + (p.t ? 5 : -5); p.vz = rand(-3, 3);
+      sfx('lose', { vol: 0.8 }); ctx.shake(1); refreshHud();
+      const final = !teamAlive(p.t) || deathmatch || !TM;
+      if (!final) {   // 2 tegen 2: de teamgenoot speelt door
+        freeze = 0.12; p.charging = false; p.charge = 0;
+        fx.texts.add('KO!', p.x, 5.2, p.z, '#ff4a4a', 1.5); hud.toast(`${names[p.i]} is uit! ${memb[p.t].filter((q) => !q.ko).map((q) => names[q.i]).join(' & ')} moet het alleen doen`, 2200);
+        return;
+      }
+      over = true; koFocus = p; freeze = 0.18;
       for (const q of pl) { q.charging = false; if (q.ball) q.charge = 0; }
-      endGame(w.i, `<b>${names[w.i]}</b> wint met ${w.hearts} hartje${w.hearts === 1 ? '' : 's'} over!`);
+      if (!TM) endGame(et, `<b>${names[et]}</b> wint met ${pl[et].hearts} hartje${pl[et].hearts === 1 ? '' : 's'} over!`);
+      else { const hs = teamHearts(et); endGame(et, `<b>${tNames[et]}</b> winnen met ${hs} hartje${hs === 1 ? '' : 's'} over!`); }
     }
-    function endGame(winner, line) {
+    function endGame(winner, line) {   // winner = team (bij 1 tegen 1: de speler)
       if (done) return; done = true; over = true;
-      const w = winner == null ? null : pl[winner];
-      pl.forEach((q) => { q.cheer = q === w; });
+      pl.forEach((q) => { q.cheer = winner != null && q.t === winner; });
       hud.setTimer(null);
       const jokes = ['Koning Klopper klapt in zijn handen.', 'Wat een vuurwerk!', 'De draak is onder de indruk.', 'Dat was heet!', 'De toeschouwers joelen.'];
-      const sum = `${line}<br>Treffers ${stat.hits[0]} – ${stat.hits[1]} · vangsten ${stat.catches[0]} – ${stat.catches[1]} · duiken ${stat.dodges[0]} – ${stat.dodges[1]}<br>${pick(jokes)}`;
-      ctx.finishPvp({ winner, score: [pl[0].hearts, pl[1].hearts], summary: sum, delay: w ? 2100 : 1200 });
+      const sum = `${line}<br>Treffers ${TM ? `${teamHits(0)} – ${teamHits(1)}` : `${stat.hits[0]} – ${stat.hits[1]}`} · vangsten ${stat.catches.reduce((a, v) => a + v, 0)} · duiken ${stat.dodges.reduce((a, v) => a + v, 0)}<br>${pick(jokes)}`;
+      ctx.finishPvp({ winners: winner == null ? [] : (TM ? TM[winner].slice() : [winner]), score: pl.map((q) => q.hearts), summary: sum, delay: winner != null ? 2100 : 1200 });
       world.cheer(2);
     }
     function timeUp() {
       if (over) return;
-      if (pl[0].hearts !== pl[1].hearts) { const w = pl[0].hearts > pl[1].hearts ? 0 : 1; hud.showBig('TIJD OM!', 1000, '#ffe14a'); endGame(w, `Tijd om! <b>${names[w]}</b> heeft de meeste hartjes.`); return; }
+      if (teamHearts(0) !== teamHearts(1)) { const w = teamHearts(0) > teamHearts(1) ? 0 : 1; hud.showBig('TIJD OM!', 1000, '#ffe14a'); endGame(w, `Tijd om! <b>${tNames[w]}</b> ${TM ? 'hebben' : 'heeft'} de meeste hartjes.`); return; }
       if (!deathmatch) {
-        deathmatch = true; pl.forEach((q) => { q.hearts = 1; q.shield = 0; q.rageOn = true; refreshLabel(q); });
+        deathmatch = true; pl.forEach((q) => { if (q.ko) return; q.hearts = 1; q.shield = 0; q.rageOn = true; refreshLabel(q); });
         hud.showBig('GELIJK! EERSTE TREFFER WINT', 1800, '#ff6a4a'); sfx('bell'); refreshHud(); hud.setTimer(null);
       }
     }
     function capOut() {
       if (over) return;
-      const h = stat.hits; const w = h[0] === h[1] ? null : h[0] > h[1] ? 0 : 1;
-      endGame(w, w == null ? 'Echt gelijk! Wat een duel.' : `Na eindeloos vuurwerk wint <b>${names[w]}</b> op treffers.`);
+      const h = [teamHits(0), teamHits(1)]; const w = h[0] === h[1] ? null : h[0] > h[1] ? 0 : 1;
+      endGame(w, w == null ? 'Echt gelijk! Wat een duel.' : `Na eindeloos vuurwerk ${TM ? 'winnen' : 'wint'} <b>${tNames[w]}</b> op treffers.`);
     }
     function startSuddenDeath() {
       sd = true; hud.showBig('SUDDEN DEATH!', 1500, '#ff5a3a'); hud.toast('De arena krimpt en het regent vuurballen!', 2600);
@@ -409,6 +433,7 @@ export default {
       if (b.live) for (const p of pl) {
         if (p.ko) continue;
         if (b.owner === p.i) continue;
+        if (TM && b.thrower >= 0 && pl[b.thrower] && pl[b.thrower].t === p.t && b.type !== 'pumpkin') continue;   // geen vriendelijk vuur
         if (b.hitCool[p.i] > 0) { b.hitCool[p.i] -= h; continue; }
         const dx = b.x - p.x, dz = b.z - p.z, rr = PR * p.sz + b.r * 0.85;
         if (dx * dx + dz * dz > rr * rr) continue;
@@ -475,7 +500,7 @@ export default {
     // ---------------- aanvoer van ballen ----------------
     function supply(dt) {
       if (over) return;
-      const target = sd ? 6 : 4; let n = 0; for (const b of fire) if (b.state !== 'off') n++;
+      const target = (sd ? 6 : 4) + (TM ? 1 : 0); let n = 0; for (const b of fire) if (b.state !== 'off') n++;
       supplyT -= dt;
       if (supplyT <= 0 && n < target) {
         const b = fire.find((q) => q.state === 'off');
@@ -496,7 +521,7 @@ export default {
     }
     function spawnSpecial() {
       specialT = rand(8, 12);
-      const lead = pl[0].hearts === pl[1].hearts ? -1 : pl[0].hearts > pl[1].hearts ? 0 : 1;   // wie voorstaat
+      const lead = teamHearts(0) === teamHearts(1) ? -1 : teamHearts(0) > teamHearts(1) ? 0 : 1;   // wie voorstaat (team)
       const behind = lead < 0 ? -1 : 1 - lead;
       const seq = ['bomb', 'gold', 'pumpkin']; let kind = specialN < 3 ? seq[specialN] : pick(['gold', 'bomb', 'pumpkin', 'gold']);
       if (specialN >= 3 && behind >= 0 && Math.random() < 0.4) kind = 'gold';
@@ -504,11 +529,11 @@ export default {
       const b = { bomb, gold, pumpkin }[kind];
       if (b.state !== 'off') return;
       if (kind === 'pumpkin') {
-        let x, z; const tgtP = lead >= 0 && Math.random() < 0.5 ? pl[lead] : pick(pl); x = clamp(tgtP.x + rand(-2.5, 2.5), -ext.x + 1.5, ext.x - 1.5); z = clamp(tgtP.z + rand(-2.5, 2.5), -ext.z + 1.5, ext.z - 1.5);
+        let x, z; const tgtP = lead >= 0 && Math.random() < 0.5 ? pick(memb[lead]) : pick(pl); x = clamp(tgtP.x + rand(-2.5, 2.5), -ext.x + 1.5, ext.x - 1.5); z = clamp(tgtP.z + rand(-2.5, 2.5), -ext.z + 1.5, ext.z - 1.5);
         if (Math.abs(x) < 1.5) x = Math.sign(x || 1) * 1.5;
         dropBall(b, x, z, { kind: 'pumpkin', aoe: 2.6 }); hud.toast('Kijk uit! Een reuzenpompoen valt uit de lucht!', 1800); sfx('bell', { vol: 0.5, rate: 0.7 });
       } else if (kind === 'gold') {
-        const x = behind >= 0 ? (behind ? 2.4 : -2.4) : 0; dropBall(b, x, rand(-4.5, 4.5), { kind: 'gold' }); hud.toast(behind >= 0 ? `Een gouden bal voor ${names[behind]}!` : 'Een GOUDEN bal! Dubbel gevaar...', 1800); sfx('sparkle', { vol: 0.7 });
+        const x = behind >= 0 ? (behind ? 2.4 : -2.4) : 0; dropBall(b, x, rand(-4.5, 4.5), { kind: 'gold' }); hud.toast(behind >= 0 ? `Een gouden bal voor ${tNames[behind]}!` : 'Een GOUDEN bal! Dubbel gevaar...', 1800); sfx('sparkle', { vol: 0.7 });
       } else {
         dropBall(b, 0, rand(-4.5, 4.5), { kind: 'bomb' }); hud.toast('Een bom-bal! Gooi hem snel terug...', 1800); sfx('bell', { vol: 0.5 });
       }
@@ -646,7 +671,7 @@ export default {
       onResize() { fitCamera(); },
       onStart() { hud.setTimer(END_AT, 10); },
       onCountdown() { refreshHud(); hud.setTimer(END_AT, 10); },
-      celebrate(w) { pl.forEach((q) => { q.cheer = q.i === w; }); for (let k = 0; k < 4; k++) fx.particles.burst(pl[w].x + rand(-3, 3), 4 + rand(0, 3), pl[w].z, { count: 36, speed: 7, up: 1.2, life: 1.5, size: 0.45, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 }); sfx('sparkle', { vol: 0.5 }); },
+      celebrate(w, winners = [w]) { pl.forEach((q) => { q.cheer = winners.includes(q.i); }); for (let k = 0; k < 4; k++) fx.particles.burst(pl[w].x + rand(-3, 3), 4 + rand(0, 3), pl[w].z, { count: 36, speed: 7, up: 1.2, life: 1.5, size: 0.45, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 }); sfx('sparkle', { vol: 0.5 }); },
       onDeurman(movers) {
         movers.forEach((m, i) => {
           if (!m) return; const p = pl[i];
@@ -659,11 +684,11 @@ export default {
       dispose() { drops.length = 0; },
       dbg: {
         state: () => ({ T, sd, over, done, deathmatch, ext: { ...ext }, stat, hearts: pl.map((p) => p.hearts), shield: pl.map((p) => p.shield), rage: pl.map((p) => p.rageOn),
-          p: pl.map((p) => ({ x: p.x, z: p.z, vx: p.vx, vz: p.vz, ball: p.ball ? p.ball.type : null, charging: p.charging, charge: p.charge, roll: p.roll, rollCd: p.rollCd, catchT: p.catchT, catchCd: p.catchCd, inv: p.inv, stun: p.stun, hearts: p.hearts, sz: p.sz, face: p.face })),
+          p: pl.map((p) => ({ t: p.t, ko: p.ko, x: p.x, z: p.z, vx: p.vx, vz: p.vz, ball: p.ball ? p.ball.type : null, charging: p.charging, charge: p.charge, roll: p.roll, rollCd: p.rollCd, catchT: p.catchT, catchCd: p.catchCd, inv: p.inv, stun: p.stun, hearts: p.hearts, sz: p.sz, face: p.face })),
           balls: balls.filter((b) => b.state !== 'off').map((b) => ({ type: b.type, state: b.state, x: b.x, y: b.y, z: b.z, vx: b.vx, vy: b.vy, vz: b.vz, live: b.live, owner: b.owner, fuse: b.fuse, r: b.r })), drops: drops.length }),
         pl, balls, ext, setT: (t) => { T = t; }, giveBall: (i, type) => { const b = { fire: fire[4], gold, bomb, pumpkin }[type]; if (b.state !== 'off') removeBall(b); const p = pl[i]; if (p.ball) removeBall(p.ball); placeRest(b, p.x, p.z); pickup(p, b); },
         dropAt: (type, x, z) => { const b = { fire: fire[5], gold, bomb, pumpkin }[type]; dropBall(b, x, z, { kind: type === 'pumpkin' ? 'pumpkin' : type, aoe: type === 'pumpkin' ? 2.6 : 0 }); },
-        hurt: (i, n = 1) => hurt(pl[i], n, { x: 0, z: 0, by: 1 - i }), meteor: dropMeteor, startSD: startSuddenDeath, trajectory,
+        hurt: (i, n = 1) => hurt(pl[i], n, { x: 0, z: 0, by: pl.findIndex((q) => q.t !== pl[i].t) }), meteor: dropMeteor, startSD: startSuddenDeath, trajectory,
       },
     };
   },

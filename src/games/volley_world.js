@@ -74,7 +74,7 @@ function gullObj() {
   g.userData.wings = wings; g.userData.dynamic = true; return g;
 }
 
-export function buildBeach(ctx, L, colorsCss) {
+export function buildBeach(ctx, L, colorsCss, tHex = [0x35c46f, 0x4a8cff], tCss = ['#7dffb0', '#8fb8ff']) {
   const { scene, fx } = ctx;
   const { W, NH, NR } = VW;
   const rng = mulberry32(4242);
@@ -108,7 +108,7 @@ export function buildBeach(ctx, L, colorsCss) {
   // zijmuren: opblaasbare gestreepte pilaren + flits
   B.walls = [];
   for (const sx of [-1, 1]) {
-    const col = sx < 0 ? 0x35c46f : 0x4a8cff;
+    const col = sx < 0 ? tHex[0] : tHex[1];
     const stp = stripeTex('#' + col.toString(16).padStart(6, '0'), '#ffffff', 8, true);
     for (const z of [-2.4, 2.4]) scene.add(mesh(new THREE.CylinderGeometry(0.36, 0.42, 15, 10), new THREE.MeshStandardMaterial({ map: stp, roughness: 0.4 }), { cast: false, pos: [sx * (W + 0.45), 7.5, z] }));
     for (const z of [-2.4, 2.4]) { scene.add(mesh(new THREE.SphereGeometry(0.5, 10, 8), mat(col, { flatShading: false, roughness: 0.3 }), { cast: false, pos: [sx * (W + 0.45), 15.1, z] })); }
@@ -198,8 +198,8 @@ export function buildBeach(ctx, L, colorsCss) {
   B.scoreboard = (names, score, secs, note) => {
     const g = sbG, w = 512, h = 192; g.fillStyle = '#17325c'; g.fillRect(0, 0, w, h); g.strokeStyle = '#ffd86b'; g.lineWidth = 8; g.strokeRect(5, 5, w - 10, h - 10);
     g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'bold 34px Fredoka, Arial Black, sans-serif';
-    g.fillStyle = '#7dffb0'; g.fillText(names[0].toUpperCase(), 100, 34); g.fillStyle = '#8fb8ff'; g.fillText(names[1].toUpperCase(), w - 100, 34);
-    g.font = 'bold 104px Fredoka, Arial Black, sans-serif'; g.fillStyle = '#7dffb0'; g.fillText(String(score[0]), 100, 112); g.fillStyle = '#8fb8ff'; g.fillText(String(score[1]), w - 100, 112);
+    g.fillStyle = tCss[0]; g.fillText(names[0].toUpperCase(), 100, 34); g.fillStyle = tCss[1]; g.fillText(names[1].toUpperCase(), w - 100, 34);
+    g.font = 'bold 104px Fredoka, Arial Black, sans-serif'; g.fillStyle = tCss[0]; g.fillText(String(score[0]), 100, 112); g.fillStyle = tCss[1]; g.fillText(String(score[1]), w - 100, 112);
     g.font = 'bold 40px Fredoka, Arial Black, sans-serif'; g.fillStyle = secs <= 10 ? '#ff7a6a' : '#ffffff';
     const mm = Math.floor(Math.max(0, secs) / 60), ss = Math.floor(Math.max(0, secs) % 60); g.fillText(note || `${mm}:${String(ss).padStart(2, '0')}`, w / 2, 50);
     g.font = 'bold 24px Fredoka, Arial Black, sans-serif'; g.fillStyle = '#cfe0ff'; g.fillText('eerste tot 11', w / 2, 150);

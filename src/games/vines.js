@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mat, mesh, clamp, lerp, damp, TAU, canvasTex } from '../engine/util.js';
 import { makeBrother, PLAYER_COLORS } from '../engine/chars.js';
-import { C, vineX, makeVine, buildJungle } from './vines_world.js';
+import { C, vineX, makeVine, buildJungle, setLanes } from './vines_world.js';
 
 // Lianen-Zwaaien — duel: zwaai van liaan naar liaan over de krokodillenrivier. Eerste aan de overkant wint.
 // Fysica: eenvoudige slinger (hang) + kogelbaan (fly). A = vasthouden, links/rechts = duwen, B = Tarzan-schreeuw.
@@ -19,18 +19,20 @@ export default {
   giver: 'Boswachter Bladerbaard',
   icon: '🌿',
   mode: 'pvp',
+  players: [2, 3, 4],              // 2 = duel; 3-4 = vrij voor allen: elk een eigen rij lianen (achter elkaar, zelfde opstelling)
   time: 50,
   music: 'game',
-  blurb: 'Zwaai als Tarzan over de rivier vol <b>hongerige krokodillen</b>! Houd <b>A</b> vast, duw mee met de zwaai en laat los om te vliegen. Eerste aan de overkant wint. Pas op voor <b>apen</b>, <b>rotte lianen</b> en een <b>draak</b>!',
+  blurb: 'Zwaai als Tarzan over de rivier vol <b>hongerige krokodillen</b>! Houd <b>A</b> vast, duw mee met de zwaai en laat los om te vliegen. Eerste aan de overkant wint. Pas op voor <b>apen</b>, <b>rotte lianen</b> en een <b>draak</b>! Met 3 of 4 spelers hangt iedereen in een eigen baan (zelfde opstelling, de lianen staan verspreid): vrij voor allen, wie het eerst aan de overkant is wint.',
   controls: ['{a} vast = hangen, los = vliegen', '{move} links/rechts = zwaaien', '{b} Tarzan-schreeuw'],
   tip: 'Duw mee met je poppetje, dan zwaai je hoger. Wie achterstaat krijgt Tarzan-power!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
-    const names = players.map((p) => p.name);
+    const names = players.map((p) => p.name), N = players.length;
+    setLanes(N);
     const L = ctx.lights('day', { shadow: 24, center: [20, 4, 0], fogNear: 80, fogFar: 200 });
     L.hemi.intensity = 1.15; L.hemi.color.set(0xd8f4ff); L.hemi.groundColor.set(0x5f8f5a); L.sun.color.set(0xfff1c0); L.sun.intensity = 2.1; L.sun.position.set(14, 40, 26);
-    const W = buildJungle(ctx);
+    const W = buildJungle(ctx, N);
     camera.fov = 30; camera.updateProjectionMatrix(); camera.near = 1; camera.far = 400; camera.updateProjectionMatrix();
 
     // ---------------- helperteksturen ----------------
@@ -51,7 +53,7 @@ export default {
     // ---------------- lianen per baan ----------------
     const rng = () => ctx.rng();
     const pick = (a) => a[Math.floor(rng() * a.length)];
-    const lanes = [0, 1].map((i) => {
+    const lanes = players.map((_, i) => {
       const rotIdx = pick([1, 2, 4, 5]);
       let slideIdx = pick([1, 2, 4, 5, 6]); if (slideIdx === rotIdx) slideIdx = 6;
       const vines = [];
@@ -73,7 +75,7 @@ export default {
     const pivotAcc = (v, t) => (v.slide ? -v.slide * 1.5625 * Math.sin(t * 1.25 + v.ph) : 0);
 
     // ---------------- spelers ----------------
-    const pl = [0, 1].map((i) => {
+    const pl = players.map((_, i) => {
       const c = makeBrother(i);
       const holder = new THREE.Group(); const inner = new THREE.Group(); holder.add(inner); inner.add(c.group); scene.add(holder);
       const sc = SC_T / c.height;
@@ -176,24 +178,29 @@ export default {
     }
     function win(i, why = '') {
       if (done) return; done = true; winner = i;
-      const w = pl[i], l = pl[1 - i];
+      const w = pl[i];
+      const order = pl.slice().sort((a, b) => (b === w) - (a === w) || (b.prog - a.prog) || (a.i - b.i));
+      const l = N === 2 ? pl[1 - i] : order[order.length - 1];
       if (!why) { w.state = 'won'; w.x = C.GOAL_U + w.off + 2.4; w.y = C.BANK_Y; } w.cheerT = 99;
       audio.sfx('win', { vol: 0.5 }); ctx.shake(0.35);
-      hud.showBig(`${names[i]} wint!`, 1600, i ? '#4a8cff' : '#35c46f');
+      hud.showBig(`${names[i]} wint!`, 1600, players[i].css);
       for (let k = 0; k < 7; k++) setTimeout(() => { try { fx.particles.burst(w.x + (Math.random() - 0.5) * 6, C.BANK_Y + 3 + Math.random() * 4, w.z + (Math.random() - 0.5) * 3, { count: 36, speed: 7, up: 1.2, life: 1.5, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 }); audio.sfx('sparkle', { vol: 0.4 }); } catch (e) { /* weg */ } }, k * 230);
-      const jokes = [`${names[i]} zwaait als een echte Tarzan! ${names[1 - i]} nam een duikje.`, `De krokodillen hebben honger, maar ${names[i]} was te snel.`, `${names[i]} landt in de schatkist! ${names[1 - i]} hangt nog ergens.`];
+      const jokes = [`${names[i]} zwaait als een echte Tarzan! ${names[l.i]} nam een duikje.`, `De krokodillen hebben honger, maar ${names[i]} was te snel.`, `${names[i]} landt in de schatkist! ${names[l.i]} hangt nog ergens.`];
+      const sum = (k) => pl.reduce((a, p) => a + p[k], 0);
       const facts = [];
-      if (pl[0].falls + pl[1].falls) facts.push(`${pl[0].falls + pl[1].falls}x in het water gevallen`);
-      if (pl[0].bananas + pl[1].bananas) facts.push(`${pl[0].bananas + pl[1].bananas}x een banaan op je neus`);
-      if (pl[0].yells + pl[1].yells) facts.push(`${pl[0].yells + pl[1].yells}x Tarzan-schreeuw`);
+      if (sum('falls')) facts.push(`${sum('falls')}x in het water gevallen`);
+      if (sum('bananas')) facts.push(`${sum('bananas')}x een banaan op je neus`);
+      if (sum('yells')) facts.push(`${sum('yells')}x Tarzan-schreeuw`);
       const summary = `<b>${why || jokes[Math.floor(Math.random() * jokes.length)]}</b>${facts.length ? '<br>' + facts.join(' · ') : ''}`;
-      ctx.finishPvp({ winner: i, score: [pct(pl[0]), pct(pl[1])], summary, delay: 2000 });
+      const args = { winner: i, score: pl.map(pct), summary, delay: 2000 };
+      if (N > 2) args.place = order.map((p) => p.i);
+      ctx.finishPvp(args);
     }
     const pct = (p) => Math.round(clamp(p.prog / C.GOAL_U, 0, 1) * 100);
 
     // ---------------- bananen & draak & wind ----------------
     function launchBanana() {
-      const [a, b] = pl; const lead = a.prog >= b.prog ? a : b, trail = lead === a ? b : a;
+      const lead = pl.reduce((a, b) => (b.prog > a.prog ? b : a), pl[0]), others = pl.filter((q) => q !== lead), trail = others.length ? others[Math.floor(Math.random() * others.length)] : null;
       const tgt = (Math.random() < 0.65 || !trail) ? lead : trail;
       if (tgt.state === 'swim' || tgt.state === 'return' || tgt.state === 'won') return false;
       const mk = W.monkeys.reduce((m, q) => (Math.abs(q.x + tgt.off - tgt.x) < Math.abs(m.x + tgt.off - tgt.x) ? q : m));
@@ -264,8 +271,7 @@ export default {
       const slip = ctx.pvp.slip, grav = ctx.pvp.gravity;
       const gP = G_PEND * (0.45 + 0.55 * grav), gF = G_FLY * (0.55 + 0.45 * grav);
       // comeback: Tarzan-power
-      const other = pl[1 - p.i];
-      const lag = other.prog - p.prog;
+      const lag = Math.max(...pl.filter((q) => q !== p).map((q) => q.prog)) - p.prog;
       p.tz = damp(p.tz, clamp((lag - 6) / 10, 0, 1), 2, dt);
       const bcd = B_CD * (1 - 0.55 * p.tz);
 
@@ -363,7 +369,6 @@ export default {
     }
     const vineXat = (v) => pivotX(v, T);
     function yellFx(p) {
-      const col = p.i ? '#7ab8ff' : '#7aff9a';
       text(['AAAAH-AH-AAAH!', 'OEEEH-OEEEH!', 'AWOEWOEWOE!'][Math.floor(Math.random() * 3)], p.x, p.y + 2.6, p.z + 1, '#ffd23f', 1.7);
       fx.particles.ring(p.x, p.y - 1.2, p.z, { count: 26, speed: 8, color: 0xffe98a, size: 0.4, life: 0.5 });
       fx.particles.burst(p.x, p.y - 1, p.z, { count: 18, speed: 6, up: 0.6, life: 0.8, size: 0.4, colors: [0x7ad070, 0xc8f0a0, 0xffe14a], gravity: 3 });
@@ -484,19 +489,19 @@ export default {
       pl.forEach((p) => {
         hud.setPlayerInfo(p.i, `${pct(p)}% van de rivier${p.tz > 0.3 ? '  🦍 Tarzan-power!' : ''}`);
       });
-      hud.setScore(`${names[0]} ${pct(pl[0])}%  –  ${pct(pl[1])}% ${names[1]}`);
+      hud.setScore(N === 2 ? `${names[0]} ${pct(pl[0])}%  –  ${pct(pl[1])}% ${names[1]}` : pl.map(pct).join('% – ') + '%');
     }
 
     // ---------------- camera ----------------
     const camLook = new THREE.Vector3();
     function cam(dt, first = false) {
-      const xs = pl.map((p) => p.x), lead = Math.max(xs[0], xs[1]), trail = Math.min(xs[0], xs[1]);
+      const xs = pl.map((p) => p.x), lead = Math.max(...xs), trail = Math.min(...xs);
       let tx = (lead + trail) / 2 + (lead - trail) * 0.04 + 3;
       let spread = lead - trail;
       if (winner >= 0) { tx = pl[winner].x - 3; spread = 4; }
       const asp = camera.aspect || 1.7, tv = Math.tan(camera.fov * Math.PI / 360);
       const needHalfW = spread / 2 + 12;
-      const tdist = clamp(Math.max(needHalfW / (tv * asp), 8.4 / tv), 30, 80);
+      const tdist = clamp(Math.max(needHalfW / (tv * asp), 8.4 / tv), 30, 80) + (N > 2 ? 4 : 0);
       camX = first ? tx : damp(camX, tx, 3.2, dt); camDist = first ? tdist : damp(camDist, tdist, 1.6, dt);
       const cy = 6.0 + Math.max(0, camDist - 30) * 0.06;
       camera.position.set(camX, cy + 7.0, camDist);
@@ -521,14 +526,14 @@ export default {
         hud.setTimer(Math.max(0, timeLeft), 15);
         if (hintT > 0) { hintT -= dt; if (hintT <= 0) hud.setHint(null); }
         updateWorldEvents(dt);
-        const order = (frame++ & 1) ? [1, 0] : [0, 1];
+        const order = pl.map((_, k) => k); if (frame++ & 1) order.reverse();
         for (const i of order) if (!done) stepPlayer(pl[i], dt);
         // lianen die breken
         updateHud();
         common(dt);
         if (timeLeft <= 0 && !done) {
-          const a = pl[0].prog, b = pl[1].prog;
-          win(a >= b ? 0 : 1, 'De tijd is om! Wie het verst kwam, wint.');
+          const best = pl.reduce((a, b) => (b.prog > a.prog ? b : a), pl[0]);
+          win(best.i, 'De tijd is om! Wie het verst kwam, wint.');
         }
       },
       introUpdate(dt) {
@@ -546,7 +551,7 @@ export default {
           fx.particles.burst(p.x, p.y - 0.8, p.z, { count: 22, speed: 4, up: 1.2, life: 0.8, size: 0.45, colors: [0xffe14a, 0xffffff, 0xff6fa5, 0x6fd8ff], gravity: 3 });
           text('🔄', p.x, p.y + 2, p.z + 1, '#ffe14a', 1.4);
         });
-        hud.toast(swapped ? `🔄 ${names[0]} bestuurt nu het poppetje van ${names[1]}!` : '🔄 Iedereen weer op zijn eigen poppetje!', 2400);
+        hud.toast(swapped ? (N === 2 ? `🔄 ${names[0]} bestuurt nu het poppetje van ${names[1]}!` : '🔄 Poppetjes gewisseld!') : '🔄 Iedereen weer op zijn eigen poppetje!', 2400);
       },
       onDeurman(movers) {
         movers.forEach((m, i) => {
@@ -555,7 +560,7 @@ export default {
           text('Verstijfd!', p.x, p.y + 2, p.z + 1, '#ff7a5a', 1.3);
         });
       },
-      celebrate(w) { pl[w].cheerT = 99; },
+      celebrate(w, ws = [w]) { for (const k of ws) pl[k].cheerT = 99; },
       dispose() { hud.setHint(null); },
       dbg: {
         state: () => ({

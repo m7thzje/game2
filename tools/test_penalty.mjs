@@ -1,7 +1,9 @@
 // Gebruik: node tools/test_penalty.mjs [scenario...]   scenario: bots | twists | idle | timeout | events | physics | shots
+//   PLAYERS=4 = vier spelers (Sam doet mee; teams [[0,1],[2,3]] bij teamspellen); zonder PLAYERS twee spelers.
 //   TW=<twist-id> kiest een twist (anders "none"). Q=low|high kwaliteit. N=<aantal potjes> voor 'bots'.
 // Bots spelen versneld (zonder renderen) hele potjes; rapporteert winnaar, aantal finishPvp-aanroepen (moet precies 1 zijn), fouten.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -14,26 +16,27 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
+const N = +process.env.PLAYERS || 2; const N4 = N === 4;   // PLAYERS=4: vier spelers (?players=4), alle spelers krijgen input
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 let FAILS = 0; const fail = (m) => { FAILS++; console.log('FAIL: ' + m); };
 
 async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   page.setDefaultTimeout(240000);
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=penalty&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=penalty&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${N >= 3 ? '&players=' + N : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 120000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
     window.__fin = { n: 0, last: null }; const orig = mode.ctx.finishPvp; mode.ctx.finishPvp = (r) => { window.__fin.n++; window.__fin.last = r; return orig(r); };
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -46,13 +49,13 @@ async function installBots(page, cfg) {
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
-    window.__cfg = cfg; window.__bs = [{}, {}];
+    window.__cfg = cfg; window.__bs = [{}, {}, {}, {}];
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i], c = window.__cfg[i], bs = window.__bs[i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
+        for (let i = 0; i < m.ids.length; i++) {
+          const v = inp.virtual[m.ids[i]], c = window.__cfg[i % 2], bs = window.__bs[i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
           if (c.style === 'idle' || !st.K) continue;
           const role = st.K.shooter === i ? 'sh' : st.K.keeper === i ? 'ke' : null;
           if (bs.kick !== st.kickNo) { bs.kick = st.kickNo; bs.side = Math.random() < 0.5 ? -1 : 1; bs.tx = bs.side * (2.4 + Math.random() * 1.0) * (Math.random() < 0.2 ? 0.1 : 1); bs.ty = Math.random() < 0.5 ? 0.6 + Math.random() * 0.5 : 1.8 + Math.random() * 0.6; bs.pT = 0.66 + (Math.random() - 0.5) * 0.2 * (1.2 - c.skill); bs.pressed = false; bs.guess = Math.random() < c.skill; bs.dir = Math.random() < 0.5 ? -1 : 1; bs.tipT = 0.1 + Math.random() * 0.2; if (c.skill < 0.5) { bs.tx *= 0.3; bs.pT = Math.random() < 0.5 ? 0.3 : 0.95; } }
@@ -109,7 +112,7 @@ for (const name of scen) {
       console.log(res.log.length > 30 ? [...res.log.slice(0, 4), '...', ...res.log.slice(-16)].join('\n') : res.log.join('\n'));
       const st = res.st;
       console.log(`end T=${st.T.toFixed(1)} score=${st.score} kicks=${st.kickNo} sdPairs=${st.sdPairs} finished=${res.finished} finishPvp-calls=${res.fin} stats=${JSON.stringify(st.stats)} events=${JSON.stringify(res.seen)}`);
-      if (res.result) { console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, ' ')}`); if (res.result.winner != null) wins[res.result.winner]++; }
+      if (res.result) { console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, ' ')}`); if (res.result.winner != null) wins[N4 && res.result.winner >= 2 ? 1 : (N4 ? 0 : res.result.winner)]++; }
       if (!res.finished) fail(`${name}/${tw}: niet afgelopen`);
       if (res.fin !== 1) fail(`${name}/${tw}: finishPvp ${res.fin}x aangeroepen`);
       if (res.result && res.result.winner == null) fail(`${name}/${tw}: geen winnaar`);

@@ -4,9 +4,11 @@
 // met bots die via de virtuele invoer spelen (versneld, zonder renderen) en controleren: finishPvp precies 1x, beide spelers kunnen winnen,
 // scores kloppen met de ronde-uitslagen, geen console-errors.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const NP = process.env.PLAYERS === '4' ? 4 : process.env.PLAYERS === '3' ? 3 : 2;   // PLAYERS=3|4: alle spelers doen mee
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'lowgrav', 'bodyswap', 'deurman'];
 let fails = 0; const FAIL = (m) => { fails++; console.log('FAIL: ' + m); };
@@ -22,46 +24,47 @@ await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
 
 async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=bowling&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=bowling&players=${NP}&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
-  await page.evaluate(async () => {
+  await page.evaluate(async (NP) => {
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
     // finishPvp tellen
     window.__fin = 0; const orig = mode.ctx.finishPvp; mode.ctx.finishPvp = (r) => { window.__fin++; window.__finRes = r; return orig(r); };
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (let q = 0; q < NP; q++) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (let q = 0; q < NP; q++) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
-  });
+  }, NP);
   return { browser, page, errors };
 }
 
 
 // cfg[i] = { skill 0..1, think (s), bomb: kans, steer: kans, style: 'play'|'idle' }
-async function installBots(page, cfg) {
+async function installBots(page, cfg0) {
+  const cfg = Array.from({ length: NP }, (_, i) => cfg0[i % cfg0.length]);   // bij meer spelers dan opgegeven: herhaal
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 777; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
     const tw = m.twist.id; const flipX = tw === 'invert', swapAB = tw === 'swapab';
-    const B = [0, 1].map(() => ({ key: '', target: 0, hold: 0.55, wait: 0, bomb: false, steer: false, armedDone: false }));
+    const B = cfg.map(() => ({ key: '', target: 0, hold: 0.55, wait: 0, bomb: false, steer: false, armedDone: false }));
     window.__cfg = cfg;
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
-        for (const i of [0, 1]) { const v = inp.virtual[i]; v.a = false; v.b = false; v.x = 0; v.y = 0; }
+        for (const i of cfg.keys()) { const v = inp.virtual[i]; v.a = false; v.b = false; v.x = 0; v.y = 0; }
         if (tw === 'deurman' && st.T > (window.__nextDeur ??= 20)) { window.__nextDeur = st.T + 25; inst.onDeurman([rnd() < 0.6, rnd() < 0.6]); }
-        for (const i of [0, 1]) {
+        for (const i of cfg.keys()) {
           const c = window.__cfg[i], L = st.lanes[i], b = B[i]; if (c.style === 'idle') continue;
-          const vi = m.swapped ? 1 - i : i; const v = inp.virtual[vi]; const A = swapAB ? 'b' : 'a', Bk = swapAB ? 'a' : 'b'; const fx = flipX ? -1 : 1;
+          const vi = m.swapped ? (m.ctx.pvp.swapPairs.find((pr) => pr.includes(i)) || [i, i]).find((k) => k !== i) ?? i : i; const v = inp.virtual[vi]; const A = swapAB ? 'b' : 'a', Bk = swapAB ? 'a' : 'b'; const fx = flipX ? -1 : 1;
           if (L.st === 'aim' || L.st === 'charge') {
             const key = `${st.frame}|${L.throwNo}|${st.sudden}`;
             if (b.key !== key) { b.key = key; b.wait = Math.floor(rnd() * (c.think ?? 1.5) * 60); b.target = (i ? -1 : 1) * 0.9 + (rnd() - 0.5) * (1 - (c.skill ?? 0.8)) * 14; b.hold = 0.45 + rnd() * 0.25 + (rnd() < 0.15 ? 0.3 : 0); b.bomb = rnd() < (c.bomb ?? 0.2); b.steer = rnd() < (c.steer ?? 0.5); b.armedDone = false; b.tog = 0; }
@@ -101,21 +104,22 @@ async function playMatch(name, tw, cfg, preset) {
   console.log(`end T=${s.T.toFixed(1)} score=${s.score} finished=${res.finished} finishPvp-calls=${res.fin} sudden=${s.sudden} stats=${JSON.stringify(s.stats)}`);
   if (res.result) console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, ' ')}`);
   if (res.fin !== 1) FAIL(`${name}: finishPvp ${res.fin}x aangeroepen`);
-  const sum = [0, 1].map((p) => s.lanes[p].fscore.reduce((a, b) => a + (b || 0), 0));
-  if (s.sudden === 0 && !s.timeUp && (sum[0] !== s.score[0] || sum[1] !== s.score[1]) && tw !== 'deurman') FAIL(`${name}: score ${s.score} != som van rondes ${sum}`);
+  if (NP > 2 && res.result && !(res.result.place && res.result.place.length === NP)) FAIL(`${name}: geen volledige plaatsen voor ${NP} spelers`);
+  const sum = s.lanes.map((_, p) => s.lanes[p].fscore.reduce((a, b) => a + (b || 0), 0));
+  if (s.sudden === 0 && !s.timeUp && sum.some((v, k) => v !== s.score[k]) && tw !== 'deurman') FAIL(`${name}: score ${s.score} != som van rondes ${sum}`);
   if (res.result && res.result.winner == null) FAIL(`${name}: geen winnaar`);
   if (errors.length) { FAIL(`${name}: console-errors`); console.log(errors.slice(0, 6).join('\n')); } else console.log('NO ERRORS');
   await browser.close();
   return res.result ? res.result.winner : null;
 }
 
-const wins = [0, 0, 0];
+const wins = [0, 0, 0, 0, 0];
 for (const name of scen) {
   if (name === 'bots') {
     const cfgs = [[{ skill: 0.95, think: 1, bomb: 0.3 }, { skill: 0.3, think: 1.5, bomb: 0.2 }], [{ skill: 0.3, think: 1.5, bomb: 0.2 }, { skill: 0.95, think: 1, bomb: 0.3 }], [{ skill: 0.8, think: 1 }, { skill: 0.8, think: 1 }], [{ skill: 0.6, think: 1.5 }, { skill: 0.9, think: 1 }]];
-    for (const c of cfgs) { const w = await playMatch('bots', process.env.TW || 'none', c); wins[w == null ? 2 : w]++; }
-    console.log('winnaars (Wes, Jor, gelijk):', wins);
-    if (!wins[0] || !wins[1]) FAIL('bots: niet beide spelers wonnen');
+    for (const c of cfgs) { const w = await playMatch('bots', process.env.TW || 'none', c); wins[w == null ? 4 : w]++; }
+    console.log('winnaars (Wes, Jor, Juul, Sam, geen):', wins);
+    if (wins.slice(0, 4).filter((w) => w > 0).length < 2) FAIL('bots: niet minstens twee verschillende winnaars');
   } else if (name === 'skill') {
     for (const sk of [1, 0.6, 0.2]) await playMatch('skill=' + sk, 'none', [{ skill: sk, think: 0.3, bomb: 0, steer: 0 }, { skill: sk, think: 0.3, bomb: 0, steer: 0 }]);
   } else if (name === 'twists') {

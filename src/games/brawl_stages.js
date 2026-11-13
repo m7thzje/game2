@@ -4,7 +4,7 @@ import { tex } from '../engine/textures.js';
 import { Dragon } from '../engine/chars.js';
 import { mergeStatic } from './quickdraw_merge.js';
 import { gradTex, glowTex, makeClouds, mkPlat } from './brawl_world.js';
-import { STAGES } from './brawl_data.js';
+import { STAGES, spreadX } from './brawl_data.js';
 
 // Twee extra podia voor Smash-Arena: de Drakenrug (bewegende platforms op een draak) en de Vulkaantoren (lava, brokkelende platforms, geisers).
 // Beide leveren hetzelfde stage-object als brawl_world.buildIsland. `api` (door brawl.js ingevuld): fs, hurt(f,o), say(t,x,y,col,s), fireProj(...), shake(a), toast(t,ms), big(t,col), sfx(n,o), fx
@@ -86,7 +86,7 @@ export function buildDragon(ctx, api) {
     mood: { hemi: 0xdcecff, ground: 0x7a8ab8, hemiI: 1.45, sun: 0xfff0d0, sunI: 2.1, sunPos: [10, 28, 24], fogNear: 90, fogFar: 260 },
     fdx: 0, fdy: 0, wind: 0,
     camBase: () => ({ x0: A.x - 12.5, x1: A.x + 12.5, y0: A.y - 3.6, y1: A.y + 11.2 }),
-    resp: (i) => ({ x: A.x + (i ? 3.4 : -3.4), y: A.y + 11 }), start: (i) => ({ x: A.x + (i ? 3.4 : -3.4), y: A.y }),
+    resp: (i, n = 2) => ({ x: A.x + spreadX(i, n, 3.4), y: A.y + 11 }), start: (i, n = 2) => ({ x: A.x + spreadX(i, n, 3.4), y: A.y }),
     itemX: () => { const p = plats[Math.random() < 0.55 ? 0 : 1 + Math.floor(Math.random() * 3)]; return p.x + rand(-p.w / 3, p.w / 3); },
     mainP: plats[0],
     step(dt) {
@@ -206,7 +206,7 @@ export function buildVolcano(ctx, api) {
   const lavaGlow = sprite(gt, 0xff6a1a, 150, 16, 0, 0, 3.1, 0.5); scene.add(lavaGlow);
   const clouds = null;
 
-  let tt = 0, lavaY = -9.5, spitT = 8, bubT = 0; const lavaCd = [0, 0];
+  let tt = 0, lavaY = -9.5, spitT = 8, bubT = 0; const lavaCd = [0, 0, 0, 0];
   const lavaAt = (t) => lerp(-9.6, -3.4, 0.5 - 0.5 * Math.cos(t / 46 * TAU));
   const S = {
     kind: 'volcano', ...STAGES.volcano, solid: { hw: HW, top: 0, bot: -44 }, plats, mainP, BLAST: { x: 27, bot: -16, top: 25 },
@@ -214,7 +214,7 @@ export function buildVolcano(ctx, api) {
     fdx: 0, fdy: 0, wind: 0,
     get lavaY() { return lavaY; },
     camBase: () => ({ x0: -11.8, x1: 11.8, y0: -3.6, y1: 11 }),
-    resp: (i) => ({ x: i ? 3.6 : -3.6, y: 10.5 }), start: (i) => ({ x: i ? 4 : -4, y: 0 }),
+    resp: (i, n = 2) => ({ x: spreadX(i, n, 3.6), y: 10.5 }), start: (i, n = 2) => ({ x: spreadX(i, n, 4), y: 0 }),
     itemX: () => { if (Math.random() < 0.6) return rand(-4, 4); const ok = plats.filter((p) => p.on && p.y > 0); const p = ok.length ? pick(ok) : plats[2]; return p.x + rand(-1.5, 1.5); },
     step(dt) {
       tt += dt; lavaY = lavaAt(tt);
@@ -249,7 +249,7 @@ export function buildVolcano(ctx, api) {
       }
       for (const f of api.fs) f.geyCd = Math.max(0, (f.geyCd || 0) - dt);
       // lava raakt je
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < api.fs.length; i++) {
         const f = api.fs[i]; lavaCd[i] = Math.max(0, lavaCd[i] - dt);
         if (f.st !== 'dead' && f.y + 0.4 < lavaY && lavaCd[i] <= 0 && f.y > S.BLAST.bot + 3) {
           if (api.hurt(f, { dmg: 12, bkb: 22, kbg: 0.05, ang: 88, dirx: f.x > 0 ? -1 : 1, x: f.x, y: lavaY, big: 1, snd: 'sizzle', hs: 0.12, hazard: 1 })) { lavaCd[i] = 1.0; api.say('HEET!', f.x, lavaY + 2.2, '#ff7a1a', 1.5); api.fx.particles.burst(f.x, lavaY, 0.5, { count: 24, speed: 8, up: 1.2, life: 0.8, size: 0.6, colors: [0xff7a1a, 0xffd070, 0xff4a2a], gravity: 6 }); }

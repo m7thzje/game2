@@ -59,8 +59,9 @@ function crystal(color, h = 3) {
 }
 
 // ---------------- rolpoppetje op een bumper-kar ----------------
-export function makeCar(i) {
-  const colr = PLAYER_COLORS[i]; const g = new THREE.Group(); g.userData.dynamic = true;
+export function makeCar(i, colorHex) {
+  const colr = colorHex != null ? colorHex : PLAYER_COLORS[i];   // kleur van de kar (teamkleur bij 2 tegen 2); het poppetje is de speler zelf
+  const g = new THREE.Group(); g.userData.dynamic = true;
   const body = new THREE.Group(); g.add(body);
   const paint = new THREE.MeshStandardMaterial({ color: colr, roughness: 0.45, metalness: 0.1, emissive: colr, emissiveIntensity: 0.22 });
   const dark = mat(0x23233a, { metalness: 0.5, roughness: 0.5 }), white = mat(0xf2f4ff, { flatShading: false, roughness: 0.4 }), glassM = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -111,7 +112,7 @@ export function makeUfo() {
   return { g, lights, beam, al };
 }
 
-export function buildArena(ctx, L, colorsCss) {
+export function buildArena(ctx, L, colorsCss, tHex = [PLAYER_COLORS[0], PLAYER_COLORS[1]], tCss = ['#7dffb0', '#8fb8ff']) {
   const { scene, fx } = ctx;
   const rng = mulberry32(2025);
   const A = { fans: [], flashT: [0, 0], cheerT: 0, crystals: [], frame: 0 };
@@ -160,7 +161,7 @@ export function buildArena(ctx, L, colorsCss) {
   const netT = netTex(); netT.wrapS = netT.wrapT = THREE.RepeatWrapping;
   for (const sx of [-1, 1]) {
     const gg = new THREE.Group(); gg.position.set(sx * LX, 0, 0); gg.userData.dynamic = true; scene.add(gg);
-    const colHex = PLAYER_COLORS[sx < 0 ? 0 : 1];
+    const colHex = tHex[sx < 0 ? 0 : 1];
     const netM = new THREE.MeshBasicMaterial({ map: netT, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false });
     const t1 = netT.clone(); t1.repeat.set(GW / 2.4, 1); t1.needsUpdate = true; const t2 = netT.clone(); t2.repeat.set(GD / 2.4, 1); t2.needsUpdate = true;
     const backM = netM.clone(); backM.map = t1; const sideM = netM.clone(); sideM.map = t2;
@@ -219,8 +220,8 @@ export function buildArena(ctx, L, colorsCss) {
   A.scoreboard = (names, score, secs, note) => {
     const g = sbG, w = 768, h = 256; g.fillStyle = '#0b0724'; g.fillRect(0, 0, w, h); g.strokeStyle = '#ff4fd0'; g.lineWidth = 8; g.strokeRect(6, 6, w - 12, h - 12);
     g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'bold 40px Fredoka, Arial Black, sans-serif';
-    g.fillStyle = '#7dffb0'; g.fillText(names[0].toUpperCase(), 160, 46); g.fillStyle = '#8fb8ff'; g.fillText(names[1].toUpperCase(), w - 160, 46);
-    g.font = 'bold 130px Fredoka, Arial Black, sans-serif'; g.fillStyle = '#7dffb0'; g.fillText(String(score[0]), 160, 150); g.fillStyle = '#8fb8ff'; g.fillText(String(score[1]), w - 160, 150);
+    g.fillStyle = tCss[0]; g.fillText(names[0].toUpperCase(), 160, 46); g.fillStyle = tCss[1]; g.fillText(names[1].toUpperCase(), w - 160, 46);
+    g.font = 'bold 130px Fredoka, Arial Black, sans-serif'; g.fillStyle = tCss[0]; g.fillText(String(score[0]), 160, 150); g.fillStyle = tCss[1]; g.fillText(String(score[1]), w - 160, 150);
     g.font = 'bold 54px Fredoka, Arial Black, sans-serif'; g.fillStyle = secs <= 10 ? '#ff7a6a' : '#ffffff';
     const mm = Math.floor(Math.max(0, secs) / 60), ss = Math.floor(Math.max(0, secs) % 60); g.fillText(note || `${mm}:${String(ss).padStart(2, '0')}`, w / 2, 70);
     g.font = 'bold 28px Fredoka, Arial Black, sans-serif'; g.fillStyle = '#cfe0ff'; g.fillText('eerste tot 5', w / 2, 210);

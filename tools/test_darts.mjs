@@ -3,6 +3,7 @@
 // Bots spelen versneld (zonder renderen) hele potjes; controleert dat finishPvp PRECIES één keer komt, beide spelers kunnen winnen,
 // geen console-errors en elke twist werkt.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -15,46 +16,49 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
+const NP = process.env.PLAYERS === '4' ? 4 : process.env.PLAYERS === '3' ? 3 : 2;   // PLAYERS=3|4: alle spelers doen mee
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 let FAIL = 0;
 const check = (ok, msg) => { if (!ok) { FAIL++; console.log('  FAIL:', msg); } else console.log('  ok:', msg); };
 
 async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=darts&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=darts&players=${NP}&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
-  await page.evaluate(async () => {
+  await page.evaluate(async (NP) => {
+    window.__NP = NP;
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
     // finishPvp tellen (de harness negeert dubbele aanroepen zelf, dus tellen we ze hier)
     window.__fin = 0; const orig = mode.ctx.finishPvp; mode.ctx.finishPvp = (r) => { window.__fin++; window.__finArg = r; return orig(r); };
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (let q = 0; q < window.__NP; q++) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (let q = 0; q < window.__NP; q++) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
-  });
+  }, NP);
   return { browser, page, errors };
 }
 
 // cfg[i] = { skill 0..1, style: 'play'|'idle'|'wild' }
-async function installBots(page, cfg) {
+async function installBots(page, cfg0) {
+  const cfg = Array.from({ length: NP }, (_, i) => cfg0[i % cfg0.length]);   // bij meer spelers dan opgegeven: herhaal
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 4242; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    const B = [0, 1].map(() => ({ aim: 0, tx: 0, ty: 0, goalPull: 0.9, wait: 0 }));
+    const B = cfg.map(() => ({ aim: 0, tx: 0, ty: 0, goalPull: 0.9, wait: 0 }));
     window.__cfg = cfg; const tw = m.twist.id;
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
-        for (const i of [0, 1]) {
+        for (const i of cfg.keys()) {
           const v = inp.virtual[i], b = B[i], c = window.__cfg[i], me = st.p[i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
           if (c.style === 'idle' || st.gstate === 'end') continue;
           const sk = c.skill ?? 0.7;
@@ -80,7 +84,7 @@ async function installBots(page, cfg) {
           }
         }
         // twist-bewust: de bot compenseert omgekeerde besturing / verwisselde knoppen (zoals een mens zou doen)
-        for (const i of [0, 1]) { const v = inp.virtual[i]; if (tw === 'invert') { v.x = -v.x; v.y = -v.y; } if (tw === 'swapab') { const t = v.a; v.a = v.b; v.b = t; } }
+        for (const i of cfg.keys()) { const v = inp.virtual[i]; if (tw === 'invert') { v.x = -v.x; v.y = -v.y; } if (tw === 'swapab') { const t = v.a; v.a = v.b; v.b = t; } }
         inp.update(); m.update(dt);
       }
       m.paused = true;
@@ -101,7 +105,7 @@ for (const name of scen) {
               [process.env.TW || 'none', [{ skill: 0.8 }, { skill: 0.8 }]],
               [process.env.TW || 'none', [{ skill: 0.5 }, { skill: 0.5 }]],
             ];
-    const wins = [0, 0, 0];
+    const wins = [0, 0, 0, 0, 0];
     for (const [tw, cfg] of list) {
       const { browser, page, errors } = await open(tw);
       await installBots(page, cfg);
@@ -125,10 +129,11 @@ for (const name of scen) {
       check(res.finished && res.fin === 1, `finishPvp precies 1x (fin=${res.fin})`);
       check(res.result && res.result.winner != null || name === 'idle', `winnaar bepaald (${res.result && res.result.winner})`);
       if (res.result && res.result.winner != null) wins[res.result.winner]++;
+      if (NP > 2 && res.result && res.result.winner != null) check(res.result.place && res.result.place.length === NP, `volledige plaatsen voor ${NP} spelers`);
       check(errors.length === 0, errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'geen console-errors');
       await browser.close();
     }
-    if (name === 'bots') check(wins[0] > 0 && wins[1] > 0, `beide spelers kunnen winnen (${wins})`);
+    if (name === 'bots') check(wins.filter((w) => w > 0).length >= 2, `minstens twee verschillende spelers kunnen winnen (${wins})`);
     continue;
   }
   if (name === 'hooks') {

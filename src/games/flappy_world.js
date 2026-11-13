@@ -3,7 +3,15 @@ import { mat, mesh, canvasTex, clamp, lerp, TAU, mulberry32 } from '../engine/ut
 
 // Wereld van de Wolkenrace: parcours (voor beide banen identiek), banen met geïnstancede wolken-pilaren, munten, vogels, stormwolken,
 // windvlagen, power-ups en parallax-achtergronden (zonsondergang boven, schemering onder).
-export const FL = { L: 760, H: 10.5, X0: -9, Y0: [0.6, -11.1], HW: 24, DZ: 28 };
+export const FL = { L: 760, H: 10.5, X0: -9, Y0: [0.6, -11.1], HW: 24, DZ: 28, AHEAD: 28, BEHIND: 26, CY: 0, DS: 1 };   // CY: hoogte van de camera; DS: weergaveschaal draken
+// Banen boven elkaar voor 2, 3 of 4 spelers: de camera gaat verder weg zodat alles in beeld past (FL wordt in place aangepast; elke create() roept dit aan).
+export function setLayout(n) {
+  const H = FL.H, pitch = H + (n === 2 ? 1.2 : 1.9); FL.Y0.length = 0;
+  for (let i = 0; i < n; i++) FL.Y0.push(n === 2 ? [0.6, -11.1][i] : ((n - 1) / 2 - i) * pitch - H / 2);
+  FL.DZ = n === 2 ? 28 : n === 3 ? 42 : 59; FL.CY = n === 2 ? 0 : n === 3 ? 1.0 : 1.6; FL.DS = n === 2 ? 1 : n === 3 ? 1.12 : 1.28;
+  FL.HW = n === 2 ? 24 : n === 3 ? 28 : 40;
+  FL.AHEAD = n === 2 ? 28 : n === 3 ? 38 : 56; FL.BEHIND = n === 2 ? 26 : n === 3 ? 30 : 40;
+}
 const { L, H } = FL;
 export const POW = {
   shield: { name: 'SCHILD', icon: '🛡️', col: '#6fd8ff', hex: 0x6fd8ff, w: 3 },
@@ -129,7 +137,7 @@ export function pillarBlobs(p, out) {   // blobs voor boven- en onderblok -> out
 }
 
 export function buildLane(ctx, i, course, rng) {
-  const { scene } = ctx; const y0 = FL.Y0[i];
+  const { scene } = ctx; const y0 = FL.Y0[i], iv = i % 2;   // iv: lucht-variant (0 = zonsondergang, 1 = schemering): afwisselend, zodat banen naast elkaar te onderscheiden zijn
   const root = new THREE.Group(); root.position.y = y0; scene.add(root);
   const group = new THREE.Group(); root.add(group);   // verschuift met de voortgang
 
@@ -142,16 +150,16 @@ export function buildLane(ctx, i, course, rng) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(w * k, hS * k), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthWrite: false, opacity, fog: false }));
     m.position.set(0, projY(yc, z), z); m.renderOrder = -10 + Math.round(z); bgGroup.add(m); lay.push({ t, f, period, w }); return m;
   };
-  const skyTop = i ? '#6f5bd8' : '#ff8f5a', skyBot = i ? '#ffb4e4' : '#ffe9ae';
+  const skyTop = iv ? '#6f5bd8' : '#ff8f5a', skyBot = iv ? '#ffb4e4' : '#ffe9ae';
   { const k = kz(-62); const sky = new THREE.Mesh(new THREE.PlaneGeometry(FL.HW * 2.4 * k, (H + 1.2) * k), new THREE.MeshBasicMaterial({ map: gradTex(skyTop, skyBot), fog: false, depthWrite: false })); sky.position.set(0, projY(H / 2, -62), -62); sky.renderOrder = -30; bgGroup.add(sky); }
-  { const k = kz(-40); const sunS = new THREE.Sprite(new THREE.SpriteMaterial({ map: discTex(i ? '#fff6e0' : '#fff2b0', i ? 'rgba(255,200,240,.5)' : 'rgba(255,170,90,.5)'), transparent: true, depthWrite: false, fog: false })); const sz = (i ? 9 : 12) * k; sunS.scale.set(sz, sz, 1); sunS.position.set((i ? 13 : 15) * k, projY(H * 0.6, -40), -40); sunS.renderOrder = -25; bgGroup.add(sunS); }
+  { const k = kz(-40); const sunS = new THREE.Sprite(new THREE.SpriteMaterial({ map: discTex(iv ? '#fff6e0' : '#fff2b0', iv ? 'rgba(255,200,240,.5)' : 'rgba(255,170,90,.5)'), transparent: true, depthWrite: false, fog: false })); const sz = (iv ? 9 : 12) * k; sunS.scale.set(sz, sz, 1); sunS.position.set((i ? 13 : 15) * k, projY(H * 0.6, -40), -40); sunS.renderOrder = -25; bgGroup.add(sunS); }
   addLayer(srcTex('rain', rainbowTex), -46, 0.04, 58, H * 0.46, H * 1.1, 0.9);
-  addLayer(srcTex('farc' + i, () => puffTex(i ? '#f3d8ff' : '#fff0d2', i ? '#c9a4ff' : '#ffc890', 11, 512, 160, 12, 30, 0.0)), -30, 0.12, 36, H * 0.36, 5.5, 0.85);
-  addLayer(srcTex('midc' + i, () => puffTex(i ? '#ffe9fb' : '#fff8e6', i ? '#e2b6ff' : '#ffd6a0', 23, 512, 192, 9, 36, 0.0)), -14, 0.4, 30, H * 0.7, 7.5, 0.9);
+  addLayer(srcTex('farc' + iv, () => puffTex(iv ? '#f3d8ff' : '#fff0d2', iv ? '#c9a4ff' : '#ffc890', 11, 512, 160, 12, 30, 0.0)), -30, 0.12, 36, H * 0.36, 5.5, 0.85);
+  addLayer(srcTex('midc' + iv, () => puffTex(iv ? '#ffe9fb' : '#fff8e6', iv ? '#e2b6ff' : '#ffd6a0', 23, 512, 192, 9, 36, 0.0)), -14, 0.4, 30, H * 0.7, 7.5, 0.9);
   // wolkenzee onder (vloer) en wolkenplafond boven: schuiven 1:1 met de wereld
-  const fh = i ? 3.6 : 2.1, fb = i ? 0.6 : 0.12, ch = i ? 2.1 : 4.1, cb = i ? 0.12 : 0.5;
-  const floorSrc = srcTex('floor' + i, () => puffTex('#ffffff', i ? '#e0c8ff' : '#ffd9b0', 5, 512, 128, 12, 30, fb));
-  const ceilSrc = srcTex('ceil' + i, () => puffTex('#ffffff', i ? '#d6b8ff' : '#ffcf9a', 8, 512, 128, 12, 30, cb));
+  const fh = iv ? 3.6 : 2.1, fb = iv ? 0.6 : 0.12, ch = iv ? 2.1 : 4.1, cb = iv ? 0.12 : 0.5;
+  const floorSrc = srcTex('floor' + iv, () => puffTex('#ffffff', iv ? '#e0c8ff' : '#ffd9b0', 5, 512, 128, 12, 30, fb));
+  const ceilSrc = srcTex('ceil' + iv, () => puffTex('#ffffff', iv ? '#d6b8ff' : '#ffcf9a', 8, 512, 128, 12, 30, cb));
   const fl = addLayer(floorSrc, -0.4, 1.0, 22, 1.5 - fh / 2, fh, 1); fl.renderOrder = 3;
   const cl = addLayer(ceilSrc, -0.4, 1.0, 22, H - 1.5 + ch / 2, ch, 1); cl.scale.y = -1; cl.renderOrder = 3;
 
@@ -177,7 +185,7 @@ export function buildLane(ctx, i, course, rng) {
   const treasIM = blobsFor(treasB, 0xffd0e0, 0xffa0c0); group.add(treasIM); treasIM.frustumCulled = false;
   // ---- munten ----
   const NC = course.coins.length; const coinG = new THREE.CylinderGeometry(0.42, 0.42, 0.14, 16); coinG.rotateX(Math.PI / 2);
-  const coinIM = new THREE.InstancedMesh(coinG, new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xff9a10, emissiveIntensity: 0.55, metalness: 0.7, roughness: 0.3 }), Math.max(1, Math.min(NC, 90))); coinIM.frustumCulled = false; group.add(coinIM);
+  const coinIM = new THREE.InstancedMesh(coinG, new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xff9a10, emissiveIntensity: 0.55, metalness: 0.7, roughness: 0.3 }), Math.max(1, Math.min(NC, 220))); coinIM.frustumCulled = false; group.add(coinIM);
   // ---- windvlaktes ----
   const windMeshes = course.winds.map((w) => { const t = srcTex('arrow', arrowTex).clone(); t.needsUpdate = true; t.wrapS = t.wrapT = THREE.RepeatWrapping; const len = w.x1 - w.x0; t.repeat.set(len / 5, H / 6); const m = new THREE.Mesh(new THREE.PlaneGeometry(len, H), new THREE.MeshBasicMaterial({ map: t, transparent: true, opacity: 0.55, depthWrite: false, color: w.dir > 0 ? 0xbfffd0 : 0xffd0e0, fog: false })); m.position.set((w.x0 + w.x1) / 2, H / 2, -0.8); m.renderOrder = 1; group.add(m); return { m, t, dir: w.dir }; });
   // ---- vogels ----
@@ -204,20 +212,20 @@ export function buildLane(ctx, i, course, rng) {
     group.position.x = -progress;
     for (const l of lay) l.t.offset.x = (progress * l.f) / l.period;
     // munten: venster [progress-26, progress+26]
-    while (cLo < NC && course.coins[cLo].x < progress - 26) cLo++;
+    while (cLo < NC && course.coins[cLo].x < progress - FL.BEHIND) cLo++;
     let n = 0; const mx = coinIM.count; vis.length = 0;
-    for (let k = cLo; k < NC && n < 90; k++) {
-      const c = course.coins[k]; if (c.x > progress + 28) break; if (!st.coinAlive[k]) continue; if (c.t >= 0 && st.treas[c.t]) continue;
+    for (let k = cLo; k < NC && n < 220; k++) {
+      const c = course.coins[k]; if (c.x > progress + FL.AHEAD) break; if (!st.coinAlive[k]) continue; if (c.t >= 0 && st.treas[c.t]) continue;
       const fly = st.coinFly[k]; const px = fly ? st.coinFx[k] : c.x, py = fly ? st.coinFy[k] : c.y;
       tmp.e.set(0, t * 3.2 + k * 0.7, 0); tmp.q.setFromEuler(tmp.e); tmp.m.compose(tmp.p.set(px, py + Math.sin(t * 2 + k) * 0.08, 0), tmp.q, tmp.s.set(1, 1, 1)); coinIM.setMatrixAt(n++, tmp.m);
     }
     coinIM.count = n; coinIM.instanceMatrix.needsUpdate = true;
     // vogels
-    course.birds.forEach((b, k) => { const s = st.bird[k], m = birds[k]; const inWin = b.x > progress - 22 && b.x < progress + 28; if (s.s === 2 || !inWin) { m.group.visible = false; return; } m.group.visible = true;
+    course.birds.forEach((b, k) => { const s = st.bird[k], m = birds[k]; const inWin = b.x > progress - FL.BEHIND && b.x < progress + FL.AHEAD; if (s.s === 2 || !inWin) { m.group.visible = false; return; } m.group.visible = true;
       const wing = Math.sin(t * 14 + k * 2) * 0.9; for (const w of m.wings) w.p.rotation.x = w.s * wing; });
-    course.pows.forEach((p, k) => { const m = pows[k]; const inWin = st.pow[k] && p.x > progress - 22 && p.x < progress + 28; m.group.visible = inWin; if (inWin) { m.group.position.y = p.y + Math.sin(t * 2.4 + k) * 0.25; m.ring.rotation.z += dt * 2; m.ring.rotation.x = 1.2 + Math.sin(t * 2) * 0.2; m.halo.material.opacity = 0.6 + Math.sin(t * 5 + k) * 0.25; } });
+    course.pows.forEach((p, k) => { const m = pows[k]; const inWin = st.pow[k] && p.x > progress - FL.BEHIND && p.x < progress + FL.AHEAD; m.group.visible = inWin; if (inWin) { m.group.position.y = p.y + Math.sin(t * 2.4 + k) * 0.25; m.ring.rotation.z += dt * 2; m.ring.rotation.x = 1.2 + Math.sin(t * 2) * 0.2; m.halo.material.opacity = 0.6 + Math.sin(t * 5 + k) * 0.25; } });
     for (const w of windMeshes) w.t.offset.y -= dt * 1.1 * w.dir * 0.5;
-    course.storms.forEach((s, k) => { const f = stormFlash[k]; const near = s.x > progress - 24 && s.x < progress + 28 && st.storm[k]; f.material.opacity = near ? Math.max(0, Math.sin(t * 3.1 + k * 4) * 3 - 2.4) : 0; });
+    course.storms.forEach((s, k) => { const f = stormFlash[k]; const near = s.x > progress - FL.BEHIND && s.x < progress + FL.AHEAD && st.storm[k]; f.material.opacity = near ? Math.max(0, Math.sin(t * 3.1 + k * 4) * 3 - 2.4) : 0; });
     // vogels zitten in de baan-groep op hun eigen positie (door de logica gezet)
   }
   return { i, y0, root, group, st, birdsM: birds, powsM: pows, coinIM, stormIM, render, destroyPillarPart, destroyStorm, destroyTreas, bg: bgGroup, vis };

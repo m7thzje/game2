@@ -19,17 +19,24 @@ export default {
   giver: 'Schatmeester Goudoog',
   icon: '🗝️',
   mode: 'pvp',
+  players: [2, 4],   // 2 = twee dieven; 4 = 2 tegen 2: elk team twee dieven met één gezamenlijk luik en één gezamenlijke buit
+  teams: true,
   time: 80,
   music: 'game_minor',
-  blurb: 'Dieven in een kasteel vol goud! Sluip langs <b>ridders, honden en de draak</b>, open kisten en breng je buit naar je eigen <b>luik</b>. Na 80 s wint de rijkste (of wie als eerste <b>500</b> heeft).',
+  blurb: 'Dieven in een kasteel vol goud! Met <b>4 spelers</b> spelen jullie <b>2 tegen 2</b>: elk team deelt één luik en één buit (eerst <b>750</b>). Sluip langs <b>ridders, honden en de draak</b>, open kisten en breng je buit naar je eigen <b>luik</b>. Na 80 s wint de rijkste (of wie als eerste <b>500</b> heeft).',
   controls: ['{move} sluipen', '{a} houden = kist openen', '{b} munt gooien (lokt wachters)'],
   tip: 'Gezien = alarm! Gooi een munt bij je broer om de wachters op hém af te sturen.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp; const names = players.map((p) => p.name);
+    const N = players.length;
+    const teamOf = ctx.teams ? ctx.teamOf.slice() : players.map((_, i) => i);   // team = kant van het kasteel (0 links, 1 rechts) = luik
+    const members = [0, 1].map((t) => players.map((_, i) => i).filter((i) => teamOf[i] === t));
+    const teamName = (t) => members[t].map((i) => names[i]).join(' & ');
+    const TARGET = N > 2 ? 750 : 500;
     const GRAV = pv.gravity || 1, SLIP = pv.slip || 0;
-    const TEMPO = pv.speed(0) === pv.speed(1) ? pv.speed(0) : 1;
+    const TEMPO = players.every((_, i) => pv.speed(i) === pv.speed(0)) ? pv.speed(0) : 1;
     const GSP = lerp(1, TEMPO, 0.5);                        // wachters schalen een beetje mee met turbo/slowmo
     const M = buildMap();
     const L = ctx.lights('night', { shadow: 30, center: [0, 0, 0], fogNear: 70, fogFar: 160 });
@@ -41,25 +48,28 @@ export default {
 
     // ---------------- toestand ----------------
     let T = 0, introT = 0, finished = false, ended = false, endT = 0, winner = -1, alarm = 0, lastCall = false, crownT = 0;
-    const stats = { chests: [0, 0], alarms: [0, 0], caught: [0, 0], coins: [0, 0], hats: [0, 0], lasers: [0, 0], pickpocket: [0, 0], chicken: 0, dragon: 0, deurman: 0, crown: 0 };
+    const z0 = () => new Array(N).fill(0);
+    const stats = { chests: z0(), alarms: z0(), caught: z0(), coins: z0(), hats: z0(), lasers: z0(), pickpocket: z0(), chicken: 0, dragon: 0, deurman: 0, crown: 0 };
     const rnd = Math.random;
     const floorTiles = []; for (let r = 0; r < H; r++) for (let c = 0; c < W; c++) if (!M.solid[r * W + c] && M.ch[r][c] !== 'l') floorTiles.push([c, r]);
     const tileSide = (c) => (c < 12 ? 0 : c > 12 ? 1 : -1);
 
     // ---------------- dieven ----------------
-    const th = [0, 1].map((i) => {
+    const th = players.map((_, i) => {
       const c = makeBandit(i); const holder = new THREE.Group(); holder.add(c.group);
-      const h = M.hatches[i]; const k = 3.1 / c.height * lerp(1, pv.size(i), 0.7); holder.scale.setScalar(k); scene.add(holder);
+      const team = teamOf[i], mi = members[team].indexOf(i);
+      const h = M.hatches[team]; const k = 3.1 / c.height * lerp(1, pv.size(i), 0.7); holder.scale.setScalar(k); scene.add(holder);
       const tag = liveSprite(3.6); tag.userData.set(names[i], players[i].css, 0); scene.add(tag);
       const bg = mesh(new THREE.PlaneGeometry(2.4, 0.34), new THREE.MeshBasicMaterial({ color: 0x120a22, transparent: true, opacity: 0.85, depthTest: false }), { cast: false, receive: false }); bg.renderOrder = 12; bg.rotation.x = -0.9;
       const fill = mesh(new THREE.PlaneGeometry(2.3, 0.24), new THREE.MeshBasicMaterial({ color: 0xffe14a, depthTest: false }), { cast: false, receive: false }); fill.renderOrder = 13; fill.rotation.x = -0.9;
       scene.add(bg, fill);
       const ring = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.8, 24), new THREE.MeshBasicMaterial({ color: players[i].color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.12; scene.add(ring);
       const bang = textSprite('!', '#ff4a3a', 1.6); bang.visible = false; scene.add(bang);
-      const sx = tx(h.c) + (i ? -1 : 1) * TILE, sz = tz(h.r);
-      return { i, c, holder, tag, bg, fill, ring, bang, x: sx, z: sz, vx: 0, vz: 0, fx: i ? -1 : 1, fz: 0, R: R0 * lerp(1, pv.size(i), 0.6), carry: 0, bank: 0, alert: 0, invuln: 0, stun: 0, disguise: 0, bCd: 3, prog: 0, progT: null, laserImm: 0, pickCd: 0, dropT: 0, depT: 0, comeback: false, lastTag: '', crown: false, hatch: h, pose: 'idle', lastTxt: '', opened: 0, caughtT: 0 };
+      const sx = tx(h.c) + (team ? -1 : 1) * TILE, sz = tz(h.r) + (members[team].length > 1 ? (mi ? 0.6 : -0.6) * TILE : 0);
+      return { i, team, mi, c, holder, tag, bg, fill, ring, bang, x: sx, z: sz, vx: 0, vz: 0, fx: team ? -1 : 1, fz: 0, R: R0 * lerp(1, pv.size(i), 0.6), carry: 0, bank: 0, alert: 0, invuln: 0, stun: 0, disguise: 0, bCd: 3, prog: 0, progT: null, laserImm: 0, pickCd: 0, dropT: 0, depT: 0, comeback: false, lastTag: '', crown: false, hatch: h, pose: 'idle', lastTxt: '', opened: 0, caughtT: 0 };
     });
-    const hatchPos = (i) => ({ x: tx(M.hatches[i].c), z: tz(M.hatches[i].r) });
+    const hatchPos = (team) => ({ x: tx(M.hatches[team].c), z: tz(M.hatches[team].r) });   // luik van een team (bij 2 spelers = de dief zelf)
+    const tbank = (t) => th.filter((q) => q.team === t).reduce((a, q) => a + q.bank, 0);        // gezamenlijke buit van een team
 
     // ---------------- kisten ----------------
     const chests = M.chests.map((d) => {
@@ -90,14 +100,14 @@ export default {
       const cone = makeCone(14); scene.add(cone.mesh);
       const icon = mkIcon('?', '#ffe14a'); icon.visible = false; scene.add(icon);
       const [c0, r0] = d.route[0];
-      return { k, type: d.type, model, grp, cone, icon, dog, x: tx(c0), z: tz(r0), yaw: 0, ty: 0, route: d.route, wpi: 0, state: 'patrol', stateT: 0, goal: null, field: new Int16Array(W * H), fgc: -1, fgr: -1, speed: dog ? 3.2 : cap ? 2.0 : 2.4, chase: dog ? 6.0 : cap ? 4.3 : 4.2, range: dog ? 6.5 : cap ? 9 : 8, half: dog ? 0.7 : cap ? 0.44 : 0.52, sus: [0, 0], target: -1, last: null, wait: 0, chaseT: 0, sw: rnd() * 6, moving: 0 };
+      return { k, type: d.type, model, grp, cone, icon, dog, x: tx(c0), z: tz(r0), yaw: 0, ty: 0, route: d.route, wpi: 0, state: 'patrol', stateT: 0, goal: null, field: new Int16Array(W * H), fgc: -1, fgr: -1, speed: dog ? 3.2 : cap ? 2.0 : 2.4, chase: dog ? 6.0 : cap ? 4.3 : 4.2, range: dog ? 6.5 : cap ? 9 : 8, half: dog ? 0.7 : cap ? 0.44 : 0.52, sus: z0(), target: -1, last: null, wait: 0, chaseT: 0, sw: rnd() * 6, moving: 0 };
     });
     // draak (slaapt)
     const drag = (() => {
       const d = new Dragon(0xd8402a, 1.0); const grp = new THREE.Group(); grp.add(d.group); grp.scale.setScalar(1.15); scene.add(grp);
       const cone = makeCone(14); scene.add(cone.mesh); cone.mesh.visible = false;
       const icon = textSprite('ZZZ', '#aee0ff', 2.2); scene.add(icon);
-      return { type: 'dragon', model: d, grp, cone, icon, x: tx(M.dragon.c), z: tz(M.dragon.r), yaw: Math.PI, home: [M.dragon.c, M.dragon.r], state: 'sleep', meter: 0, stateT: 0, cool: 0, field: new Int16Array(W * H), fgc: -1, fgr: -1, speed: 2.5, chase: 3.4, range: 9, half: 0.5, target: -1, sus: [0, 0], sw: 0, zT: 0 };
+      return { type: 'dragon', model: d, grp, cone, icon, x: tx(M.dragon.c), z: tz(M.dragon.r), yaw: Math.PI, home: [M.dragon.c, M.dragon.r], state: 'sleep', meter: 0, stateT: 0, cool: 0, field: new Int16Array(W * H), fgc: -1, fgr: -1, speed: 2.5, chase: 3.4, range: 9, half: 0.5, target: -1, sus: z0(), sw: 0, zT: 0 };
     })();
     drag.grp.position.set(drag.x, 0, drag.z); drag.grp.rotation.y = Math.PI;
     const allG = [...guards, drag];
@@ -109,10 +119,10 @@ export default {
     });
     const dm = { on: false, g: makeDeurman(0.85), x: 0, z: 0, t: 0, next: 24 + rnd() * 10, field: new Int16Array(W * H), fgc: -1, fgr: -1, fade: 0 };
     dm.g.group.visible = false; scene.add(dm.g.group);
-    const hats = [0, 1].map(() => { const g = makeHatPickup(); g.visible = false; scene.add(g); return { on: false, x: 0, z: 0, g, life: 0 }; });
+    const hats = Array.from({ length: N > 2 ? 3 : 2 }, () => { const g = makeHatPickup(); g.visible = false; scene.add(g); return { on: false, x: 0, z: 0, g, life: 0 }; });
     let hatT = 10;
-    const coins = Array.from({ length: 4 }, () => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.07, 10), new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xffa500, emissiveIntensity: 0.7, metalness: 0.7 })); m.visible = false; scene.add(m); return { on: false, m, t: 0, sx: 0, sz: 0, ex: 0, ez: 0, owner: 0 }; });
-    const coinMarks = [0, 1].map(() => { const g = glowDisc(0xffe070, 3.4, 0.55, 0.1); g.visible = false; scene.add(g); return g; });
+    const coins = Array.from({ length: 2 * N }, () => { const m = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.07, 10), new THREE.MeshStandardMaterial({ color: 0xffd23f, emissive: 0xffa500, emissiveIntensity: 0.7, metalness: 0.7 })); m.visible = false; scene.add(m); return { on: false, m, t: 0, sx: 0, sz: 0, ex: 0, ez: 0, owner: 0 }; });
+    const coinMarks = players.map(() => { const g = glowDisc(0xffe070, 3.4, 0.55, 0.1); g.visible = false; scene.add(g); return g; });
 
     // ---------------- hulp: paden ----------------
     function navigate(o, gc, gr, speed, dt) {
@@ -131,7 +141,7 @@ export default {
     function nearestFloor(x, z) { let c = cx_(x), r = cz_(z); if (!isSolidC(M, c, r)) return [c, r]; for (let d = 1; d < 4; d++) for (let dr = -d; dr <= d; dr++) for (let dc = -d; dc <= d; dc++) if (!isSolidC(M, c + dc, r + dr)) return [c + dc, r + dr]; return [1, 1]; }
 
     // ---------------- alarm en straf ----------------
-    function inSafe(t) { const h = hatchPos(t.i); return Math.hypot(t.x - h.x, t.z - h.z) < 1.5; }
+    function inSafe(t) { const h = hatchPos(t.team); return Math.hypot(t.x - h.x, t.z - h.z) < 1.5; }
     function setAlarm(v) { alarm = Math.max(alarm, v); }
     function raise(i, by) {
       const t = th[i]; if (t.alert > 2.0 || t.invuln > 0) { t.alert = Math.max(t.alert, 5); return; }
@@ -149,11 +159,11 @@ export default {
       t.carry = 0; t.crown = false; t.alert = 0; t.disguise = 0;
       fx.particles.burst(t.x, 1, t.z, { count: 30, speed: 6, up: 1.2, life: 0.8, size: 0.5, colors: [0xffffff, 0xffe14a, 0xff6a3a], gravity: 5 });
       fx.texts.add('GEPAKT!', t.x, 3.6, t.z, '#ff5a3a', 1.7); sfx('hurt', { vol: 0.8 }); sfx('slam', { vol: 0.5 }); ctx.shake(0.6);
-      const h = hatchPos(i); t.x = h.x + (i ? -1 : 1) * TILE; t.z = h.z; t.vx = t.vz = 0; t.stun = 1.4; t.invuln = 3.2; t.prog = 0; t.progT = null;
+      const h = hatchPos(t.team); t.x = h.x + (t.team ? -1 : 1) * TILE; t.z = h.z + (members[t.team].length > 1 ? (t.mi ? 0.6 : -0.6) * TILE : 0); t.vx = t.vz = 0; t.stun = 1.4; t.invuln = 3.2; t.prog = 0; t.progT = null;
       fx.particles.burst(t.x, 1, t.z, { count: 20, speed: 4, up: 1.4, life: 0.7, size: 0.4, colors: [0xffffff, 0x9fe8ff], gravity: 3 });
       for (const g of guards) if (g.target === i && g.state === 'chase') { g.state = 'search'; g.stateT = 0; g.goal = null; g.last = [by ? by.x : t.x, by ? by.z : t.z]; }
       if (drag.target === i) drag.target = -1;
-      hud.toast(`${names[i]} is gepakt en moet terug naar zijn luik!`, 1800);
+      hud.toast(`${names[i]} is gepakt en moet terug naar ${N > 2 ? 'het' : 'zijn'} luik!`, 1800);
     }
     function noise(x, z, who, radius = 24) {
       const [gc, gr] = nearestFloor(x, z);
@@ -162,7 +172,7 @@ export default {
     }
 
     // ---------------- inputs en acties ----------------
-    function trailing(i) { return th[1 - i].bank - th[i].bank >= 80; }
+    function trailing(i) { return tbank(1 - th[i].team) - tbank(th[i].team) >= 80; }
     function openChest(i, ch) {
       const t = th[i];
       const mult = t.comeback ? 1.35 : 1; const val = Math.round(ch.val * mult);
@@ -211,15 +221,15 @@ export default {
       t.x += t.vx * dt; t.z += t.vz * dt;
       if (Math.hypot(mx, mz) > 0.25) { const l = Math.hypot(mx, mz); t.fx = mx / l; t.fz = mz / l; }
       const p = { x: t.x, z: t.z }; if (pushOut(M, p, t.R)) { t.x = p.x; t.z = p.z; }
-      const o = th[1 - i]; const dx = t.x - o.x, dz = t.z - o.z, dd = Math.hypot(dx, dz), mm = t.R + o.R;
-      if (dd < mm && dd > 1e-4) { const k = (mm - dd) / 2; t.x += dx / dd * k; t.z += dz / dd * k; o.x -= dx / dd * k; o.z -= dz / dd * k; }
+      for (const q of th) { if (q === t) continue; const dx = t.x - q.x, dz = t.z - q.z, dd = Math.hypot(dx, dz), mm = t.R + q.R;
+        if (dd < mm && dd > 1e-4) { const k = (mm - dd) / 2; t.x += dx / dd * k; t.z += dz / dd * k; q.x -= dx / dd * k; q.z -= dz / dd * k; } }
       // interactie (A)
       let prompt = '';
-      let target = null, tkind = null, bd = 1e9;
+      let target = null, tkind = null, bd = 1e9, o = null;
       if (!stunned) {
         for (const q of piles) if (q.on) { const d = Math.hypot(q.x - t.x, q.z - t.z); if (d < 1.9 && d < bd) { bd = d; target = q; tkind = 'pile'; } }
         if (!target) for (const ch of chests) if (ch.full) { const d = Math.hypot(ch.x - t.x, ch.z - t.z); if (d < 1.9 && d < bd) { bd = d; target = ch; tkind = 'chest'; } }
-        if (!target && o.carry >= 10 && t.pickCd <= 0 && Math.hypot(o.x - t.x, o.z - t.z) < 1.6 && o.invuln <= 0 && !inSafe(o)) { target = o; tkind = 'rob'; }
+        if (!target && t.pickCd <= 0) { o = th.find((q) => q.team !== t.team && q.carry >= 10 && Math.hypot(q.x - t.x, q.z - t.z) < 1.6 && q.invuln <= 0 && !inSafe(q)) || null; if (o) { target = o; tkind = 'rob'; } }
       }
       if (tkind === 'pile') { prompt = `A: pak ${target.val} goud`; if (inp.aP) { t.carry += target.val; target.on = false; target.g.visible = false; fx.texts.add(`+${target.val}`, target.x, 3, target.z, '#ffe14a', 1.2); sfx('coin', { vol: 0.7 }); t.c.swing(); } }
       else if (tkind === 'chest') {
@@ -232,7 +242,7 @@ export default {
       // buit neerleggen (lang A houden zonder iets in de buurt)
       if (!target && inp.a && t.carry > 0 && !stunned && !inSafe(t)) { t.dropT += dt; prompt = 'A houden: buit neerleggen'; if (t.dropT > 0.7) { t.dropT = 0; dropPile(t.x, t.z, t.carry, 0.4); fx.texts.add('NEERGELEGD', t.x, 3, t.z, '#fff', 1.0); t.carry = 0; t.crown = false; sfx('thud', { vol: 0.4 }); } } else t.dropT = 0;
       // inleveren bij het eigen luik
-      const h = hatchPos(i);
+      const h = hatchPos(t.team);
       if (t.carry > 0 && Math.hypot(t.x - h.x, t.z - h.z) < 1.3 && !stunned) { t.depT += dt; prompt = 'Inleveren...'; if (t.depT > 0.45) bankIt(i); } else t.depT = 0;
       // B: munt
       if (inp.bP && t.bCd <= 0 && !stunned) throwCoin(i);
@@ -251,11 +261,11 @@ export default {
     }
     function bankIt(i) {
       const t = th[i]; const v = t.carry; t.carry = 0; t.bank += v; t.depT = 0; t.crown = false;
-      const h = hatchPos(i);
-      fx.particles.burst(h.x, 1, h.z, { count: 40, speed: 7, up: 1.6, life: 1.2, size: 0.45, colors: [0xffd23f, 0xffe680, 0xffffff, i ? 0x8fb8ff : 0x7dffb0], gravity: 7 });
+      const h = hatchPos(t.team);
+      fx.particles.burst(h.x, 1, h.z, { count: 40, speed: 7, up: 1.6, life: 1.2, size: 0.45, colors: [0xffd23f, 0xffe680, 0xffffff, t.team ? 0x8fb8ff : 0x7dffb0], gravity: 7 });
       fx.texts.add(`+${v} VEILIG!`, h.x, 3.4, h.z, '#8dff6a', 1.5); sfx('win', { vol: 0.4 }); sfx('coin', { vol: 0.8 }); sfx('sparkle', { vol: 0.5 }); t.c.pose = 'cheer'; t.cheerT = 0.9;
       refreshHud();
-      if (t.bank >= TARGET && !ended) endGame(i, 'target');
+      if (tbank(t.team) >= TARGET && !ended) endGame(t.team, 'target');
     }
     const laserOn = (lz) => ((T + lz.phase * 0.9) % CYCLE) < CYCLE * 0.5;
 
@@ -312,6 +322,7 @@ export default {
       const p = { x: g.x, z: g.z }; if (pushOut(M, p, 0.35)) { g.x = p.x; g.z = p.z; }
       g.ys = sweep;
     }
+    const nearestThief = (o) => th.reduce((a, q) => (Math.hypot(q.x - o.x, q.z - o.z) < Math.hypot(a.x - o.x, a.z - o.z) ? q : a), th[0]);
     function updateDragon(dt) {
       const d = drag; d.zT -= dt; d.cool = Math.max(0, d.cool - dt);
       if (d.state === 'sleep') {
@@ -319,14 +330,14 @@ export default {
         for (const t of th) { const dist = Math.hypot(t.x - d.x, t.z - d.z); if (dist < 7.5 && t.invuln <= 0) near = Math.max(near, (Math.hypot(t.vx, t.vz) > 1 ? 0.14 : 0.04) + (t.progT ? 0.45 : 0)); }
         if (d.cool <= 0) d.meter = clamp(d.meter + (near > 0 ? near * dt : -0.12 * dt), 0, 1.2);
         if (d.zT <= 0) { d.zT = 1.6; fx.texts.add('Zzz', d.x + 1, 3.4, d.z - 1, '#aee0ff', 1.0); }
-        if (d.meter >= 1) wakeDragon(th[0].progT || Math.hypot(th[0].x - d.x, th[0].z - d.z) < Math.hypot(th[1].x - d.x, th[1].z - d.z) ? 0 : 1);
+        if (d.meter >= 1) wakeDragon((th.find((q) => q.progT) || nearestThief(d)).i);
         d.icon.visible = true; d.icon.position.set(d.x, 4.2, d.z); d.icon.scale.setScalar(1 + d.meter * 0.5); d.icon.material.color.setRGB(1, 1 - d.meter * 0.6, 1 - d.meter * 0.8);
         d.model.update(dt * 0.3);
       } else {
         d.icon.visible = false; d.stateT += dt; d.moving = 0;
         if (d.state === 'awake') {
           // dichtstbijzijnde dief jagen
-          let tg = d.target; if (tg < 0 || Math.hypot(th[1 - tg].x - d.x, th[1 - tg].z - d.z) < Math.hypot(th[tg].x - d.x, th[tg].z - d.z) * 0.6) tg = Math.hypot(th[0].x - d.x, th[0].z - d.z) < Math.hypot(th[1].x - d.x, th[1].z - d.z) ? 0 : 1; d.target = tg;
+          let tg = d.target; const nt = nearestThief(d).i; if (tg < 0 || (nt !== tg && Math.hypot(th[nt].x - d.x, th[nt].z - d.z) < Math.hypot(th[tg].x - d.x, th[tg].z - d.z) * 0.6)) tg = nt; d.target = tg;
           const t = th[tg]; const dx = t.x - d.x, dz = t.z - d.z, dist = Math.hypot(dx, dz);
           if (dist < 7 && los(M, d.x, d.z, t.x, t.z)) { const s = Math.min(d.chase * GSP * dt, dist); d.x += dx / dist * s; d.z += dz / dist * s; d.mx = dx / dist; d.mz = dz / dist; d.moving = 1; } else { const [c, r] = tileOf(t); navigate(d, c, r, d.chase * GSP, dt); }
           faceTo(d, d.mx || dx, d.mz || dz, dt, 5);
@@ -360,7 +371,7 @@ export default {
           fx.texts.add(`KIP STAAL ${amt}!`, c.x, 3, c.z, '#ffd23f', 1.4); sfx('hurt', { vol: 0.4, rate: 1.5 }); fx.particles.burst(c.x, 1, c.z, { count: 14, speed: 4, up: 1.2, life: 0.6, size: 0.3, colors: [0xffffff, 0xffd23f], gravity: 6 });
         } else { const [cc, rr] = tileOf(t); if (d < 3 && los(M, c.x, c.z, t.x, t.z)) { const s = Math.min(3.8 * GSP * dt, d); c.x += dx / d * s; c.z += dz / d * s; c.mx = dx / d; c.mz = dz / d; } else navigate(c, cc, rr, 3.6 * GSP, dt); moved = 1; }
       } else if (c.state === 'flee') {
-        if (!c.goal) { let best = null, bd = -1; for (let k = 0; k < 8; k++) { const o = floorTiles[(rnd() * floorTiles.length) | 0]; const dd = Math.min(Math.hypot(tx(o[0]) - th[0].x, tz(o[1]) - th[0].z), Math.hypot(tx(o[0]) - th[1].x, tz(o[1]) - th[1].z)); if (dd > bd) { bd = dd; best = o; } } c.goal = best; }
+        if (!c.goal) { let best = null, bd = -1; for (let k = 0; k < 8; k++) { const o = floorTiles[(rnd() * floorTiles.length) | 0]; const dd = Math.min(...th.map((q) => Math.hypot(tx(o[0]) - q.x, tz(o[1]) - q.z))); if (dd > bd) { bd = dd; best = o; } } c.goal = best; }
         const arr = navigate(c, c.goal[0], c.goal[1], 4.8 * GSP, dt); moved = 1; if (arr) c.goal = null;
         for (const t of th) if (Math.hypot(t.x - c.x, t.z - c.z) < 1.1 && t.stun <= 0) { t.carry += c.carry + 5; fx.texts.add(`TERUG! +${c.carry + 5}`, c.x, 3, c.z, '#8dff6a', 1.3); sfx('powerup', { vol: 0.5 }); c.carry = 0; c.state = 'wander'; c.goal = null; c.cool = 8; break; }
         if (c.state === 'flee' && c.t > 8) { dropPile(c.x, c.z, c.carry, 0.5); c.carry = 0; c.state = 'wander'; c.goal = null; c.cool = 10; }
@@ -373,7 +384,7 @@ export default {
       if (!dm.on) {
         dm.next -= dt;
         if (dm.next <= 0 && T > 15) {
-          let o, tries = 0; do { o = floorTiles[(rnd() * floorTiles.length) | 0]; tries++; } while (tries < 40 && (Math.hypot(tx(o[0]) - th[0].x, tz(o[1]) - th[0].z) < 14 || Math.hypot(tx(o[0]) - th[1].x, tz(o[1]) - th[1].z) < 14));
+          let o, tries = 0; do { o = floorTiles[(rnd() * floorTiles.length) | 0]; tries++; } while (tries < 40 && th.some((q) => Math.hypot(tx(o[0]) - q.x, tz(o[1]) - q.z) < 14));
           dm.on = true; dm.t = 0; dm.x = tx(o[0]); dm.z = tz(o[1]); dm.g.group.visible = true; dm.next = 35; stats.deurman++;
           hud.toast('Wie klopt daar...? De Deurman komt kijken. Niet beginnen te schreeuwen!', 2600); sfx('knock', { vol: 0.6 }); sfx('creak', { vol: 0.4 });
           fx.particles.burst(dm.x, 1, dm.z, { count: 20, speed: 3, up: 1, life: 1, size: 0.5, colors: [0xffffff, 0x8888aa], gravity: -1 });
@@ -381,7 +392,7 @@ export default {
         return;
       }
       dm.t += dt;
-      let tg = th[0].carry === th[1].carry ? (Math.hypot(th[0].x - dm.x, th[0].z - dm.z) < Math.hypot(th[1].x - dm.x, th[1].z - dm.z) ? 0 : 1) : (th[0].carry > th[1].carry ? 0 : 1);
+      const tg = th.reduce((a, q) => (q.carry > a.carry || (q.carry === a.carry && Math.hypot(q.x - dm.x, q.z - dm.z) < Math.hypot(a.x - dm.x, a.z - dm.z)) ? q : a), th[0]).i;   // de dief met de meeste buit (gelijk: de dichtstbijzijnde)
       const t = th[tg]; const [c, r] = tileOf(t); const sp = 2.2 * GSP;
       const arr = navigate(dm, c, r, sp, dt); dm.g.faceDir(dm.mx || 0, dm.mz || 0); dm.g.speed = 0.6; dm.g.update(dt);
       if (inSafe(t)) { /* in je luik ben je veilig */ }
@@ -391,7 +402,7 @@ export default {
     }
     function spawnHat() {
       const h = hats.find((q) => !q.on); if (!h) return;
-      const trail = th[0].bank === th[1].bank ? -1 : th[0].bank < th[1].bank ? 0 : 1;
+      const trail = tbank(0) === tbank(1) ? -1 : tbank(0) < tbank(1) ? 0 : 1;
       let o, tries = 0; do { o = floorTiles[(rnd() * floorTiles.length) | 0]; tries++; } while (tries < 40 && ((o[0] >= 9 && o[0] <= 15 && o[1] <= 3) || M.ch[o[1]][o[0]] !== '.' || (trail >= 0 && rnd() < 0.7 && tileSide(o[0]) !== trail)));
       h.on = true; h.x = tx(o[0]); h.z = tz(o[1]); h.life = 18; h.g.visible = true; h.g.position.set(h.x, 0, h.z);
       fx.particles.ring(h.x, 0.4, h.z, { count: 16, speed: 3, color: 0xff9ae0, size: 0.3, life: 0.6 }); sfx('sparkle', { vol: 0.4 });
@@ -399,27 +410,34 @@ export default {
     }
 
     // ---------------- einde ----------------
-    function endGame(w, how) {
+    function endGame(w, how) {   // w = winnend team (= luik; bij 2 spelers gelijk aan de speler)
       if (ended) return; ended = true; endT = 0; winner = w; stats.how = how;
-      th[w].c.pose = 'cheer'; th[1 - w].c.pose = 'sad'; hud.setTimer(null);
-      hud.showBig(how === 'target' ? `${names[w]} HEEFT ${TARGET}!` : 'TIJD OM!', 2000, '#ffd23f'); sfx('bell', { vol: 0.8 });
+      for (const t of th) t.c.pose = t.team === w ? 'cheer' : 'sad'; hud.setTimer(null);
+      hud.showBig(how === 'target' ? (N > 2 ? `${teamName(w)} HEBBEN ${TARGET}!` : `${names[w]} HEEFT ${TARGET}!`) : 'TIJD OM!', 2000, '#ffd23f'); sfx('bell', { vol: 0.8 });
       const h = hatchPos(w); fx.particles.burst(h.x, 2, h.z, { count: 70, speed: 9, up: 1.4, life: 1.5, size: 0.6, colors: [0xffd23f, 0xffffff, 0xff6fa5, 0x6fd8ff], gravity: 5 });
     }
     function finishGame() {
       if (finished) return; finished = true;
-      const w = winner, l = 1 - w;
-      const jokes = [`${names[w]} ging er met ${th[w].bank} goud vandoor. ${names[l]} had ${th[l].bank} en een hoofd vol alarmbellen.`, `Het kasteel is leeg! ${names[w]} (${th[w].bank}) is de slimste dief, ${names[l]} (${th[l].bank}) stond vooral in de gevangenis.`, `${names[w]} sloop als een kat. ${names[l]} sloop als een olifant. ${th[w].bank} tegen ${th[l].bank}.`];
-      ctx.finishPvp({ winner: w, score: [th[0].bank, th[1].bank], delay: 600, summary: `${pick(jokes)} (${stats.alarms[0] + stats.alarms[1]} alarmen, ${stats.caught[0] + stats.caught[1]}x gepakt${stats.crown ? ', de kroon is gestolen' : ''}${stats.chicken ? `, de kip stal ${stats.chicken}x` : ''}.)` });
+      const w = winner, l = 1 - w, many = members[w].length > 1;
+      const WN = teamName(w), LN = teamName(l), wb = tbank(w), lb = tbank(l);
+      const jokes = [`${WN} ${many ? 'gingen' : 'ging'} er met ${wb} goud vandoor. ${LN} ${members[l].length > 1 ? 'hadden' : 'had'} ${lb} en een hoofd vol alarmbellen.`, `Het kasteel is leeg! ${WN} (${wb}) ${many ? 'zijn de slimste dieven' : 'is de slimste dief'}, ${LN} (${lb}) ${members[l].length > 1 ? 'stonden' : 'stond'} vooral in de gevangenis.`, `${WN} ${many ? 'slopen' : 'sloop'} als een kat. ${LN} ${members[l].length > 1 ? 'slopen' : 'sloop'} als een olifant. ${wb} tegen ${lb}.`];
+      const sum = (a) => a.reduce((x, y) => x + y, 0);
+      const summary = `${pick(jokes)} (${sum(stats.alarms)} alarmen, ${sum(stats.caught)}x gepakt${stats.crown ? ', de kroon is gestolen' : ''}${stats.chicken ? `, de kip stal ${stats.chicken}x` : ''}.)`;
+      if (N === 2) ctx.finishPvp({ winner: w, score: [th[0].bank, th[1].bank], delay: 600, summary });
+      else {
+        const order = players.map((_, i) => i).sort((a, b) => (teamOf[b] === w) - (teamOf[a] === w) || th[b].bank - th[a].bank);   // winnend team eerst, daarbinnen op eigen ingeleverde buit
+        ctx.finishPvp({ winners: members[w].slice(), score: players.map((_, i) => tbank(teamOf[i])), place: order, delay: 600, summary: summary + ` Eigen buit: ${names.map((n, i) => `${n} ${th[i].bank}`).join(', ')}.` });
+      }
     }
     function timeUp() {
-      const a = th[0], b = th[1]; let w;
-      if (a.bank !== b.bank) w = a.bank > b.bank ? 0 : 1;
-      else if (a.carry !== b.carry) w = a.carry > b.carry ? 0 : 1;
-      else if (a.opened !== b.opened) w = a.opened > b.opened ? 0 : 1;
+      const ca = (t) => th.filter((q) => q.team === t), sm = (t, k) => ca(t).reduce((a, q) => a + q[k], 0); let w;
+      if (tbank(0) !== tbank(1)) w = tbank(0) > tbank(1) ? 0 : 1;
+      else if (sm(0, 'carry') !== sm(1, 'carry')) w = sm(0, 'carry') > sm(1, 'carry') ? 0 : 1;
+      else if (sm(0, 'opened') !== sm(1, 'opened')) w = sm(0, 'opened') > sm(1, 'opened') ? 0 : 1;
       else w = rnd() < 0.5 ? 0 : 1;
       endGame(w, 'time');
     }
-    function refreshHud() { hud.setScore(`${names[0]} ${th[0].bank}  –  ${th[1].bank} ${names[1]}`); }
+    function refreshHud() { hud.setScore(N === 2 ? `${names[0]} ${th[0].bank}  –  ${th[1].bank} ${names[1]}` : `${tbank(0)}  –  ${tbank(1)}`); }
 
     // ---------------- hoofdupdate ----------------
     function update(dt) {
@@ -504,7 +522,7 @@ export default {
         const col = g.state === 'chase' ? 0xff3a2a : g.state === 'investigate' || g.state === 'search' ? 0xffa030 : g.state === 'tired' ? 0x8888aa : g.dog ? 0xffc8a0 : 0xffeea0;
         g.cone.setColor(col, g.state === 'chase' ? 0.62 : 0.5); g.cone.mesh.visible = g.state !== 'tired';
         g.cone.update(M, g.x, g.z, look, g.range, g.half);
-        const sus = Math.max(g.sus[0], g.sus[1]);
+        const sus = Math.max(...g.sus);
         const ic = g.state === 'chase' ? '!' : (g.state === 'investigate' || g.state === 'search' || sus > 0.05) ? '?' : null;
         g.icon.visible = !!ic; if (ic) { g.icon.material.map = iconTex[ic]; g.icon.position.set(g.x, 4.0 + Math.sin(tt * 8) * 0.1, g.z); g.icon.scale.setScalar(ic === '!' ? 1.6 : 0.9 + sus * 1.0); g.icon.material.color.set(ic === '!' ? 0xff5a4a : 0xffe14a); }
       }
@@ -535,11 +553,11 @@ export default {
       onDeurman(movers) {
         movers.forEach((m, i) => { if (m) { const t = th[i]; const lose = Math.ceil(t.carry * 0.3); if (lose > 0) { t.carry -= lose; dropPile(t.x, t.z, lose, 1); } t.stun = 0.6; fx.texts.add('BEWOOG!', t.x, 3.6, t.z, '#c8c8d8', 1.4); sfx('static', { vol: 0.4 }); ctx.shake(0.3); } });
       },
-      celebrate(w) { th[w].c.pose = 'cheer'; th[1 - w].c.pose = 'sad'; },
+      celebrate(w, winners = [w]) { th.forEach((t, i) => { t.c.pose = winners.includes(i) ? 'cheer' : 'sad'; }); },
       dispose() {},
       dbg: {
         M, th, guards, drag, chests, piles, chickens, dm, hats, stats, TILE,
-        state: () => ({ T, ended, finished, winner, left: MATCH_TIME - T, bank: th.map((t) => t.bank), carry: th.map((t) => t.carry), alert: th.map((t) => +t.alert.toFixed(1)), caught: [...stats.caught], alarms: [...stats.alarms], stun: th.map((t) => t.stun), pos: th.map((t) => [t.x, t.z]), gstates: guards.map((g) => g.state), dragon: drag.state, meter: +drag.meter.toFixed(2), crownT, stats, hatCd: th.map((t) => t.bCd), full: chests.map((c) => c.full), disguise: th.map((t) => t.disguise) }),
+        state: () => ({ T, ended, finished, winner, left: MATCH_TIME - T, bank: th.map((t) => t.bank), tbank: [tbank(0), tbank(1)], carry: th.map((t) => t.carry), alert: th.map((t) => +t.alert.toFixed(1)), caught: [...stats.caught], alarms: [...stats.alarms], stun: th.map((t) => t.stun), pos: th.map((t) => [t.x, t.z]), gstates: guards.map((g) => g.state), dragon: drag.state, meter: +drag.meter.toFixed(2), crownT, stats, hatCd: th.map((t) => t.bCd), full: chests.map((c) => c.full), disguise: th.map((t) => t.disguise) }),
         setTime: (t) => { T = MATCH_TIME - t; }, give: (i, n) => { th[i].carry += n; }, setBank: (i, n) => { th[i].bank = n; refreshHud(); }, raise, jail, wakeDragon, spawnHat, bankIt, openChest,
         startDeurman: () => { dm.next = 0; T = Math.max(T, 16); }, noise, throwCoin, tp: (i, x, z) => { th[i].x = x; th[i].z = z; },
         fieldTo: (gc, gr) => bfsField(M, gc, gr), stepDir, cx_, cz_, tx, tz, setCrownPile: () => {},

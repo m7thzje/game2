@@ -21,16 +21,18 @@ export default {
   giver: 'Bibliothecaris Boekweit',
   icon: '🃏',
   mode: 'pvp',
+  players: [2, 3, 4],
   time: 100,
   twists: ['invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'lowgrav', 'bodyswap', 'deurman'],
   music: 'puzzle',
-  blurb: 'In de magische bibliotheek liggen <b>20 kaarten</b> op een gigantisch toverboek. Om en om draai je <b>twee kaarten</b> om: een <b>paar</b> is een punt en je mag nog een keer! Geen paar? Dan draaien ze terug en is je broer aan de beurt. Je hebt maar <b>8 seconden</b> per keuze. Pas op voor de <b>bom</b>, de <b>poltergeist</b> die alles door elkaar schudt, en let op de <b>joker</b> en de <b>spiegel</b>: daarmee kun je nog winnen!',
+  blurb: 'In de magische bibliotheek liggen <b>20 kaarten</b> op een gigantisch toverboek. Om en om (met 3 of 4 spelers: de hele kring rond) draai je <b>twee kaarten</b> om: een <b>paar</b> is een punt en je mag nog een keer! Geen paar? Dan draaien ze terug en is de volgende aan de beurt. Je hebt maar <b>8 seconden</b> per keuze. Pas op voor de <b>bom</b>, de <b>poltergeist</b> die alles door elkaar schudt, en let op de <b>joker</b> en de <b>spiegel</b>: daarmee kun je nog winnen!',
   controls: ['{move} cursor over de kaarten', '{a} kaart omdraaien', '{b} spring naar de volgende kaart'],
   tip: 'Onthoud wat er al open is geweest. Een bom laat alle kaarten even zien: kijk dan goed! Het allerlaatste paar is goud en telt voor 2 punten.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const names = players.map((p) => p.name);
+    const N = players.length;
     const css = players.map((p) => p.css);
     const L = ctx.lights('indoor', { shadow: 13, center: [0, 0, 0], fogNear: 55, fogFar: 150 });
     L.hemi.intensity = 1.05; L.hemi.color.set(0xc8c0ff); L.hemi.groundColor.set(0x5a3a2a);
@@ -40,7 +42,7 @@ export default {
     const spd = ctx.twist.speed || 1;
     const lowg = ctx.twist.id === 'lowgrav';
     const drunk = ctx.twist.id === 'drunk';
-    const turnLen = TURN_SEC / spd;
+    const turnLen = (N > 2 ? 6.5 : TURN_SEC) / spd;
     const aLabel = (i) => (ctx.twist.id === 'swapab' ? KEY_LABELS[i].b : KEY_LABELS[i].a);
     const bLabel = (i) => (ctx.twist.id === 'swapab' ? KEY_LABELS[i].a : KEY_LABELS[i].b);
     const v3 = new THREE.Vector3(), v3b = new THREE.Vector3();
@@ -58,8 +60,8 @@ export default {
       c.tw = { t: -0.15 - k * 0.07, dur: 0.75, from: c.p.clone(), to: c.tgt.clone(), arc: 0, spin: TAU, sc0: 1, sc1: 1, started: false };
       return c;
     });
-    const piles = [[], []];
-    const sColor = [0x35c46f, 0x4a8cff];
+    const piles = players.map(() => []);
+    const sColor = players.map((p) => p.color);
 
     function tween(c, to, dur, { delay = 0, arc = 0, spin = 0, sc = null, onDone = null } = {}) {
       c.tw = { t: -delay, dur, from: c.p.clone(), to: to.clone(), arc, spin, sc0: c.sc, sc1: sc == null ? c.scT : sc, started: false, onDone };
@@ -98,22 +100,24 @@ export default {
     function popup(text, x, y, z, color = '#ffe14a', s = 1.2) { fx.texts.add(text, x, y, z, color, s); }
 
     // ---------------- spelers ----------------
-    const BASE_X = [-8.2, 8.2];
+    // 2 spelers: links en rechts van het boek; 3-4 spelers: twee per kant (achter/voor)
+    const BASE_X = N > 2 ? [-8.6, 8.6, -8.6, 8.6] : [-8.2, 8.2], BASE_Z = N > 2 ? [-3.1, -3.1, 2.2, 2.2] : [0.9, 0.9];
+    const sideOf = (i) => (i % 2 ? 1 : -1);
     const pl = players.map((pp, i) => {
       const c = ctx.make.brother(i);
       const holder = new THREE.Group(); holder.add(c.group); scene.add(holder);
-      const size = ctx.pvp.size(i); const sc = 1.5 * size; holder.scale.setScalar(sc); holder.position.set(BASE_X[i], 0.02, 0.9);
-      const hs = c.spec.headScale ?? 1; c._hat('wizard', i ? 0x2a54c8 : 0x1f8a48, 0xffd24a, 0.3 * c.s * hs, c.s, c.head);
+      const size = ctx.pvp.size(i); const sc = 1.5 * size; holder.scale.setScalar(sc); holder.position.set(BASE_X[i], 0.02, BASE_Z[i]);
+      const hs = c.spec.headScale ?? 1; c._hat('wizard', [0x1f8a48, 0x2a54c8, 0xc86a1a, 0x8a24b0][pp.id] || pp.color, 0xffd24a, 0.3 * c.s * hs, c.s, c.head);
       // toverstaf
       const s = c.s;
       const wand = new THREE.Group();
       wand.add(mesh(new THREE.CylinderGeometry(0.025 * s, 0.035 * s, 0.9 * s, 6), mat(0x4a2a60), { pos: [0, -0.4 * s, 0] }));
       const starM = mesh(new THREE.OctahedronGeometry(0.1 * s, 0), new THREE.MeshBasicMaterial({ color: 0xffe14a }), { cast: false, pos: [0, -0.92 * s, 0], scale: [1, 1, 0.5] }); wand.add(starM);
       const tip = new THREE.Object3D(); tip.position.set(0, -0.92 * s, 0); wand.add(tip);
-      c.hold(wand, i === 0 ? 'r' : 'l');
-      const ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.25, 32), new THREE.MeshBasicMaterial({ color: pp.color, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(BASE_X[i], 0.04, 0.9); scene.add(ring);
+      c.hold(wand, sideOf(i) < 0 ? 'r' : 'l');
+      const ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.25, 32), new THREE.MeshBasicMaterial({ color: pp.color, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.set(BASE_X[i], 0.04, BASE_Z[i]); scene.add(ring);
       // lichtzuil bij de actieve speler
-      const beamCol = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 9, 20, 1, true), new THREE.MeshBasicMaterial({ color: pp.color, transparent: true, opacity: 0.0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })); beamCol.position.set(BASE_X[i], 4.5, 0.9); scene.add(beamCol);
+      const beamCol = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 9, 20, 1, true), new THREE.MeshBasicMaterial({ color: pp.color, transparent: true, opacity: 0.0, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })); beamCol.position.set(BASE_X[i], 4.5, BASE_Z[i]); scene.add(beamCol);
       // naamplaatje
       const plaque = canvasTex(512, 192, (g, w, h) => {
         g.fillStyle = pp.css; g.strokeStyle = '#1a0e08'; g.lineWidth = 12; g.beginPath(); g.roundRect(10, 10, w - 20, h - 66, 36); g.fill(); g.stroke();
@@ -126,7 +130,7 @@ export default {
       cursor.rotation.x = -Math.PI / 2; cursor.position.set(0, CARD_Y + 0.3, 0); cursor.visible = false; cursor.renderOrder = 6; scene.add(cursor);
       // magische straal
       const zap = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 1, 6, 1, true), new THREE.MeshBasicMaterial({ color: pp.color, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending })); zap.visible = false; zap.renderOrder = 7; scene.add(zap);
-      return { i, c, holder, size, sc, wand, tip, wandArm: i === 0 ? c.armR : c.armL, ring, beamCol, banner, cursor, zap, pose: 'idle', poseT: 0, name: pp.name, bob: i * 1.7 };
+      return { i, c, holder, size, sc, wand, tip, wandArm: sideOf(i) < 0 ? c.armR : c.armL, ring, beamCol, banner, cursor, zap, pose: 'idle', poseT: 0, name: pp.name, bob: i * 1.7 };
     });
 
     // zandloper-balk aan de voorkant van de tafel
@@ -134,17 +138,17 @@ export default {
     const timerBack = mesh(new THREE.BoxGeometry(8.3, 0.1, 0.5), mat(0x2a1a10), { cast: false, receive: false, pos: [0, 0.06, 6.3] }); scene.add(timerBack);
 
     // ---------------- toestand ----------------
-    const T0 = { phase: 'deal', active: 0, first: null, second: null, timer: turnLen, cur: [0, NSLOT - 1], total: 0, shuffles: 0, ghosts: 0, nextGhost: 24 + rand(0, 8), turns: 0, misses: [0, 0], done: false, revealed: false };
+    const T0 = { phase: 'deal', active: 0, first: null, second: null, timer: turnLen, cur: players.map((_, i) => (i % 2 ? NSLOT - 1 : 0)), total: 0, shuffles: 0, ghosts: 0, nextGhost: 24 + rand(0, 8), turns: 0, misses: players.map(() => 0), done: false, revealed: false };
     const S = T0;
-    let T = 0, introT = 0, timers = [], lastTaunt = [-9, -9];
-    const dirSt = [{ prev: null, hold: 0, rep: 0 }, { prev: null, hold: 0, rep: 0 }];
+    let T = 0, introT = 0, timers = [], lastTaunt = players.map(() => -9);
+    const dirSt = players.map(() => ({ prev: null, hold: 0, rep: 0 }));
     const later = (sec, fn) => { timers.push({ t: sec, fn }); };
     const scoreOf = (i) => piles[i].reduce((a, pr) => a + (pr.w || 1), 0);
     const remainingPairs = () => cards.filter((c) => c.kind === 'pair' && (c.st === 'down' || c.st === 'up')).length / 2;
 
     hud.setTimer(null);
     function refreshHud() {
-      hud.setScore(`${names[0]} ${scoreOf(0)} – ${scoreOf(1)} ${names[1]}`);
+      hud.setScore(N === 2 ? `${names[0]} ${scoreOf(0)} – ${scoreOf(1)} ${names[1]}` : (S.phase === 'deal' || S.phase === 'peek' ? null : `Nog ${remainingPairs()} paren`));
       for (const p of pl) hud.setPlayerInfo(p.i, `${scoreOf(p.i)} ${scoreOf(p.i) === 1 ? 'punt' : 'punten'}${S.active === p.i && !S.done && S.phase !== 'deal' ? ' · aan de beurt' : ''}`);
     }
     function hint() {
@@ -184,7 +188,7 @@ export default {
       S.active = who; S.phase = 'pick1'; S.first = S.second = null; S.timer = turnLen; S.turns++;
       ensureCursor(who);
       for (const p of pl) { p.banner.visible = p.i === who; if (p.i !== who && p.pose === 'point') setPose(p, 'idle', 0); }
-      W.owlLook(who ? 1 : -1);
+      W.owlLook(sideOf(who));
       hud.showBig(again ? `${names[who]}: nog een keer!` : `${names[who]} is aan de beurt!`, again ? 900 : 1100, css[who]);
       audio.sfx(again ? 'powerup' : 'select', { vol: 0.5 });
       refreshHud(); hint();
@@ -193,7 +197,7 @@ export default {
     function endTurn() {
       if (S.done) return;
       if (remainingPairs() <= 0 || S.total > GAME_CAP) { finishGame(); return; }
-      const next = 1 - S.active;
+      const next = (S.active + 1) % N;
       if (ghostDue()) { S.ghosts++; S.nextGhost = S.total + 22 + rand(0, 8); poltergeist(() => startTurn(next)); return; }
       startTurn(next);
     }
@@ -213,7 +217,7 @@ export default {
       if (b.kind !== 'pair') { special(b); return; }
       if (a.face === b.face) matchPair(a, b); else mismatch(a, b);
     }
-    function pileTarget(i, k, w) { return v3.set((i ? 1 : -1) * 6.9 + (w ? 0.5 : -0.5), 0.07, -4.3 + clamp(k, 0, 8) * 1.2); }
+    function pileTarget(i, k, w) { return N > 2 ? v3.set(sideOf(i) * 6.9 + (w ? 0.5 : -0.5), 0.07 + clamp(k, 0, 8) * 0.012, (i < 2 ? -5.7 : 0.45) + clamp(k, 0, 8) * 0.6) : v3.set((i ? 1 : -1) * 6.9 + (w ? 0.5 : -0.5), 0.07, -4.3 + clamp(k, 0, 8) * 1.2); }
     function claim(a, b, i, fromJoker = false) {
       const k = piles[i].length; const pr = [a, b]; pr.w = remainingPairs() === 1 ? 2 : 1; piles[i].push(pr);
       if (pr.w === 2) { popup('GOUDEN PAAR! +2', (a.p.x + b.p.x) / 2, 4.2, (a.p.z + b.p.z) / 2, '#ffd23a', 1.7); hud.showBig('GOUDEN PAAR: 2 PUNTEN!', 1500, '#ffd23a'); audio.sfx('win', { vol: 0.5 }); }
@@ -244,7 +248,7 @@ export default {
       a.wob = b.wob = 1; a.mat.emissive.set(0xff3a3a); b.mat.emissive.set(0xff3a3a); a.glowT = b.glowT = 0.9;
       audio.sfx('miss', { vol: 0.7 }); audio.sfx('buzz', { vol: 0.3 });
       popup(pick(['Helaas!', 'Mis!', 'Net niet!', 'Oeps!']), (a.p.x + b.p.x) / 2, 3.0, (a.p.z + b.p.z) / 2, '#ff8a8a', 1.2);
-      setPose(pl[S.active], 'sad', 1.2); setPose(pl[1 - S.active], 'wave', 1.2);
+      for (const q of pl) setPose(q, q.i === S.active ? 'sad' : 'wave', 1.2);
       later(0.7, () => { a.glowT = b.glowT = 0; });
       later(1.0, () => { for (const c of [a, b]) { c.st = 'down'; c.angT = 0; c.mat.emissive.set(0xffd24a); } });
       later(1.55, () => { S.first = S.second = null; endTurn(); });
@@ -302,15 +306,17 @@ export default {
       } else if (c.kind === 'mirror') {
         hud.showBig('SPIEGEL!', 1100, '#6ac8ff'); audio.sfx('sparkle', { vol: 0.8 }); c.wob = 0.6;
         later(0.8, () => {
-          const s0 = scoreOf(0), s1 = scoreOf(1);
-          if (s0 === s1) { popup('Gelijk! Niks verandert', 0, 3.6, 0, '#cfe8ff', 1.3); hud.toast('Spiegel, spiegel: jullie staan gelijk...', 1800); audio.sfx('miss', { vol: 0.5 }); }
+          // 2 spelers: de stapels wisselen; 3-4 spelers: de leider en de laatste wisselen hun stapel
+          const sc = piles.map((_, q) => scoreOf(q)); let hi = 0, lo = 0;
+          sc.forEach((v, q) => { if (v > sc[hi]) hi = q; if (v < sc[lo]) lo = q; });
+          if (sc[hi] === sc[lo]) { popup('Gelijk! Niks verandert', 0, 3.6, 0, '#cfe8ff', 1.3); hud.toast('Spiegel, spiegel: jullie staan gelijk...', 1800); audio.sfx('miss', { vol: 0.5 }); }
           else {
-            const t = piles[0]; piles[0] = piles[1]; piles[1] = t;
-            for (let q = 0; q < 2; q++) piles[q].forEach((pr, k) => { pr.forEach((cd, w) => { cd.owner = q; tween(cd, pileTarget(q, k, w), 1.1, { arc: 3.4, delay: k * 0.06 + w * 0.04, sc: 0.62 }); }); });
-            popup(`${names[0]} ${scoreOf(0)} – ${scoreOf(1)} ${names[1]}`, 0, 4.2, 0, '#9ad8ff', 1.5);
+            const t = piles[hi]; piles[hi] = piles[lo]; piles[lo] = t;
+            for (const q of (N === 2 ? [0, 1] : [hi, lo])) piles[q].forEach((pr, k) => { pr.forEach((cd, w) => { cd.owner = q; tween(cd, pileTarget(q, k, w), 1.1, { arc: 3.4, delay: k * 0.06 + w * 0.04, sc: 0.62 }); }); });
+            popup(N === 2 ? `${names[0]} ${scoreOf(0)} – ${scoreOf(1)} ${names[1]}` : `${names[hi]} en ${names[lo]} wisselen!`, 0, 4.2, 0, '#9ad8ff', 1.5);
             audio.sfx('powerup', { vol: 0.7 }); ctx.shake(0.4);
             burst(0, 2.5, 0, { count: 70, speed: 8, up: 0.8, life: 1.1, size: 0.5, colors: [0x9ad8ff, 0xffffff, 0xcfa8ff], gravity: 2 });
-            setPose(pl[0], scoreOf(0) > scoreOf(1) ? 'cheer' : 'sad', 1.6); setPose(pl[1], scoreOf(1) > scoreOf(0) ? 'cheer' : 'sad', 1.6);
+            setPose(pl[hi], 'sad', 1.6); setPose(pl[lo], 'cheer', 1.6);
             refreshHud();
           }
           later(1.3, () => afterSpecial(c, false));
@@ -363,19 +369,28 @@ export default {
     function finishGame() {
       if (S.done) return; S.done = true; S.phase = 'end'; hud.setTimer(null); hud.setHint(null);
       for (const p of pl) p.banner.visible = false;
-      const a = scoreOf(0), b = scoreOf(1);
-      let w = a > b ? 0 : b > a ? 1 : null, why = '';
-      if (w == null) { if (S.misses[0] !== S.misses[1]) { w = S.misses[0] < S.misses[1] ? 0 : 1; why = `Gelijk aantal paren, maar ${names[w]} maakte minder fouten.`; } else { w = Math.random() < 0.5 ? 0 : 1; why = `Helemaal gelijk! De kip beslist: ${names[w]} wint.`; } }
-      const jokes = [`${names[w]} heeft een geheugen als een olifant (met een toverstaf)!`, `${names[w]} is de Meester van de Magische Memory!`, `${names[1 - w]} was de kaarten vergeten. Alle kaarten.`];
-      setPose(pl[w], 'cheer', 99); setPose(pl[1 - w], 'sad', 99);
-      later(0.5, () => ctx.finishPvp({ winner: w, score: [a, b], delay: 800, summary: why ? why : pick(jokes) }));
+      const sc = pl.map((p) => scoreOf(p.i)), a = sc[0], b = sc[1];
+      // volgorde: punten, dan minder fouten, dan toeval
+      const coin = pl.map(() => Math.random());
+      const order = pl.map((p) => p.i).sort((x, y) => sc[y] - sc[x] || S.misses[x] - S.misses[y] || coin[x] - coin[y]);
+      const w = order[0], l = order[N - 1];
+      const tiedTop = order.length > 1 && sc[order[1]] === sc[w];
+      let why = '';
+      if (tiedTop) { why = S.misses[w] !== S.misses[order[1]] ? `Gelijk aantal paren, maar ${names[w]} maakte minder fouten.` : `Helemaal gelijk! De kip beslist: ${names[w]} wint.`; }
+      const jokes = [`${names[w]} heeft een geheugen als een olifant (met een toverstaf)!`, `${names[w]} is de Meester van de Magische Memory!`, `${names[l]} was de kaarten vergeten. Alle kaarten.`];
+      for (const p of pl) setPose(p, p.i === w ? 'cheer' : 'sad', 99);
+      later(0.5, () => ctx.finishPvp(N === 2 ? { winner: w, score: [a, b], delay: 800, summary: why ? why : pick(jokes) } : { winner: w, place: order, score: sc, delay: 800, summary: (why ? why + ' ' : '') + pick(jokes) + ` Stand: ${order.map((q) => names[q] + ' ' + sc[q]).join(', ')}.` }));
     }
 
     // ---------------- invoer per frame ----------------
     function handleInput(dt) {
-      const i = S.active, inp = ctx.pvp.input(i), other = ctx.pvp.input(1 - i);
-      if (other.bP && T - lastTaunt[1 - i] > 1.2) { lastTaunt[1 - i] = T; popup(pick(['Hihi!', 'Pech!', 'Tja...', 'Ik zie alles!', 'Haha!']), pl[1 - i].holder.position.x, 4.6, 1, css[1 - i], 1.0); setPose(pl[1 - i], 'wave', 0.8); audio.sfx('pop', { vol: 0.4, rate: 1.3 }); }
-      else if (dirSt[1 - i].prev) dirSt[1 - i].prev = null;
+      const i = S.active, inp = ctx.pvp.input(i);
+      for (let j = 0; j < N; j++) {
+        if (j === i) continue;
+        const other = ctx.pvp.input(j);
+        if (other.bP && T - lastTaunt[j] > 1.2) { lastTaunt[j] = T; popup(pick(['Hihi!', 'Pech!', 'Tja...', 'Ik zie alles!', 'Haha!']), pl[j].holder.position.x, 4.6, pl[j].holder.position.z, css[j], 1.0); setPose(pl[j], 'wave', 0.8); audio.sfx('pop', { vol: 0.4, rate: 1.3 }); }
+        else if (dirSt[j].prev) dirSt[j].prev = null;
+      }
       if (S.phase !== 'pick1' && S.phase !== 'pick2') { dirEvents(i, blankIn, dt); return; }
       const mv = dirEvents(i, inp, dt); if (mv) moveCur(i, mv);
       if (inp.bP) jumpNext(i);
@@ -436,13 +451,13 @@ export default {
     const camP = new THREE.Vector3(0, 12, 17), camL = new THREE.Vector3(0, 0, 1); let camShiftX = 0;
     function camUpdate(dt, intro = false) {
       const a = camera.aspect || 1.7, f = clamp(1.7 / a, 1, 1.7);
-      const act = S.done ? 0 : (S.active ? 1 : -1);
+      const act = S.done ? 0 : sideOf(S.active);
       camShiftX = damp(camShiftX, intro ? 0 : act * 0.7, 2.5, dt);
       let tx, ty, tz, lx = 0, ly = 0, lz = 1.0;
-      if (intro) { const t = introT * 0.25; tx = Math.sin(t) * 5; ty = 8.6 + Math.sin(t * 0.7) * 0.8; tz = 14.5 + Math.cos(t) * 1.2; }
-      else if (S.phase === 'peek' || S.revealed) { tx = 0; ty = 9.4; tz = 12.6; }
-      else if (S.phase === 'event') { tx = Math.sin(T * 1.2) * 1.5; ty = 9.2; tz = 13.2; }
-      else { tx = camShiftX; ty = 8.5; tz = 11.9 + Math.sin(T * 0.4) * 0.12; }
+      if (intro) { const t = introT * 0.25; tx = Math.sin(t) * 5; ty = 8.6 + Math.sin(t * 0.7) * 0.8; tz = (N > 2 ? 16.5 : 14.5) + Math.cos(t) * 1.2; }
+      else if (S.phase === 'peek' || S.revealed) { tx = 0; ty = N > 2 ? 10.6 : 9.4; tz = N > 2 ? 14.8 : 12.6; }
+      else if (S.phase === 'event') { tx = Math.sin(T * 1.2) * 1.5; ty = N > 2 ? 10.4 : 9.2; tz = N > 2 ? 15 : 13.2; }
+      else { tx = camShiftX; ty = N > 2 ? 10.2 : 8.5; tz = (N > 2 ? 14.6 : 11.9) + Math.sin(T * 0.4) * 0.12; }
       camP.x = damp(camP.x, tx * 1.0, 3, dt); camP.y = damp(camP.y, ty * (0.8 + 0.2 * f), 3, dt); camP.z = damp(camP.z, 1 + (tz - 1) * f, 3, dt);
       camL.set(camShiftX * 0.5, ly, lz);
       camera.position.copy(camP); camera.lookAt(camL);
@@ -456,7 +471,7 @@ export default {
     function update(dt) {
       T += dt; if (!S.done) S.total += dt;
       stepTimers(dt);
-      if (S.phase === 'deal') { S.phase = 'peek'; S.peekT = 0; refreshHud(); hint(); hud.showBig('KIJK GOED!', 1400, '#ffe14a'); later(0.5, () => { cards.forEach((c, k) => { c.angT = Math.PI; }); audio.sfx('sparkle', { vol: 0.6 }); }); later(0.5 + 3.0, () => { cards.forEach((c) => { c.angT = 0; }); }); later(0.5 + 3.0 + 0.9, () => { startTurn(Math.random() < 0.5 ? 0 : 1); }); }
+      if (S.phase === 'deal') { S.phase = 'peek'; S.peekT = 0; refreshHud(); hint(); hud.showBig('KIJK GOED!', 1400, '#ffe14a'); later(0.5, () => { cards.forEach((c, k) => { c.angT = Math.PI; }); audio.sfx('sparkle', { vol: 0.6 }); }); later(0.5 + 3.0, () => { cards.forEach((c) => { c.angT = 0; }); }); later(0.5 + 3.0 + 0.9, () => { startTurn(Math.floor(Math.random() * N)); }); }
       else if (S.phase === 'pick1' || S.phase === 'pick2') {
         S.timer -= dt;
         if (S.timer <= 3 && Math.ceil(S.timer) !== Math.ceil(S.timer + dt) && S.timer > 0) audio.sfx('tick', { vol: 0.7, rate: 1.5 });
@@ -492,12 +507,12 @@ export default {
       },
       celebrate(w) {
         for (const p of pl) p.banner.visible = false;
-        setPose(pl[w], 'cheer', 99); setPose(pl[1 - w], 'sad', 99);
+        for (const p of pl) setPose(p, p.i === w ? 'cheer' : 'sad', 99);
         for (let k = 0; k < 6; k++) later(k * 0.25, () => { burst(pl[w].holder.position.x + rand(-2, 2), 4 + rand(0, 3), rand(-1, 3), { count: 34, speed: 7, up: 1.2, life: 1.4, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 }); audio.sfx('sparkle', { vol: 0.35 }); });
       },
       dispose() { timers.length = 0; },
       dbg: {
-        state: () => ({ T, total: S.total, phase: S.phase, active: S.active, timer: S.timer, cur: S.cur.slice(), first: S.first ? S.first.slot : -1, scores: [scoreOf(0), scoreOf(1)], remaining: remainingPairs(), shuffles: S.shuffles, ghosts: S.ghosts, misses: S.misses.slice(), done: S.done,
+        state: () => ({ T, total: S.total, phase: S.phase, active: S.active, timer: S.timer, cur: S.cur.slice(), first: S.first ? S.first.slot : -1, scores: pl.map((p) => scoreOf(p.i)), remaining: remainingPairs(), shuffles: S.shuffles, ghosts: S.ghosts, misses: S.misses.slice(), done: S.done,
           cards: slots.map((c) => (c ? { uid: c.uid, st: c.st, kind: c.kind, face: c.face } : null)), piles: piles.map((p) => p.length), revealed: S.revealed }),
         nextCur, cards, slots, piles, pl, world: W,
       },

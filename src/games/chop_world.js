@@ -158,7 +158,7 @@ export function buildForest(ctx, { trunkX, names, css }) {
   const gr = tex.grass(46, 34); scene.add(mesh(new THREE.PlaneGeometry(220, 150), new THREE.MeshStandardMaterial({ map: gr, roughness: 1 }), { cast: false, pos: [0, 0, -30], rot: [-Math.PI / 2, 0, 0] }));
   for (const x of trunkX) scene.add(mesh(new THREE.CircleGeometry(9.5, 28), new THREE.MeshStandardMaterial({ map: tex.dirt(5, 5), roughness: 1 }), { cast: false, pos: [x, 0.03, 1.5], rot: [-Math.PI / 2, 0, 0], scale: [1, 0.8, 1] }));
   // podia
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < trunkX.length; i++) {
     const g = new THREE.Group(); g.position.set(trunkX[i], 0, 0); scene.add(g);
     g.add(mesh(new THREE.CylinderGeometry(4.6, 4.9, 0.5, 24), new THREE.MeshStandardMaterial({ map: tex.planks(3, 1, '#a9774a'), roughness: 0.9, flatShading: true }), { pos: [0, 0.25, 0] }));
     g.add(mesh(new THREE.TorusGeometry(4.7, 0.18, 6, 32), M(new THREE.Color(css[i]).getHex()), { cast: false, pos: [0, 0.52, 0], rot: [Math.PI / 2, 0, 0] }));

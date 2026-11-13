@@ -3,6 +3,7 @@
 // Bots spelen versneld (zonder renderen) hele potjes; controleert dat finishPvp precies 1x komt, beide spelers kunnen winnen,
 // elke twist werkt, elke hole in de pool oplosbaar is en er geen console-fouten zijn.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -15,6 +16,7 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
+const NP = process.env.PLAYERS === '4' ? 4 : process.env.PLAYERS === '3' ? 3 : 2;   // PLAYERS=3|4: alle spelers doen mee
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['course', 'bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 let failures = 0;
@@ -25,35 +27,36 @@ const SAVEKEY = 'heitjes_voor_karweitjes_v1';
 // opts: { holes (3|6|9|12), start (false = stop op de intro-kaart) }
 async function open(twist, opts = {}) {
   const holes = opts.holes ?? envHoles ?? 6;
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
   // S.arcade.golfHoles zetten via de localStorage-opslag, voordat het spel start
   await page.addInitScript(([key, n]) => { try { localStorage.setItem(key, JSON.stringify({ arcade: { wins: [0, 0], draws: 0, plays: 0, byGame: {}, tourneys: [0, 0], golfHoles: n } })); } catch (e) { /* */ } }, [SAVEKEY, holes]);
-  await page.goto(`http://localhost:${port}/?game=golf&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=golf&players=${NP}&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
   await page.waitForFunction(() => window.__app && window.__app.mode && window.__app.mode.instance, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   if (opts.start === false) return { browser, page, errors };
-  await page.evaluate(async () => {
+  await page.evaluate(async (NP) => {
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
     // finishPvp-teller
     window.__fin = 0; const ctx = mode.ctx, orig = ctx.finishPvp; ctx.finishPvp = (r) => { window.__fin++; return orig(r); };
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (let q = 0; q < NP; q++) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (let q = 0; q < NP; q++) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
-  });
+  }, NP);
   const got = await page.evaluate(async () => { const { S } = await import('/src/save.js'); return S.arcade.golfHoles; });
   if (got !== holes) { console.log(`WAARSCHUWING: S.arcade.golfHoles=${got}, verwacht ${holes}`); }
   return { browser, page, errors };
 }
 
 // cfg[i] = { skill: 0..1, style: 'play'|'idle', bonk: kans per slag }
-async function installBots(page, cfg) {
+async function installBots(page, cfg0) {
+  const cfg = Array.from({ length: NP }, (_, i) => cfg0[i % cfg0.length]);   // bij meer spelers dan opgegeven: herhaal
   await page.evaluate(async (cfg) => {
     const GC = await import('/src/games/golf_course.js');
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input, d = inst.dbg;
@@ -74,12 +77,12 @@ async function installBots(page, cfg) {
       }
       return best;
     }
-    const B = [{ plan: null, key: '' }, { plan: null, key: '' }];
+    const B = cfg.map(() => ({ plan: null, key: '' }));
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = d.state(); if (stop && stop(st)) { m.paused = true; return true; }
-        for (const i of [0, 1]) {
+        for (const i of cfg.keys()) {
           const v = inp.virtual[i], c = window.__cfg[i], me = st.pl[i], b = B[i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
           if (c.style === 'idle' || st.gstate !== 'play') { b.plan = null; continue; }
           if (me.state !== 'aim') { b.plan = null; if (me.state === 'roll' && c.bonk && rnd() < c.bonk * 0.01 && !me.bonkUsed) v.b = true; continue; }
@@ -104,7 +107,7 @@ const TARGET = { 3: 75, 6: 170, 9: 235, 12: 300 };
 async function runMatch(label, twist, cfg, pre, opts = {}) {
   const { browser, page, errors } = await open(twist, opts);
   await installBots(page, cfg);
-  if (pre) await page.evaluate(pre);
+  if (pre) await page.evaluate(pre, NP);
   const res = await page.evaluate(() => {
     const m = window.__app.mode, inst = m.instance; const log = []; let last = ''; let g = 0;
     while (!m.finished && g++ < 60 * 420) {
@@ -123,6 +126,7 @@ async function runMatch(label, twist, cfg, pre, opts = {}) {
   if (res.result) console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, ' ')}`);
   check(res.finished && res.fin === 1, `${label}: finishPvp precies 1x (fin=${res.fin}, finished=${res.finished})`);
   check(res.result && res.result.winner != null, `${label}: altijd een winnaar (winner=${res.result && res.result.winner})`);
+  if (NP > 2) check(res.result && res.result.place && res.result.place.length === NP, `${label}: volledige plaatsen voor ${NP} spelers`);
   const played = s.results.filter((r) => !r.sd).length, nsd = s.results.filter((r) => r.sd).length;
   if (opts.expectSd) { check(nsd === 1 && s.results[s.results.length - 1].sd, `${label}: gelijkspel leidt tot precies 1 gouden putt (${nsd})`); check(s.results.filter((r) => r.final).length === 1, `${label}: de finale telde dubbel`); }
   else { check(played === s.N && nsd <= 1, `${label}: ${s.N} holes gespeeld (${played})${nsd ? ' + gouden putt (gelijkspel)' : ''}`); check(s.finals.filter(Boolean).length === 1 && s.finals[s.N - 1], `${label}: alleen de laatste hole telt dubbel`); }
@@ -196,7 +200,7 @@ for (const name of scen) {
       const r2 = await runMatch(`bots ${n} B>A`, process.env.TW || 'none', [Bw, A], null, { holes: n });
       const rs = [r1, r2];
       if (n === 3) rs.push(await runMatch(`bots ${n} gelijk`, process.env.TW || 'none', [A, A], null, { holes: n }));
-      const ws = new Set(rs.map((r) => r.result && r.result.winner)); check(ws.has(0) && ws.has(1), `${n} holes: beide spelers kunnen winnen (winnaars: ${[...ws]})`);
+      const ws = new Set(rs.map((r) => r.result && r.result.winner)); check(NP > 2 ? ws.size >= 2 : (ws.has(0) && ws.has(1)), `${n} holes: verschillende spelers kunnen winnen (winnaars: ${[...ws]})`);
     }
     continue;
   }
@@ -241,7 +245,8 @@ for (const name of scen) {
   if (name === 'timeout') { await runMatch('timeout', 'none', [{ style: 'idle' }, { skill: 0.9, style: 'play', bonk: 0 }]); continue; }
   if (name === 'sudden') {
     // gelijkspel na de laatste hole afdwingen: totalen gelijk zetten tijdens de laatste hole -> gouden putt
-    await runMatch('sudden', 'none', [A, A], () => { const d = window.__app.mode.instance.dbg; d.loadHole(d.N - 1); d.setTotals(0, 6); d.sink(0); }, { holes: envHoles || 3, expectSd: true });
+    // de eerste in het gat krijgt op de (dubbele) finale 6 (2 spelers), 8 (3) of 10 (4) punten: speler 1 staat daar al op, dus gelijk -> gouden putt tussen die twee
+    await runMatch('sudden', 'none', NP === 2 ? [A, A] : [{ style: 'idle' }], (np) => { const d = window.__app.mode.instance.dbg; d.loadHole(d.N - 1); d.setTotals(0, np === 2 ? 6 : np === 3 ? 8 : 10); d.sink(0); }, { holes: envHoles || 3, expectSd: true });
     continue;
   }
   if (name === 'intro') {

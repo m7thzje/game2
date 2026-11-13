@@ -1,5 +1,5 @@
-// Drie spelers (Wes 0, Jor 1, Juul 2) op één toetsenbord (of gamepads / online).
-// input.all[id] = ruwe staat per spelers-id (ALTIJD 3; staat 2 is nul zolang S.settings.players !== 3).
+// Vier spelers (Wes 0, Jor 1, Juul 2, Sam 3) op één toetsenbord (of gamepads / online).
+// input.all[id] = ruwe staat per spelers-id (ALTIJD 4; staat i is nul zolang i >= S.settings.players).
 // input.p = SLOT-view: standaard [all[0], all[1]]; de harness zet met mapSlots([idA, idB, ...]) slot i -> spelers-id (resetSlots() = terug).
 // Per staat: x: links(-1)..rechts(+1)   y: omhoog(-1)..omlaag(+1)  (schermrichting; omhoog = van je af)
 // a / b = ingedrukt gehouden, aP / bP = net ingedrukt deze frame, aR / bR = net losgelaten.
@@ -10,14 +10,19 @@ export const KEYMAP = [
   { up: ['KeyW'], down: ['KeyS'], left: ['KeyA'], right: ['KeyD'], a: ['KeyF', 'Space'], b: ['KeyG', 'KeyE'] },
   { up: ['ArrowUp'], down: ['ArrowDown'], left: ['ArrowLeft'], right: ['ArrowRight'], a: ['Enter', 'NumpadEnter', 'Slash'], b: ['ShiftRight', 'Period', 'Numpad0'] },
   { up: ['KeyI'], down: ['KeyK'], left: ['KeyJ'], right: ['KeyL'], a: ['KeyU'], b: ['KeyO'] },   // Juul
+  { up: ['Numpad8'], down: ['Numpad5', 'Numpad2'], left: ['Numpad4'], right: ['Numpad6'], a: ['Numpad7'], b: ['Numpad9'] },   // Sam (numeriek blok)
 ];
 // Basislabels per spelers-id; KEY_LABELS is de actieve view (index = slot tijdens een spel, anders = spelers-id)
 export const BASE_KEY_LABELS = [
   { move: 'WASD', a: 'F', b: 'G' },
   { move: 'Pijltjes', a: 'Enter', b: 'Shift' },
   { move: 'IJKL', a: 'U', b: 'O' },
+  { move: 'Numpad 8456', a: 'Num7', b: 'Num9' },
 ];
 export const KEY_LABELS = BASE_KEY_LABELS.map((k) => ({ ...k }));
+
+// Aantal spelers dat meedoet (2, 3 of 4) volgens S.settings.players
+const activeCount = () => { const n = S.settings.players; return n >= 4 ? 4 : n === 3 ? 3 : 2; };
 
 const BTN = ['up', 'down', 'left', 'right', 'a', 'b'];
 
@@ -30,13 +35,13 @@ function blank() {
 class Input {
   constructor() {
     this.keys = new Set();
-    this.virtual = [{}, {}, {}];   // voor tests: virtual[id].left = true enz., of virtual[id].x/.y analoog (id = spelers-id, niet slot)
-    this.all = [blank(), blank(), blank()];
+    this.virtual = [{}, {}, {}, {}];   // voor tests: virtual[id].left = true enz., of virtual[id].x/.y analoog (id = spelers-id, niet slot)
+    this.all = [blank(), blank(), blank(), blank()];
     this.p = [this.all[0], this.all[1]];   // slot-view (zie mapSlots)
     this.slotIds = [0, 1];
-    this.prev = [{}, {}, {}];
+    this.prev = [{}, {}, {}, {}];
     this.lastPressTime = 0;
-    this.pads = [null, null, null];
+    this.pads = [null, null, null, null];
     // online: een of meer spelers komen van een andere computer. remote[id] = { state, latch, keys }
     this.remote = {}; this._legacyOnline = false;
     addEventListener('keydown', (e) => {
@@ -53,7 +58,7 @@ class Input {
   set online(v) { this._legacyOnline = !!v; }
   isRemote(id) { return !!this.remote[id] || (this._legacyOnline && id === 1); }
   isGameKey(code) {
-    const n = S.settings.players === 3 ? 3 : 2;   // Juul-toetsen tellen alleen mee in een spel met 3 spelers
+    const n = activeCount();   // Juul-/Sam-toetsen tellen alleen mee in een spel met 3 resp. 4 spelers
     for (let i = 0; i < n; i++) for (const b of BTN) if (KEYMAP[i][b].includes(code)) return true;
     return code === 'Escape' || code === 'KeyP' || code === 'KeyM' || code === 'Tab';
   }
@@ -67,10 +72,10 @@ class Input {
     this.slotIds = ids.slice();
     this.p.length = 0;
     ids.forEach((id, slot) => { this.p.push(this.all[id]); if (KEY_LABELS[slot]) Object.assign(KEY_LABELS[slot], BASE_KEY_LABELS[id]); });
-    for (let k = ids.length; k < 3; k++) Object.assign(KEY_LABELS[k], BASE_KEY_LABELS[k]);   // overige labels = identiteit
+    for (let k = ids.length; k < 4; k++) Object.assign(KEY_LABELS[k], BASE_KEY_LABELS[k]);   // overige labels = identiteit
   }
   resetSlots() { this.mapSlots([0, 1]); }
-  // Netwerklaag: toetsstand van remote-speler `playerId` (1 of 2). state = null markeert hem alleen als remote.
+  // Netwerklaag: toetsstand van remote-speler `playerId` (1, 2 of 3). state = null markeert hem alleen als remote.
   // (Oude aanroep setRemote(state, keys) = speler 1.)
   setRemote(playerId, state, keys) {
     if (typeof playerId !== 'number') { keys = state; state = playerId; playerId = 1; }
@@ -87,12 +92,12 @@ class Input {
     const gps = navigator.getGamepads ? navigator.getGamepads() : [];
     const connected = [];
     for (const g of gps) if (g && g.connected) connected.push(g);
-    const three = S.settings.players === 3;
-    for (let i = 0; i < 3; i++) {
+    const n = activeCount();
+    for (let i = 0; i < 4; i++) {
       const raw = {};
       for (const b of BTN) raw[b] = false;
       let ax = 0, ay = 0;
-      const active = i < 2 || three;   // Juul doet alleen mee bij 3 spelers
+      const active = i < n;   // Juul doet mee vanaf 3 spelers, Sam bij 4
       const km = KEYMAP[i];
       const remoteSlot = this.isRemote(i);
       if (active && !remoteSlot) for (const b of BTN) for (const c of km[b]) if (this.keys.has(c)) raw[b] = true;
@@ -138,7 +143,7 @@ class Input {
       p.anyP = p.aP || p.bP || p.upP || p.downP || p.leftP || p.rightP;
     }
   }
-  // helpers (over alle spelers-id's; staat 2 is nul zolang er maar 2 spelers zijn)
+  // helpers (over alle spelers-id's; staat i is nul zolang i niet meedoet)
   anyA() { return this.all.some((p) => p.aP); }
   anyB() { return this.all.some((p) => p.bP); }
   reset() { this.keys.clear(); for (const id in this.remote) this.remote[id].latch = {}; for (const p of this.all) for (const k in p) p[k] = typeof p[k] === 'boolean' ? false : 0; for (const pr of this.prev) for (const k in pr) pr[k] = false; }

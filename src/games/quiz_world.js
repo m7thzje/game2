@@ -39,7 +39,7 @@ function wrapLines(g, text, maxW) {
   if (cur) out.push(cur); return out;
 }
 
-export function buildStudio(ctx, L) {
+export function buildStudio(ctx, L, N = 2) {
   const { scene, fx } = ctx;
   const rng = mulberry32(4242);
   const S = { t: 0, cheerT: 0, groanT: 0 };
@@ -133,8 +133,9 @@ export function buildStudio(ctx, L) {
   };
 
   // ---------------- lessenaars ----------------
-  S.desks = [0, 1].map((i) => {
-    const sx = i ? 1 : -1; const g = new THREE.Group(); g.position.set(sx * 6.1, 0.45, 3.2); g.rotation.y = -sx * 0.22; scene.add(g);
+  const DESK_X = N === 4 ? [-6.9, -2.3, 2.3, 6.9] : N === 3 ? [-6.6, 0, 6.6] : [-6.1, 6.1];
+  S.desks = DESK_X.map((dx, i) => {
+    const sx = dx < 0 ? -1 : 1; const g = new THREE.Group(); g.position.set(dx, 0.45, 3.2); g.rotation.y = -Math.max(-1, Math.min(1, dx / 6.1)) * 0.22; scene.add(g);
     const col = PLAYER_COLORS[i];
     g.add(mesh(new THREE.BoxGeometry(3.6, 1.9, 1.5), mat(0x1c1440, { metalness: 0.4, roughness: 0.4 }), { pos: [0, 0.95, 0] }));
     g.add(mesh(new THREE.BoxGeometry(3.9, 0.16, 1.8), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.35, metalness: 0.5, roughness: 0.3 }), { pos: [0, 1.95, 0.05] }));
@@ -149,9 +150,9 @@ export function buildStudio(ctx, L) {
     const ringM = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false });
     const ringL = new THREE.Mesh(new THREE.RingGeometry(0.62, 0.8, 24), ringM); ringL.rotation.x = -Math.PI / 2; ringL.position.y = 0.16; bz.add(ringL);
     // het poppetje achter de lessenaar
-    const c = makeBrother(i); const k = 3.3 / c.height; const holder = new THREE.Group(); holder.add(c.group); holder.scale.setScalar(k); holder.position.set(sx * 6.1, 0.7, 1.9); scene.add(holder); c.faceDir(0, 1);
-    const stand = mesh(new THREE.CylinderGeometry(1.4, 1.6, 0.4, 16), mat(0x2a1470), { cast: false, pos: [sx * 6.1, 0.45, 1.9] }); scene.add(stand);
-    return { i, g, panel, pg, pT, buzM, ringM, ringL, bz, c, holder, k, key: '', baseX: sx * 6.1, freezeFx: 0 };
+    const c = makeBrother(i); const k = 3.3 / c.height; const holder = new THREE.Group(); holder.add(c.group); holder.scale.setScalar(k); holder.position.set(dx, 0.7, 1.9); scene.add(holder); c.faceDir(0, 1);
+    const stand = mesh(new THREE.CylinderGeometry(1.4, 1.6, 0.4, 16), mat(0x2a1470), { cast: false, pos: [dx, 0.45, 1.9] }); scene.add(stand);
+    return { i, g, panel, pg, pT, buzM, ringM, ringL, bz, c, holder, k, key: '', baseX: dx, sx, freezeFx: 0 };
   });
 
   // ---------------- publiek (instanced) ----------------
@@ -185,7 +186,7 @@ export function buildStudio(ctx, L) {
   const ck = { on: false, t: 0, from: new THREE.Vector3(), desk: 0, stage: 'in', landed: false, onLand: null, onDone: null };
   S.chickenBusy = () => ck.on;
   S.chickenStart = (deskI, onLand, onDone) => {
-    const d = S.desks[deskI]; const sx = deskI ? 1 : -1;
+    const d = S.desks[deskI]; const sx = d.sx;
     ck.on = true; ck.t = 0; ck.desk = deskI; ck.stage = 'in'; ck.landed = false; ck.onLand = onLand; ck.onDone = onDone;
     ck.from.set(sx * 17, 0.45, 5.4); chicken.group.visible = true; chicken.group.position.copy(ck.from);
   };
@@ -263,7 +264,7 @@ export function buildStudio(ctx, L) {
       const X = (v) => x0 + (v - q.min) / (q.max - q.min) * (x1 - x0);
       g.fillStyle = '#fff'; g.font = `bold 38px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(q.min), x0, y + 40); g.fillText(String(q.max), x1, y + 40);
       for (let k = 0; k <= 10; k++) { g.fillStyle = 'rgba(168,200,255,.6)'; g.fillRect(x0 + k * (x1 - x0) / 10 - 2, y - 14, 4, 28); }
-      if (st.picks) st.picks.forEach((v, p) => { if (v == null) return; const px = X(clamp(v, q.min, q.max)); g.fillStyle = PLAYER_CSS[p]; g.beginPath(); g.moveTo(px, y + (p ? 24 : -24)); g.lineTo(px - 18, y + (p ? 54 : -54)); g.lineTo(px + 18, y + (p ? 54 : -54)); g.closePath(); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 4; g.stroke(); fitText(g, String(Math.round(v)), px, y + (p ? 82 : -78), 220, 36, { color: PLAYER_CSS[p], stroke: '#10082a' }); });
+      if (st.picks) st.picks.forEach((v, p) => { if (v == null) return; const px = X(clamp(v, q.min, q.max)); g.fillStyle = PLAYER_CSS[p]; g.beginPath(); g.moveTo(px, y + (p % 2 ? 24 : -24)); g.lineTo(px - 18, y + (p % 2 ? 54 : -54)); g.lineTo(px + 18, y + (p % 2 ? 54 : -54)); g.closePath(); g.fill(); g.strokeStyle = '#fff'; g.lineWidth = 4; g.stroke(); fitText(g, String(Math.round(v)), px, y + (p % 2 ? 82 : -78), 220, 36, { color: PLAYER_CSS[p], stroke: '#10082a' }); });
       if (rev) { const px = X(q.ans); g.fillStyle = '#ffd23f'; g.beginPath(); for (let j = 0; j < 5; j++) { const b = j / 5 * TAU - Math.PI / 2; g.lineTo(px + Math.cos(b) * 34, y + Math.sin(b) * 34); g.lineTo(px + Math.cos(b + TAU / 10) * 14, y + Math.sin(b + TAU / 10) * 14); } g.closePath(); g.fill(); g.lineWidth = 5; g.strokeStyle = '#7a4a00'; g.stroke(); fitText(g, `Antwoord: ${q.ans} ${q.unit}`, W / 2, 482, 1100, 44, { color: '#ffd23f', stroke: '#2a1000' }); }
       else fitText(g, st.hint || `Stel in met je pijlen (grof/fijn), A = vastzetten`, W / 2, 468, 1200, 36, { color: '#a8c8ff' });
     }
@@ -337,7 +338,7 @@ export function buildStudio(ctx, L) {
     bodiesI.instanceMatrix.needsUpdate = true; headsI.instanceMatrix.needsUpdate = true; armsI.instanceMatrix.needsUpdate = true;
     // kip
     if (ck.on) {
-      ck.t += dt; chicken.update(dt); const D = S.desks[ck.desk]; const sx = ck.desk ? 1 : -1; const gp = chicken.group.position;
+      ck.t += dt; chicken.update(dt); const D = S.desks[ck.desk]; const sx = D.sx; const gp = chicken.group.position;
       const buz = _v1.set(D.baseX, 2.55, 3.65), spot = _v2.set(D.baseX + sx * 2.6, 0.45, 5.4), tgt = _v3.set(sx * 18, 0.45, 5.4);
       if (ck.stage === 'in') {
         const u = Math.min(1, ck.t / 1.3); gp.lerpVectors(ck.from, spot, u); gp.y = 0.45 + Math.abs(Math.sin(ck.t * 12)) * 0.25; chicken.speed = 1; chicken.targetYaw = -sx * Math.PI / 2;

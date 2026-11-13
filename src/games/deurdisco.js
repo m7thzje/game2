@@ -40,15 +40,17 @@ export default {
   giver: 'DJ Deurman',
   icon: '🪩',
   mode: 'pvp',
+  players: [2, 3, 4],   // 2 = duel; 4 = iedereen tegen iedereen (een Deurman-flash gaat naar de koploper)
   time: 75,
   music: 'concert',
-  blurb: 'De Deurman danst een <b>pose</b> voor: een rijtje <b>symbolen</b> boven zijn hoofd. Kopieer ze <b>zo snel en precies</b> mogelijk! Een fout? Dan begin je opnieuw. <b>3 Perfecte rondes</b> laden de <b>Deurman-flash</b> die de pose van je broer verstoort. Zing mee!',
+  blurb: 'Met <b>2 of 4 spelers</b> (bij vier: iedereen tegen iedereen, de flash verstoort de koploper). De Deurman danst een <b>pose</b> voor: een rijtje <b>symbolen</b> boven zijn hoofd. Kopieer ze <b>zo snel en precies</b> mogelijk! Een fout? Dan begin je opnieuw. <b>3 Perfecte rondes</b> laden de <b>Deurman-flash</b> die de pose van je broer verstoort. Zing mee!',
   controls: ['{move} de pijl-symbolen tikken', '{a} en {b} de A- en B-symbolen tikken', 'Fout? Dan begin je opnieuw!'],
   tip: 'Let op de symbolen vóór je eigen poppetje: bij een Deurman-flash kunnen ze anders zijn dan bij de Deurman!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp, names = players.map((p) => p.name), tid = ctx.twist.id;
+    const N = players.length;
     const GRAV = pv.gravity || 1, SLIP = pv.slip || 0;
     const tempo = tid === 'turbo' ? 1.22 : tid === 'slowmo' ? 0.86 : 1;
     const rng = mulberry32(Math.floor(ctx.rng() * 1e9) + 7);
@@ -67,7 +69,7 @@ export default {
     const camFlash = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0xffffff, transparent: true, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, opacity: 0 })); camFlash.scale.set(2.5, 2.5, 1); camFlash.renderOrder = 20; scene.add(camFlash);
 
     // ---------------- dansers ----------------
-    const BX = [-7.2, 7.2];
+    const BX = N > 2 ? players.map((_, i) => (i - (N - 1) / 2) * 6.4) : [-7.2, 7.2];
     const D = players.map((pp, p) => {
       const c = ctx.make.brother(p), sz = pv.size(p), k = 1.75 * sz; c.group.scale.setScalar(k);
       const holder = new THREE.Group(); holder.add(c.group); holder.position.set(BX[p], 0.7, 2.0); scene.add(holder);
@@ -78,7 +80,7 @@ export default {
     // chips boven de eigen poppetjes + de grote rij boven de Deurman
     const mkChip = (scale) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glyphTex(0), transparent: true, depthTest: false })); s.scale.set(scale, scale, 1); s.renderOrder = 12; s.visible = false; scene.add(s); return s; };
     const mainChips = Array.from({ length: 5 }, () => mkChip(1.75));
-    D.forEach((d) => { d.chips = Array.from({ length: 6 }, () => mkChip(1.0)); d.lamps = [0, 1, 2].map((i) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0x554466, transparent: true, depthWrite: false, depthTest: false })); s.scale.set(0.9, 0.9, 1); s.position.set(d.bx + (i - 1) * 0.85, 0.95, 3.7); s.renderOrder = 12; scene.add(s); return s; }); });
+    D.forEach((d) => { d.chips = Array.from({ length: 6 }, () => mkChip(N > 2 ? 0.86 : 1.0)); d.lamps = [0, 1, 2].map((i) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0x554466, transparent: true, depthWrite: false, depthTest: false })); s.scale.set(0.9, 0.9, 1); s.position.set(d.bx + (i - 1) * 0.85, 0.95, 3.7); s.renderOrder = 12; scene.add(s); return s; }); });
     const sabLabels = SABS.map((s) => labelTex(s.name, s.col, 512, 96, 54));
     const sabSpr = D.map((d) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: sabLabels[0], transparent: true, depthTest: false })); s.scale.set(3.6, 0.68, 1); s.renderOrder = 14; s.visible = false; scene.add(s); return s; });
     const nameSpr = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex(NAMES[0], '#ffe14a', 640, 96, 58), transparent: true, depthTest: false })); nameSpr.scale.set(6.4, 0.96, 1); nameSpr.position.set(0, 12.3, -1.0); nameSpr.renderOrder = 13; nameSpr.visible = false; scene.add(nameSpr);
@@ -91,13 +93,14 @@ export default {
 
     // ---------------- toestand ----------------
     let T = 0, introT = 0, songT = 0, started = false, finished = false, ending = false, endT = 0, evI = 0, sylI = 0, lastBeat = -1, cur = -1, curOpen = false, gap = 0;
-    const pending = [null, null]; const sabQ = [shuffle(SABS.map((s) => s.id), rng), shuffle(SABS.map((s) => s.id), rng)];
-    const stats = { rounds: 0, flashes: 0, perfects: [0, 0] };
-    let lyr = null, lastInfo = ['', '']; const timers = []; const later = (s, fn) => timers.push({ t: s, fn });
+    const pending = players.map(() => null), pendingBy = players.map(() => -1); const sabQ = players.map(() => shuffle(SABS.map((s) => s.id), rng));   // pending[p] = flash die p te wachten staat; pendingBy[p] = wie hem stuurde
+    const stats = { rounds: 0, flashes: 0, perfects: players.map(() => 0) };
+    let lyr = null, lastInfo = players.map(() => ''); const timers = []; const later = (s, fn) => timers.push({ t: s, fn });
     const bar = document.createElement('div');
     bar.style.cssText = 'position:fixed;left:50%;bottom:8px;transform:translateX(-50%);max-width:92vw;padding:4px 16px;border-radius:14px;background:rgba(20,6,40,.62);pointer-events:none;z-index:5;font:700 26px Fredoka,Arial Black,sans-serif;color:#fff;text-shadow:0 2px 4px #000;white-space:nowrap;display:none';
     document.body.append(bar); lyr = bar;
-    const behind = (p) => D[1 - p].score - D[p].score >= 500;
+    const bestOther = (p) => Math.max(...D.filter((d) => d.p !== p).map((d) => d.score));
+    const behind = (p) => bestOther(p) - D[p].score >= 500;
     const need = (p) => (behind(p) ? 2 : 3);
     const tNow = () => (started ? songT : introT);
 
@@ -139,7 +142,7 @@ export default {
       sabSpr[d.p].material.map = sabLabels[SABS.indexOf(S0)]; sabSpr[d.p].material.needsUpdate = true; sabSpr[d.p].visible = true; sabSpr[d.p].userData.t = 0;
       flashOv[d.p].material.opacity = 1; DM.flash = 0.8; camFlash.material.opacity = 1;
       audio.sfx('static', { vol: 0.35 }); audio.sfx('whoosh', { vol: 0.5 }); ctx.shake(0.35); d.stumble = 0.5;
-      hud.toast(`📸 Deurman-flash van ${names[1 - d.p]}: ${S0.name} (${S0.desc})`, 2400);
+      hud.toast(`📸 Deurman-flash van ${names[pendingBy[d.p] >= 0 ? pendingBy[d.p] : (d.p + 1) % N]} voor ${names[d.p]}: ${S0.name} (${S0.desc})`, 2400);
       fx.particles.burst(d.bx, 3.5, 3.5, { count: 30, speed: 6, up: 0.6, life: 0.8, size: 0.4, colors: [HEXC(S0.col), 0xffffff], gravity: 1 });
     }
     function layoutChips(d) {
@@ -148,7 +151,7 @@ export default {
         if (i >= n) return;
         const hidden = d.revealT && songT < ROUNDS[cur].t0 + d.revealT[i];
         s.material.map = hidden ? glyphTex(6) : glyphTex(d.req[i]); s.material.color.setRGB(0.55, 0.55, 0.62); s.material.needsUpdate = true;
-        s.position.set(d.bx + (i - (n - 1) / 2) * 1.12, 5.0 + (d.sz > 1.2 ? 0.8 : 0), 3.3);
+        s.position.set(d.bx + (i - (n - 1) / 2) * (N > 2 ? 0.94 : 1.12), 5.0 + (d.sz > 1.2 ? 0.8 : 0), 3.3);
       });
     }
     const _nc = new THREE.Color(1, 0.55, 1);
@@ -168,7 +171,7 @@ export default {
       });
     }
     // lees de ingedrukte symbolen van speler p (edge-velden; bij dronken uit de stick afgeleid)
-    const aHold = [-1, -1];
+    const aHold = players.map(() => -1);
     function readInputs(p) {
       const inp = pv.input(p), out = [];
       if (tid === 'drunk') {
@@ -181,7 +184,7 @@ export default {
     }
     function stepSound(p, i, ok) {
       if (!ok) { audio.sfx('buzz', { vol: 0.3 }); return; }
-      const f = mtof(60 + [0, 2, 4, 7, 9, 12][i % 6] + (p ? 12 : 0));
+      const f = mtof(60 + [0, 2, 4, 7, 9, 12][i % 6] + (p % 2 ? 12 : 0));
       audio.tone(f, 0.16, { type: 'triangle', vol: 0.16, send: 0.2 }); audio.tone(f * 2, 0.1, { type: 'sine', vol: 0.06 });
     }
     function press(p, gs) {
@@ -207,7 +210,7 @@ export default {
       d.res = perfect ? 'perfect' : 'good';
       d.combo++; d.maxCombo = Math.max(d.maxCombo, d.combo);
       let pts = (perfect ? PERF_PTS : GOOD_PTS) + 10 * (len - 2); pts = Math.round(pts * mult(d) * (d.gold ? 2 : 1));
-      const other = D[1 - p], first = !other.done;
+      const first = D.every((o) => o === d || !o.done);   // als eerste klaar
       let bonus = 0; if (first) { bonus = 20; d.firsts++; }
       d.score += pts + bonus; d.roundPts = pts + bonus;
       if (perfect) { d.perfects++; stats.perfects[p]++; d.streak++; } else { d.goods++; if (!behind(p)) d.streak = 0; else d.streak = Math.max(0, d.streak); }
@@ -220,9 +223,10 @@ export default {
       if (perfect) { d.spin = 0.001; d.hop = 1; S.crowdHype = Math.min(1.4, S.crowdHype + 0.15); } else d.hop = 0.5;
       if (d.combo > 0 && d.combo % 5 === 0) { fx.texts.add(`${d.combo} COMBO!`, d.bx, 9.2, 3.0, '#ff9ad5', 1.4); audio.sfx('powerup', { vol: 0.4 }); }
       // flash laden
-      if (d.streak >= need(p) && !pending[1 - p]) {
+      const victim = N === 2 ? (pending[1 - p] ? null : D[1 - p]) : D.filter((o) => o !== d && !pending[o.p]).sort((a, b) => b.score - a.score)[0] || null;   // bij 4 spelers: de koploper (zonder wachtende flash)
+      if (d.streak >= need(p) && victim) {
         d.streak = 0; d.flashesSent++; if (!sabQ[p].length) sabQ[p] = shuffle(SABS.map((s) => s.id), rng);
-        pending[1 - p] = sabQ[p].pop(); d.loaded = true;
+        pending[victim.p] = sabQ[p].pop(); pendingBy[victim.p] = p; d.loaded = true;
         fx.texts.add('FLASH GELADEN!', d.bx, 8.3, 3.0, '#ffffff', 1.4); audio.sfx('powerup', { vol: 0.6 });
         fx.particles.ring(d.bx, 1.0, 3.5, { count: 24, speed: 6, color: 0xffffff, size: 0.3, life: 0.6 });
       }
@@ -304,23 +308,25 @@ export default {
       visuals(dt);
     }
     let closeT = 0;
-    function winnerOf() {
-      if (D[0].score !== D[1].score) return D[0].score > D[1].score ? 0 : 1;
-      if (D[0].perfects !== D[1].perfects) return D[0].perfects > D[1].perfects ? 0 : 1;
-      if (D[0].maxCombo !== D[1].maxCombo) return D[0].maxCombo > D[1].maxCombo ? 0 : 1;
-      return Math.random() < 0.5 ? 0 : 1;
+    function ranking() {   // 1e eerst: score, dan perfecten, dan langste combo, dan toeval
+      const coin = D.map(() => Math.random());
+      return D.map((d) => d.p).sort((x, y) => D[y].score - D[x].score || D[y].perfects - D[x].perfects || D[y].maxCombo - D[x].maxCombo || coin[x] - coin[y]);
     }
+    const winnerOf = () => ranking()[0];
     function endSong() {
       if (finished) return; finished = true;
-      const w = winnerOf(), tie = D[0].score === D[1].score;
+      const order = ranking(), w = order[0], l = N === 2 ? 1 - w : order[order.length - 1];
+      const tie = D[w].score === D[order[1]].score, tieP = tie && D[w].perfects !== D[order[1]].perfects;
       hud.setTimer(null); hud.showBig(`${names[w]} wint!`, 1800, players[w].css);
-      D[w].cheer = 99; D[1 - w].cheer = -99; S.crowdHype = 1.5; audio.sfx('win'); ctx.shake(0.5); lyr.style.display = 'none';
+      D.forEach((d) => { d.cheer = d.p === w ? 99 : -99; }); S.crowdHype = 1.5; audio.sfx('win'); ctx.shake(0.5); lyr.style.display = 'none';
       mainChips.forEach((s) => { s.visible = false; }); nameSpr.visible = false; D.forEach((d) => d.chips.forEach((s) => { s.visible = false; }));
       for (let k = 0; k < 4; k++) later(k * 0.3, () => fx.particles.burst(rand(-6, 6), 8, 1.5, { count: 40, speed: 8, up: 1, life: 1.4, size: 0.5, colors: [0xffe14a, 0xff4fa8, 0x4fd8ff, 0x8dff6a], gravity: 6 }));
-      const J = [`${names[w]} is de nieuwe Disco-Deurman! ${names[1 - w]} had twee linkervoeten.`, `Het publiek van deurtjes klapt ${names[w]} open! ${names[1 - w]} struikelt nog door.`, `De Deurman geeft ${names[w]} een hoge vijf. ${names[1 - w]} krijgt een pleister.`, `${names[w]} danst de scharnieren van de deur. ${names[1 - w]} danst de klink eraf.`];
-      const bits = [`${names[0]}: ${D[0].perfects} perfect, beste combo ${D[0].maxCombo}`, `${names[1]}: ${D[1].perfects} perfect, beste combo ${D[1].maxCombo}`];
+      const J = [`${names[w]} is de nieuwe Disco-Deurman! ${names[l]} had twee linkervoeten.`, `Het publiek van deurtjes klapt ${names[w]} open! ${names[l]} struikelt nog door.`, `De Deurman geeft ${names[w]} een hoge vijf. ${names[l]} krijgt een pleister.`, `${names[w]} danst de scharnier-swing als een echte deurprofessional. ${names[l]} danst nog even door.`];
+      const bits = D.map((d) => `${names[d.p]}: ${d.perfects} perfect, beste combo ${d.maxCombo}`);
       if (stats.flashes) bits.push(`${stats.flashes}x Deurman-flash`);
-      ctx.finishPvp({ winner: w, score: [D[0].score, D[1].score], delay: 1400, summary: `${pick(J)}${tie ? (D[0].perfects !== D[1].perfects ? ' (Gelijke stand: de meeste perfecten besliste.)' : ' (Helemaal gelijk: de Deurman gooit een munt op.)') : ''} ${bits.join(' · ')}.` });
+      const summary = `${pick(J)}${tie ? (tieP ? ' (Gelijke stand: de meeste perfecten besliste.)' : ' (Helemaal gelijk: de Deurman gooit een munt op.)') : ''} ${bits.join(' · ')}.`;
+      if (N === 2) ctx.finishPvp({ winner: w, score: [D[0].score, D[1].score], delay: 1400, summary });
+      else ctx.finishPvp({ winner: w, score: D.map((d) => d.score), place: order, delay: 1400, summary });
     }
 
     // ---------------- beelden ----------------
@@ -400,13 +406,13 @@ export default {
         const info = `${d.score} pt · combo ${d.combo} · flash ${Math.min(d.streak, need(d.p))}/${need(d.p)}${pending[d.p] ? ' · 📸 FLASH op komst!' : ''}`;
         if (info !== lastInfo[d.p]) { lastInfo[d.p] = info; hud.setPlayerInfo(d.p, info); }
       });
-      hud.setScore(`${names[0]} ${D[0].score} – ${D[1].score} ${names[1]}`);
+      hud.setScore(N === 2 ? `${names[0]} ${D[0].score} – ${D[1].score} ${names[1]}` : null);
       placeCamera();
     }
     let camPunch = 0;
     function placeCamera() {
       const sw = Math.sin((T + introT) * 0.4) * 0.5;
-      camera.position.set(sw, 7.6, 17.2 - camPunch * 2); camera.lookAt(0, 6.5, 0);
+      camera.position.set(sw, N > 2 ? 8.2 : 7.6, (N > 2 ? 20.5 : 17.2) - camPunch * 2); camera.lookAt(0, 6.5, 0);   // bij 4 spelers verder weg
     }
     function resultUpdate(dt) { T += dt; endT += dt; for (let i = timers.length - 1; i >= 0; i--) { timers[i].t -= dt; if (timers[i].t <= 0) { const f = timers[i].fn; timers.splice(i, 1); f(); } } visuals(dt); }
     function introUpdate(dt) { introT += dt; visuals(dt); }
@@ -415,20 +421,20 @@ export default {
     return {
       update: (dt) => { if (finished) { resultUpdate(dt); return; } update(dt); },
       resultUpdate, introUpdate,
-      onStart() { try { audio.stopMusic(); } catch (e) { /* geen audio */ } started = true; songT = 0; lastInfo = ['', '']; bar.style.display = ''; },
-      onCountdown() { lastInfo = ['', '']; },
+      onStart() { try { audio.stopMusic(); } catch (e) { /* geen audio */ } started = true; songT = 0; lastInfo = players.map(() => ''); bar.style.display = ''; },
+      onCountdown() { lastInfo = players.map(() => ''); },
       onResize() { camera.updateProjectionMatrix(); },
       onSwap() { for (const d of D) fx.particles.burst(d.bx, 3, 2.5, { count: 24, speed: 4, up: 1, life: 0.8, size: 0.4, colors: [0xffe14a, 0xffffff], gravity: 2 }); hud.toast('🔄 Wissel! Jullie tikken met elkaars knoppen', 2200); },
       onDeurman(movers) {
         movers.forEach((m, p) => { if (!m) return; const d = D[p]; d.combo = 0; d.streak = 0; d.score = Math.max(0, d.score - 250); d.stumble = 1.2; d.idx = 0; fx.texts.add('DEURMAN ZAG JE! -250', d.bx, 6.4, 3.0, '#ff6a4a', 1.3); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); });
       },
-      celebrate(w) { D[w].cheer = 99; D[1 - w].cheer = -99; S.crowdHype = 1.5; },
+      celebrate(w, winners = [w]) { D.forEach((d) => { d.cheer = winners.includes(d.p) ? 99 : -99; }); S.crowdHype = 1.5; },
       dispose() { bar.remove(); },
       dbg: {
         state: () => ({ T, songT, started, finished, ending, cur, open: curOpen, rounds: ROUNDS.length, tempo, combo: cur >= 0 ? COMBOS[cur] : [], r0: cur >= 0 ? ROUNDS[cur].t0 : 0, W: cur >= 0 ? ROUNDS[cur].W : 0, ROUNDS_END,
           P: D.map((d) => ({ score: d.score, combo: d.combo, maxCombo: d.maxCombo, perfects: d.perfects, goods: d.goods, misses: d.misses, streak: d.streak, req: [...d.req], idx: d.idx, done: d.done, res: d.res, sab: d.sab, mistakes: d.mistakes, revealT: d.revealT, gold: d.gold, lock: d.lock, flashesSent: d.flashesSent })), pending: [...pending], stats: { ...stats, perfects: [...stats.perfects] } }),
-        setScore(a, b) { D[0].score = a; D[1].score = b; },
-        queueSab(p, id) { pending[p] = id; },
+        setScore(...v) { v.forEach((x, i) => { if (i < N) D[i].score = x; }); },
+        queueSab(p, id) { pending[p] = id; pendingBy[p] = -1; },
         jumpTo(t) { songT = t; evI = EVENTS.findIndex((e) => e[0] >= t); if (evI < 0) evI = EVENTS.length; sylI = SYLS.findIndex((s) => s.t >= t); if (sylI < 0) sylI = SYLS.length; },
         combos: COMBOS,
       },

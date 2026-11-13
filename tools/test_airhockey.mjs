@@ -1,7 +1,9 @@
 // Gebruik: node tools/test_airhockey.mjs [scenario...]   scenario: bots | twists | shots | timeout | idle
+//   PLAYERS=4 = vier spelers (Sam doet mee; teams [[0,1],[2,3]] bij teamspellen); zonder PLAYERS twee spelers.
 //   TW=<twist-id> kiest een twist (anders: "none" / per scenario). Q=low|high kwaliteit.
 // Bots spelen versneld (zonder renderen) hele potjes; rapporteert tussenstanden, winnaar, fouten.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -14,23 +16,24 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
+const N = +process.env.PLAYERS || 2;   // PLAYERS=4: vier spelers (?players=4), alle spelers krijgen input
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 
 async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=airhockey&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=airhockey&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${N >= 3 ? '&players=' + N : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -43,17 +46,17 @@ async function installBots(page, cfg) {
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 987; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    const B = [0, 1].map(() => ({ hold: 0, wait: 0 }));
+    const B = [0, 1, 2, 3].map(() => ({ hold: 0, wait: 0 }));
     window.__cfg = cfg;
     window.__bot = (n, stop) => {
       const dt = 1 / 60;
       m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i], b = B[i], c = window.__cfg[i], me = st.pads[i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
+        for (let i = 0; i < st.pads.length; i++) {
+          const v = inp.virtual[m.ids[i]], b = B[i], c = window.__cfg[i % 2], me = st.pads[i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
           if (c.style === 'idle' || st.gstate === 'init' || st.gstate === 'end') continue;
-          const dir = i === 0 ? 1 : -1;
+          const dir = me.t === 0 ? 1 : -1;
           const live = st.pucks.filter((q) => !q.falling);
           // kies puck: de gevaarlijkste (op mijn helft / naar mijn doel) of anders dichtstbij
           let tp = null, best = 1e9;

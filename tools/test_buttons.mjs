@@ -1,6 +1,8 @@
 // Gebruik: node tools/test_buttons.mjs [bots|idle|shots|twists] [twist-id]
+//   bots3 / bots4 = drie / vier spelers (vrij voor allen, ?players=N): alle spelers krijgen input, uitslag volgt, place klopt.
 // Versneld (zonder renderen) potjes Knoppen-Breker laten spelen door bots; rapporteert winnaars, duur, fouten.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath, BROWSER_ARGS } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -17,19 +19,19 @@ const args = process.argv.slice(2);
 const scen = args[0] || 'bots';
 const ALL_TW = ['none', 'invert', 'swapab', 'drunk', 'bodyswap', 'turbo', 'slowmo', 'deurman'];
 
-async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+async function open(twist, N = 2) {
+  const browser = await chromium.launch({ executablePath: chromePath(), args: BROWSER_ARGS });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|ERR_/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=buttons&quality=low${twist ? '&twist=' + twist : ''}`);
+  await page.goto(`http://localhost:${port}/?game=buttons&quality=low${twist ? '&twist=' + twist : ''}${N > 2 ? '&players=' + N : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 3000) { inp.update(); mode.update(0.016); }
   });
@@ -37,16 +39,17 @@ async function open(twist) {
   await page.evaluate(() => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     const KEYS = ['left', 'right', 'up', 'down', 'a', 'b'];
-    const B = [0, 1].map(() => ({ wait: 0, seen: -1, skill: 0.5, err: 0.05, wasKey: null }));
+    const NN = m.ids.length;
+    const B = m.ids.map(() => ({ wait: 0, seen: -1, skill: 0.5, err: 0.05, wasKey: null }));
     window.__B = B;
     window.__bot = (n, opt = {}, stop) => {
       const dt = 1 / 60;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) return true;
-        for (const i of [0, 1]) { const v = inp.virtual[i]; for (const key of KEYS) v[key] = false; v.x = 0; v.y = 0; }
+        for (const i of m.ids) { const v = inp.virtual[i]; for (const key of KEYS) v[key] = false; v.x = 0; v.y = 0; }
         if (!opt.idle) {
-          for (const col of [0, 1]) {
-            const phys = st.swapped ? 1 - col : col;   // welke toetsenbordspeler bestuurt deze kolom
+          for (let col = 0; col < NN; col++) {
+            const phys = NN === 2 && st.swapped ? 1 - col : m.ids[col];   // welke toetsenbordspeler bestuurt deze kolom
             const b = B[col], p = st.p[col];
             if (p.need < 0 || p.stun > 0 || p.squash > 0 || p.lock > 0 || p.ignore > 0 || p.frozen > 0.7) { b.seen = -1; continue; }
             const sig = p.need + ':' + p.kind + ':' + st.p[col].broken;
@@ -84,7 +87,23 @@ async function runMatch(page, opt) {
   }, opt);
 }
 
-if (scen === 'bots' || scen === 'twists') {
+if (scen === 'bots3' || scen === 'bots4') {
+  const N = scen === 'bots4' ? 4 : 3, winners = new Set(); let bad = 0;
+  const SK = N === 4 ? [[0.35, 0.6, 0.8, 0.6], [0.6, 0.35, 0.6, 0.8], [0.8, 0.6, 0.35, 0.6], [0.6, 0.8, 0.6, 0.35], [0.5, 0.5, 0.5, 0.5], [99, 99, 99, 99], [0.4, 99, 99, 0.6]] : [[0.35, 0.6, 0.8], [0.6, 0.35, 0.6], [0.8, 0.6, 0.35], [99, 99, 99]];
+  for (const skill of SK) {
+    const { browser, page, errors } = await open(args[1] || 'none', N);
+    const r = await runMatch(page, { skill, err: skill.map(() => 0.05) });
+    const fin = await page.evaluate(() => { const m = window.__app.mode; return m.result ? { place: m.result.place, winnerIds: m.result.winnerIds } : null; });
+    console.log(skill.join('/').padEnd(18), `finished=${r.finished} sudden=${r.sudden} t=${r.t.toFixed(1)} score=${r.res && r.res.score} winner=${r.res && r.res.winner} place=${fin && fin.place} :: ${r.res && r.res.summary.slice(0, 70)}`);
+    if (!r.finished || !fin) { console.log('FAIL: niet afgelopen'); bad++; }
+    else { if (fin.place.length !== N || new Set(fin.place).size !== N) { console.log('FAIL: place ongeldig'); bad++; } for (const w of fin.winnerIds) winners.add(w); }
+    if (errors.length) { console.log('ERRORS:\n' + errors.slice(0, 5).join('\n')); bad++; }
+    await browser.close();
+  }
+  console.log('winnaars (spelers-id):', [...winners].sort().join(','));
+  if (winners.size < Math.min(N, 3)) { console.log('FAIL: te weinig verschillende winnaars'); bad++; }
+  if (bad) process.exitCode = 1;
+} else if (scen === 'bots' || scen === 'twists') {
   const tws = scen === 'twists' ? ALL_TW : [args[1] || 'none'];
   for (const tw of tws) {
     const tally = [0, 0, 0]; const durs = [];

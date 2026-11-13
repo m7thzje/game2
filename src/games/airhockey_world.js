@@ -106,7 +106,7 @@ function yeti() {
   return g;
 }
 
-export function buildArena(ctx, L, colors) {
+export function buildArena(ctx, L, colors, tHex = [0x35c46f, 0x4a8cff], tCss = ['#7dffb0', '#8fb8ff']) {
   const { scene, fx } = ctx;
   const { LX, LZ, SD, GH } = TB;
   const rng = mulberry32(777);
@@ -174,7 +174,7 @@ export function buildArena(ctx, L, colors) {
   A.goals = [];
   for (const sx of [-1, 1]) {
     const gg = new THREE.Group(); gg.position.set(sx * LX, 0, 0); scene.add(gg);
-    const colHex = sx < 0 ? 0x35c46f : 0x4a8cff;
+    const colHex = sx < 0 ? tHex[0] : tHex[1];
     // net (achterwand + zijwanden + dak)
     const netM = new THREE.MeshStandardMaterial({ map: netT, side: THREE.DoubleSide, roughness: 0.9, transparent: true, opacity: 0.92 });
     gg.add(mesh(new THREE.PlaneGeometry(2 * GH, 1.6), netM, { cast: false, pos: [sx * SD, 0.8, 0], rot: [0, Math.PI / 2, 0] }));
@@ -232,9 +232,9 @@ export function buildArena(ctx, L, colors) {
     g.strokeStyle = '#ffd86b'; g.lineWidth = 8; g.strokeRect(6, 6, w - 12, h - 12);
     g.textAlign = 'center'; g.textBaseline = 'middle';
     g.font = 'bold 40px Fredoka, Arial Black, sans-serif';
-    g.fillStyle = '#7dffb0'; g.fillText(names[0].toUpperCase(), 140, 44); g.fillStyle = '#8fb8ff'; g.fillText(names[1].toUpperCase(), w - 140, 44);
+    g.fillStyle = tCss[0]; g.fillText(names[0].toUpperCase(), 140, 44); g.fillStyle = tCss[1]; g.fillText(names[1].toUpperCase(), w - 140, 44);
     g.font = 'bold 116px Fredoka, Arial Black, sans-serif';
-    g.fillStyle = '#7dffb0'; g.fillText(String(score[0]), 140, 142); g.fillStyle = '#8fb8ff'; g.fillText(String(score[1]), w - 140, 142);
+    g.fillStyle = tCss[0]; g.fillText(String(score[0]), 140, 142); g.fillStyle = tCss[1]; g.fillText(String(score[1]), w - 140, 142);
     g.fillStyle = '#ffd86b'; g.font = 'bold 40px Fredoka, Arial Black, sans-serif'; g.fillText(':', w / 2, 128);
     g.font = 'bold 46px Fredoka, Arial Black, sans-serif'; g.fillStyle = secs <= 10 ? '#ff7a6a' : '#ffffff';
     const mm = Math.floor(Math.max(0, secs) / 60), ss = Math.floor(Math.max(0, secs) % 60);

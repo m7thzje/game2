@@ -4,6 +4,7 @@
 //  input  : controleer lopen / zitten / duiken / duwen met echte (virtuele) toetsen
 //  shots  : screenshots van de belangrijkste momenten (muziek, stop, gouden stoel, ontploffende stoel, uitvallen, trofee)
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -17,21 +18,21 @@ const server = http.createServer((req, res) => {
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 const allErrors = [];
 
-async function open(twist = 'none', size = [1100, 650]) {
+async function open(twist = 'none', size = [1100, 650], np = 2) {
   const page = await browser.newPage({ viewport: { width: size[0], height: size[1] } });
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) allErrors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => allErrors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=chairs&twist=${twist}&scare=0&quality=low`);
+  await page.goto(`http://localhost:${port}/?game=chairs&twist=${twist}&scare=0&quality=low&players=${np}`);
   await page.waitForFunction(() => window.__app && window.__app.mode && window.__app.mode.instance, null, { timeout: 60000 });
   await page.waitForTimeout(500);
   await page.evaluate(async () => {
     try { const am = await import('/src/engine/audio.js'); am.audio.init(); window.__audioOK = !!am.audio.ctx; } catch (e) { window.__audioOK = 'err ' + e.message; }
     const app = window.__app, mode = app.mode, inp = app.input;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     window.__step = (n) => { for (let k = 0; k < n && !mode.finished; k++) { inp.update(); mode.update(1 / 60); } };
@@ -40,6 +41,40 @@ async function open(twist = 'none', size = [1100, 650]) {
 }
 
 for (const name of scen) {
+  if (name === 'four' || name === 'three') {
+    // 4 (of 3) spelers: alle spelers worden door de AI gespeeld (auto); uitslag met plaatsen 1e-4e, finishPvp 1x, geen console-fouten
+    const np = name === 'four' ? 4 : 3; let bad = 0;
+    const tws = process.env.TW ? process.env.TW.split(',') : ['none', 'bodyswap', 'giant', 'slippery'];
+    for (const tw of tws) {
+      const page = await open(tw, [1100, 650], np);
+      const res = await page.evaluate((np) => {
+        const m = window.__app.mode, d = m.instance.dbg; let fin = 0; const f0 = m.ctx.finishPvp; m.ctx.finishPvp = (r) => { fin++; return f0(r); };
+        for (let i = 0; i < np; i++) d.auto(i);
+        let guard = 0; while (!m.finished && guard++ < 60 * 400) window.__step(2);
+        for (let k = 0; k < 120; k++) window.__step(2);
+        return { fin: m.finished, calls: fin, st: d.state(), result: m.result };
+      }, np);
+      const r = res.result;
+      const ok = res.fin && res.calls === 1 && r && r.ids.length === np && r.place.length === np && new Set(r.place).size === np && r.scoreArr.length === np && r.winner != null && r.place[0] === r.ids[r.winner];
+      console.log(ok ? 'OK  ' : 'FOUT', `${name} twist=${tw} winner=${r && r.winner} place=${r && r.place} score=${r && r.scoreArr} out=${res.st.outRound} :: ${r ? r.summary.replace(/<[^>]+>/g, '') : ''}`);
+      if (!ok) bad++;
+      await page.close();
+    }
+    console.log(allErrors.length ? 'ERRORS:\n' + allErrors.slice(0, 8).join('\n') : 'NO ERRORS');
+    if (bad || allErrors.length) process.exitCode = 1;
+    continue;
+  }
+  if (name === 'four-shots') {
+    const page = await open('none', [1100, 650], 4);
+    const snap = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); for (let k = 0; k < 4; k++) { try { await page.screenshot({ path: `/tmp/chairs4_${tag}.png`, timeout: 90000 }); break; } catch (e) { await page.waitForTimeout(1500); } } await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
+    await page.evaluate(() => { const d = window.__app.mode.instance.dbg; for (let i = 0; i < 4; i++) d.auto(i); window.__step(60 * 4); });
+    await snap('music');
+    await page.evaluate(() => { const d = window.__app.mode.instance.dbg; let g = 0; while (d.state().rs !== 'stop' && g++ < 60 * 40) window.__step(1); window.__step(30); }); await snap('stop');
+    await page.evaluate(() => { const d = window.__app.mode.instance.dbg; let g = 0; while (d.state().rs !== 'elim' && g++ < 60 * 40) window.__step(1); window.__step(40); }); await snap('elim');
+    await page.evaluate(() => { const d = window.__app.mode.instance.dbg; let g = 0; while (d.state().rs !== 'trophy' && g++ < 60 * 200) window.__step(2); window.__step(200); }); await snap('trophy');
+    console.log(allErrors.length ? 'ERRORS:\n' + allErrors.slice(0, 8).join('\n') : 'NO ERRORS');
+    continue;
+  }
   if (name === 'bots') {
     const twists = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
     const wins = [0, 0, 0]; const N = +process.env.N || twists.length;

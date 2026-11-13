@@ -19,7 +19,8 @@ const W0 = 1.25;              // basis-wiebel (wereld-eenheden)
 const RS = 3.4;               // richtpunt-snelheid
 const STEADY_T = 1.1, STEADY_CD = 5.5;
 const LATE_T = 15;
-const STAND = [[-6.4, 3.4], [6.4, 3.4]];
+const STAND2 = [[-6.4, 3.4], [6.4, 3.4]];
+const RUG = [0x2a7a46, 0x2c4f9a, 0x9a5a1c, 0x7a2a8a];
 
 export default {
   id: 'darts',
@@ -27,9 +28,10 @@ export default {
   giver: 'Herbergier Hennie',
   icon: '🎯',
   mode: 'pvp',
+  players: [2, 3, 4],
   time: 90,
   music: 'game_fast',
-  blurb: 'Darts in de taverne, <b>allebei tegelijk</b>! Eerst <b>300 punten</b> wint (of de meeste na 90 s). Het bord <b>draait en schuift</b>, een <b>kip</b> fladdert in de weg en gouden dubbelvakken tellen x4!',
+  blurb: 'Darts in de taverne, <b>allemaal tegelijk</b> (2 tot 4 spelers)! Eerst <b>300 punten</b> wint (of de meeste na 90 s). Het bord <b>draait en schuift</b>, een <b>kip</b> fladdert in de weg en gouden dubbelvakken tellen x4!',
   controls: ['{move} richtpunt bijsturen', '{a} trekken, loslaten = gooien', '{b} adem inhouden (even rustig)'],
   tip: 'Trek je pijl even aan voor een rechte worp, maar niet te lang! Wie achterstaat wordt rustiger.',
 
@@ -37,6 +39,8 @@ export default {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
+    const N = players.length;
+    const STAND = N === 2 ? STAND2 : N === 3 ? [[-7.4, 3.4], [0, 4.1], [7.4, 3.4]] : [[-8.4, 3.2], [-2.8, 4.0], [2.8, 4.0], [8.4, 3.2]];
     const tw = ctx.twist.id;
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const TEMPO = tw === 'turbo' || tw === 'slowmo' ? ctx.twist.speed || 1 : 1;
@@ -55,7 +59,7 @@ export default {
       const sz = pv.size(i); const k = 1.3 * lerp(1, sz, 0.45);
       holder.scale.setScalar(k); holder.position.set(STAND[i][0], 0.0, STAND[i][1]); scene.add(holder);
       c.faceDir(-STAND[i][0] * 0.6, -STAND[i][1]); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
-      const rug = mesh(new THREE.BoxGeometry(3.4, 0.08, 2.2), mat(i ? 0x2c4f9a : 0x2a7a46, { flatShading: false }), { cast: false, pos: [STAND[i][0], 0.04, STAND[i][1]] }); scene.add(rug);
+      const rug = mesh(new THREE.BoxGeometry(3.4, 0.08, 2.2), mat(RUG[pp.id], { flatShading: false }), { cast: false, pos: [STAND[i][0], 0.04, STAND[i][1]] }); scene.add(rug);
       const tagTex = canvasTex(256, 96, (g, w, h) => { g.font = 'bold 58px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(10,5,10,.9)'; g.lineJoin = 'round'; g.strokeText(pp.name, w / 2, h / 2); g.fillStyle = pp.css; g.fillText(pp.name, w / 2, h / 2); });
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false })); tag.scale.set(2.4, 0.9, 1); tag.position.set(STAND[i][0], k * 1.84 + 0.9, STAND[i][1]); tag.renderOrder = 14; scene.add(tag);
       // richtpunt
@@ -65,25 +69,25 @@ export default {
       const barBg = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.17), new THREE.MeshBasicMaterial({ color: 0x120c10, transparent: true, opacity: 0.8, depthTest: false })); barBg.renderOrder = 12; scene.add(barBg);
       const barFill = new THREE.Mesh(new THREE.PlaneGeometry(1.22, 0.1), new THREE.MeshBasicMaterial({ color: pp.color, depthTest: false })); barFill.renderOrder = 13; scene.add(barFill);
       return { i, name: pp.name, col: pp.color, c, holder, k, ret, pw, glow, barBg, barFill, x: STAND[i][0], z: STAND[i][1],
-        ax: i ? 1.6 : -1.6, ay: CY - 0.4, vx: 0, vy: 0, lx: 0, ly: 0, ph: Math.random() * 6, wmul: 1,
+        ax: N === 2 ? (i ? 1.6 : -1.6) : (i - (N - 1) / 2) * 1.9, ay: CY - 0.4, vx: 0, vy: 0, lx: 0, ly: 0, ph: Math.random() * 6, wmul: 1,
         state: 'ready', hold: 0, pull: 0, cd: 0.4, left: ROUND_DARTS, flying: 0, held: -1, steadyT: 0, steadyCd: 0, score: 0, roundPts: 0, last: '', poseT: 0, frozen: 0,
         st: { bulls: 0, outer: 0, trip: 0, dbl: 0, gold: 0, miss: 0, best: 0, thrown: 0, chicken: 0 } };
     });
 
     // ---------------- toestand ----------------
     let T = 0, introT = 0, finished = false, slow = 1, slowHold = 0, camPunch = 0;
-    const G = { state: 'play', timeLeft: MATCH_TIME, late: false, timeUp: false, sd: false, sdT: 0, sdRes: [null, null], round: 1, roundT: 0, graceT: 0, graceOn: false, forceRelease: -1, clearT: 0, endT: 0, winner: -1, goldT: 0, goldSet: new Set() };
+    const G = { state: 'play', timeLeft: MATCH_TIME, late: false, timeUp: false, sd: false, sdT: 0, sdRes: [null, null], sdSet: [0, 1], round: 1, roundT: 0, graceT: 0, graceOn: false, forceRelease: -1, clearT: 0, endT: 0, winner: -1, goldT: 0, goldSet: new Set() };
     const stats = { events: 0, rounds: 1, evs: [] };
     const darted = [];      // alle pijlen
     const v3 = new THREE.Vector3(), v3b = new THREE.Vector3(), qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), m4 = new THREE.Matrix4(), dummy = new THREE.Object3D(), ZAX = new THREE.Vector3(0, 0, 1);
-    const trailing = (p) => Math.max(0, P[1 - p.i].score - p.score);
+    const trailing = (p) => Math.max(0, Math.max(...P.filter((q) => q !== p).map((q) => q.score)) - p.score);
     const kTrail = (p) => clamp(trailing(p) / 50, 0, 1);
 
     function refreshHud() {
-      hud.setScore(`${names[0]} ${P[0].score} – ${P[1].score} ${names[1]}${G.sd ? '  (STERFTE-BEURT)' : ''}`);
+      hud.setScore(N === 2 ? `${names[0]} ${P[0].score} – ${P[1].score} ${names[1]}${G.sd ? '  (STERFTE-BEURT)' : ''}` : (G.sd ? 'STERFTE-BEURT' : `Eerst ${TARGET} punten`));
       for (const p of P) {
         const kt = kTrail(p);
-        hud.setPlayerInfo(p.i, `${p.score} pt · ${'●'.repeat(p.left)}${'○'.repeat(ROUND_DARTS - p.left)}${p.steadyCd > 0 ? ` · adem ${Math.ceil(p.steadyCd)}s` : ' · adem ✓'}${kt > 0.3 ? ' · RUSTIG' : ''}`);
+        hud.setPlayerInfo(p.i, N > 2 ? `${p.score} pt · ${'●'.repeat(p.left)}${'○'.repeat(ROUND_DARTS - p.left)}${p.steadyCd > 0 ? ` · ${Math.ceil(p.steadyCd)}s` : ' · B✓'}` : `${p.score} pt · ${'●'.repeat(p.left)}${'○'.repeat(ROUND_DARTS - p.left)}${p.steadyCd > 0 ? ` · adem ${Math.ceil(p.steadyCd)}s` : ' · adem ✓'}${kt > 0.3 ? ' · RUSTIG' : ''}`);
         A.drawScore(p.i, p.name, p.score, TARGET, p.last, p.left, kt > 0.3);
       }
     }
@@ -116,7 +120,7 @@ export default {
     newGold();
 
     // ---------------- worp ----------------
-    function handPos(p, out) { p.c.handR.getWorldPosition(out); if (!isFinite(out.x) || out.y < 0.5) out.set(p.x + (p.i ? -0.5 : 0.5), 2.7, p.z - 0.5); return out; }
+    function handPos(p, out) { p.c.handR.getWorldPosition(out); if (!isFinite(out.x) || out.y < 0.5) out.set(p.x + (p.x > 0 ? -0.5 : 0.5), 2.7, p.z - 0.5); return out; }
     const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 0.75;
     function startPull(p) {
       p.state = 'pull'; p.hold = 0; p.pull = 0; p.pose0 = true; p.c.pose = 'point';
@@ -194,30 +198,32 @@ export default {
     // ---------------- einde ----------------
     function finishMatch(winner) {
       if (finished) return; finished = true;
-      const l = 1 - winner, W = P[winner], Lz = P[l];
+      const order = [winner, ...P.map((p) => p.i).filter((i) => i !== winner).sort((a, b) => P[b].score - P[a].score || a - b)];
+      const l = order[N - 1], W = P[winner], Lz = P[l];
       const jokes = [`${W.name} gooit alles in de roos! ${Lz.name} raakt vooral de muur.`, `De hele taverne joelt voor ${W.name}. ${Lz.name} bestelt troostbier.`, `${W.name} is de nieuwe Pijlen-Poeha! De kip is onder de indruk.`, `${Lz.name} mikte op de bull, maar raakte de herbergier.`];
       const bits = [];
       if (W.st.bulls) bits.push(`${W.st.bulls}x bullseye`); if (W.st.gold) bits.push(`${W.st.gold}x gouden dubbel`); if (W.st.trip) bits.push(`${W.st.trip}x triple`);
-      if (P[0].st.chicken + P[1].st.chicken) bits.push(`de kip werd ${P[0].st.chicken + P[1].st.chicken}x geraakt`);
-      ctx.finishPvp({ winner, score: [P[0].score, P[1].score], delay: 900, summary: `${pick(jokes)}${G.sd ? ' Beslist met een sterfte-beurt: dichtst bij de roos won!' : ''}${bits.length ? ` (${bits.join(', ')})` : ''}` });
+      const chx = P.reduce((a, q) => a + q.st.chicken, 0); if (chx) bits.push(`de kip werd ${chx}x geraakt`);
+      ctx.finishPvp({ winner, score: P.map((q) => q.score), place: N > 2 ? order : undefined, delay: 900, summary: `${pick(jokes)}${G.sd ? ' Beslist met een sterfte-beurt: dichtst bij de roos won!' : ''}${bits.length ? ` (${bits.join(', ')})` : ''}` });
     }
     function endMatch(winner, why) {
       if (G.state === 'end') return;
       G.state = 'end'; G.winner = winner; G.endT = 0; G.why = why; slow = Math.min(slow, 0.4); slowHold = 0.8;
       hud.setTimer(null);
-      hud.showBig(`${names[winner]} WINT!`, 1700, winner ? '#8fb8ff' : '#7dffb0');
+      hud.showBig(`${names[winner]} WINT!`, 1700, players[winner].css);
       audio.sfx('bell', { vol: 1 }); ctx.shake(0.5); A.cheer(8);
-      P[winner].c.pose = 'cheer'; P[1 - winner].c.pose = 'sad';
+      for (const q of P) q.c.pose = q.i === winner ? 'cheer' : 'sad';
       for (const p of P) { if (p.held >= 0) { darts.release(p.held); p.held = -1; } p.state = 'done'; }
       fx.particles.burst(0, CY + 2, 1.5, { count: 90, speed: 9, up: 1.0, life: 1.6, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 });
     }
     function resolveTimeUp() {
-      if (P[0].score !== P[1].score) { hud.showBig('TIJD!', 1000, '#ffd23f'); audio.sfx('bell', { vol: 0.9 }); endMatch(P[0].score > P[1].score ? 0 : 1, 'time'); return; }
-      // gelijkspel: sterfte-beurt
-      G.sd = true; G.sdT = 0; G.sdRes = [null, null]; G.state = 'play'; G.late = false; G.timeUp = false; G.graceOn = false;
-      for (const p of P) { p.left = 1; p.state = 'ready'; p.cd = 0.3; p.flying = 0; p.roundPts = 0; }
+      const top = Math.max(...P.map((q) => q.score)), tied = P.filter((q) => q.score === top).map((q) => q.i);
+      if (tied.length === 1) { hud.showBig('TIJD!', 1000, '#ffd23f'); audio.sfx('bell', { vol: 0.9 }); endMatch(tied[0], 'time'); return; }
+      // gelijkspel (tussen de koplopers): sterfte-beurt, alleen de gelijke spelers gooien één pijl
+      G.sd = true; G.sdT = 0; G.sdRes = P.map(() => null); G.sdSet = tied; G.state = 'play'; G.late = false; G.timeUp = false; G.graceOn = false;
+      for (const p of P) { const inSd = tied.includes(p.i); p.left = inSd ? 1 : 0; p.state = inSd ? 'ready' : 'done'; p.cd = 0.3; p.flying = 0; p.roundPts = 0; }
       for (const d of darted) if (d.state === 'stuck' && d.rm === 0) d.rm = 0.001;
-      hud.showBig('GELIJK!', 1300, '#ffd23f'); hud.toast('Sterfte-beurt: één pijl elk, dichtst bij de roos wint!', 2800); audio.sfx('bell', { vol: 0.9 }); ctx.shake(0.4);
+      hud.showBig('GELIJK!', 1300, '#ffd23f'); hud.toast(N > 2 && tied.length < N ? `Sterfte-beurt voor ${tied.map((k) => names[k]).join(' en ')}: dichtst bij de roos wint!` : 'Sterfte-beurt: één pijl elk, dichtst bij de roos wint!', 2800); audio.sfx('bell', { vol: 0.9 }); ctx.shake(0.4);
       refreshHud();
     }
 
@@ -225,7 +231,7 @@ export default {
     function startClear() {
       G.state = 'clear'; G.clearT = 0;
       for (const p of P) {
-        if (p.roundPts > 0) fx.texts.add(`+${p.roundPts}`, p.x, p.k * 1.84 + 1.6, p.z, p.i ? '#8fb8ff' : '#7dffb0', 1.4);
+        if (p.roundPts > 0) fx.texts.add(`+${p.roundPts}`, p.x, p.k * 1.84 + 1.6, p.z, players[p.i].css, 1.4);
         p.roundPts = 0;
       }
       for (const d of darted) if (d.state === 'stuck' && d.rm === 0) { d.rm = 0.001; }
@@ -372,7 +378,7 @@ export default {
     function updateCamera(dt) {
       camPunch = Math.max(0, camPunch - dt * 2.2);
       const t = T + introT;
-      camera.position.set(Math.sin(t * 0.3) * 0.35, 6.3 - camPunch * 0.25, 15.4 - camPunch * 1.1);
+      camera.position.set(Math.sin(t * 0.3) * 0.35, (N > 2 ? 6.9 : 6.3) - camPunch * 0.25, (N > 2 ? 18.2 : 15.4) - camPunch * 1.1);
       camera.lookAt(0, 4.55, 0.5);
     }
 
@@ -392,7 +398,7 @@ export default {
       G.goldT += dt; if (G.goldT > 11 && G.state === 'play') { G.goldT = 0; newGold(); hud.toast('✨ Nieuwe gouden dubbelvakken: x4!', 1800); audio.sfx('sparkle', { vol: 0.5 }); }
       // spelers
       for (const p of P) control(p, sdt, dt);
-      if (G.sd) { G.sdT += dt; if (G.sdT > 9) for (const p of P) if (p.state === 'ready') startPull(p); }
+      if (G.sd) { G.sdT += dt; if (G.sdT > 9) for (const p of P) if (p.state === 'ready' && G.sdSet.includes(p.i)) startPull(p); }
       // ronde-logica
       if (G.state === 'play') {
         G.roundT += dt;
@@ -401,13 +407,13 @@ export default {
           for (const p of P) if (p.state === 'ready' || p.state === 'cool') { p.left = 0; if (p.state === 'ready') p.state = 'waiting'; }
           if (P.every((p) => p.flying === 0 && p.state !== 'pull' && p.state !== 'cool') && !G.sd) resolveTimeUp();
         } else if (G.sd) {
-          if (done[0] && done[1] && P.every((p) => p.flying === 0)) {
-            const a = G.sdRes[0], b = G.sdRes[1]; if (a != null && b != null) { const w = a === b ? (Math.random() < 0.5 ? 0 : 1) : a < b ? 0 : 1; endMatch(w, 'sd'); }
+          if (done.every(Boolean) && P.every((p) => p.flying === 0)) {
+            if (G.sdSet.every((k) => G.sdRes[k] != null)) { const best = Math.min(...G.sdSet.map((k) => G.sdRes[k])), c = G.sdSet.filter((k) => G.sdRes[k] === best); endMatch(c[Math.floor(Math.random() * c.length)], 'sd'); }
           }
         } else {
-          if (done[0] && done[1]) startClear();
+          if (done.every(Boolean)) startClear();
           else {
-            if ((done[0] || done[1]) && !G.graceOn) { G.graceOn = true; G.graceT = 7; hud.toast(`${names[done[0] ? 1 : 0]} is klaar: nog 7 s voor de rest!`, 1400); }
+            if (done.some(Boolean) && !G.graceOn) { G.graceOn = true; G.graceT = 7; hud.toast(N === 2 ? `${names[done[0] ? 1 : 0]} is klaar: nog 7 s voor de rest!` : `${P.filter((q, k) => done[k]).map((q) => q.name).join(' & ')} klaar: nog 7 s voor de rest!`, 1400); }
             if (G.graceOn) G.graceT -= dt;
             if ((G.graceOn && G.graceT <= 0) || G.roundT > 22) {
               for (const p of P) { if (p.state === 'pull') G.forceRelease = p.i; else if (p.state === 'ready' || p.state === 'cool') { if (p.left > 0) fx.texts.add('TE LAAT!', p.x, p.k * 1.84 + 1.2, p.z, '#ff9a8a', 1.1); p.left = 0; p.state = p.flying ? 'waiting' : 'done'; } }
@@ -442,7 +448,7 @@ export default {
         movers.forEach((m, i) => { if (m) { const p = P[i]; p.score = Math.max(0, p.score - 12); p.frozen = 2.0; fx.texts.add('DEURMAN: -12', p.x, p.k * 1.84 + 1.6, p.z, '#ff8a8a', 1.4); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); p.last = 'DEURMAN -12'; } });
         refreshHud();
       },
-      celebrate(w) { P[w].c.pose = 'cheer'; P[1 - w].c.pose = 'sad'; A.cheer(6); },
+      celebrate(w) { for (const q of P) q.c.pose = q.i === w ? 'cheer' : 'sad'; A.cheer(6); },
       dispose() {},
       dbg: {
         state: () => ({ T, gstate: G.state, timeLeft: G.timeLeft, timeUp: G.timeUp, sd: G.sd, late: G.late, round: G.round, score: P.map((p) => p.score), finished, target: TARGET,
@@ -450,7 +456,7 @@ export default {
           chicken: A.chicken.on ? { x: A.chicken.x, y: A.chicken.y, hit: A.chicken.hit } : null,
           p: P.map((p) => ({ state: p.state, pull: p.pull, hold: p.hold, left: p.left, flying: p.flying, ax: p.ax, ay: p.ay, lx: p.lx, ly: p.ly, steadyT: p.steadyT, steadyCd: p.steadyCd, wmul: p.wmul, st: { ...p.st } })),
           darts: darted.length }),
-        setScore: (a, b) => { P[0].score = a; P[1].score = b; refreshHud(); },
+        setScore: (a, b, c, d) => { [a, b, c, d].forEach((v, k) => { if (v != null && P[k]) P[k].score = v; }); refreshHud(); },
         setTime: (t) => { G.timeLeft = t; },
         startEvent: (id) => startEvent(id), evalHit, newGold, P, board, A, darts,
         setGoldSet: (arr) => { G.goldSet = new Set(arr); A.setGold(G.goldSet); },

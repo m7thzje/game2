@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mat, mesh, clamp, lerp, damp, rand, pick, shuffle, TAU, canvasTex, mulberry32 } from '../engine/util.js';
 import { Animal } from '../engine/chars.js';
-import { buildWorld, ROWS, LW, T, RS, DOORH, LANE_CX, rowZ, FINISH_Z, START_Z, kraakPhase, doorGeo, doorX } from './deurenrace_world.js';
+import { buildWorld, setLanes, ROWS, LW, T, RS, DOORH, LANE_CX, rowZ, FINISH_Z, START_Z, kraakPhase, doorGeo, doorX } from './deurenrace_world.js';
 import { friendlyDeurman, deurmanHead } from './deurenrace_man.js';
 
 // Deurenrace — Fall Guys "Door Dash" voor twee broers: twee banen naast elkaar met 14 rijen deuren. Achter maar één deur per rij is de weg open,
@@ -42,15 +42,17 @@ export default {
   giver: 'De Deurman',
   icon: '🚪',
   mode: 'pvp',
+  players: [2, 3, 4],   // 2 = twee banen; 4 = vier banen naast elkaar (allemaal hetzelfde patroon), iedereen tegen iedereen
   time: 80,
   music: 'game_fast',
-  blurb: 'Renn door de kasteelgang vol <b>deuren</b>! Achter maar <b>één deur per rij</b> is de weg open, de rest is nep: <b>boem</b>, een <b>kip</b>, een <b>taart</b> of de <b>Deurman</b> die een handtekening wil. Jullie banen hebben <b>hetzelfde patroon</b>: kijk ook naar je broer! Pak vraagtekenblokken voor <b>kijkgat</b>, <b>turbo</b> of een <b>zandzak</b>.',
+  blurb: 'Met <b>2 of 4 spelers</b> (vier banen naast elkaar, iedereen tegen iedereen). Renn door de kasteelgang vol <b>deuren</b>! Achter maar <b>één deur per rij</b> is de weg open, de rest is nep: <b>boem</b>, een <b>kip</b>, een <b>taart</b> of de <b>Deurman</b> die een handtekening wil. Jullie banen hebben <b>hetzelfde patroon</b>: kijk ook naar je broer! Pak vraagtekenblokken voor <b>kijkgat</b>, <b>turbo</b> of een <b>zandzak</b>.',
   controls: ['{move} rennen', '{a} deur openduwen', '{b} duik (even wachten)'],
   tip: 'Hints: krassen op de vloer, een lichtstreepje onder de deur, een krakende deur of de Deurman die kijkt. Een NEP-bordje? Niet duwen!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp, names = players.map((p) => p.name);
+    const N = players.length; setLanes(N);   // aantal banen volgt het aantal spelers
     const GRAV = pv.gravity || 1, SLIP = pv.slip || 0;
     const rng = mulberry32(Math.floor(ctx.rng() * 1e9) + 1);
     const rows = genRows(rng);
@@ -80,8 +82,8 @@ export default {
         peekT: 5.5 + p * 0.7, peek: null, stepT: 0, wrong: 0, items: 0, info: '', sign: null, facing: 0 };
     });
     // Deurman-handtekening: per baan een eigen Deurman (pas gemaakt als hij nodig is) + kijkhoofd om uit de deur te steken
-    const heads = [0, 1].map(() => { const g = deurmanHead(1.0); g.visible = false; scene.add(g); return g; });
-    const signers = [0, 1].map(() => ({ hold: null, dm: null, t: 0, show: 0 }));
+    const heads = players.map(() => { const g = deurmanHead(1.0); g.visible = false; scene.add(g); return g; });
+    const signers = players.map(() => ({ hold: null, dm: null, t: 0, show: 0 }));
     function ensureSigner(p) {
       const s = signers[p]; if (s.dm) return s;
       const dm = friendlyDeurman(1.0); const hold = new THREE.Group(); hold.add(dm.group); hold.visible = false; hold.scale.setScalar(1.05); scene.add(hold);
@@ -94,18 +96,19 @@ export default {
 
     // ---------------- toestand ----------------
     let winner = -1, T0 = 0, introT = 0, started = false, finished = false, raceT = 0, timeLeft = RACE_T, lastDt = 0.016, camInit = false;
-    const stats = { wrong: [0, 0], kip: [0, 0], taart: [0, 0], sign: [0, 0], boom: [0, 0], sand: [0, 0], hits: [0, 0], items: [0, 0], peeks: 0 };
+    const z0 = () => players.map(() => 0);
+    const stats = { wrong: z0(), kip: z0(), taart: z0(), sign: z0(), boom: z0(), sand: z0(), hits: z0(), items: z0(), peeks: 0 };
     const timers = []; const later = (s, fn) => timers.push({ t: s, fn });
     const door = (p, r, d) => W.doors[p][r][d];
     const prog = (q) => START_Z - q.z;
-    const lead = (p) => prog(P[1 - p]) - prog(P[p]);          // > 0: je ligt achter
+    const lead = (p) => Math.max(...P.filter((q) => q.p !== p).map(prog)) - prog(P[p]);          // > 0: je ligt achter (op de beste tegenstander)
     const behind = (p) => lead(p) >= 13;
 
     // eigen kleine DOM-voortgangsbalk onderaan (wie waar is)
     const bar = document.createElement('div');
     bar.style.cssText = 'position:fixed;left:50%;bottom:10px;transform:translateX(-50%);width:min(420px,60vw);height:30px;pointer-events:none;z-index:5;font:700 12px Fredoka,Arial,sans-serif;color:#fff;text-shadow:0 1px 3px #000';
     bar.innerHTML = '<div style="position:absolute;left:0;right:0;top:12px;height:6px;border-radius:3px;background:rgba(20,10,40,.7);border:1px solid rgba(255,255,255,.5)"></div><div style="position:absolute;right:-2px;top:2px;font-size:16px">🏁</div>';
-    const dots = players.map((pp, i) => { const d = document.createElement('div'); d.style.cssText = `position:absolute;top:${i ? 14 : 6}px;width:16px;height:16px;margin-left:-8px;border-radius:50%;background:${pp.css};border:2px solid #fff;transition:left .1s`; bar.append(d); return d; });
+    const dots = players.map((pp, i) => { const d = document.createElement('div'); d.style.cssText = `position:absolute;top:${N > 2 ? 1 + i * 9 : i ? 14 : 6}px;width:16px;height:16px;margin-left:-8px;border-radius:50%;background:${pp.css};border:2px solid #fff;transition:left .1s`; bar.append(d); return d; });
     bar.style.display = 'none'; document.body.append(bar);
 
     // ---------------- hulp ----------------
@@ -178,7 +181,8 @@ export default {
       if (kind === 'kijk') { q.kijkT = 5; sayP(q, 'KIJKGAT! Zie je de goede deur?', '#6aff9a', 1.2); }
       else if (kind === 'turbo') { q.turboT = 3.2; sayP(q, 'TURBO!', '#ffe14a', 1.5); audio.sfx('whoosh', { vol: 0.5 }); }
       else {
-        const t = P[1 - q.p]; sayP(q, `ZANDZAK naar ${names[1 - q.p]}!`, '#ffb060', 1.2); audio.sfx('throw', { vol: 0.6 });
+        const others = P.filter((r) => r.p !== q.p && !r.done), ahead = others.filter((r) => prog(r) > prog(q)).sort((a, b2) => prog(a) - prog(b2))[0];   // de speler net voor je (ben je de leider: de dichtstbijzijnde achter je)
+        const t = N === 2 ? P[1 - q.p] : (ahead || others.sort((a, b2) => prog(b2) - prog(a))[0] || P[(q.p + 1) % N]); sayP(q, `ZANDZAK naar ${names[t.p]}!`, '#ffb060', 1.2); audio.sfx('throw', { vol: 0.6 });
         if (!t.done) {
           const sx = clamp(t.x + t.vx * 0.9, LANE_CX[t.p] - LW / 2 + 1, LANE_CX[t.p] + LW / 2 - 1), sz = t.z + Math.min(0, t.vz) * 0.9;
           const g = new THREE.Group(); g.add(new THREE.Mesh(sandGeo, sandM), mesh(knotG, sandM, { pos: [0, 0.6, 0] })); g.scale.setScalar(1.5); scene.add(g);
@@ -188,7 +192,7 @@ export default {
       }
     }
     function passRow(q) {
-      q.row++; audio.sfx('ding', { vol: 0.5, rate: 1 + q.row * 0.04 }); fx.particles.ring(q.x, 0.3, q.z + 0.4, { count: 16, speed: 5, color: q.p ? 0x6fa8ff : 0x6aff9a, size: 0.25, life: 0.5 });
+      q.row++; audio.sfx('ding', { vol: 0.5, rate: 1 + q.row * 0.04 }); fx.particles.ring(q.x, 0.3, q.z + 0.4, { count: 16, speed: 5, color: N > 2 ? players[q.p].color : q.p ? 0x6fa8ff : 0x6aff9a, size: 0.25, life: 0.5 });
       sayP(q, q.row >= ROWS ? 'LAATSTE DEUR!' : `Rij ${q.row}!`, '#ffffff', 1.0);
       if (q.peek && q.peek.r < q.row) stopPeek(q);
     }
@@ -275,19 +279,17 @@ export default {
       // beide over de finish in dezelfde frame: wie verder is wint; na 80 s: wie verst is
       if (!finished) {
         const d = P.filter((q) => q.done);
-        if (d.length) endRace(d.length === 2 ? (P[0].z <= P[1].z ? 0 : 1) : d[0].p, 'finish');
+        if (d.length) endRace(d.sort((a, b) => a.z - b.z)[0].p, 'finish');   // meerdere tegelijk over de finish: wie het verst is wint
         else if (timeLeft <= 0) endRace(winnerByProgress(), 'tijd');
       }
       sandbagsUpdate(dt); chickensUpdate(dt); signersUpdate(dt);
       visuals(dt);
     }
-    function winnerByProgress() {
-      const a = prog(P[0]), b = prog(P[1]);
-      if (P[0].row !== P[1].row) return P[0].row > P[1].row ? 0 : 1;
-      if (Math.abs(a - b) > 0.05) return a > b ? 0 : 1;
-      if (P[0].wrong !== P[1].wrong) return P[0].wrong < P[1].wrong ? 0 : 1;
-      return Math.random() < 0.5 ? 0 : 1;
+    function ranking() {   // 1e eerst: rijen, dan afstand, dan minste nepdeuren; (bij 2 spelers gelijk -> toeval: dobbelt de loting)
+      const coin = P.map(() => Math.random());
+      return P.map((q) => q.p).sort((x, y) => P[y].row - P[x].row || (Math.abs(prog(P[x]) - prog(P[y])) > 0.05 ? prog(P[y]) - prog(P[x]) : 0) || P[x].wrong - P[y].wrong || coin[x] - coin[y]);
     }
+    const winnerByProgress = () => ranking()[0];
     function sandbagsUpdate(dt) {
       for (let i = sandbags.length - 1; i >= 0; i--) {
         const s = sandbags[i]; s.t += dt; const u = Math.min(1, s.t / s.dur);
@@ -311,7 +313,7 @@ export default {
       }
     }
     function signersUpdate(dt) {
-      for (let p = 0; p < 2; p++) {
+      for (let p = 0; p < N; p++) {
         const s = signers[p]; if (!s.dm || !s.hold.visible) continue; const q = P[p], dr = s.door;
         s.t += dt; const pop = s.leave > 0 ? Math.max(0, s.leave / 0.6) : Math.min(1, s.t / 0.35);
         if (s.leave > 0) { s.leave -= dt; if (s.leave <= 0) { s.hold.visible = false; s.leave = 0; continue; } }
@@ -326,10 +328,10 @@ export default {
     // ---------------- beelden ----------------
     const camTgt = new THREE.Vector3(), camPos = new THREE.Vector3();
     function placeCamera(dt, snap) {
-      const zs = winner >= 0 ? [P[winner].z + 2, P[winner].z + 2] : [P[0].z, P[1].z], lead0 = Math.min(zs[0], zs[1]), trail = Math.max(zs[0], zs[1]);
-      const mid = lerp(trail, lead0, 0.4), gap = trail - lead0, extra = clamp(gap - 4, 0, 40);
-      let tz = mid - 4.5 - extra * 0.1, py = 13.2 + extra * 0.62, pz = mid + 11.5 + extra * 0.5, ty = 0.5;
-      if (winner >= 0) { tz = mid - 20; py = 9.5; pz = mid + 11; ty = 3.2; }          // na de finish: kijk naar de boog en de Deurman
+      const zs = winner >= 0 ? [P[winner].z + 2, P[winner].z + 2] : P.map((q) => q.z), lead0 = Math.min(...zs), trail = Math.max(...zs);
+      const mid = lerp(trail, lead0, 0.4), gap = trail - lead0, extra = clamp(gap - 4, 0, 40), wide = N > 2 ? 1.5 : 1;   // bij 4 banen verder weg
+      let tz = mid - 4.5 - extra * 0.1, py = (13.2 + extra * 0.62) * wide, pz = mid + (11.5 + extra * 0.5) * wide, ty = 0.5;
+      if (winner >= 0) { tz = mid - 20; py = 9.5 * wide; pz = mid + 11 * wide; ty = 3.2; }          // na de finish: kijk naar de boog en de Deurman
       const k = snap ? 1 : 1 - Math.exp(-3.2 * dt);
       camPos.set(0, lerp(camera.position.y, py, k), lerp(camera.position.z, pz, k)); camTgt.set(0, lerp(camTgt.y, ty, k), lerp(camTgt.z, tz, k));
       if (snap) { camTgt.z = tz; camPos.set(0, py, pz); }
@@ -370,8 +372,8 @@ export default {
         }
         const t = bits.filter(Boolean).join(' · '); if (t !== q.info) { q.info = t; hud.setPlayerInfo(q.p, t); }
       }
-      hud.setScore(`${names[0]} rij ${P[0].row} – rij ${P[1].row} ${names[1]}`);
-      for (let i = 0; i < 2; i++) { const f = clamp((START_Z - P[i].z) / (START_Z - FINISH_Z), 0, 1); dots[i].style.left = (f * 100) + '%'; }
+      hud.setScore(N === 2 ? `${names[0]} rij ${P[0].row} – rij ${P[1].row} ${names[1]}` : null);
+      for (let i = 0; i < N; i++) { const f = clamp((START_Z - P[i].z) / (START_Z - FINISH_Z), 0, 1); dots[i].style.left = (f * 100) + '%'; }
     }
     function visuals(dt) {
       const bt = T0 + introT;
@@ -400,17 +402,20 @@ export default {
     function endRace(w, why) {
       if (finished) return; finished = true; winner = w;
       for (const q of P) { q.signT = 0; q.stunT = 0; q.chargeT = 0; q.diveT = 0; }
-      const q = P[w], o = P[1 - w];
+      const order = ranking(), q = P[w], rr = order.find((i) => i !== w), o = P[rr];   // rr = de nummer twee
+      const place = [w, ...order.filter((i) => i !== w)];
       hud.setTimer(null); hud.showBig(`${names[w]} wint!`, 1800, players[w].css); audio.sfx('win'); ctx.shake(0.4);
       for (let k = 0; k < 5; k++) later(k * 0.25, () => fx.particles.burst(q.x + rand(-4, 4), 6, q.z - 2, { count: 40, speed: 8, up: 1, life: 1.4, size: 0.5, colors: [0xffe14a, 0xff4fa8, 0x4fd8ff, 0x8dff6a], gravity: 6 }));
-      const tie = why !== 'finish' && P[0].row === P[1].row && Math.abs(prog(P[0]) - prog(P[1])) <= 0.05;
+      const tie = why !== 'finish' && q.row === o.row && Math.abs(prog(q) - prog(o)) <= 0.05;
       const J = tie ? [`De tijd is om en niemand durfde echt ver... De Deurman gooit een munt op: ${names[w]} wint!`] : why === 'finish'
-        ? [`${names[w]} stormt als eerste door de laatste deur en krijgt een hoge vijf van de Deurman!`, `${names[w]} wist de goede deuren (of had gewoon geluk). ${names[1 - w]} stond nog te kloppen.`, `De Deurman tekent een handtekening op ${names[w]}'s voorhoofd. ${names[1 - w]} krijgt een pleister.`]
+        ? [`${names[w]} stormt als eerste door de laatste deur en krijgt een hoge vijf van de Deurman!`, `${names[w]} wist de goede deuren (of had gewoon geluk). ${names[rr]} stond nog te kloppen.`, `De Deurman tekent een handtekening op ${names[w]}'s voorhoofd. ${names[rr]} krijgt een troostdeur.`]
         : [`De tijd is om! ${names[w]} kwam het verst (rij ${q.row} tegen rij ${o.row}).`, `${names[w]} was het verst toen de bel ging. De Deurman fluit af.`];
-      const bits = [`${names[0]}: ${stats.wrong[0]}x een nepdeur`, `${names[1]}: ${stats.wrong[1]}x een nepdeur`];
-      if (stats.kip[0] + stats.kip[1]) bits.push(`${stats.kip[0] + stats.kip[1]}x kip`); if (stats.taart[0] + stats.taart[1]) bits.push(`${stats.taart[0] + stats.taart[1]}x taart`); if (stats.sign[0] + stats.sign[1]) bits.push(`${stats.sign[0] + stats.sign[1]}x handtekening`); if (stats.sand[0] + stats.sand[1]) bits.push(`${stats.sand[0] + stats.sand[1]} zandzak-treffers`);
-      const sc = why === 'finish' ? [w === 0 ? ROWS : P[0].row, w === 1 ? ROWS : P[1].row] : [P[0].row, P[1].row];
-      ctx.finishPvp({ winner: w, score: sc, delay: 1500, summary: `${pick(J)} ${bits.join(' · ')}.` });
+      const sum = (a) => a.reduce((x, y) => x + y, 0);
+      const bits = N === 2 ? [`${names[0]}: ${stats.wrong[0]}x een nepdeur`, `${names[1]}: ${stats.wrong[1]}x een nepdeur`] : [`nepdeuren: ${names.map((n, i) => `${n} ${stats.wrong[i]}`).join(', ')}`];
+      if (sum(stats.kip)) bits.push(`${sum(stats.kip)}x kip`); if (sum(stats.taart)) bits.push(`${sum(stats.taart)}x taart`); if (sum(stats.sign)) bits.push(`${sum(stats.sign)}x handtekening`); if (sum(stats.sand)) bits.push(`${sum(stats.sand)}x zandzak raak`);
+      const sc = P.map((r) => (why === 'finish' && r.p === w ? ROWS : r.row));
+      if (N === 2) ctx.finishPvp({ winner: w, score: sc, delay: 1500, summary: `${pick(J)} ${bits.join(' · ')}.` });
+      else ctx.finishPvp({ winner: w, score: sc, place, delay: 1500, summary: `${pick(J)} ${bits.join(' · ')}.` });
     }
 
     introUpdate(0.016);
@@ -420,11 +425,11 @@ export default {
       onResize() { camera.updateProjectionMatrix(); },
       onCountdown() { for (const q of P) q.info = ''; },
       onStart() { for (const q of P) q.info = ''; bar.style.display = ''; },
-      onSwap() { for (const q of P) fx.particles.burst(q.x, 2, q.z, { count: 24, speed: 4, up: 1, life: 0.8, size: 0.4, colors: [0xffe14a, 0xffffff], gravity: 2 }); hud.toast('🔄 Wissel! Wes rent met Jor z\'n knoppen en andersom', 2200); },
+      onSwap() { for (const q of P) fx.particles.burst(q.x, 2, q.z, { count: 24, speed: 4, up: 1, life: 0.8, size: 0.4, colors: [0xffe14a, 0xffffff], gravity: 2 }); hud.toast(N === 2 ? '🔄 Wissel! Wes rent met Jor z\'n knoppen en andersom' : '🔄 Wissel! Een paar spelers rennen met elkaars knoppen', 2200); },
       onDeurman(movers) {
         movers.forEach((m, i) => { if (!m || P[i].done) return; const q = P[i]; q.vz = 11; stun(q, 1.3, 'scared'); say(q.x, q.z, 'DEURMAN ZAG JE! Terug!', '#ff6a4a', 1.3, 3.4); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.35); });
       },
-      celebrate(w) { P[w].c.pose = 'cheer'; P[w].cheerT = 999; P[1 - w].c.pose = 'sad'; },
+      celebrate(w, winners = [w]) { P.forEach((q) => { if (winners.includes(q.p)) { q.c.pose = 'cheer'; q.cheerT = 999; } else q.c.pose = 'sad'; }); },
       dispose() { bar.remove(); },
       dbg: {
         state: () => ({ T: T0, started, finished, timeLeft, rows, P: P.map((q) => ({ x: q.x, z: q.z, vx: q.vx, vz: q.vz, row: q.row, done: q.done, stunT: q.stunT, signT: q.signT, chargeCd: q.chargeCd, diveCd: q.diveCd, kijkT: q.kijkT, turboT: q.turboT, hiT: q.hiT, wrong: q.wrong, items: q.items, rad: q.rad })), stats: JSON.parse(JSON.stringify(stats)), sandbags: sandbags.length, doors: W.doors.map((lane) => lane.map((row) => row.map((d) => ({ cx: d.cx, pass: !!d.pass, fake: d.fake, real: d.real, marked: d.mark.visible })))), orbs: W.orbs.map((l) => l.map((o) => ({ x: o.x, z: o.z, alive: o.alive, kind: o.kind }))) }),

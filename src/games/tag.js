@@ -11,7 +11,7 @@ import { ARENA, KINDS, makeObstacle, makeBomb, makePeel, makeGift, makeUfo, glow
 //  * na 85 s: noodbom, de eerstvolgende ontploffing beslist het duel
 
 const { AX, AZ } = ARENA;
-const LIVES = 3, MATCH_T = 85, BLAST_R = 6.6, START_X = 11.2;
+const MATCH_T = 85, BLAST_R = 6.6, START_X = 11.2;
 const FUSE = [14, 12.6, 11.4, 10.4, 9.6, 9];
 const RUN = 7.3, RUN_HOLD = 8.0, SPRINT = 1.5, DIVE_V = 15.5, DIVE_T = 0.26;
 const GIFTS = {
@@ -20,8 +20,8 @@ const GIFTS = {
   swap: { name: 'BOMMEN-WISSEL!', css: '#ff6ad8', hex: 0xff6ad8, w: 25 },
   shield: { name: 'SCHILD!', css: '#ffd23f', hex: 0xffd23f, w: 25 },
 };
-// kleur per spelers-id (Wes groen, Jor blauw, Juul oranje): hex, css voor de vloer, lichte tekstkleur
-const HEX_ID = [0x35c46f, 0x4a8cff, 0xff9a3a], CSS_ID = ['rgba(60,200,120,1)', 'rgba(70,140,255,1)', 'rgba(255,154,58,1)'], LITE_ID = ['#7dffb0', '#8fb8ff', '#ffc27a'], LITEHEX_ID = [0x7dffb0, 0x8fb8ff, 0xffc27a];
+// kleur per spelers-id (Wes groen, Jor blauw, Juul oranje, Sam paars): hex, css voor de vloer, lichte tekstkleur
+const HEX_ID = [0x35c46f, 0x4a8cff, 0xff9a3a, 0xc844e8], CSS_ID = ['rgba(60,200,120,1)', 'rgba(70,140,255,1)', 'rgba(255,154,58,1)', 'rgba(200,68,232,1)'], LITE_ID = ['#7dffb0', '#8fb8ff', '#ffc27a', '#e9a2ff'], LITEHEX_ID = [0x7dffb0, 0x8fb8ff, 0xffc27a, 0xe9a2ff];
 const LAYOUT = [['fountain', 0, 0], ['pillar', 6.5, 4.6], ['pillar', 6.5, -4.6], ['pillar', -6.5, 4.6], ['pillar', -6.5, -4.6], ['crates', 8.2, 0], ['crates', -8.2, 0], ['barrels', 3.2, 6.3], ['barrels', -3.2, 6.3], ['barrels', 3.2, -6.3], ['barrels', -3.2, -6.3], ['bush', 12.4, 5.4], ['bush', -12.4, 5.4], ['bush', 12.4, -5.4], ['bush', -12.4, -5.4]];
 const OBST_KINDS = ['pillar', 'barrels', 'crates', 'bush'];
 
@@ -45,10 +45,10 @@ export default {
   giver: 'Bommenbaas Boris',
   icon: '💣',
   mode: 'pvp',
-  players: [2, 3],
+  players: [2, 3, 4],
   time: 90,
   music: 'game_fast',
-  blurb: 'Eén broer heeft de <b>bom</b>! Tik de ander aan en de bom gaat over. Ontploft hij in jouw handen, dan verlies je een <b>leven</b> (je hebt er 3). Wie de bom heeft rent iets sneller. Pas op voor <b>kippen</b> en de <b>ufo</b>! Met <b>Juul</b> erbij is het vrij voor allen: wie zijn drie levens kwijt is, ligt eruit.',
+  blurb: 'Eén broer heeft de <b>bom</b>! Tik de ander aan en de bom gaat over. Ontploft hij in jouw handen, dan verlies je een <b>leven</b> (je hebt er 3). Wie de bom heeft rent iets sneller. Pas op voor <b>kippen</b> en de <b>ufo</b>! Met <b>Juul</b> (en <b>Sam</b>) erbij is het vrij voor allen: wie zijn levens kwijt is (3 levens, bij vier spelers 2), ligt eruit.',
   controls: ['{move} rennen', '{a} sprint (houd in) en duik (tik)', '{b} bananenschil neerleggen'],
   tip: 'Een geduikte tik reikt verder. Leg een schil achter je neer: wie erop stapt, glijdt weg! Na een knal krijgt wie voor staat de volgende bom.',
 
@@ -63,10 +63,11 @@ export default {
     L.sun.color.set(0xdfe6ff); L.sun.intensity = 2.0; L.sun.position.set(-10, 30, 14);
     camera.fov = 46; camera.updateProjectionMatrix();
     const NP = players.length;
+    const LIVES = NP === 4 ? 2 : 3;                                  // vier spelers: 2 levens (anders duurt het potje te lang bij maar één bom)
     const colorsHex = players.map((p) => HEX_ID[p.id]), colorsCss = players.map((p) => CSS_ID[p.id]);
     const lite = (i) => LITE_ID[players[i].id], liteHex = (i) => LITEHEX_ID[players[i].id];
     // startplekken: 2 spelers links/rechts; 3 spelers een (bijna gelijkzijdige) driehoek
-    const STARTS = NP === 2 ? [[-START_X, 0], [START_X, 0]] : [[-8, 6], [8, 6], [0, -7]];
+    const STARTS = NP === 4 ? [[-9, -5.5], [9, -5.5], [-9, 5.5], [9, 5.5]] : NP === 2 ? [[-START_X, 0], [START_X, 0]] : [[-8, 6], [8, 6], [0, -7]];   // 4: de vier hoeken, slot 0/1 achter, 2/3 voor (zoals de HUD-vakken)
     const world = buildArena(ctx, colorsCss, colorsHex, STARTS);
 
     // ---------------- spelers ----------------
@@ -140,7 +141,7 @@ export default {
     const ufoWarn = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.5, 24), new THREE.MeshBasicMaterial({ color: 0xff5a3a, transparent: true, opacity: 0.8, side: THREE.DoubleSide, depthWrite: false })); ufoWarn.rotation.x = -Math.PI / 2; ufoWarn.position.y = 0.07; ufoWarn.visible = false; scene.add(ufoWarn);
 
     // ---------------- toestand ----------------
-    const R = { state: 'ready', t: 0, holder: -1, carry: -1, fuse: 0, fuse0: 12, count: 0, matchT: NP === 3 ? MATCH_T - 10 : MATCH_T, sd: false, tickT: 0, giftT: 4.5, victim: -1, winner: -1 };
+    const R = { state: 'ready', t: 0, holder: -1, carry: -1, fuse: 0, fuse0: 12, count: 0, matchT: NP >= 3 ? MATCH_T - 10 : MATCH_T, sd: false, tickT: 0, giftT: 4.5, victim: -1, winner: -1 };
     let T = 0, introT = 0, finished = false, slow = 1, slowT = 0, camPunch = 0, camFocus = null;
     const stats = { passes: 0, chicken: 0, ufo: 0, peels: 0, slips: 0, booms: 0 };
     const hearts = (i) => '♥'.repeat(pl[i].lives) + '♡'.repeat(LIVES - pl[i].lives);
@@ -222,9 +223,10 @@ export default {
       if (finished) return; finished = true;
       const w = R.winner;
       let l; if (NP === 2) l = 1 - w; else { const others = pl.filter((p) => p.i !== w); const mn = Math.min(...others.map((p) => p.lives)); const ls = others.filter((p) => p.lives === mn); l = (ls.find((p) => p.i === R.victim) || ls[0]).i; }
+      const place = pl.slice().sort((a, b) => (a.i === w ? -1 : b.i === w ? 1 : 0) || (a.out ? 1 : 0) - (b.out ? 1 : 0) || b.lives - a.lives || (b.outAt || 0) - (a.outAt || 0) || b.stats.tags - a.stats.tags).map((p) => p.i);   // winnaar, dan de levenden op levens, dan wie het langst bleef zitten
       if (w < 0) { ctx.finishPvp({ winner: null, score: pl.map((p) => p.lives), delay: 700, summary: `Gelijkspel! Alle bommen zijn op, niemand wil de winnaar zijn. Er waren ${stats.booms} ontploffingen, de bom ging ${stats.passes}x over.` }); return; }
       const jokes = [`${names[l]} werd gebombardeerd tot ${names[l]}-confetti. ${names[w]} wint!`, `${names[l]} hield de bom net iets te lang vast. ${names[w]} danst.`, `Boris de Bommenbaas knikt goedkeurend naar ${names[w]}. ${names[l]} ruikt naar rook.`, `${names[w]} kan zeker niet tegen hete aardappelen, maar is er wel goed in. ${names[l]} is gaar.`];
-      ctx.finishPvp({ winner: w, score: pl.map((p) => p.lives), delay: 700, summary: `${pick(jokes)} Er waren ${stats.booms} ontploffingen, de bom ging ${stats.passes}x over${stats.chicken ? `, de kippen bezorgden hem ${stats.chicken}x` : ''}${stats.peels ? ` en er werd ${stats.slips}x uitgegleden over ${stats.peels} schillen` : ''}.${R.sd ? ' De noodbom besliste het duel.' : ''}` });
+      ctx.finishPvp({ winner: w, score: pl.map((p) => p.lives), place, delay: 700, summary: `${pick(jokes)} Er waren ${stats.booms} ontploffingen, de bom ging ${stats.passes}x over${stats.chicken ? `, de kippen bezorgden hem ${stats.chicken}x` : ''}${stats.peels ? ` en er werd ${stats.slips}x uitgegleden over ${stats.peels} schillen` : ''}.${R.sd ? ' De noodbom besliste het duel.' : ''}` });
     }
 
     // ---------------- kadootjes ----------------
@@ -452,7 +454,7 @@ export default {
           const v = pl[R.victim];
           if (NP === 2) { if (v.lives <= 0 || R.sd) endMatch(1 - v.i); else startRound(false); }
           else {
-            if (v.lives <= 0) { v.out = true; v.holder.visible = false; fx.texts.add('UIT!', v.x, 3.5, v.z, '#ff7a7a', 1.6); hud.toast(`${names[v.i]} ligt eruit!`, 1800); }
+            if (v.lives <= 0) { v.out = true; v.outAt = R.count; v.holder.visible = false; fx.texts.add('UIT!', v.x, 3.5, v.z, '#ff7a7a', 1.6); hud.toast(`${names[v.i]} ligt eruit!`, 1800); }
             const alive = pl.filter((p) => !p.out);
             if (alive.length <= 1) endMatch(alive.length ? alive[0].i : sdWinner(v)); else if (R.sd) endMatch(sdWinner(v)); else startRound(false);
           }
@@ -549,6 +551,7 @@ export default {
     return {
       update: (dt) => { if (finished) { resultUpdate(dt); return; } update(dt); visuals(dt * slow); },
       resultUpdate, introUpdate,
+      onCountdown() { for (const p of pl) p.lastTxt = ''; refreshHud(); },   // de harness bouwt de HUD bij het aftellen opnieuw op
       onResize() { fitCamera(); },
       onSwap() { for (const p of pl) fx.particles.burst(p.x, 1.2, p.z, { count: 20, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) {

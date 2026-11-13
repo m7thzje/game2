@@ -7,7 +7,6 @@ import { makeBars } from './screws_bars.js';
 // Schroef-Duel (Silly Screws-achtig): stamp je reuzenschroef naar beneden. Wie het eerst beneden is, wint.
 // A en B om en om = ritme (extra draaiing). Te snel mashen = vastgeroest. Raaf, moersleutels, roestvlekken, aardbeving, gnoom.
 
-const COL_X = [-6.8, 6.8];
 const Y0 = 24.0, BLOCK_H = 2.2, HEAD_FINAL = BLOCK_H + 1.0, TRAVEL = Y0 - HEAD_FINAL;
 const REQ = 225;                         // draai-eenheden tot de schroef beneden is
 const MAXT = 110;                        // noodstop: wie dan het diepst zit wint
@@ -25,10 +24,11 @@ export default {
   giver: 'Smid Schroef',
   icon: '🔩',
   mode: 'pvp',
+  players: [2, 3, 4],              // 2 = duel; 3-4 = vrij voor allen: elk een eigen schroef, zelfde roestvlekken
   time: 50,
   music: 'game',
   twists: ['invert', 'swapab', 'drunk', 'bodyswap', 'turbo', 'slowmo', 'lowgrav', 'deurman'],
-  blurb: 'In de kelder van het kasteel staan twee <b>reuzenschroeven</b>. Stamp erop om je schroef <b>naar beneden te draaien</b>: de eerste die helemaal beneden is, rinkelt de bel en wint! Stamp <b>A en B om en om</b> voor een ritme-bonus, maar mash niet te wild, want dan <b>roest</b> je schroef vast. Pas op voor de <b>raaf</b>, pak de <b>moersleutels</b> en timing de <b>roestvlekken</b>!',
+  blurb: 'In de kelder van het kasteel staat voor elke speler een <b>reuzenschroef</b> (2 tot 4 spelers tegelijk). Stamp erop om je schroef <b>naar beneden te draaien</b>: de eerste die helemaal beneden is, rinkelt de bel en wint! Stamp <b>A en B om en om</b> voor een ritme-bonus, maar mash niet te wild, want dan <b>roest</b> je schroef vast. Pas op voor de <b>raaf</b>, pak de <b>moersleutels</b> en timing de <b>roestvlekken</b>!',
   controls: ['{a} / {b} stampen (om en om = ritme!)', '{move} links/rechts: ontwijk en pak dingen', 'omlaag: veeg raaf-poep weg'],
   tip: 'Een gouden moersleutel is turbo! Wie ver achterstaat krijgt hulp van een gnoom met een boor.',
 
@@ -36,6 +36,9 @@ export default {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const names = players.map((p) => p.name), css = players.map((p) => p.css);
     const rng = ctx.rng;
+    const N = players.length;
+    const COL_X = N === 2 ? [-6.8, 6.8] : N === 3 ? [-6.8, 0, 6.8] : [-10.2, -3.4, 3.4, 10.2];   // kolommen, links naar rechts
+    const leftSide = (i) => i < N / 2;                    // linkerhelft kijkt naar rechts (gnoom/meters aan de buitenkant)
     const L = ctx.lights('indoor', { shadow: 28, center: [0, 12, 0], fogNear: 55, fogFar: 150 });
     L.hemi.intensity = 1.05; L.sun.intensity = 1.5; L.sun.position.set(14, 44, 26);
     camera.fov = CAM_FOV; camera.updateProjectionMatrix();
@@ -46,7 +49,7 @@ export default {
     // ---------- schroeven ----------
     const patchP = PATCH_P.map((p) => p + (rng() - 0.5) * 0.03);
     const collarDepths = patchP.map((p) => TRAVEL * (1 - p));
-    const pl = [0, 1].map((i) => {
+    const pl = players.map((_, i) => {
       const sc = buildScrew(i, { shaftLen: SHAFT_LEN, collarDepths, color: PLAYER_COLORS[i] });
       sc.group.position.set(COL_X[i], Y0, 0); scene.add(sc.group);
       const cage = buildCage(Y0 + 4.2, BLOCK_H); cage.position.x = COL_X[i]; scene.add(cage);
@@ -88,13 +91,13 @@ export default {
       g.font = 'bold 40px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 8; g.strokeStyle = 'rgba(20,8,4,.95)'; g.lineJoin = 'round'; g.strokeText(txt, 128, 34, 246); g.fillStyle = '#ffe9b0'; g.fillText(txt, 128, 34, 246);
       const tx = new THREE.CanvasTexture(t); tx.colorSpace = THREE.SRGBColorSpace; return tx;
     }
-    const bars = makeBars(ctx, { colors: PLAYER_COLORS, vertical: true });
+    const bars = makeBars(ctx, { colors: players.map((p) => p.color), vertical: true });
 
     // ---------- toestand ----------
     let T = 0, done = false, phase = 'play', winner = null, winT = 0, introT = 0, cine = 1, resultT = 0;
     let finishCalled = false;
-    const E = { ravenT: 7 + rng() * 3, raven: null, blob: null, wrenchT: 5 + rng() * 2, wrench: null, quakeT: 21 + rng() * 6, quake: 0, quakes: 0, gnomeCd: [6, 6], gnomes: [0, 0], gnome: [null, null], stalled: 0 };
-    let hudT = 0; const lastInfo = ['', ''];
+    const E = { ravenT: 7 + rng() * 3, raven: null, blob: null, wrenchT: 5 + rng() * 2, wrench: null, quakeT: 21 + rng() * 6, quake: 0, quakes: 0, gnomeCd: players.map(() => 6), gnomes: players.map(() => 0), gnome: players.map(() => null), stalled: 0 };
+    let hudT = 0;
     const tmp = new THREE.Vector3();
     const headY = (p) => Y0 - TRAVEL * clamp(p.shown / REQ, 0, 1);
     const gSpeed = (i) => ctx.pvp.speed(i);
@@ -198,8 +201,8 @@ export default {
     const blobMesh = mesh(new THREE.SphereGeometry(0.62, 10, 8), new THREE.MeshStandardMaterial({ color: 0xf1f4e4, emissive: 0x8a9a60, emissiveIntensity: 0.35, roughness: 0.2, flatShading: false }), { cast: false, scale: [0.8, 1.2, 0.8] }); blobMesh.visible = false; scene.add(blobMesh);
 
     function spawnRaven() {
-      const lead = pl[0].units - pl[1].units;
-      const tgt = Math.abs(lead) > 8 && rng() < 0.65 ? (lead > 0 ? 0 : 1) : (rng() < 0.5 ? 0 : 1);
+      const us = pl.map((q) => q.units), mx = Math.max(...us), lead = mx - Math.min(...us);
+      const tgt = lead > 8 && rng() < 0.65 ? us.indexOf(mx) : Math.floor(rng() * N);
       const dir = rng() < 0.5 ? 1 : -1;
       E.raven = { i: tgt, dir, x: -dir * 30, off: (rng() * 2 - 1) * 1.7, dropped: false, t: 0, y: headY(pl[tgt]) + 9.5 };
       raven.g.visible = true; audio.tone(520, 0.25, { type: 'sawtooth', vol: 0.07, slide: -240 }); hud.toast('Een raaf! Hij heeft honger... of iets anders', 1700);
@@ -239,9 +242,9 @@ export default {
     const wr = { silver: wrench(0xc9d0dc, 1.15), gold: wrench(0xffd23f, 1.35) };
     for (const k of ['silver', 'gold']) { wr[k].visible = false; scene.add(wr[k]); }
     function spawnWrench() {
-      const lead = pl[0].units - pl[1].units;
-      const tgt = Math.abs(lead) > 6 ? (lead > 0 ? 1 : 0) : (rng() < 0.5 ? 0 : 1);
-      const trail = Math.abs(lead) > 14;
+      const us = pl.map((q) => q.units), mn = Math.min(...us), lead = Math.max(...us) - mn;
+      const tgt = lead > 6 ? us.indexOf(mn) : Math.floor(rng() * N);
+      const trail = lead > 14;
       const gold = rng() < (trail ? 0.55 : 0.22);
       E.wrench = { i: tgt, gold, off: (rng() * 2 - 1) * 1.7, y: headY(pl[tgt]) + 12, state: 'fall', t: 0, vx: 0, vy: 0 };
       pl[tgt].mWrench.visible = true; pl[tgt].mWrench.material.color.set(gold ? 0xffd23f : 0xffffff);
@@ -280,10 +283,10 @@ export default {
 
     // ---------- gnoom met boor ----------
     function makeGnome(i) {
-      const g = new THREE.Group(); const c = ctx.make.npc('dwarf'); c.group.scale.setScalar(2.3); c.faceDir(i ? -1 : 1, 0); c.pose = 'push'; g.add(c.group);
+      const g = new THREE.Group(); const c = ctx.make.npc('dwarf'); c.group.scale.setScalar(2.3); c.faceDir(leftSide(i) ? 1 : -1, 0); c.pose = 'push'; g.add(c.group);
       const plat = mesh(new THREE.BoxGeometry(3.6, 0.45, 2.4), mat(0x8a5a30), { pos: [0, -0.22, 0] }); g.add(plat);
       for (const sx of [-1, 1]) g.add(mesh(new THREE.CylinderGeometry(0.06, 0.06, 40, 4), mat(0x25252c), { cast: false, pos: [sx * 1.6, 20, 0] }));
-      const dir = i ? -1 : 1;
+      const dir = leftSide(i) ? 1 : -1;
       const drill = new THREE.Group(); drill.position.set(0, 1.45, 0.6); drill.rotation.y = dir * 0.4; g.add(drill);
       drill.add(mesh(new THREE.BoxGeometry(1.3, 0.65, 0.6), mat(0xe8742a), { cast: false, pos: [dir * 0.5, 0, 0] }));
       drill.add(mesh(new THREE.BoxGeometry(0.3, 0.8, 0.3), mat(0x2b2b30), { cast: false, pos: [dir * 0.1, -0.6, 0] }));
@@ -296,22 +299,22 @@ export default {
       scene.add(g); return g;
     }
     function updateGnomes(dt) {
-      for (let i = 0; i < 2; i++) {
-        const p = pl[i], o = pl[1 - i];
+      for (let i = 0; i < N; i++) {
+        const p = pl[i], oMax = Math.max(...pl.filter((q) => q !== p).map((q) => q.units));
         E.gnomeCd[i] -= dt;
         const g = E.gnome[i];
-        if (!g && E.gnomeCd[i] <= 0 && E.gnomes[i] < 3 && o.units - p.units >= REQ * 0.14 && phase === 'play') {
+        if (!g && E.gnomeCd[i] <= 0 && E.gnomes[i] < 3 && oMax - p.units >= REQ * 0.14 && phase === 'play') {
           const ng = makeGnome(i); E.gnome[i] = ng; E.gnomes[i]++; ng.userData.t = 0; p.gnome = 6.5;
           note(i, 'Een gnoom komt helpen!', '#ffd9a0', 1.1, 6.2); hud.toast(`Een vriendelijke gnoom helpt ${names[i]} met zijn boor!`, 2200); audio.sfx('powerup', { vol: 0.6 }); audio.sfx('sparkle', { vol: 0.6 });
         }
         if (g) {
           const u = g.userData; u.t += dt;
-          const sg = i ? 1 : -1, hy = headY(p);
+          const sg = leftSide(i) ? -1 : 1, hy = headY(p);
           const inT = smoothstep(0, 0.5, u.t), outT = smoothstep(6.0, 6.5, u.t);
-          const sc = inT * (1 - outT) + 0.001; g.scale.setScalar(sc);
-          g.position.set(COL_X[i] + sg * 7.6, hy - 1.45, 2.4);
+          const sc = (inT * (1 - outT) + 0.001) * (N > 2 ? 0.85 : 1); g.scale.setScalar(sc);
+          g.position.set(COL_X[i] + sg * (N > 2 ? 4.5 : 7.6), hy - 1.45, 2.4);
           u.c.update(dt); u.bit.rotation.x += dt * 30;
-          if (u.t > 0.5 && u.t < 6.2 && rng() < dt * 25) fx.particles.emit(COL_X[i] + sg * 3.2, hy - 0.5, 0.9, sg * (0.5 + rng() * 2), 1 + rng() * 2, (rng() - 0.5) * 2, { life: 0.35, size: 0.2, color: pick([0xffe9a0, 0xffb040, 0xffffff]), gravity: 10 });
+          if (u.t > 0.5 && u.t < 6.2 && rng() < dt * 25) fx.particles.emit(COL_X[i] + sg * 3.0, hy - 0.5, 0.9, sg * (0.5 + rng() * 2), 1 + rng() * 2, (rng() - 0.5) * 2, { life: 0.35, size: 0.2, color: pick([0xffe9a0, 0xffb040, 0xffffff]), gravity: 10 });
           if (u.t > 0.7 && (u.shout = (u.shout || 0) - dt) <= 0) { u.shout = 1.4; note(i, 'BRRRR!', '#ffb040', 0.9, 6.0); audio.sfx('scrape', { vol: 0.3, rate: 1.6 }); }
           if (u.t >= 6.5) { scene.remove(g); g.traverse((o2) => { if (o2.geometry) o2.geometry.dispose(); }); E.gnome[i] = null; E.gnomeCd[i] = 14; fx.particles.burst(g.position.x, g.position.y + 1, 0.5, { count: 18, speed: 3, up: 1, life: 0.6, size: 0.4, colors: [0xffffff, 0xd8c8a8], gravity: 2 }); }
         }
@@ -336,7 +339,7 @@ export default {
         if (rng() < dt * 40) fx.particles.emit((rng() - 0.5) * 36, headCam() + 12, -3 + rng() * 6, (rng() - 0.5), -8 - rng() * 6, 0, { life: 1.3, size: 0.45, color: pick([0x8a8278, 0x6e665e, 0xb0a698]), gravity: 12 });
       }
     }
-    const headCam = () => (headY(pl[0]) + headY(pl[1])) / 2;
+    const headCam = () => { const ys = pl.map(headY); return (Math.max(...ys) + Math.min(...ys)) / 2; };
 
     // ---------- deurman ----------
     function onDeurman(movers) {
@@ -344,18 +347,23 @@ export default {
     }
 
     // ---------- eind ----------
-    function endGame(w) {
+    function endGame(w, tops = null) {
       if (finishCalled) return; finishCalled = true; phase = 'won'; winner = w; winT = 0;
       const pc = pl.map((p) => Math.round(p.units / REQ * 100));
-      const nm = w == null ? null : names[w];
+      const order = pl.slice().sort((a, b) => (b.units - a.units) || (a.lastT - b.lastT) || (a.i - b.i));
+      let place = order.map((p) => p.i); if (w != null) place = [w, ...place.filter((k) => k !== w)];
+      const nm = w == null ? null : names[w], l = order[order.length - 1].i;
       let summary;
-      if (w == null) summary = 'Allebei even diep gedraaid. Gelijkspel!';
-      else if (pl[w].units < REQ) summary = `Tijd om! ${nm} zit het diepst (${pc[w]}%), ${names[1 - w]} staat op ${pc[1 - w]}%.`;
+      if (w == null) summary = N === 2 ? 'Allebei even diep gedraaid. Gelijkspel!' : 'Allemaal even diep gedraaid. Gelijkspel!';
+      else if (tops && tops.length > 1) summary = `Tijd om! ${tops.map((k) => names[k]).join(' & ')} zitten even diep (${pc[w]}%).`;
+      else if (pl[w].units < REQ) summary = N === 2 ? `Tijd om! ${nm} zit het diepst (${pc[w]}%), ${names[1 - w]} staat op ${pc[1 - w]}%.` : `Tijd om! ${nm} zit het diepst (${pc[w]}%).`;
       else {
-        const jokes = [`${nm} draait zijn schroef helemaal naar beneden en rinkelt de bel!`, `${nm} is de snelste schroevendraaier van het kasteel!`, `De gnomen joelen voor ${nm}. ${names[1 - w]} zit nog vast aan zijn roest.`];
-        summary = jokes[Math.floor(rng() * jokes.length)] + `<br>${names[w]} ${pc[w]}% - ${names[1 - w]} ${pc[1 - w]}% (${Math.round(T)} sec)`;
+        const jokes = [`${nm} draait zijn schroef helemaal naar beneden en rinkelt de bel!`, `${nm} is de snelste schroevendraaier van het kasteel!`, `De gnomen joelen voor ${nm}. ${names[l]} zit nog vast aan zijn roest.`];
+        summary = jokes[Math.floor(rng() * jokes.length)] + (N === 2 ? `<br>${names[w]} ${pc[w]}% - ${names[1 - w]} ${pc[1 - w]}% (${Math.round(T)} sec)` : `<br>${names.map((n2, k) => `${n2} ${pc[k]}%`).join(' - ')} (${Math.round(T)} sec)`);
       }
-      ctx.finishPvp({ winner: w, score: pc, summary, delay: 3000 });
+      const args = { winner: w, score: pc, summary, delay: 3000 };
+      if (N > 2) { args.place = place; if (tops && tops.length > 1) { args.winners = tops; delete args.winner; } }
+      ctx.finishPvp(args);
     }
 
     // ---------- per-speler update ----------
@@ -458,7 +466,7 @@ export default {
           hud.setPlayerInfo(p.i, `${pct}%  ritme ${rb}${tags ? '  ' + tags : ''}`);
         }
       }
-      bars.update([pl[0].shown / REQ, pl[1].shown / REQ]);
+      bars.update(pl.map((p) => p.shown / REQ));
       if (phase === 'play') hud.setTimer(Math.max(0, MAXT - T), 15);
     }
 
@@ -466,8 +474,8 @@ export default {
     const camP = new THREE.Vector3(), camL = new THREE.Vector3(), wantP = new THREE.Vector3(), wantL = new THREE.Vector3(), introP = new THREE.Vector3(), introL = new THREE.Vector3();
     let camInit = false; const gpV = new THREE.Vector3(), glV = new THREE.Vector3();
     function cam(dt) {
-      const hy = headCam(), sp = Math.abs(headY(pl[0]) - headY(pl[1]));
-      let ty = hy + 2.2, tz = 23.5 + sp * 0.55;
+      const hy = headCam(), ysC = pl.map(headY), sp = Math.max(...ysC) - Math.min(...ysC);
+      let ty = hy + 2.2, tz = 23.5 + sp * 0.55 + (N - 2) * 1.5;
       if (phase === 'won') { const k = smoothstep(0.4, 2.2, winT); ty = lerp(ty, 5.5, k); tz = lerp(tz, 24, k); }
       wantP.set(0, ty + 3.4, tz); wantL.set(0, ty, 0);
       introP.set(Math.sin(introT * 0.3) * 7, 20, 64); introL.set(0, 14, 0);
@@ -514,12 +522,12 @@ export default {
         E.wrenchT -= dt; if (!E.wrench && E.wrenchT <= 0) { spawnWrench(); E.wrenchT = 8 + rng() * 4; }
         updateRaven(dt); updateWrench(dt); updateGnomes(dt); updateQuake(dt);
         // einde?
-        const f0 = pl[0].units >= REQ, f1 = pl[1].units >= REQ;
-        if (f0 || f1) {
-          let w = f0 && f1 ? (pl[0].lastT >= pl[1].lastT ? 1 : 0) : (f0 ? 0 : 1);
-          endGame(w);
+        const fin = pl.filter((q) => q.units >= REQ);
+        if (fin.length) {
+          endGame(fin.reduce((a, b) => (b.lastT < a.lastT ? b : a)).i);   // wie het eerst klaar is; gelijk: de vroegste laatste stamp
         } else if (T >= MAXT) {
-          const d = pl[0].units - pl[1].units; endGame(Math.abs(d) < 0.5 ? null : d > 0 ? 0 : 1);
+          const mx = Math.max(...pl.map((q) => q.units)), tops = pl.filter((q) => mx - q.units < 0.5).map((q) => q.i);
+          endGame(tops.length === 1 ? tops[0] : tops.length === N ? null : tops[0], tops);
         }
       } else {
         for (const p of pl) playerStep(p, dt, false);
@@ -548,11 +556,11 @@ export default {
       onCountdown() { counting = true; hud.setTimer(MAXT, 15); hud.setScore('🔩 Draai je schroef naar beneden!'); },
       onStart() { hud.setTimer(MAXT, 15); hud.setScore('🔩 Draai je schroef naar beneden!'); },
       onDeurman,
-      celebrate(w) { pl[w].c.pose = 'cheer'; pl[1 - w].c.pose = 'sad'; },
+      celebrate(w, ws = [w]) { pl.forEach((p, k) => { p.c.pose = ws.includes(k) ? 'cheer' : 'sad'; }); },
       onSwap() { for (const p of pl) fx.particles.ring(COL_X[p.i] + p.offX, headY(p) + 1.6, 0.5, { count: 18, speed: 3, color: 0xffe14a, size: 0.3, life: 0.5 }); },
       dispose() { },
       dbg: {
-        state: () => ({ T, phase, winner, units: pl.map((p) => p.units), rhythm: pl.map((p) => p.rhythm), rust: pl.map((p) => p.rust), jam: pl.map((p) => p.jam), atPatch: pl.map((p) => p.atPatch), cleared: pl.map((p) => p.cleared.slice()), goo: pl.map((p) => p.gooV), turbo: pl.map((p) => p.turbo), gnome: pl.map((p) => p.gnome), offX: pl.map((p) => p.offX), needle: pl.map((p) => needlePos(p)), patchT: pl.map((p) => p.patchT), raven: !!E.raven, blob: E.blob ? { x: E.blob.x, i: E.blob.i } : null, wrench: E.wrench ? { i: E.wrench.i, gold: E.wrench.gold, off: E.wrench.off, state: E.wrench.state } : null, quakes: E.quakes, gnomes: E.gnomes.slice(), finished: finishCalled, REQ, patchP }),
+        state: () => ({ colX: COL_X, T, phase, winner, units: pl.map((p) => p.units), rhythm: pl.map((p) => p.rhythm), rust: pl.map((p) => p.rust), jam: pl.map((p) => p.jam), atPatch: pl.map((p) => p.atPatch), cleared: pl.map((p) => p.cleared.slice()), goo: pl.map((p) => p.gooV), turbo: pl.map((p) => p.turbo), gnome: pl.map((p) => p.gnome), offX: pl.map((p) => p.offX), needle: pl.map((p) => needlePos(p)), patchT: pl.map((p) => p.patchT), raven: !!E.raven, blob: E.blob ? { x: E.blob.x, i: E.blob.i } : null, wrench: E.wrench ? { i: E.wrench.i, gold: E.wrench.gold, off: E.wrench.off, state: E.wrench.state } : null, quakes: E.quakes, gnomes: E.gnomes.slice(), finished: finishCalled, REQ, patchP }),
         force: {
           raven() { E.ravenT = 0; }, wrench() { E.wrenchT = 0; }, quake() { E.quakeT = 0; },
           setUnits(i, u) { const p = pl[i]; p.units = u; p.shown = u; patchP.forEach((q, j) => { if (q * REQ <= u) p.cleared[j] = true; }); p.atPatch = -1; },

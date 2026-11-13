@@ -6,10 +6,11 @@ import { buildTower, updateTower, makeHand, makeGhost, makeCuckoo, makeStar, HAN
 
 // Klokkentoren-Sprong — duel: spring over de draaiende wijzers van de gigantische klok. Wie geraakt wordt, vliegt de tandwielen in.
 // Best-of-3 (2 gewonnen rondes). Gimmicks: koekoek, kantelende plaat, uurslag (wijzers verspringen), gouden wijzer, tijdstop-ster.
+// 3-4 spelers: vrij voor allen op dezelfde plaat; wie als laatste overeind blijft wint de ronde. Eerste met 2 rondewinsten wint, na 3 rondes beslissen de winsten en dan de totale overlevingstijd.
 
 const VSC = 1.42, PRC = 0.62;
 const RUN = 7.4, G0 = 32, JUMP_V = 12.8, PLAY_R = 8.9;
-const WIN_ROUNDS = 2, MAX_ROUNDS = 4;
+const WIN_ROUNDS = 2, MAX_ROUNDS = 4, MAX_ROUNDS_FFA = 3;
 const DOOR_ANG = [270, 90, 330, 30];      // klokstanden van de koekoekshuisjes
 const HOUSE_R = PLATE_R + 1.45;
 
@@ -30,17 +31,18 @@ export default {
   giver: 'Klokkenmaker Tik-Tak',
   icon: '🕰️',
   mode: 'pvp',
+  players: [2, 3, 4],              // 2 = duel; 3-4 = vrij voor allen: laatste overlevende wint de ronde
   time: 75,
   pay: 1,
   music: 'game_fast',
   twists: ['invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'],
-  blurb: 'In de klokkentoren van het kasteel staan jullie op een <b>gigantische wijzerplaat</b> boven een afgrond vol tandwielen. De wijzers draaien rond: <b>spring eroverheen</b> of ren ervoor weg! Elk heel uur verspringen ze met een gong, een <b>koekoek</b> pikt in je benen en soms kantelt de hele klok. Wie geraakt wordt vliegt de tandwielen in. Wie als eerste <b>2 rondes</b> wint is de klokkenkampioen.',
+  blurb: 'In de klokkentoren van het kasteel staan jullie op een <b>gigantische wijzerplaat</b> boven een afgrond vol tandwielen. De wijzers draaien rond: <b>spring eroverheen</b> of ren ervoor weg! Elk heel uur verspringen ze met een gong, een <b>koekoek</b> pikt in je benen en soms kantelt de hele klok. Wie geraakt wordt vliegt de tandwielen in. Wie als eerste <b>2 rondes</b> wint is de klokkenkampioen. Met 3 of 4 spelers staan jullie allemaal op de klok: wie als laatste overeind blijft wint de ronde (eerste met 2 rondes wint, na 3 rondes beslist de overlevingstijd).',
   controls: ['{move} rennen', '{a} springen', '{b} stampen (in de lucht!)'],
   tip: 'De gouden wijzer is te groot om overheen te springen: ren voor hem uit! Wie achterstaat kan de tijdstop-ster pakken. Een stamp-landing vlak bij je broer schudt hem door elkaar.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
-    const names = players.map((p) => p.name);
+    const names = players.map((p) => p.name), N = players.length, pcss = players.map((p) => p.css);
     const L = ctx.lights('night', { shadow: 15, center: [0, 0, 0], fogNear: 60, fogFar: 190 });
     L.hemi.color.set(0xc9b8ff); L.hemi.groundColor.set(0x8a5a2a); L.hemi.intensity = 1.35;
     L.sun.color.set(0xffe4b4); L.sun.intensity = 2.2; L.sun.position.set(-10, 32, 22);
@@ -97,7 +99,8 @@ export default {
     const starGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: W.glowTex, color: 0xffe080, transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending })); starGlow.scale.set(5, 5, 1); starGlow.visible = false; A.add(starGlow);
 
     // ---------------- spelers ----------------
-    const START = [[-5.4, 2.8], [5.4, -2.8]];
+    // beginplekken: 2 spelers tegenover elkaar (zoals altijd); 3-4 spelers gelijkmatig rond de plaat
+    const START = N === 2 ? [[-5.4, 2.8], [5.4, -2.8]] : Array.from({ length: N }, (_, k) => { const a = (k / N) * TAU + (N === 4 ? Math.PI / 4 : 0.35); return [Math.sin(a) * 5.9, -Math.cos(a) * 5.9]; });
     const pl = players.map((pp, i) => {
       const c = makeBrother(i); const holder = new THREE.Group(); holder.add(c.group); A.add(holder);
       const rg = new THREE.Mesh(new THREE.RingGeometry(0.8, 0.98, 28), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i], transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); rg.rotation.x = -Math.PI / 2; rg.position.y = 0.05; A.add(rg);
@@ -110,13 +113,14 @@ export default {
 
     // ---------------- rondetoestand ----------------
     const R = { n: 0, state: 'pre', t: 0, ht: 0, sd: false, hitFirst: -1, decideAt: 0, endT: 0, draws: 0, calm: 0, freeze: 0, nextCuckoo: 5, nextStrike: 6, nextTilt: 12, secondAt: 9, goldAt: 15, strike: null, tilt: { st: 'none', t: 0, a: 0, dx: 0, dz: 1, amt: 0 }, star: null, starAt: 7, starFor: -1, matchOver: false, tickT: 0, swapped: false };
+    const MAXR = N === 2 ? MAX_ROUNDS : MAX_ROUNDS_FFA;
     let god = false, T = 0, done = false, introT = 0, freezeFlash = 0, lastLoser = -1, camPunch = 0, flashT = 0;
     const hist = [];
     hud.setTimer(null);
     const pips = (w) => '●'.repeat(w) + '○'.repeat(WIN_ROUNDS - w);
     function refreshHud() {
-      hud.setScore(`Ronde ${clamp(R.n, 1, 9)}    ${names[0]} ${pips(pl[0].wins)}  –  ${pips(pl[1].wins)} ${names[1]}`);
-      hud.setPlayerInfo(0, `Gewonnen: ${pl[0].wins}`); hud.setPlayerInfo(1, `Gewonnen: ${pl[1].wins}`);
+      hud.setScore(N === 2 ? `Ronde ${clamp(R.n, 1, 9)}    ${names[0]} ${pips(pl[0].wins)}  –  ${pips(pl[1].wins)} ${names[1]}` : `Ronde ${clamp(R.n, 1, 9)}/${MAXR}    ${pl.map((p) => pips(p.wins)).join('  ')}`);
+      pl.forEach((p) => hud.setPlayerInfo(p.i, `Gewonnen: ${p.wins}`));
     }
 
     // ---------------- ronde starten ----------------
@@ -145,10 +149,11 @@ export default {
       R.nextCuckoo = 4.2 + rand(0, 1.2); R.nextStrike = R.n === 1 ? 6.2 : 5.4; R.nextTilt = 11 + rand(0, 3); R.secondAt = 8 + rand(0, 1.5); R.goldAt = 13.5 + rand(0, 2); R.starAt = 6.5 + rand(0, 2); R.tilt.st = 'none'; R.tilt.amt = 0; R.tilt.t = 0;
       R.starFor = -1; R.goldDone = false; R.starDone = false;
       // wie staat er achter? (alleen die kan de ster pakken)
-      if (pl[0].wins !== pl[1].wins) R.starFor = pl[0].wins < pl[1].wins ? 0 : 1; else if (R.n > 1 && lastLoser >= 0) R.starFor = lastLoser;
+      const wn = pl.map((p) => p.wins), wmin = Math.min(...wn), wmax = Math.max(...wn);
+      if (wmin !== wmax && wn.filter((v) => v === wmin).length === 1) R.starFor = wn.indexOf(wmin); else if (R.n > 1 && lastLoser >= 0) R.starFor = lastLoser;
       const swap = (R.n % 2) === 0;
       pl.forEach((p, i) => {
-        const s = START[swap ? 1 - i : i];
+        const s = N === 2 ? START[swap ? 1 - i : i] : START[(i + R.n - 1) % N];
         Object.assign(p, { x: s[0], z: s[1], vx: 0, vz: 0, y: 0, vy: 0, st: 'play', stun: 0, jumpBuf: 0, stompReq: false, stamping: false, stompCd: 0, flyT: 0, spin: 0, rot: 0, bounced: false, cheer: false, wasAir: false, sc: 0.2, hitAt: -1 });
         p.face = Math.atan2(-s[0], -s[1]) ; p.c.pose = 'idle'; p.c.air = false; p.holder.visible = true; p.holder.rotation.set(0, 0, 0); p.dizzy.visible = false;
       });
@@ -156,7 +161,7 @@ export default {
       for (const hs of houses) { hs.state = 'idle'; hs.bird.visible = false; hs.strip.visible = false; hs.warn.visible = false; hs.open = 0; }
       starObj.visible = false; starRing.visible = false; starGlow.visible = false;
       refreshHud();
-      if (R.n > 1) { hud.showBig(R.n >= MAX_ROUNDS || (pl[0].wins === 1 && pl[1].wins === 1) ? 'BESLISSENDE RONDE!' : `RONDE ${R.n}`, 1200, '#ffe14a'); audio.sfx('bell', { vol: 0.5 }); }
+      if (R.n > 1) { hud.showBig((N === 2 ? (R.n >= MAX_ROUNDS || (pl[0].wins === 1 && pl[1].wins === 1)) : R.n >= MAXR) ? 'BESLISSENDE RONDE!' : `RONDE ${R.n}`, 1200, '#ffe14a'); audio.sfx('bell', { vol: 0.5 }); }
       ring(0, 0.3, 0, { count: 30, speed: 7, color: 0xffe9a0, size: 0.3, life: 0.7 });
     }
 
@@ -177,7 +182,7 @@ export default {
       burst(p.x, 0.8, p.z, { count: 36, speed: 6, up: 1.3, life: 0.8, size: 0.4, colors: [0xffe14a, 0xffffff, 0xff9a3a, 0xff5a3a], gravity: 8 });
       ring(p.x, 0.3, p.z, { count: 20, speed: 6, color: 0xffffff, size: 0.3, life: 0.4 });
       ftext(pick(JOKES_HIT), p.x, 3.4, p.z, '#ff7a5a', 1.3);
-      if (R.state === 'fight' && R.hitFirst < 0) { R.hitFirst = p.i; R.decideAt = T + 0.32; }
+      if (R.state === 'fight' && R.hitFirst < 0 && (N === 2 || pl.filter((q) => q.st === 'play').length <= 1)) { R.hitFirst = p.i; R.decideAt = T + 0.32; }   // 3-4 spelers: de ronde eindigt als er nog maar één (of niemand) overeind staat
     }
 
     // ---------------- spelerfysica ----------------
@@ -231,12 +236,14 @@ export default {
     function stompLand(p) {
       ring(p.x, 0.15, p.z, { count: 26, speed: 8, color: 0xfff0b0, size: 0.35, life: 0.5 });
       ctx.shake(0.35);
-      const o = pl[1 - p.i]; if (o.st !== 'play' || o.y > 0.7) return;
-      const dx = o.x - p.x, dz = o.z - p.z, d = Math.hypot(dx, dz) || 1;
-      if (d < 3.1) {
-        o.vx += dx / d * 12; o.vz += dz / d * 12; o.stun = Math.max(o.stun, 0.5);
-        ftext('DREUN!', o.x, 3.3, o.z, '#ffffff', 1.1); audio.sfx('hit', { vol: 0.8 }); audio.sfx('thud', { vol: 0.8 });
-        burst(o.x, 0.8, o.z, { count: 16, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 6 });
+      for (const o of pl) {
+        if (o === p || o.st !== 'play' || o.y > 0.7) continue;
+        const dx = o.x - p.x, dz = o.z - p.z, d = Math.hypot(dx, dz) || 1;
+        if (d < 3.1) {
+          o.vx += dx / d * 12; o.vz += dz / d * 12; o.stun = Math.max(o.stun, 0.5);
+          ftext('DREUN!', o.x, 3.3, o.z, '#ffffff', 1.1); audio.sfx('hit', { vol: 0.8 }); audio.sfx('thud', { vol: 0.8 });
+          burst(o.x, 0.8, o.z, { count: 16, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 6 });
+        }
       }
     }
 
@@ -359,7 +366,7 @@ export default {
       if (Math.random() < dt * 14) { const v = wp(s.x + (Math.random() - 0.5) * 1.5, 1.2 + Math.random() * 1.6, s.z + (Math.random() - 0.5) * 1.5); fx.particles.emit(v.x, v.y, v.z, 0, 0.8, 0, { life: 0.7, size: 0.22, color: 0xfff0a0, gravity: -0.5 }); }
       const b = pl[R.starFor];
       if (R.state === 'fight' && b.st === 'play' && b.y < 2.4 && Math.hypot(b.x - s.x, b.z - s.z) < 1.55) { collectStar(b, s); return; }
-      if (R.state === 'fight') { const o = pl[1 - R.starFor]; if (o.st === 'play' && o.y < 2.4 && Math.hypot(o.x - s.x, o.z - s.z) < 1.4 && !s.teased) { s.teased = true; ftext('Niet voor jou!', o.x, 3.4, o.z, '#9fd0ff', 0.9); audio.sfx('buzz', { vol: 0.4 }); } }
+      if (R.state === 'fight') { for (const o of pl) { if (o === b) continue; if (o.st === 'play' && o.y < 2.4 && Math.hypot(o.x - s.x, o.z - s.z) < 1.4 && !s.teased) { s.teased = true; ftext('Niet voor jou!', o.x, 3.4, o.z, '#9fd0ff', 0.9); audio.sfx('buzz', { vol: 0.4 }); } } }
       if (s.life <= 0) { R.star = null; starObj.visible = false; starRing.visible = false; starGlow.visible = false; }
     }
     function collectStar(b, s) {
@@ -427,11 +434,12 @@ export default {
         updateCuckoos(dtG, dt); updateTilt(dtG, dt); updateSpawns(dtG, dt);
         // einde van de ronde
         if (R.hitFirst >= 0 && T >= R.decideAt) endRound();
-        else if (R.hitFirst < 0 && R.ht > 32) { // veiligheidsklep: alles spoelt weg
+        else if (R.hitFirst < 0 && R.ht > (N === 2 ? 32 : 40)) { // veiligheidsklep: alles spoelt weg
           for (const p of pl) hitPlayer(p, 0, 1, 0, 0, 1, 'timeout');
           endRound();
         }
         if (R.hitFirst < 0 && pl.every((p) => p.st !== 'play')) endRound();
+        if (N > 2 && R.hitFirst < 0 && pl.filter((p) => p.st === 'play').length <= 1) { R.hitFirst = 0; R.decideAt = T + 0.32; }
       } else if (R.state === 'end') {
         R.endT -= dt;
         updateCuckoos(0, dt); updateTilt(0, dt);
@@ -441,29 +449,51 @@ export default {
     }
     function endRound() {
       R.state = 'end'; R.endT = 2.7; R.tilt.st = 'back'; R.tilt.t = 0; R.strike = null; for (const k in hands) hands[k].ghost.visible = false;
-      const fallen = pl.filter((p) => p.st !== 'play');
+      const fallen = pl.filter((p) => p.st !== 'play'), alive = pl.filter((p) => p.st === 'play');
       for (const p of pl) p.surv += p.st === 'play' ? R.ht : (p.hitAt >= 0 ? p.hitAt : R.ht);
-      if (fallen.length >= 2) {
-        R.draws++; R.n--; hud.showBig('GELIJKSPEL!', 1300, '#ffd24a'); hud.toast('Allebei in de tandwielen! Opnieuw...', 1900); audio.sfx('lose', { vol: 0.5 });
-        if (R.draws >= 2) R.matchOver = true;   // te vaak gelijk: overlevingstijd beslist
-        R.endT = 2.4; refreshHud(); return;
+      let winner = null, loser = null;
+      if (N === 2) {
+        if (fallen.length >= 2) {
+          R.draws++; R.n--; hud.showBig('GELIJKSPEL!', 1300, '#ffd24a'); hud.toast('Allebei in de tandwielen! Opnieuw...', 1900); audio.sfx('lose', { vol: 0.5 });
+          if (R.draws >= 2) R.matchOver = true;   // te vaak gelijk: overlevingstijd beslist
+          R.endT = 2.4; refreshHud(); return;
+        }
+        loser = fallen[0]; winner = pl[1 - loser.i];
+      } else {
+        // 3-4 spelers: de enige overlevende wint; niemand meer over: de laatste die viel wint (als dat duidelijk eerder was dan de rest), anders gelijkspel
+        if (alive.length === 1) winner = alive[0];
+        else if (alive.length === 0) { const o = pl.slice().sort((a, b) => b.hitAt - a.hitAt); if (o[0].hitAt - o[1].hitAt > 0.25) winner = o[0]; }
+        const first = fallen.slice().sort((a, b) => a.hitAt - b.hitAt)[0]; loser = first || null;
+        if (!winner) {
+          R.draws++; R.n--; hud.showBig('GELIJKSPEL!', 1300, '#ffd24a'); hud.toast(alive.length ? 'Niemand valt: opnieuw...' : 'Allemaal in de tandwielen! Opnieuw...', 1900); audio.sfx('lose', { vol: 0.5 });
+          if (R.draws >= 2) R.matchOver = true;
+          R.endT = 2.4; refreshHud(); return;
+        }
       }
-      const loser = fallen[0], winner = pl[1 - loser.i];
-      winner.wins++; lastLoser = loser.i;
+      winner.wins++; if (loser) lastLoser = loser.i;
       winner.cheer = true; winner.c.pose = 'cheer'; audio.sfx('win', { vol: 0.5 });
-      const over = winner.wins >= WIN_ROUNDS || (pl[0].wins + pl[1].wins) >= MAX_ROUNDS;
-      hud.showBig(over ? 'KLOKKENKAMPIOEN!' : `${names[winner.i]} wint de ronde!`, 1500, winner.i ? '#4a8cff' : '#35c46f');
-      if (!over) hud.toast(pick([`${names[loser.i]} is nu een tandwiel-pannenkoek.`, `Tik-tak! ${names[loser.i]} is te laat.`, `${names[loser.i]} zit tussen de raderen.`, `Hoogste tijd, ${names[loser.i]}!`]), 2000);
+      const total = pl.reduce((a, p) => a + p.wins, 0);
+      const over = winner.wins >= WIN_ROUNDS || total >= MAXR;
+      hud.showBig(over ? 'KLOKKENKAMPIOEN!' : `${names[winner.i]} wint de ronde!`, 1500, pcss[winner.i]);
+      if (!over && loser) hud.toast(pick([`${names[loser.i]} is nu een tandwiel-pannenkoek.`, `Tik-tak! ${names[loser.i]} is te laat.`, `${names[loser.i]} zit tussen de raderen.`, `Hoogste tijd, ${names[loser.i]}!`]), 2000);
       refreshHud();
       if (over) R.matchOver = true;
     }
     function finishMatch() {
       if (done) return; done = true;
-      let w = pl[0].wins > pl[1].wins ? 0 : pl[1].wins > pl[0].wins ? 1 : -1;
-      if (w < 0) w = Math.abs(pl[0].surv - pl[1].surv) > 0.4 ? (pl[0].surv > pl[1].surv ? 0 : 1) : -1;
-      const sc = [pl[0].wins, pl[1].wins];
-      pl.forEach((p, i) => { p.cheer = i === w; if (p.st === 'play') p.c.pose = i === w ? 'cheer' : 'sad'; });
-      const champ = w >= 0 ? names[w] : null, other = w >= 0 ? names[1 - w] : null;
+      const order = pl.slice().sort((a, b) => (b.wins - a.wins) || (b.surv - a.surv) || (a.i - b.i));
+      let w = -1, tops = [];
+      if (N === 2) {
+        w = pl[0].wins > pl[1].wins ? 0 : pl[1].wins > pl[0].wins ? 1 : -1;
+        if (w < 0) w = Math.abs(pl[0].surv - pl[1].surv) > 0.4 ? (pl[0].surv > pl[1].surv ? 0 : 1) : -1;
+      } else {
+        const o0 = order[0]; tops = order.filter((q) => q.wins === o0.wins && Math.abs(q.surv - o0.surv) <= 0.4);
+        w = tops.length === 1 ? o0.i : (tops.length === N ? -1 : o0.i);
+      }
+      const sc = pl.map((p) => p.wins);
+      const winSet = N === 2 ? (w >= 0 ? [w] : []) : (tops.length === 1 ? [w] : tops.map((q) => q.i));
+      pl.forEach((p, i) => { p.cheer = winSet.includes(i); if (p.st === 'play') p.c.pose = winSet.includes(i) ? 'cheer' : 'sad'; });
+      const champ = w >= 0 ? names[w] : null, other = w >= 0 ? (N === 2 ? names[1 - w] : names[order[order.length - 1].i]) : null;
       const jokes = champ ? [
         `${champ} springt als een kikker over de wijzers! ${other} zit nu tussen de tandwielen.`,
         `Het is hoogste tijd voor ${champ}: de nieuwe klokkenkampioen!`,
@@ -471,7 +501,9 @@ export default {
         `Tik-tak-BOEM! ${champ} wint, ${other} draait nog een rondje in de raderen.`,
       ] : ['Precies even snel! De klok weet niet wie er gewonnen heeft.'];
       for (let k = 0; k < 6; k++) setTimeout(() => { try { fx.particles.burst(rand(-5, 5), 5 + rand(0, 3), rand(-3, 3), { count: 36, speed: 7, up: 1.2, life: 1.5, size: 0.45, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 }); audio.sfx('sparkle', { vol: 0.4 }); } catch (e) { /* weg */ } }, k * 250);
-      ctx.finishPvp({ winner: w >= 0 ? w : null, score: sc, delay: 1400, summary: `${pick(jokes)}${w < 0 ? '' : ''}` });
+      const args = { winner: w >= 0 ? w : null, score: sc, delay: 1400, summary: `${pick(jokes)}${N > 2 ? `<br><small>Rondewinsten: ${pl.map((p) => `${names[p.i]} ${p.wins}`).join(', ')}</small>` : ''}` };
+      if (N > 2) { args.place = order.map((q) => q.i); if (winSet.length > 1 && winSet.length < N) { args.winners = winSet; delete args.winner; } else if (winSet.length === N) { args.winner = null; } }
+      ctx.finishPvp(args);
     }
 
     // ---------------- beeld ----------------
@@ -592,10 +624,12 @@ export default {
           for (const k of HL) { if (!k.on) continue; const om = k.dir * k.d.base * spMul * endSlow * (k.k === 'gold' ? 1 : 0.6); if (om) setAngle(k, k.theta + om * h); }
         }
         // spelers botsen een beetje tegen elkaar
-        const a = pl[0], b = pl[1];
-        if (a.st === 'play' && b.st === 'play' && a.y < 1 && b.y < 1) {
-          const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || 1e-3, min = PRC * (ctx.pvp.size(0) + ctx.pvp.size(1)) * 1.1;
-          if (d < min) { const o = (min - d) / 2, nx = dx / d, nz = dz / d; a.x -= nx * o; a.z -= nz * o; b.x += nx * o; b.z += nz * o; }
+        for (let ia = 0; ia < N; ia++) for (let ib = ia + 1; ib < N; ib++) {
+          const a = pl[ia], b = pl[ib];
+          if (a.st === 'play' && b.st === 'play' && a.y < 1 && b.y < 1) {
+            const dx = b.x - a.x, dz = b.z - a.z, d = Math.hypot(dx, dz) || 1e-3, min = PRC * (ctx.pvp.size(ia) + ctx.pvp.size(ib)) * 1.1;
+            if (d < min) { const o = (min - d) / 2, nx = dx / d, nz = dz / d; a.x -= nx * o; a.z -= nz * o; b.x += nx * o; b.z += nz * o; }
+          }
         }
       }
       // ontsnapt een speler per ongeluk (deze situatie komt niet voor): sla over
@@ -607,7 +641,7 @@ export default {
       visuals(dt);
       cam(dt, 'play');
       // hint tijdens ronde: wie heeft de ster
-      if (R.state === 'fight') { hud.setPlayerInfo(0, pl[0].st === 'play' ? `Gewonnen: ${pl[0].wins}` : 'Weggevlogen!'); hud.setPlayerInfo(1, pl[1].st === 'play' ? `Gewonnen: ${pl[1].wins}` : 'Weggevlogen!'); }
+      if (R.state === 'fight') pl.forEach((p) => hud.setPlayerInfo(p.i, p.st === 'play' ? `Gewonnen: ${p.wins}` : 'Weggevlogen!'));
     }
     function resultUpdate(dt) {
       T += dt; visuals(dt); cam(dt, 'result');
@@ -635,7 +669,7 @@ export default {
       onDeurman(movers) {
         movers.forEach((m, i) => { if (!m) return; const p = pl[i]; if (p.st !== 'play') return; p.stun = 1.6; p.vx = p.vz = 0; ftext('BEWOOOG!', p.x, 3.4, p.z, '#ff5a5a', 1.2); audio.sfx('hurt', { vol: 0.5 }); });
       },
-      celebrate(w) { pl.forEach((p, i) => { p.cheer = i === w; if (p.st === 'play') p.c.pose = i === w ? 'cheer' : 'sad'; }); },
+      celebrate(w, ws = [w]) { pl.forEach((p, i) => { p.cheer = ws.includes(i); if (p.st === 'play') p.c.pose = ws.includes(i) ? 'cheer' : 'sad'; }); },
       dispose() {},
       dbg: {
         state: () => ({ T, round: R.n, rstate: R.state, ht: R.ht, wins: pl.map((p) => p.wins), done, draws: R.draws, sd: R.sd, freeze: R.freeze, calm: R.calm, tilt: R.tilt.st, tiltAmt: R.tilt.amt, strike: !!R.strike, star: R.star ? { x: R.star.x, z: R.star.z } : null, starFor: R.starFor, surv: pl.map((p) => p.surv), hist,

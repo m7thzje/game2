@@ -8,9 +8,12 @@ import { mergeStatic } from '../world/merge.js';
 // Wereld van "Boogschieten-Battle": toernooiveld voor een kasteel, schietbanen, doelen, tribune met toeschouwers, wind-vlaggen.
 // Alle schietcoördinaten leven in één "doelvlak" (x = zijwaarts, y = hoogte) op z = ZT; bonusdoelen (ballonnen, kip, draak) op z = ZB.
 
-export const AX = [-6.5, 6.5];        // x van de schutters
+export const AX = [-6.5, 6.5];        // x van de schutters (2 spelers)
 export const ZA = 1.6;                // z van de schutters
 export const TXC = [-7, 7];           // x van de doelen (midden)
+export const LAYOUT = {                // 3-4 spelers: doelen naast elkaar (zelfde afmetingen)
+  2: { AX, TXC }, 3: { TXC: [-9.2, 0, 9.2], AX: [-8.6, 0, 8.6] }, 4: { TXC: [-10.5, -3.5, 3.5, 10.5], AX: [-9.8, -3.3, 3.3, 9.8] },
+};
 export const TY = 3.9;                // hoogte doel-midden
 export const TR = 2.8;                // straal doelschijf
 export const ZT = -20, ZB = -16.5;    // doelvlak, bonusvlak
@@ -84,8 +87,8 @@ export function makeBow(color) {
   return { rig, bow, string, nock };
 }
 
-export function buildWorld(ctx, L) {
-  const { scene, fx } = ctx; const rng = mulberry32(2024);
+export function buildWorld(ctx, L, NPL = 2) {
+  const { scene, fx } = ctx; const { AX, TXC } = LAYOUT[NPL] || LAYOUT[2]; const rng = mulberry32(2024);
   const W = { crowd: null, flags: [], clouds: [], bannerList: [] };
   const first = scene.children.length;
   // grond + gemaaide banen

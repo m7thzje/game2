@@ -1,8 +1,10 @@
 // Gebruik: node tools/test_pingpong.mjs [scenario...]   scenario: bots | twists | timeout | idle | golden | events | rules | shots
+//   PLAYERS=4 = vier spelers (Sam doet mee; teams [[0,1],[2,3]] bij teamspellen); zonder PLAYERS twee spelers.
 //   TW=<twist-id> kiest een twist (anders: "none" / per scenario). Q=low|high kwaliteit.
 // Bots spelen versneld (zonder renderen) hele potjes; controleert dat finishPvp PRECIES één keer komt, beide spelers kunnen winnen,
 // geen console-errors, dat elke twist werkt en dat de spelregels (serve, stuit, net, gouden punt) kloppen.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -15,26 +17,27 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
+const N = +process.env.PLAYERS || 2;   // PLAYERS=4: vier spelers (?players=4), alle spelers krijgen input
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 let FAIL = 0;
 const check = (ok, msg) => { if (!ok) { FAIL++; console.log('  FAIL:', msg); } else console.log('  ok:', msg); };
 
 async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=pingpong&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=pingpong&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${N >= 3 ? '&players=' + N : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
     window.__fin = 0; const orig = mode.ctx.finishPvp; mode.ctx.finishPvp = (r) => { window.__fin++; window.__finArg = r; return orig(r); };
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -48,19 +51,19 @@ async function installBots(page, cfg) {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input; const tw = m.twist.id;
     let s = 777; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
     const gs = () => (rnd() + rnd() + rnd() - 1.5) / 0.75;
-    const B = [0, 1].map(() => ({ plan: null, pressed: false, lat: 0, fwd: 0, kind: 'A', errT: 0 }));
+    const B = [0, 1, 2, 3].map(() => ({ plan: null, pressed: false, lat: 0, fwd: 0, kind: 'A', errT: 0 }));
     window.__cfg = cfg;
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i], b = B[i], c = window.__cfg[i], me = st.p[i], dir = me.dir; v.a = false; v.b = false; v.x = 0; v.y = 0;
+        for (let i = 0; i < st.p.length; i++) {
+          const v = inp.virtual[m.ids[i]], b = B[i], c = window.__cfg[i % 2], me = st.p[i], dir = me.dir; v.a = false; v.b = false; v.x = 0; v.y = 0;
           if (c.style === 'idle' || st.phase === 'end' || st.phase === 'point') continue;
           const sk = c.skill ?? 0.7;
           let fwdIn = 0, latIn = 0, zT = me.z, uT = 5.8, press = null;
-          if (st.phase === 'serve') { if (st.server === i && st.stare <= 0 && st.T > 0) { b.wait = (b.wait || 0) + dt; if (b.wait > 0.5 + (1 - sk) * 0.8) { press = 'A'; b.wait = 0; fwdIn = rnd() < 0.3 ? 1 : 0; } } }
-          else if (st.phase === 'rally' && st.lastHitter !== i && st.ball.vx * dir < 0) {
+          if (st.phase === 'serve') { if (st.sp === i && st.stare <= 0 && st.T > 0) { b.wait = (b.wait || 0) + dt; if (b.wait > 0.5 + (1 - sk) * 0.8) { press = 'A'; b.wait = 0; fwdIn = rnd() < 0.3 ? 1 : 0; } } }
+          else if (st.phase === 'rally' && st.lastHitter !== me.t && st.ball.vx * dir < 0) {
             const pr = inst.dbg.predict(i);
             if (pr) {
               if (!b.err || b.errBall !== st.rally) { b.errBall = st.rally; b.err = gs() * (0.5 + (1 - sk) * 2.0); b.tErr = gs() * (0.03 + (1 - sk) * 0.14); b.kind = rnd() < (c.fancy ?? 0.12) ? 'B' : 'A'; b.lat = (rnd() - 0.5) * 2; b.fwd = rnd() < (c.smash ?? 0.25) ? 1 : (rnd() < 0.15 ? -1 : 0); }
@@ -120,7 +123,7 @@ for (const name of scen) {
       if (res.result) console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, ' ')}`);
       check(res.finished && res.fin === 1, `finishPvp precies 1x (fin=${res.fin})`);
       check(res.result && res.result.winner != null, `winnaar bepaald (${res.result && res.result.winner})`);
-      if (res.result && res.result.winner != null) wins[res.result.winner]++;
+      if (res.result && res.result.winner != null) wins[N === 4 ? (res.result.winner >= 2 ? 1 : 0) : res.result.winner]++;   // 4 spelers: team 0 = slot 0/1, team 1 = slot 2/3
       if (name === 'golden') check(res.st.golden && Math.abs(res.st.score[0] - res.st.score[1]) >= 1, `gouden punt na gelijkspel (score ${res.st.score})`);
       check(errors.length === 0, errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'geen console-errors');
       await browser.close();

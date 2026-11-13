@@ -4,6 +4,7 @@
 // er geen console-errors zijn en dat elke twist uit `twists` werkt. Exitcode 1 bij een mislukte controle.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
+import { chromePath, BROWSER_ARGS } from './chrome_path.mjs';
 
 const GAME = 'deurzegt';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -20,20 +21,20 @@ const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'turbo', 'slowmo', 'giant', 'lowgrav', 'bodyswap', 'deurman'];   // = `twists` van de game (+ none)
 let failures = 0; const check = (ok, msg) => { console.log(`${ok ? 'OK  ' : 'FAIL'} ${msg}`); if (!ok) failures++; };
 
-async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+async function open(twist, N = 2) {
+  const browser = await chromium.launch({ executablePath: chromePath(), args: BROWSER_ARGS });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=${GAME}&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=${GAME}&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${N === 4 ? '&players=4' : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -49,18 +50,18 @@ async function installBots(page, cfg) {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 4242; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
     const KEY = { A: 'a', B: 'b', L: 'left', R: 'right', U: 'up', D: 'down' }; const ALL = ['a', 'b', 'left', 'right', 'up', 'down'];
-    const B = [0, 1].map(() => ({ key: '', at: 0, hold: 0, cool: 0, move: null, doPress: true }));
+    const B = cfg.map(() => ({ key: '', at: 0, hold: 0, cool: 0, move: null, doPress: true }));
     window.__cfg = cfg;
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i], b = B[i], c = window.__cfg[i];
+        for (let i = 0; i < cfg.length; i++) {
+          const v = inp.virtual[m.ids[i]], b = B[i], c = window.__cfg[i];
           if (b.hold > 0) { b.hold--; if (b.hold === 0) { for (const a of ALL) v[a] = false; b.cool = 2; } continue; }
           if (b.cool > 0) { b.cool--; continue; }
           for (const a of ALL) v[a] = false;
-          if (c.style === 'idle' || st.gstate !== 'win' || st.done[i]) { if (st.gstate !== 'win') b.key = ''; continue; }
+          if (c.style === 'idle' || st.gstate !== 'win' || st.done[i] || (st.out && st.out[i])) { if (st.gstate !== 'win') b.key = ''; continue; }
           const need = st.expect.length ? st.expect[st.idx[i]] : null;
           const key = st.round + ':' + st.idx[i];
           if (b.key !== key) {   // nieuw doel: kies reactietijd en eventuele fout
@@ -82,11 +83,11 @@ const weak = { delay: 0.55, jitter: 0.45, err: 0.12, trapErr: 0.2, style: 'play'
 const mid = { delay: 0.42, jitter: 0.35, err: 0.06, trapErr: 0.1, style: 'play' };
 const perfect = { delay: 0.12, jitter: 0.05, err: 0, trapErr: 0, style: 'play' };
 
-async function runMatch(name, tw, cfg, pre) {
-  const { browser, page, errors } = await open(tw);
+async function runMatch(name, tw, cfg, pre, NP = 2) {
+  const { browser, page, errors } = await open(tw, NP);
   await installBots(page, cfg);
   if (pre) await page.evaluate(pre);
-  if (name === 'twists') await page.evaluate(() => { window.__bot(600); const i = window.__app.mode.instance; i.onDeurman([true, false]); i.onSwap(true); i.onDeurman([false, true]); i.onSwap(false); });   // twist-hooks ook echt aanroepen
+  if (name === 'twists') await page.evaluate(() => { window.__bot(600); const i = window.__app.mode.instance; i.onDeurman(window.__app.mode.ids.map((_, k) => k === 0)); i.onSwap(true); i.onDeurman(window.__app.mode.ids.map((_, k) => k === 1)); i.onSwap(false); });   // twist-hooks ook echt aanroepen
   const res = await page.evaluate(() => {
     const m = window.__app.mode, inst = m.instance; const log = []; let last = ''; let g = 0;
     while (!m.finished && g++ < 60 * 300) {
@@ -107,11 +108,25 @@ async function runMatch(name, tw, cfg, pre) {
   await browser.close();
   check(res.finished && res.fin === 1, `${name}/${res.twist}: finishPvp precies 1x (calls=${res.fin})`);
   check(errors.length === 0, `${name}/${res.twist}: geen console-errors`);
+  if (NP === 4) {
+    const r = res.result;
+    check(r && r.scoreArr.length === 4 && r.place.length === 4 && [...r.place].sort().join() === '0,1,2,3' && r.place[0] === r.winnerId, `${name}/${res.twist}: vier plaatsen, winnaar eerst (${r && r.place}, winnaar ${r && r.winnerId})`);
+  }
   return { res, errors };
 }
 
 const winners = new Set();
 for (const name of scen) {
+  if (name === 'bots4') {   // vier spelers, iedereen tegen iedereen: sterke/zwakke bots, elke slot kan winnen
+    const cfgs = [[strong, weak, weak, weak], [weak, strong, weak, weak], [weak, weak, strong, weak], [weak, weak, weak, strong]];
+    for (const cfg of cfgs) { const { res } = await runMatch('bots4', process.env.TW || 'none', cfg, null, 4); if (res.result && res.result.winner != null) winners.add(res.result.winner); check(res.st.out.some(Boolean) || res.st.why === 'punten' || res.st.why === 'sd', `bots4: wie uitviel of punten/sd besliste (${res.st.why}, uit=${res.st.out})`); }
+    check(winners.size >= 2, `bots4: meerdere slots kunnen winnen (winnaars: ${[...winners]})`);
+    continue;
+  }
+  if (name === 'idle4') { const { res } = await runMatch('idle4', 'none', [0, 1, 2, 3].map(() => ({ style: 'idle' })), null, 4); check(res.result.winner != null, 'idle4: toch een winnaar (' + res.st.why + ')'); continue; }
+  if (name === 'timeout4') { const { res } = await runMatch('timeout4', 'none', [perfect, perfect, perfect, perfect], () => { window.__app.mode.instance.dbg.setTime(10); }, 4); check(res.result.winner != null, 'timeout4: er is een winnaar (' + res.st.why + ')'); continue; }
+  if (name === 'sd4') { const { res } = await runMatch('sd4', 'none', [perfect, perfect, perfect, perfect], () => { const d = window.__app.mode.instance.dbg; d.setTime(0.5); d.setPts(5, 5, 5, 0); }, 4); check(res.result.winner != null && res.result.winner !== 3, 'sd4: sudden death tussen de gelijken, winnaar niet de achterblijver (' + res.st.why + ')'); continue; }
+  if (name === 'twists4') { for (const tw of TWISTS) { const { res } = await runMatch('twists4', tw, [mid, mid, mid, mid], null, 4); check(res.result && res.result.winner != null, `twist4 ${tw}: er is een winnaar`); } continue; }
   if (name === 'bots') {
     for (const cfg of [[strong, weak], [weak, strong], [mid, mid]]) {
       const { res } = await runMatch('bots', process.env.TW || 'none', cfg);

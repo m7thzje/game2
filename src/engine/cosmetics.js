@@ -1,15 +1,15 @@
 import { S } from '../save.js';
 
 // ============================================================================
-// Hoeden en kleuren voor Wes (0), Jor (1) en Juul (2). Alleen data + hulpfuncties; de winkel zit in world/shop.js,
+// Hoeden en kleuren voor Wes (0), Jor (1), Juul (2) en Sam (3). Alleen data + hulpfuncties; de winkel zit in world/shop.js,
 // het tekenen in engine/chars.js (makeBrother leest S.cosmetics.equipped[i]).
-//   S.cosmetics = { owned: [{hat:[id], shirt:[id], hair:[id], cape:[id]}, {...}, {...}], equipped: [{hat,shirt,hair,cape}, {...}, {...}] }  (index = spelers-id; oude opslag met 2 spelers wordt aangevuld)
+//   S.cosmetics = { owned: [{hat:[id], shirt:[id], hair:[id], cape:[id]}, {...}, {...}, {...}], equipped: [{hat,shirt,hair,cape}, {...}, {...}, {...}] }  (index = spelers-id; oude opslag met 2 of 3 spelers wordt aangevuld)
 // id 'std' = standaarduitrusting van die broer (altijd gratis).
 // ============================================================================
 export const CATS = ['hat', 'shirt', 'hair', 'cape'];
 export const CAT_LABEL = { hat: 'Hoeden', shirt: 'Shirt', hair: 'Haar', cape: 'Cape' };
 export const CAT_ICON = { hat: '👒', shirt: '👕', hair: '💇', cape: '🧣' };
-export const catLabel = (cat, i) => (cat === 'cape' ? (i === 1 ? 'Cape' : 'Sjaal') : CAT_LABEL[cat]);   // Wes en Juul dragen een sjaal, Jor een cape
+export const catLabel = (cat, i) => (cat === 'cape' ? (i === 1 || i === 3 ? 'Cape' : 'Sjaal') : CAT_LABEL[cat]);   // Wes en Juul dragen een sjaal, Jor een cape (Sam kan er een kopen)
 
 // 'gold' = glimmend goud, 'rainbow' = regenboog (zie chars.js)
 export const HATS = [
@@ -58,25 +58,25 @@ export const CAPES = [
 ];
 const LISTS = { shirt: SHIRTS, hair: HAIRS, cape: CAPES };
 // standaardkleuren per broer (voor het staal bij 'standaard'); komt overeen met BROTHER_SPECS in chars.js
-const STD = { hat: [null, 0xffc93c, null], shirt: [0x2f9e5b, 0x3a78e0, 0xf0862a], hair: [0x7a4a24, 0xe8b84a, 0x2a1a30], cape: [0xd8372c, 0xe5484d, 0xff6fb5] };
-const STD_NAME = { hat: ['Blote kop (standaard)', 'Pet achterstevoren (standaard)', 'Blote kop (standaard)'], shirt: ['Standaardshirt', 'Standaardshirt', 'Standaardshirt'], hair: ['Eigen haar', 'Eigen haar', 'Eigen haar'], cape: ['Standaard sjaal', 'Standaard cape', 'Standaard sjaal'] };
+const STD = { hat: [null, 0xffc93c, null, 0xf2f0ea], shirt: [0x2f9e5b, 0x3a78e0, 0xf0862a, 0x9b3fe0], hair: [0x7a4a24, 0xe8b84a, 0x2a1a30, 0x16101a], cape: [0xd8372c, 0xe5484d, 0xff6fb5, null] };
+const STD_NAME = { hat: ['Blote kop (standaard)', 'Pet achterstevoren (standaard)', 'Blote kop (standaard)', 'Witte pet achterstevoren (standaard)'], shirt: ['Standaardshirt', 'Standaardshirt', 'Standaardshirt', 'Standaard hoodie'], hair: ['Eigen haar', 'Eigen haar', 'Eigen haar', 'Eigen haar'], cape: ['Standaard sjaal', 'Standaard cape', 'Standaard sjaal', 'Geen cape (standaard)'] };
 
 // Alle opties voor een broer in een categorie (inclusief standaard)
 export function itemsFor(i, cat) {
-  const std = { id: 'std', name: STD_NAME[cat][i], price: 0, c: STD[cat][i], icon: cat === 'hat' ? (i === 1 ? '🧢' : '🙂') : null };
-  if (cat === 'hat') return [std, ...(i === 1 ? [{ id: 'none', name: 'Blote kop', price: 0, icon: '🙂' }] : []), ...HATS];
+  const std = { id: 'std', name: STD_NAME[cat][i], price: 0, c: STD[cat][i], icon: cat === 'hat' ? (i === 1 || i === 3 ? '🧢' : '🙂') : null };
+  if (cat === 'hat') return [std, ...(i === 1 || i === 3 ? [{ id: 'none', name: 'Blote kop', price: 0, icon: '🙂' }] : []), ...HATS];
   return [std, ...LISTS[cat]];
 }
 export const findItem = (i, cat, id) => itemsFor(i, cat).find((x) => x.id === id) || null;
 
 const blank = () => ({ hat: ['std'], shirt: ['std'], hair: ['std'], cape: ['std'] });
 const blankEq = () => ({ hat: 'std', shirt: 'std', hair: 'std', cape: 'std' });
-export const defaultCosmetics = () => ({ owned: [blank(), blank(), blank()], equipped: [blankEq(), blankEq(), blankEq()] });
+export const defaultCosmetics = () => ({ owned: [blank(), blank(), blank(), blank()], equipped: [blankEq(), blankEq(), blankEq(), blankEq()] });
 // Altijd veilig te gebruiken, ook voor oude opslag zonder dit veld
 export function cosm() {
   const c = (S.cosmetics ||= defaultCosmetics());
   if (!Array.isArray(c.owned)) c.owned = []; if (!Array.isArray(c.equipped)) c.equipped = [];
-  for (let i = 0; i < 3; i++) {   // oude opslag met 2 spelers: Juul wordt aangevuld
+  for (let i = 0; i < 4; i++) {   // oude opslag met 2 of 3 spelers: Juul en Sam worden aangevuld
     const ow = (c.owned[i] ||= blank()), eq = (c.equipped[i] ||= {});
     for (const cat of CATS) {
       if (!Array.isArray(ow[cat])) ow[cat] = ['std']; if (!ow[cat].includes('std')) ow[cat].unshift('std');
@@ -108,6 +108,6 @@ export function applyCosmetics(base, i, eq = cosm().equipped[i]) {
   const hr = HAIRS.find((x) => x.id === eq.hair);
   if (eq.hair !== 'std' && hr) { o.hair = hr.c; o.hairFx = hr.fx; }
   const cp = CAPES.find((x) => x.id === eq.cape);
-  if (eq.cape !== 'std' && cp) { if (base.cape != null) { o.cape = cp.c; o.capeFx = cp.fx; } if (base.scarf != null) { o.scarf = cp.c; o.scarfFx = cp.fx; } }
+  if (eq.cape !== 'std' && cp) { if (base.cape != null) { o.cape = cp.c; o.capeFx = cp.fx; } if (base.scarf != null) { o.scarf = cp.c; o.scarfFx = cp.fx; } if (base.cape == null && base.scarf == null) { o.cape = cp.c; o.capeFx = cp.fx; } }   // Sam heeft standaard geen cape: een gekochte cape komt er gewoon bij
   return o;
 }

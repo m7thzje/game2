@@ -1,10 +1,12 @@
 // Gebruik: node tools/test_dodgeball.mjs [scenario...]
+//   PLAYERS=4 = vier spelers (Sam doet mee; teams [[0,1],[2,3]] bij teamspellen); zonder PLAYERS twee spelers.
 //   bots      : volledige potjes met bots (versneld, zonder renderen): sterk-vs-zwak, zwak-vs-sterk, gelijk; toont dat beide kunnen winnen en finishPvp komt
 //   twists    : één potje per twist (alle twists van het spel) -> finishPvp altijd aangeroepen, geen fouten
 //   idle      : niemand doet iets -> tijd om / sudden death / eindigt toch
 //   shots     : screenshots van aanvoer, laden, pompoen, bom, gouden bal, sudden death, einde (/tmp/db_*.png)
 // Omgeving: TWIST=<id> om de twist in 'bots'/'shots' te forceren. Q=high voor schaduwen.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -17,22 +19,23 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
+const N = +process.env.PLAYERS || 2;   // PLAYERS=4: vier spelers (?players=4), alle spelers krijgen input
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const ALL_TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 const errors = [];
 
 async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY/.test(m.text())) errors.push(`[${twist}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push(`[${twist}] [pageerror] ` + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=dodgeball&quality=${process.env.Q || 'low'}&twist=${twist}`);
+  await page.goto(`http://localhost:${port}/?game=dodgeball&quality=${process.env.Q || 'low'}&twist=${twist}${N >= 3 ? '&players=' + N : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
   });
@@ -40,19 +43,21 @@ async function open(twist) {
   await page.evaluate(() => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 12345; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    const B = [{ tgt: 0.5, hold: false, cd: 0 }, { tgt: 0.5, hold: false, cd: 0 }];
+    const B = [0, 1, 2, 3].map(() => ({ tgt: 0.5, hold: false, cd: 0 }));
     window.__skill = [{ dodge: 0.6, catch: 0.5, aim: 0.15, react: 0.3 }, { dodge: 0.6, catch: 0.5, aim: 0.15, react: 0.3 }];
     window.__mode = 'bots';
     const norm = (x, z) => { const l = Math.hypot(x, z) || 1; return [x / l, z / l]; };
     function bot(i, st, dt) {
-      const me = st.p[i], op = st.p[1 - i], v = inp.virtual[i], b = B[i], sk = window.__skill[i];
+      const me = st.p[i], v = inp.virtual[m.ids[i]], b = B[i], sk = window.__skill[i % 2];
+      let op = null, od = 1e9; for (const q of st.p) { if (q.t === me.t || q.ko) continue; const d = Math.hypot(q.x - me.x, q.z - me.z); if (d < od) { od = d; op = q; } }
+      if (!op) op = st.p.find((q) => q.t !== me.t);
       v.a = false; v.b = false; v.x = 0; v.y = 0;
       if (window.__mode === 'idle' || st.over) return;
       b.cd -= dt;
       // dreiging?
       let tmin = 9, thr = null;
       for (const ba of st.balls) {
-        if (!ba.live || ba.state !== 'air' || ba.owner === i) continue;
+        if (!ba.live || ba.state !== 'air' || ba.owner === i || (ba.owner >= 0 && st.p[ba.owner].t === me.t)) continue;
         const dx = me.x - ba.x, dz = me.z - ba.z, d = Math.hypot(dx, dz), sp = Math.hypot(ba.vx, ba.vz);
         if (sp < 2.5 || d < 0.01) continue;
         const dot = (dx * ba.vx + dz * ba.vz) / (d * sp); if (dot < 0.5) continue;
@@ -82,18 +87,18 @@ async function open(twist) {
       for (const ba of st.balls) {
         const ok = ba.state === 'rest' || (ba.state === 'air' && !ba.live && ba.y < ba.r + 0.8);
         if (!ok) continue; if (ba.type === 'bomb' && ba.fuse < 1.3) continue;
-        const own = i === 0 ? ba.x < 1.2 : ba.x > -1.2; if (!own) continue;
+        const own = me.t === 0 ? ba.x < 1.2 : ba.x > -1.2; if (!own) continue;
         const d = Math.hypot(ba.x - me.x, ba.z - me.z); if (d < bd) { bd = d; best = ba; }
       }
-      if (best) { const tx = i === 0 ? Math.min(best.x, -0.8) : Math.max(best.x, 0.8); const [dx, dz] = norm(tx - me.x, best.z - me.z); v.x = dx; v.y = dz; }
-      else { const [dx, dz] = norm((i ? 7 : -7) - me.x, -me.z + Math.sin(st.T * 0.7 + i) * 3); v.x = dx * 0.5; v.y = dz * 0.5; }
+      if (best) { const tx = me.t === 0 ? Math.min(best.x, -0.8) : Math.max(best.x, 0.8); const [dx, dz] = norm(tx - me.x, best.z - me.z); v.x = dx; v.y = dz; }
+      else { const [dx, dz] = norm((me.t ? 7 : -7) - me.x, -me.z + Math.sin(st.T * 0.7 + i) * 3); v.x = dx * 0.5; v.y = dz * 0.5; }
     }
     const clamp01 = (x) => Math.max(0, Math.min(1, x));
     window.__bot = (n, stop) => {
       const dt = 1 / 30;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) return true;
-        bot(0, st, dt); bot(1, st, dt);
+        for (let i = 0; i < st.p.length; i++) bot(i, st, dt);
         inp.update(); m.update(dt);
       }
       return false;

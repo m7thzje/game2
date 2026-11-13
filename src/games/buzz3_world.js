@@ -60,7 +60,7 @@ export function buildStudio(ctx) {
   const pods = [], chars = [];
   const X = LEC_X;
   for (let i = 0; i < n; i++) {
-    const x = n === 3 ? X[i] : (i - 0.5) * 6, col = players[i].color;
+    const x = n === 3 ? X[i] : n === 4 ? (i - 1.5) * 4.2 : (i - 0.5) * 6, col = players[i].color;
     const g = new THREE.Group(); g.position.set(x, 0, 0); root.add(g);
     g.add(mesh(new THREE.BoxGeometry(2.6, 1.0, 1.5), mat(0x2a1650), { pos: [0, 0.5, LEC_Z - 0.55] }));                      // verhoging
     g.add(mesh(new THREE.BoxGeometry(2.3, 0.85, 0.95), mat(0x35205f), { pos: [0, 0.55, LEC_Z + 0.1] }));                          // lessenaar
@@ -90,10 +90,11 @@ export function buildStudio(ctx) {
   }
 
   // ---- presentator: de Deurman met feesthoed ----
-  const host = makeDeurman(1.1, { outfit: 'feest' }); host.group.position.set(-7.6, 0.2, -0.8); host.faceDir(0.5, 1); scene.add(host.group);
-  root.add(mesh(new THREE.CylinderGeometry(1.0, 1.15, 0.2, 18), mat(0xf2c230, { metalness: 0.6, roughness: 0.35 }), { pos: [-7.6, 0.1, -0.8] }));
+  const host = makeDeurman(1.1, { outfit: 'feest' }); const HX0 = n === 4 ? 9.0 : 7.6;   // vier lessenaars: presentator en beker iets verder naar buiten
+  host.group.position.set(-HX0, 0.2, -0.8); host.faceDir(0.5, 1); scene.add(host.group);
+  root.add(mesh(new THREE.CylinderGeometry(1.0, 1.15, 0.2, 18), mat(0xf2c230, { metalness: 0.6, roughness: 0.35 }), { pos: [-HX0, 0.1, -0.8] }));
   // gouden beker op sokkel
-  const cup = new THREE.Group(); cup.position.set(7.6, 0, -1); root.add(cup);
+  const cup = new THREE.Group(); cup.position.set(HX0, 0, -1); root.add(cup);
   cup.add(mesh(new THREE.BoxGeometry(1.5, 1.1, 1.5), mat(0x35205f), { pos: [0, 0.55, 0] }));
   { const gold = mat(0xffd23f, { metalness: 0.7, roughness: 0.25, emissive: 0x4a3400 });
     cup.add(mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.5, 10), gold, { pos: [0, 1.4, 0] }));

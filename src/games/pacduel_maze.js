@@ -22,7 +22,34 @@ export const W = 21, H = LEFT.length;
 export const CELL = 1.8;                             // wereld-eenheden per vakje
 export const TUNNEL_ROWS = [4, 10];                  // in deze rijen lopen de zijkanten door (wrap-around)
 
-export function buildMaze() {
+// Vier-spelers-doolhof: spiegelsymmetrisch links-rechts ÉN boven-onder (21x15): vier startplekken (hoeken-binnen), vier krachtbollen in de hoeken.
+//  Onderste helft = bovenste helft gespiegeld (rij z <-> rij 14-z). Zo heeft elke speler precies dezelfde kansen.
+const LEFT4_TOP = [
+  '###########',
+  '#o...#.....',
+  '#.##.#.####',
+  '#.##.#.####',
+  '..........#',
+  '#.##.#.##.#',
+  '#....#.#...',
+  '#.##.#.#.#G',
+];
+
+export function buildMaze(four = false) {
+  if (four) {
+    const rows = []; for (let z = 0; z < H; z++) rows.push(z < 8 ? LEFT4_TOP[z] : LEFT4_TOP[14 - z]);
+    const wall = new Uint8Array(W * H), orbs = [], ghosts = [];
+    for (let z = 0; z < H; z++) for (let x = 0; x < 11; x++) {
+      const c = rows[z][x];
+      for (const xx of x === 10 ? [10] : [x, W - 1 - x]) {
+        const i = z * W + xx;
+        if (c === '#') wall[i] = 1; else if (c === 'o') orbs.push([xx, z]); else if (c === 'G' && xx === 10) ghosts.push([xx, z]);
+      }
+    }
+    for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) if (wall[z * W + x] !== wall[z * W + (W - 1 - x)] || wall[z * W + x] !== wall[(H - 1 - z) * W + x]) throw new Error('vier-spelers-doolhof niet symmetrisch');
+    const cells = []; for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) if (!wall[z * W + x]) cells.push([x, z]);
+    return { wall, orbs, starts: [[7, 13], [13, 13], [7, 1], [13, 1]], ghost: ghosts[0] || [10, 7], cells, four: true };
+  }
   const wall = new Uint8Array(W * H), orbs = [], starts = [], ghosts = [];
   for (let z = 0; z < H; z++) for (let x = 0; x < 11; x++) {
     const c = LEFT[z][x];

@@ -1,7 +1,9 @@
 // Gebruik: node tools/test_duckshoot.mjs [scenario...]
 // scenario: bots, p0, p1, idle (gelijkspel/sudden death), twists (alle twists), giant (reuzeneend: delen en alleen), shots (screenshots), deurman
+//   bots3 / bots4 = drie / vier spelers (vrij voor allen, ?players=N): alle spelers krijgen input, uitslag volgt, place klopt.
 // Versneld (zonder renderen) potjes Schiettent met bots; controleert dat finishPvp altijd wordt aangeroepen en beide spelers kunnen winnen.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath, BROWSER_ARGS } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -17,31 +19,31 @@ const port = server.address().port;
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'bodyswap', 'deurman'];
 
-async function open(browser, twist) {
+async function open(browser, twist, N = 2) {
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=duckshoot&quality=low&scare=0${twist ? '&twist=' + twist : ''}`);
+  await page.goto(`http://localhost:${port}/?game=duckshoot&quality=low&scare=0${twist ? '&twist=' + twist : ''}${N > 2 ? '&players=' + N : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
   });
   await page.evaluate(() => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 4242; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    window.__mode = 'bots'; window.__skill = [1, 1];
+    window.__mode = 'bots'; window.__skill = m.ids.map(() => 1);
     window.__bot = (n, stop) => {
       const dt = 1 / 60;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) return true;
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
+        for (let i = 0; i < m.ids.length; i++) {
+          const v = inp.virtual[m.ids[i]]; v.a = false; v.b = false; v.x = 0; v.y = 0;
           const skill = window.__skill[i]; if (!skill || window.__mode === 'idle') continue;
           const me = st.ch[i]; const tg = inst.dbg.targets;
           // beste doelwit: hoogste waarde, dichtbij
@@ -62,8 +64,26 @@ async function open(browser, twist) {
 }
 
 for (const name of scen) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
-  if (name === 'twists') {
+  const browser = await chromium.launch({ executablePath: chromePath(), args: BROWSER_ARGS });
+  if (name === 'bots3' || name === 'bots4') {
+    const N = name === 'bots4' ? 4 : 3, winners = new Set(); let bad = 0;
+    const SK = N === 4 ? [[1, 0.4, 0.4, 0.4], [0.4, 1, 0.4, 0.4], [0.4, 0.4, 1, 0.4], [0.4, 0.4, 0.4, 1], [0, 0, 0, 0], [1, 1, 1, 1], [1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]] : [[1, 0.4, 0.4], [0.4, 1, 0.4], [0.4, 0.4, 1], [0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]];   // laatste reeksen: alleen één speler schiet (elk slot kan winnen)
+    for (const skill of SK) {
+      const { page, errors } = await open(browser, 'none', N);
+      const res = await page.evaluate((skill) => {
+        window.__skill = skill; const m = window.__app.mode; let g = 0; while (!m.finished && g++ < 60 * 120) window.__bot(1);
+        const st = m.instance.dbg.state(); return { fin: m.finished, T: +st.T.toFixed(1), sc: st.score, over: st.over, place: m.result && m.result.place, winnerIds: m.result && m.result.winnerIds, sum: m.result && m.result.summary.replace(/<[^>]+>/g, ' ').slice(0, 80) };
+      }, skill);
+      console.log(skill.join('/').padEnd(14), JSON.stringify(res), errors.length ? 'ERRORS ' + errors.slice(0, 3).join('|') : 'ok');
+      if (!res.fin || !res.place) { console.log('FAIL: niet afgelopen'); bad++; }
+      else { if (res.place.length !== N || new Set(res.place).size !== N) { console.log('FAIL: place ongeldig'); bad++; } for (const w of res.winnerIds) winners.add(w); }
+      if (errors.length) bad++;
+      await page.close();
+    }
+    console.log('winnaars (spelers-id):', [...winners].sort().join(','));
+    if (winners.size < N) { console.log('FAIL: niet elke speler kon winnen'); bad++; }
+    if (bad) process.exitCode = 1;
+  } else if (name === 'twists') {
     for (const tw of (process.env.TW ? process.env.TW.split(',') : TWISTS)) {
       const { page, errors } = await open(browser, tw);
       const res = await page.evaluate(() => { const m = window.__app.mode; let g = 0; while (!m.finished && g++ < 60 * 120) window.__bot(1); const st = m.instance.dbg.state(); return { fin: m.finished, T: +st.T.toFixed(1), sc: st.score, w: m.result && m.result.winner, tw: m.twist.id, sz: st.ch.map((c) => +c.size.toFixed(2)), stats: st.stats.hits }; });

@@ -5,7 +5,7 @@ import { ui } from '../engine/ui.js';
 import { buildWorld, RA, pol } from './sneeuwgevecht_world.js';
 import { glowSprite } from './dodgeball_world.js';
 
-// Sneeuwballen-Slag — drie sneeuwforten in een driehoek, iedereen tegen iedereen.
+// Sneeuwballen-Slag — drie sneeuwforten in een driehoek (met 4 spelers: vier forten in de hoeken), iedereen tegen iedereen.
 // A: sneeuwbal maken (als je er geen hebt) en gooien (ingedrukt houden = verder/harder, boogbaan!), B: tikken = sneeuwmuur bouwen, ingedrukt = schild.
 // Geraakt = -1 leven en 2 s verdoofd; 3 levens. Power-ups: ijsbal, reuzenbal, sneeuwscooter. Gimmicks: sneeuwstorm (zicht weg + wind),
 // de yeti die rondstommelt (en de leider opzoekt) en de Deurman-sneeuwpop in het midden. Comeback: wie achterstaat krijgt een GOUDEN sneeuwbal (dubbele schade).
@@ -21,17 +21,17 @@ export default {
   giver: 'Sneeuwpop de Deurman',
   icon: '❄️',
   mode: 'pvp',
-  players: [3],
+  players: [3, 4],
   time: 90,
   music: 'game_fast',
-  blurb: 'Drie sneeuwforten, drie gooiers! Maak <b>sneeuwballen</b> en gooi ze: <b>houd A ingedrukt</b> voor een verre boogworp. <b>Geraakt = -1 leven</b> en 2 sec verdoofd (3 levens). Pas op voor de <b>yeti</b> en de <b>sneeuwstorm</b>! Laatste met levens wint.',
+  blurb: 'Drie (of vier) sneeuwforten, drie (of vier) gooiers! Maak <b>sneeuwballen</b> en gooi ze: <b>houd A ingedrukt</b> voor een verre boogworp. <b>Geraakt = -1 leven</b> en 2 sec verdoofd (3 levens). Pas op voor de <b>yeti</b> en de <b>sneeuwstorm</b>! Laatste met levens wint.',
   controls: ['{move} lopen en richten', '{a} maken / gooien (houd = verder)', '{b} tik = muur, houd = schild'],
   tip: 'Lange worpen vliegen hoog: kijk naar de ring waar ze landen! Wie achterstaat krijgt een gouden bal.',
 
   create(ctx) {
     const { scene, camera, hud, fx } = ctx, pv = ctx.pvp, n = ctx.players.length, names = ctx.players.map((p) => p.name);
     ctx.lights('ice', { shadow: 20 });
-    camera.position.set(0, 20.5, 16.3); camera.lookAt(0, 0, -3.5);
+    if (n === 4) { camera.position.set(0, 23.5, 15.8); camera.lookAt(0, 0, 0.6); } else { camera.position.set(0, 20.5, 16.3); camera.lookAt(0, 0, -3.5); }   // 4 forten: symmetrisch, dus camera gecentreerd
     const W = buildWorld(ctx);
     const rng = ctx.rng, sfx = (a, o) => ctx.sfx(a, o);
 
@@ -138,8 +138,9 @@ export default {
     function finish() {
       if (done) return; done = true;
       const w = winner, sc = P.map((p) => p.hits);
+      const place = P.slice().sort((a, b) => (a.i === w ? -1 : b.i === w ? 1 : 0) || (a.alive ? 0 : 1) - (b.alive ? 0 : 1) || b.lives - a.lives || b.hits - a.hits || (b.koT || 0) - (a.koT || 0)).map((p) => p.i);   // winnaar, dan de levenden, dan wie het langst bleef staan
       const why = P.filter((p) => p.alive).length <= 1 ? 'is als laatste overgebleven' : 'heeft na afloop van de tijd de meeste treffers';
-      ctx.finishPvp({ winner: w, score: sc, delay: 500, summary: `<b style="color:${ctx.players[w].css}">${names[w]}</b> ${why}!<br>Treffers: ${P.map((p) => `${names[p.i]} ${p.hits}`).join(' · ')} · Levens over: ${P.map((p) => p.lives).join('-')}` });
+      ctx.finishPvp({ winner: w, score: sc, place, delay: 500, summary: `<b style="color:${ctx.players[w].css}">${names[w]}</b> ${why}!<br>Treffers: ${P.map((p) => `${names[p.i]} ${p.hits}`).join(' · ')} · Levens over: ${P.map((p) => p.lives).join('-')}` });
     }
     function giveAmmo(p, k) { p.ammo = Math.min(AMMO_MAX, p.ammo + k); }
     function giveGold(p) {
@@ -233,7 +234,7 @@ export default {
       return s;
     }
     function pickupUpdate(dt) {
-      if (!over) { nextPick -= dt; if (nextPick <= 0) { if (W.pick.filter((q) => q.on).length < 2) spawnPickup(); nextPick = 10 + rng() * 5; } }
+      if (!over) { nextPick -= dt; if (nextPick <= 0) { if (W.pick.filter((q) => q.on).length < (n === 4 ? 3 : 2)) spawnPickup(); nextPick = 10 + rng() * 5; } }
       for (const s of W.pick) {
         if (!s.on) continue; s.t += dt; s.g.rotation.y += dt * 2; s.g.position.y = Math.sin(s.t * 3) * 0.15; s.halo.scale.setScalar(1 + Math.sin(s.t * 5) * 0.08);
         if (s.t > 16) { s.on = false; s.g.visible = false; continue; }
@@ -406,7 +407,7 @@ export default {
     }
     const hearts = (p) => '♥'.repeat(p.lives) + '·'.repeat(3 - p.lives);
     const hudUpdate = () => {
-      P.forEach((p) => hud.setPlayerInfo(p.i, `${hearts(p)}  ●${p.ammo}  treffers ${p.hits}` + (p.power ? ` [${POWER_NAME[p.power]}]` : '') + (p.scooter > 0 ? ' [SCOOTER]' : '') + (!p.alive ? '  IJSBLOK' : '')));
+      P.forEach((p) => hud.setPlayerInfo(p.i, n === 4 ? `${hearts(p)} ●${p.ammo} 🎯${p.hits}` + (p.power ? ` ${p.power === 'ice' ? '🧊' : p.power === 'giant' ? '⚪' : '⭐'}` : '') + (p.scooter > 0 ? ' 🛷' : '') + (!p.alive ? ' IJS' : '') : `${hearts(p)}  ●${p.ammo}  treffers ${p.hits}` + (p.power ? ` [${POWER_NAME[p.power]}]` : '') + (p.scooter > 0 ? ' [SCOOTER]' : '') + (!p.alive ? '  IJSBLOK' : '')));
       hud.setScore(storm.active ? 'SNEEUWSTORM!' : `Treffers ${P.map((p) => p.hits).join(' - ')}`);
     };
 

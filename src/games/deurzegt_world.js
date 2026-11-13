@@ -162,9 +162,9 @@ export function buildStage(ctx, L) {
   pod.add(mesh(new THREE.CylinderGeometry(3.3, 3.3, 0.14, 24), mat(0xe8b830, { metalness: 0.6, roughness: 0.35, flatShading: false }), { pos: [0, 1.22, 0] }));
   pod.add(mesh(new THREE.TorusGeometry(3.45, 0.12, 6, 36), mat(0xffd23f, { emissive: 0x6a4800, flatShading: false }), { cast: false, pos: [0, 1.0, 0], rot: [Math.PI / 2, 0, 0] }));
   scene.add(pod);
-  const colors = [0x2f9e5b, 0x3a78e0]; S.pods = [];
-  for (let i = 0; i < 2; i++) {
-    const g = new THREE.Group(); g.position.set(i ? 6.4 : -6.4, 0, 1.2);
+  const NP = ctx.players.length, colors = NP > 2 ? ctx.players.map((pl) => pl.color) : [0x2f9e5b, 0x3a78e0]; S.pods = [];
+  for (let i = 0; i < NP; i++) {   // bij 4 spelers: vier smallere podiumpjes naast elkaar
+    const g = new THREE.Group(); g.position.set(NP > 2 ? (i - (NP - 1) / 2) * 4.3 : i ? 6.4 : -6.4, 0, 1.2); if (NP > 2) g.scale.set(0.8, 1, 0.8);
     g.add(mesh(new THREE.CylinderGeometry(2.3, 2.5, 0.5, 20), mat(colors[i], { flatShading: false }), { pos: [0, 0.25, 0] }));
     g.add(mesh(new THREE.CylinderGeometry(2.25, 2.25, 0.08, 20), new THREE.MeshStandardMaterial({ color: colors[i], emissive: colors[i], emissiveIntensity: 0.55 }), { cast: false, pos: [0, 0.52, 0] }));
     g.add(mesh(new THREE.TorusGeometry(2.4, 0.1, 6, 30), mat(0xffd23f, { emissive: 0x6a4800, flatShading: false }), { cast: false, pos: [0, 0.4, 0], rot: [Math.PI / 2, 0, 0] }));

@@ -1,8 +1,10 @@
 // Gebruik: node tools/test_claw.mjs [scenario...]   scenario: bots | twists | shots | timeout | idle | physics
+//   bots4 | twists4 | idle4 = vier spelers (?players=4, 2 tegen 2: [[0,1],[2,3]]); controleert eindstand, winnende team, plaatsen en console-errors.
 //   TW=<twist-id> kiest een twist (anders: "none" / per scenario). Q=low|high kwaliteit.
 // Bots spelen versneld (zonder renderen) hele potjes; rapporteert tussenstanden, winnaar, fouten.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
+import { chromePath, BROWSER_ARGS } from './chrome_path.mjs';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json' };
@@ -18,20 +20,20 @@ const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 const GAME = 'claw';
 
-async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+async function open(twist, N = 2) {
+  const browser = await chromium.launch({ executablePath: chromePath(), args: BROWSER_ARGS });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=${GAME}&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=${GAME}&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${N === 4 ? '&players=4' : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -44,15 +46,15 @@ async function installBots(page, cfg) {
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 4242; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    const B = [0, 1].map(() => ({ tgt: null, tt: 0, pressAt: -1, wait: 0 }));
+    const B = cfg.map(() => ({ tgt: null, tt: 0, pressAt: -1, wait: 0 }));
     window.__cfg = cfg;
     const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i], b = B[i], c = window.__cfg[i], me = st.claws[i], op = st.claws[1 - i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
+        for (let i = 0; i < cfg.length; i++) {
+          const v = inp.virtual[m.ids[i]], b = B[i], c = window.__cfg[i], me = st.claws[i], op = st.claws.filter((q) => q.team !== me.team).sort((x, y) => (y.hold ? 1 : 0) - (x.hold ? 1 : 0) || Math.hypot(x.hx - me.hx, x.hz - me.hz) - Math.hypot(y.hx - me.hx, y.hz - me.hz))[0]; v.a = false; v.b = false; v.x = 0; v.y = 0;
           if (c.style === 'idle') continue;
           b.wait -= dt;
           const sk = c.skill ?? 0.8;
@@ -75,7 +77,7 @@ async function installBots(page, cfg) {
           } else if (me.state === 'close') {
             if (me.t >= b.pressAt && b.pressAt > 0) { v.a = true; b.pressAt = -1; }
           } else if (me.state === 'carry') {
-            const cx = (i ? 1 : -1) * (inst.dbg.X - inst.dbg.HOLE_W / 2), cz = (inst.dbg.HOLE_Z0 + inst.dbg.ZF) / 2;
+            const cx = (me.team ? 1 : -1) * (inst.dbg.X - inst.dbg.HOLE_W / 2), cz = (inst.dbg.HOLE_Z0 + inst.dbg.ZF) / 2;
             const dx = cx - me.hx, dz = cz - me.hz;
             v.x = clamp(dx * 1.2, -1, 1); v.y = clamp(dz * 1.2, -1, 1);
             if (Math.hypot(dx, dz) < 0.7 + (1 - sk) * 0.5) v.a = true;
@@ -91,7 +93,35 @@ async function installBots(page, cfg) {
   }, cfg);
 }
 
+let fails = 0; const check = (ok, msg) => { console.log(`${ok ? 'OK  ' : 'FAIL'} ${msg}`); if (!ok) fails++; };
 for (const name of scen) {
+  if (['bots4', 'twists4', 'idle4'].includes(name)) {
+    const good = { skill: 0.9, greed: 0.9, aggr: 0.5, style: 'play' }, weak = { skill: 0.5, greed: 0.5, aggr: 0.2, style: 'play' };
+    const list = name === 'twists4' ? TWISTS.map((t) => [t, [good, weak, good, weak]]) : name === 'idle4' ? [['none', [{ style: 'idle' }, { style: 'idle' }, { style: 'idle' }, { style: 'idle' }]]] : [[process.env.TW || 'none', [good, weak, weak, weak]], [process.env.TW || 'none', [weak, weak, good, good]]];
+    for (const [tw, cfg] of list) {
+      const { browser, page, errors } = await open(tw, 4);
+      await installBots(page, cfg);
+      const res = await page.evaluate(() => {
+        const m = window.__app.mode, inst = m.instance; let calls = 0, g = 0; const rs = [];
+        const orig = m.ctx.finishPvp; m.ctx.finishPvp = (r) => { calls++; rs.push(r); return orig(r); };
+        while (!m.finished && g++ < 60 * 200) window.__bot(1);
+        for (let k = 0; k < 300; k++) { window.__bot(1); m.update(0.016); }
+        return { st: inst.dbg.state(), finished: m.finished, result: m.result, calls, r: rs[0], twist: m.twist.id, ids: m.ids.slice() };
+      });
+      const r = res.r, st = res.st;
+      console.log(`--- ${name} twist=${res.twist} teamscore=${st.score} eigen=${st.pscore}`);
+      check(res.finished && res.calls === 1, `finishPvp precies één keer (${res.calls})`);
+      if (name !== 'idle4' || true) check(r && Array.isArray(r.winners) && r.winners.length === 2 && (r.winners.join() === '0,1' || r.winners.join() === '2,3'), `winnend team als paar slots: ${r && r.winners}`);
+      const wt = r && r.winners[0] === 0 ? 0 : 1, lt = 1 - wt;
+      check(r && (st.score[wt] > st.score[lt] || st.score[wt] === st.score[lt]), `winnend team heeft de meeste punten (${st.score})`);
+      check(r && r.place.length === 4 && r.place.slice(0, 2).every((k) => r.winners.includes(k)) && [...r.place].sort().join() === '0,1,2,3', `plaatsen: winnaars eerst (${r && r.place})`);
+      check(r && r.score.length === 4 && r.score[0] === r.score[1] && r.score[2] === r.score[3], `teamscore voor beide teamgenoten (${r && r.score})`);
+      if (name === 'bots4') check(st.score[wt] > 0, 'er is gescoord');
+      check(!errors.length, 'geen console-errors' + (errors.length ? ': ' + errors.slice(0, 3).join(' | ') : ''));
+      await browser.close();
+    }
+    continue;
+  }
   if (name === 'physics') {
     // robuustheid: prijzen op willekeurige snelheden afschieten, bommen/kippen/kronen spawnen; geen NaN, niets buiten de kast
     const { browser, page, errors } = await open(process.env.TW || 'none');
@@ -169,4 +199,4 @@ for (const name of scen) {
     await browser.close(); continue;
   }
 }
-server.close();
+console.log(fails ? `${fails} FOUT(EN)` : 'klaar'); server.close(); process.exit(fails ? 1 : 0);

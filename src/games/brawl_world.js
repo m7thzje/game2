@@ -3,7 +3,7 @@ import { mat, mesh, canvasTex, mulberry32, TAU, rand } from '../engine/util.js';
 import { tex } from '../engine/textures.js';
 import * as P from '../engine/props.js';
 import { mergeStatic } from './quickdraw_merge.js';
-import { STAGES } from './brawl_data.js';
+import { STAGES, spreadX } from './brawl_data.js';
 
 // Omgeving van "Smash-Arena": een zwevend eiland bij zonsondergang boven de wolken, met een kasteelberg op de achtergrond,
 // drijvende eilandjes, wolken, lantaarns en vlaggen. Statische delen worden samengevoegd (weinig draw calls).
@@ -163,7 +163,7 @@ export function buildIsland(ctx, api) {
     mood: { hemi: 0xffd0e8, ground: 0x7a5a9a, hemiI: 1.25, sun: 0xffc890, sunI: 2.0, sunPos: [-10, 26, 22], fogNear: 70, fogFar: 230 },
     fdx: 0, fdy: 0, wind: 0,
     camBase: () => ({ x0: -ST.HW - 1.5, x1: ST.HW + 1.5, y0: -3.2, y1: 10.6 }),
-    resp: (i) => ({ x: i ? 3.6 : -3.6, y: 10.5 }), start: (i) => ({ x: i ? 5 : -5, y: 0 }),
+    resp: (i, n = 2) => ({ x: spreadX(i, n, 3.6), y: 10.5 }), start: (i, n = 2) => ({ x: spreadX(i, n, 5), y: 0 }),   // n spelers netjes verdeeld van links naar rechts (2: links/rechts zoals altijd)
     itemX: () => rand(-7.5, 7.5),
     step() {},
     update(t, dt) {

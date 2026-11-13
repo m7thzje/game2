@@ -104,7 +104,7 @@ export const scare = {
     const lvl = this.level();
     cv.style.display = 'block';
     const prevMusic = audio.musicName; audio.music('deurchase'); audio.sfx('doorbell');
-    let t = 0, open = 0, last = performance.now(); let caught = false; let movers = [false, false]; let phase = 0; let phaseT = 0; let beep = 0;
+    let t = 0, open = 0, last = performance.now(); let caught = false; let movers = input.p.map(() => false); let phase = 0; let phaseT = 0; let beep = 0;
     const banner = h('div', { class: 'hud-big deur-stare', style: { top: '12%' } }, label);
     const bar = h('div', { class: 'deur-hold' }, h('i')); ui.screens.append(banner, bar);
     const fill = bar.firstChild;
@@ -115,7 +115,7 @@ export const scare = {
       else if (phase === 1) {
         beep -= dt; if (beep <= 0) { audio.sfx('boop', { rate: 0.9 + 0.5 * (phaseT / hold), vol: 0.7 }); beep = 0.5; }
         open = 1; fill.style.width = Math.max(0, 100 * (1 - phaseT / hold)) + '%';
-        if (phaseT > 0.35 && input.p.some((q) => q.any)) { caught = true; movers = input.p.map((q) => q.any); break; }   // input.p = slot-view (2 of 3 deelnemers)
+        if (phaseT > 0.35 && input.p.some((q) => q.any)) { caught = true; movers = input.p.map((q) => q.any); break; }   // input.p = slot-view (2, 3 of 4 deelnemers)
         if (phaseT > hold) break;
       }
       drawDoorScene(open, t, side, phase === 1 ? phaseT / hold : 0, t);

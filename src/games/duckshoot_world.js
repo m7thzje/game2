@@ -330,11 +330,22 @@ export function buildStall(ctx) {
   board.c.width = 512; board.c.height = 128; board.t = new THREE.CanvasTexture(board.c); board.t.colorSpace = THREE.SRGBColorSpace;
   const bm = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 1.4), new THREE.MeshBasicMaterial({ map: board.t })); bm.position.set(0, 0.92, 8.54); add(bm);
   board.draw = (names, vals, cols) => {
-    if (board.vals[0] === vals[0] && board.vals[1] === vals[1]) return; board.vals = vals.slice();
+    if (board.vals.length === vals.length && board.vals.every((v, k) => v === vals[k])) return; board.vals = vals.slice();
     const g = board.c.getContext('2d'); g.fillStyle = '#2a1608'; g.fillRect(0, 0, 512, 128); g.strokeStyle = '#f2c230'; g.lineWidth = 8; g.strokeRect(4, 4, 504, 120);
-    g.textBaseline = 'middle'; g.font = 'bold 40px Fredoka, Arial Black, sans-serif'; g.fillStyle = cols[0]; g.textAlign = 'left'; g.fillText(names[0], 24, 38); g.fillStyle = cols[1]; g.textAlign = 'right'; g.fillText(names[1], 488, 38);
-    g.font = 'bold 62px Fredoka, Arial Black, sans-serif'; g.fillStyle = cols[0]; g.textAlign = 'left'; g.fillText(String(vals[0]), 40, 88); g.fillStyle = cols[1]; g.textAlign = 'right'; g.fillText(String(vals[1]), 472, 88);
-    g.fillStyle = '#ffe14a'; g.textAlign = 'center'; g.font = 'bold 54px serif'; g.fillText('🦆', 256, 66); board.t.needsUpdate = true;
+    g.textBaseline = 'middle';
+    if (vals.length === 2) {
+      g.font = 'bold 40px Fredoka, Arial Black, sans-serif'; g.fillStyle = cols[0]; g.textAlign = 'left'; g.fillText(names[0], 24, 38); g.fillStyle = cols[1]; g.textAlign = 'right'; g.fillText(names[1], 488, 38);
+      g.font = 'bold 62px Fredoka, Arial Black, sans-serif'; g.fillStyle = cols[0]; g.textAlign = 'left'; g.fillText(String(vals[0]), 40, 88); g.fillStyle = cols[1]; g.textAlign = 'right'; g.fillText(String(vals[1]), 472, 88);
+      g.fillStyle = '#ffe14a'; g.textAlign = 'center'; g.font = 'bold 54px serif'; g.fillText('🦆', 256, 66);
+    } else {
+      const n = vals.length, cw = 496 / n;
+      vals.forEach((v, k) => {
+        const cx = 8 + cw * (k + 0.5); g.textAlign = 'center';
+        g.font = `bold ${n > 3 ? 30 : 36}px Fredoka, Arial Black, sans-serif`; g.fillStyle = cols[k]; g.fillText(names[k], cx, 36, cw - 10);
+        g.font = `bold ${n > 3 ? 54 : 62}px Fredoka, Arial Black, sans-serif`; g.fillText(String(v), cx, 90, cw - 10);
+      });
+    }
+    board.t.needsUpdate = true;
   };
   // banden
   const belts = [];

@@ -167,9 +167,9 @@ export const FT = {
 export const FT_IDS = ['sword', 'mage', 'giant', 'ninja'];
 
 // Bouwt het poppetje van een vechter voor speler i
-export function buildFighterChar(type, i) {
+export function buildFighterChar(type, i, id = i) {   // i = slot (kleur), id = spelers-id (uiterlijk)
   const ft = FT[type], pc = PLAYER_COLORS[i];
-  const c = new Character(ft.spec(BROTHER_SPECS[i], pc));
+  const c = new Character(ft.spec(BROTHER_SPECS[id], pc));
   const w = ft.weapon(pc); c.hold(w, 'r'); c.weapon = w;
   if (ft.offhand) c.hold(ft.offhand(pc), 'l');
   if (type === 'ninja') {
@@ -261,3 +261,5 @@ export const STAGES = {
   volcano: { id: 'volcano', name: 'Vulkaantoren', icon: '🌋', blurb: 'Stijgende lava, brokkelende platforms en gevaarlijke geisers!' },
 };
 export const STAGE_IDS = ['island', 'dragon', 'volcano'];
+// x-positie van speler i van n op een podium met halve breedte a: 2 spelers links/rechts (zoals altijd), 3-4 spelers gelijkmatig van links naar rechts
+export const spreadX = (i, n, a) => (n <= 2 ? (i ? a : -a) : -a + (2 * a * i) / (n - 1));

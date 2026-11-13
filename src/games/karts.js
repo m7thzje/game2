@@ -5,7 +5,7 @@ import * as P from '../engine/props.js';
 import { buildCourse, locate, pointAt, HALF_W, WALL_M } from './karts_track.js';
 import { buildWorld, makeKartModel, questionTex, emojiTex } from './karts_world.js';
 
-// Kasteel-Kartrace — Mario Kart-lite voor 2 (of 3, met Juul) op één scherm. Gas is automatisch.
+// Kasteel-Kartrace — Mario Kart-lite voor 2, 3 (met Juul) of 4 (met Sam) op één scherm. Gas is automatisch.
 //   links/rechts = sturen · A = voorwerp gebruiken · B = remmen (rechtdoor) of driften (met sturen, loslaten = turbo)
 
 const LAPS = 3;
@@ -32,10 +32,10 @@ export default {
   giver: 'Koning Klopper',
   icon: '🏎️',
   mode: 'pvp',
-  players: [2, 3],
+  players: [2, 3, 4],
   time: 75,
   music: 'game_fast',
-  blurb: 'Race 3 rondes om het <b>kasteel</b>! Gas geven gaat vanzelf. Pak <b>vraagtekenblokken</b> voor bananen, vuurballen, turbo\'s en een <b>ketchup-kanon</b>. Pas op voor de <b>draak</b> die vuur laat vallen en voor de <b>koeien</b> op de weg! Met drie spelers mikt alles op de koploper: wie als eerste over de finish komt, wint.',
+  blurb: 'Race 3 rondes om het <b>kasteel</b>! Gas geven gaat vanzelf. Pak <b>vraagtekenblokken</b> voor bananen, vuurballen, turbo\'s en een <b>ketchup-kanon</b>. Pas op voor de <b>draak</b> die vuur laat vallen en voor de <b>koeien</b> op de weg! Met drie of vier spelers (2 x 2 startvakken, geloot) mikt alles op de koploper: wie als eerste over de finish komt, wint.',
   controls: ['{move} sturen', '{a} voorwerp gebruiken', '{b} remmen · of driften (met sturen, loslaten = turbo)'],
   tip: 'Wie ver achterligt krijgt sneller een <b>gouden paddenstoel</b> en een inhaalboost. Drift door de bochten voor mini-turbo\'s!',
 
@@ -54,7 +54,7 @@ export default {
     const iconSprites = [];
     const karts = players.map((pp, i) => {
       const model = makeKartModel(PLAYER_COLORS[i]); scene.add(model.root);
-      const ch = makeBrother(i); ch.pose = 'sit'; const hs = 0.62 * [1, 1.19, 1.06][pp.id];   // bestuurder even groot, ook al hebben Wes/Jor/Juul een andere schaal
+      const ch = makeBrother(i); ch.pose = 'sit'; const hs = 0.62 * [1, 1.19, 1.06, 0.95][pp.id];   // bestuurder even groot, ook al hebben Wes/Jor/Juul een andere schaal
       ch.group.scale.setScalar(hs); ch.group.position.set(0, 0.72, -0.28); model.tilt.add(ch.group);
       const size = ctx.pvp.size(i), spd = ctx.pvp.speed(i);
       model.root.scale.setScalar(size);
@@ -84,13 +84,16 @@ export default {
     }
 
     // startgrid: 2 karts gespiegeld naast elkaar; 3 karts op één rij (3 banen), de volgorde van de banen wordt geloot (eerlijk)
-    const lanes = karts.length === 2 ? [-1.75, 1.75] : (() => { const l = [-2.45, 0, 2.45]; for (let q = 2; q > 0; q--) { const j = Math.floor(ctx.rng() * (q + 1)); [l[q], l[j]] = [l[j], l[q]]; } return l; })();
+    // 4 karts: 2 x 2 startvakken (voorste rij op de lijn, tweede rij 4 m erachter); alle vier de vakken worden geloot (eerlijk)
     const NK = karts.length;
+    const lanes = NK === 2 ? [-1.75, 1.75] : NK === 4 ? [-1.75, 1.75, -1.75, 1.75] : (() => { const l = [-2.45, 0, 2.45]; for (let q = 2; q > 0; q--) { const j = Math.floor(ctx.rng() * (q + 1)); [l[q], l[j]] = [l[j], l[q]]; } return l; })();
+    const rows = NK === 4 ? [0, 0, 4, 4] : [0, 0, 0];
+    if (NK === 4) { const perm = [0, 1, 2, 3]; for (let q = 3; q > 0; q--) { const j = Math.floor(ctx.rng() * (q + 1)); [perm[q], perm[j]] = [perm[j], perm[q]]; } const l0 = lanes.slice(), r0 = rows.slice(); perm.forEach((pi, i) => { lanes[i] = l0[pi]; rows[i] = r0[pi]; }); }
     const placeStart = () => {
       karts.forEach((k, i) => {
-        const p = pointAt(C, N - 5, lanes[i]);
-        k.x = p.x; k.z = p.z; k.th = Math.atan2(p.tx, p.tz); k.vx = k.vz = 0; k.prog = -5; k.loc.idx = N - 5; k.fwd = 0;
-        locate(C, k.x, k.z, N - 5, k.loc);
+        const at = N - 5 - (rows[i] || 0), p = pointAt(C, at, lanes[i]);
+        k.x = p.x; k.z = p.z; k.th = Math.atan2(p.tx, p.tz); k.vx = k.vz = 0; k.prog = -5 - (rows[i] || 0); k.loc.idx = at; k.fwd = 0;
+        locate(C, k.x, k.z, at, k.loc);
       });
     };
     placeStart();
@@ -457,7 +460,7 @@ export default {
       // HUD
       for (const k of karts) {
         const rk = rankOf(k); const lapN = clamp(k.lap + 1, 1, LAPS);
-        hud.setPlayerInfo(k.i, `${rk}e plek · ronde ${lapN}/${LAPS}${k.item ? ' · ' + ITEMS[k.item].e + ' ' + ITEMS[k.item].n : k.rollT > 0 ? ' · 🎲' : ''}`);
+        hud.setPlayerInfo(k.i, NK === 4 ? `${rk}e · ronde ${lapN}/${LAPS}${k.item ? ' ' + ITEMS[k.item].e : k.rollT > 0 ? ' 🎲' : ''}` : `${rk}e plek · ronde ${lapN}/${LAPS}${k.item ? ' · ' + ITEMS[k.item].e + ' ' + ITEMS[k.item].n : k.rollT > 0 ? ' · 🎲' : ''}`);
       }
       hud.setScore(`🏁 ` + karts.map((k) => `${names[k.i]}: ${clamp(k.lap + 1, 1, LAPS)}/${LAPS}`).join('   –   '));
       hud.setTimer(timeLeftFn(), 15);
@@ -547,10 +550,10 @@ export default {
       karts.forEach((k) => { k.done = true; k.drift.on = false; });
       hud.showBig('FINISH!', 1300, winner.css); audio.sfx('bell', { vol: 0.8 }); audio.sfx('win', { vol: 0.6 }); hud.setHint(null);
       // 2 karts: score = gereden rondes; 3 karts: positiepunten (1e 10, 2e 6, 3e 3)
-      const sc = NK === 2 ? karts.map((k) => clamp(Math.floor(k.prog / N), 0, LAPS)) : karts.map((k) => [10, 6, 3][order.indexOf(k)]);
+      const sc = NK === 2 ? karts.map((k) => clamp(Math.floor(k.prog / N), 0, LAPS)) : karts.map((k) => [10, 6, 3, 1][order.indexOf(k)]);
       const lead = Math.round(Math.abs(winner.prog - order[1].prog));
       const jokes = [`${winner.name} snelt als een kasteelspook over de finish!`, `${loser.name} stond nog te praten met een koe...`, `Een volle ronde ketchup voor ${loser.name}? Volgende keer beter!`, `${winner.name} is de snelste van het kasteel!`];
-      ctx.finishPvp({ winner: winner.i, score: sc, delay: 4200, summary: `${why === 'tijd' ? 'Tijd is om: ' : ''}<b>${winner.name}</b> wint met ${lead} meter voorsprong!<br>${NK > 2 ? `Uitslag: ${order.map((k, n) => `${n + 1}e ${k.name} (${sc[k.i]} p)`).join(' · ')}<br>` : ''}${pick(jokes)}` });
+      ctx.finishPvp({ winner: winner.i, score: sc, place: order.map((k) => k.i), delay: 4200, summary: `${why === 'tijd' ? 'Tijd is om: ' : ''}<b>${winner.name}</b> wint met ${lead} meter voorsprong!<br>${NK > 2 ? `Uitslag: ${order.map((k, n) => `${n + 1}e ${k.name} (${sc[k.i]} p)`).join(' · ')}<br>` : ''}${pick(jokes)}` });
     }
     function makePhoto() {
       try {

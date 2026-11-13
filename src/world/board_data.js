@@ -1,5 +1,6 @@
 // FEESTBORD: pure data en spelregels (geen THREE). Bord-graaf, vakjes, items, kaarten, Deurman-gebeurtenissen.
 import { S } from '../save.js';
+import { supports } from '../engine/party.js';
 
 export const TILES = {
   blue:   { icon: '🔵', name: 'Blauw vakje', color: 0x3a82f0, desc: '+3 munten' },
@@ -14,7 +15,8 @@ export const TILES = {
 };
 // beschrijving per aantal spelers (bij 3 spelers: "de anderen")
 export const TILE_DESC3 = { duel: 'Direct een duel tegen een ander (de derde kijkt toe)', party: 'Feest! Jij +4, de anderen +2' };
-export const tileDesc = (type, n = 2) => (n === 3 && TILE_DESC3[type]) || TILES[type].desc;
+export const TILE_DESC4 = { duel: 'Direct een duel tegen een ander (de rest kijkt toe)', party: 'Feest! Jij +4, de anderen +2' };
+export const tileDesc = (type, n = 2) => (n >= 4 && TILE_DESC4[type]) || (n === 3 && TILE_DESC3[type]) || TILES[type].desc;
 export const TILE_ORDER = ['blue', 'red', 'dice', 'shop', 'trophy', 'duel', 'deur', 'chance', 'party'];
 
 export const ITEMS = {
@@ -69,8 +71,8 @@ export const GRAPH = buildGraph();
 export const tileType = (B, id) => (id === B.trophyNode ? 'trophy' : GRAPH.nodes[id].type);
 
 // ---------------------------------------------------------------- spelstatus (blijft bewaard tussen duels)
-// aantal spelers: 2 (standaard) of 3 (Juul doet mee)
-export const playerCount = () => (S.settings && S.settings.players === 3 ? 3 : 2);
+// aantal spelers: 2 (standaard), 3 (Juul doet mee) of 4 (Sam ook, Impactid Gamehal)
+export const playerCount = () => { const n = S.settings && S.settings.players; return n >= 4 ? 4 : n === 3 ? 3 : 2; };
 export function newState(rounds = 10, n = playerCount()) {
   const spots = [11, 19, 34];   // begin-plek van de Trofee (niet vlak bij de start)
   return {
@@ -107,12 +109,13 @@ export function lowest(B) { const sc = B.players.map((p) => score(p)); const mn 
 export function ranking(B) { return B.players.map((p, i) => ({ i, t: p.trophies, c: p.coins, r: Math.random() })).sort((a, b) => b.t - a.t || b.c - a.c || a.r - b.r).map((x) => x.i); }
 // punten per plek bij een 3-speler-spel: 10 / 6 / 3, bij gelijke stand gedeeld (gemiddelde, afgerond). keys[i] = hoger is beter; undefined = laatste.
 export const PLACE_PTS = [10, 6, 3];
-export function placePoints(keys) {
+export const PLACE_PTS4 = [10, 6, 4, 2];   // 4 spelers in één spel: 1e t/m 4e plek
+export function placePoints(keys, table = keys.length >= 4 ? PLACE_PTS4 : PLACE_PTS) {
   const n = keys.length, ord = keys.map((k, i) => ({ i, k: Number.isFinite(k) ? k : -Infinity })).sort((a, b) => b.k - a.k);
   const pts = new Array(n).fill(0), place = new Array(n).fill(0); let pos = 0;
   while (pos < n) {
     let e = pos; while (e + 1 < n && ord[e + 1].k === ord[pos].k) e++;
-    let sum = 0; for (let q = pos; q <= e; q++) sum += PLACE_PTS[q] ?? 0; const avg = Math.round(sum / (e - pos + 1));
+    let sum = 0; for (let q = pos; q <= e; q++) sum += table[q] ?? 0; const avg = Math.round(sum / (e - pos + 1));
     for (let q = pos; q <= e; q++) { pts[ord[q].i] = avg; place[ord[q].i] = pos + 1; } pos = e + 1;
   }
   return { pts, place };
@@ -127,10 +130,11 @@ export function pickDuelId(app, { isUnlocked, ARCADE_HALLS }, last = []) {
   return choosePool(Object.keys(app.games).filter(ok), last);
 }
 // 3-speler-spel kiezen (spel-definitie met players die 3 bevat), of null als er geen is
-export function pickPartyId(app, { isUnlocked, ARCADE_HALLS }, last = []) {
+// n = aantal spelers dat het spel samen speelt (3 of 4); bij 4 mag het ook een teamspel (2 tegen 2) zijn
+export function pickPartyId(app, { isUnlocked, ARCADE_HALLS }, last = [], n = 3) {
   const ex = (S.arcade && S.arcade.excluded) || [];
   const hallOf = (id) => { const h = ARCADE_HALLS.find((x) => x.ids.includes(id)); return h ? h.id : 0; };
-  const ok = (id) => { const d = app.games[id]; return d && Array.isArray(d.players) && d.players.includes(3) && !ex.includes(id) && (S.settings.unlockAll || isUnlocked(hallOf(id))); };
+  const ok = (id) => { const d = app.games[id]; return d && Array.isArray(d.players) && supports(d, n) && !ex.includes(id) && (S.settings.unlockAll || isUnlocked(hallOf(id))); };
   return choosePool(Object.keys(app.games).filter(ok), last);
 }
 function choosePool(all, last) {
@@ -171,14 +175,14 @@ export const DEUR_EVENTS = [
   { id: 'swap', title: 'Plekkenwissel!', text: 'De Deurman kijkt heel aardig uit zijn deur... en wisselt jullie plekken. Hij vond het gewoon leuk.', text3: 'De Deurman kijkt heel aardig uit zijn deur... en draait jullie plekken rond: iedereen schuift door naar de plek van de volgende. Hij vond het gewoon leuk.', w: 3 },
   { id: 'sign', title: 'Handtekening!', text: 'De Deurman schenkt je een handtekening. Hij is er héél trots op. Je krijgt 5 munten.', w: 3 },
   { id: 'steal', title: 'Hoed-mop', text: 'De Deurman steelt 2 munten en geeft je een hoed-mop: "Wat zegt de hoed tegen de muts? Ik sta boven je!"', w: 2 },
-  { id: 'dance', title: 'Deurman-dansje', text: 'De Deurman doet een dansje. Een te lang dansje. Iedereen +1 munt, want applaus.', text3: 'De Deurman doet een dansje. Een te lang dansje. Alle drie +1 munt, want applaus.', w: 3 },
+  { id: 'dance', title: 'Deurman-dansje', text: 'De Deurman doet een dansje. Een te lang dansje. Iedereen +1 munt, want applaus.', text3: 'De Deurman doet een dansje. Een te lang dansje. Alle drie +1 munt, want applaus.', text4: 'De Deurman doet een dansje. Een te lang dansje. Alle vier +1 munt, want applaus.', w: 3 },
   { id: 'hold', title: 'Deur open!', text: 'De Deurman houdt de deur voor je open. Beleefd! Je mag nog een keer dobbelen.', w: 2 },
   { id: 'gift', title: 'Deur-cadeautje', text: 'Achter de deur ligt een cadeautje. De Deurman zwaait verlegen met al zijn lange vingers.', w: 2, cond: (me) => me.items.length < MAX_ITEMS },
-  { id: 'comfort', only: 3, title: 'Troostprijs!', text: 'De Deurman heeft medelijden met wie het minste heeft: die krijgt +4 munten. Hij noemt het "een lening". Terugbetalen hoeft niet.', w: 3 },
+  { id: 'comfort', min: 3, title: 'Troostprijs!', text: 'De Deurman heeft medelijden met wie het minste heeft: die krijgt +4 munten. Hij noemt het "een lening". Terugbetalen hoeft niet.', w: 3 },
 ];
 export function drawDeur(B, i) {
   const me = B.players[i], o = B.players[pickTarget(B, i, 'rich')];
-  const pool = DEUR_EVENTS.filter((c) => (!c.only || c.only === B.players.length) && (!c.cond || c.cond(me, o)));
+  const pool = DEUR_EVENTS.filter((c) => (!c.min || B.players.length >= c.min) && (!c.cond || c.cond(me, o)));
   let r = Math.random() * pool.reduce((a, c) => a + c.w, 0);
   for (const c of pool) { r -= c.w; if (r <= 0) return c; }
   return pool[0];
@@ -188,3 +192,14 @@ export const PARTY_LINES = ['FEEST! De confetti-kanon ging per ongeluk af.', 'Fe
 export const WIN_LINES = ['{w} wint het duel! {l} was er ook bij. Dat telt.', 'Wat een duel! {w} wint. {l} krijgt een stickertje.', '{w} pakt de winst. {l}: "Ik liet hem winnen." Ja hoor.'];
 
 export const PARTY3_LINES = ['{a} pakt goud, {b} zilver en {c} brons. Het brons glimt het mooist.', 'Wat een spel! {a} wint, {b} wordt tweede en {c} staat op de derde plek.', '{a} wint! {b} en {c} zeggen dat ze het zo bedoeld hadden.'];
+
+// ---------------------------------------------------------------- 4 spelers
+export const PARTY4_LINES = ['{a} pakt goud, {b} zilver, {c} brons en {d} een eervolle vermelding.', 'Wat een spel! {a} wint, {b} en {c} volgen en {d} was er ook bij. Dat telt.', '{a} wint! {b}, {c} en {d} zeggen dat ze het zo bedoeld hadden.'];
+export const TEAM_LINES = ['{w} wint het teamspel! {l} had ook samen kunnen werken. Misschien volgende keer.', 'Teamwork! {w} wint. {l} geeft elkaar de schuld.', '{w} pakt de winst. {l}: "Wij liepen gewoon warm."'];
+// tekst van een kaart of Deurman-gebeurtenis voor n spelers (text4 voor vier, text3 voor drie of meer)
+export const textFor = (c, n) => (n >= 4 && c.text4) || (n >= 3 && c.text3) || c.text;
+// Ronde-afsluiting met 4 spelers en een 1-tegen-1-spel: wie speelt (de andere twee kijken toe). Elk paar komt in zes rondes één keer aan bod.
+export const PAIRS4 = [[0, 1], [2, 3], [0, 2], [1, 3], [0, 3], [1, 2]];
+export const roundPair4 = (round) => PAIRS4[(Math.max(1, round) - 1) % PAIRS4.length].slice();
+// namenlijst: "A", "A en B", "A, B en C"
+export const joinList = (arr) => (arr.length < 2 ? arr.join('') : `${arr.slice(0, -1).join(', ')} en ${arr[arr.length - 1]}`);

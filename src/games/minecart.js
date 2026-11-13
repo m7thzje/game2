@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mat, mesh, clamp, lerp, damp, rand, randInt, pick, TAU, canvasTex, smoothstep, mulberry32, shuffle } from '../engine/util.js';
 import { Dragon, PLAYER_COLORS } from '../engine/chars.js';
 import * as P from '../engine/props.js';
-import { buildMine, laneX, LANES, S0, VIEW, makeCart, makeSpark, makeRock, makePit, makePad, makeFire, makeWall, makeFinishArch, makeStation } from './minecart_world.js';
+import { buildMine, setPlayers, laneX, LANES, S0, VIEW, makeCart, makeSpark, makeRock, makePit, makePad, makeFire, makeWall, makeFinishArch, makeStation } from './minecart_world.js';
 
 // Mijnkar-Race — duel: race door een kristalmijn. Eigen baan met 3 rails per broer, springen over gaten en vonkjes,
 // remmen = turbo opladen. Wie als eerste 1000 m (virtueel) haalt wint. De achterligger krijgt vaker turbo-pads.
@@ -43,34 +43,35 @@ export default {
   giver: 'Mijnmeester Pikhouweel',
   icon: '🚃',
   mode: 'pvp',
+  players: [2, 3, 4],              // 2 = duel; 3-4 = vrij voor allen: elk een eigen spoor, zelfde parcours
   time: 50,
   pay: 1,
   music: 'game_fast',
   twists: ['invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'],
-  blurb: 'Een wilde race door de <b>Kristalmijn</b>! Jullie zitten elk in een mijnkar op een eigen spoor met <b>3 rails</b>. Wissel van rail, spring over gaten en <b>elektrische vonkjes</b>, ontwijk zwaaiende rotsen en het vuur van de draak. Rem om je <b>turbo op te laden</b>, rij over turbo-pads en wie als eerste de finish van <b>1 kilometer</b> haalt, wint!',
+  blurb: 'Een wilde race door de <b>Kristalmijn</b>! Jullie zitten elk in een mijnkar op een eigen spoor met <b>3 rails</b> (met 2 tot 4 spelers tegelijk). Wissel van rail, spring over gaten en <b>elektrische vonkjes</b>, ontwijk zwaaiende rotsen en het vuur van de draak. Rem om je <b>turbo op te laden</b>, rij over turbo-pads en wie als eerste de finish van <b>1 kilometer</b> haalt, wint!',
   controls: ['{move} links/rechts = van rail wisselen', '{a} springen', '{b} ingedrukt = remmen & turbo opladen (loslaten = turbo!)'],
   tip: 'Een turbo breekt ook de brokkelmuur van de Snelweg: dat scheelt 26 meter! Wie achterstaat krijgt meer turbo-pads.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
-    const names = players.map((p) => p.name);
+    const names = players.map((p) => p.name), NP = players.length;
+    setPlayers(NP);
     const L = ctx.lights('cave', { shadow: 14, center: [0, 0, -4], fogNear: 40, fogFar: 125 });
     L.hemi.color.set(0xb4a8ff); L.hemi.groundColor.set(0x5a4a8a); L.hemi.intensity = 2.3;
     L.sun.color.set(0xfff0d8); L.sun.intensity = 2.0; L.sun.position.set(-8, 24, 14);
     camera.fov = 56; camera.updateProjectionMatrix();
     const rng = mulberry32(90210);
-    const Mw = buildMine(ctx, mulberry32(777));
+    const Mw = buildMine(ctx, mulberry32(777), NP);
     const B = Mw.B;
     const course = genCourse(mulberry32(Math.floor(ctx.rng() * 1e9) + 1));
     const gT = canvasTex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 1, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.4, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
 
     // start-station + finish-bogen
-    const station = makeStation(); scene.add(station);
-    const arches = [0, 1].map((i) => { const a = makeFinishArch(7.4); scene.add(a); return a; });
+    const station = makeStation(); station.scale.x = NP === 2 ? 1 : NP === 3 ? 1.25 : 1.6; scene.add(station);
+    const arches = players.map(() => { const a = makeFinishArch(NP === 4 ? 5.6 : 7.4); scene.add(a); return a; });
 
     // ---------------- spelers ----------------
-    const sizes = [1, 1];
-    const pl = players.map((pp, i) => {
+        const pl = players.map((pp, i) => {
       const cart = makeCart(i); scene.add(cart);
       const blob = P.shadowBlob(1.5); scene.add(blob);
       const tagTex = canvasTex(256, 96, (g, w, hh) => { g.font = 'bold 56px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(10,10,30,.9)'; g.lineJoin = 'round'; g.strokeText(pp.name, w / 2, hh / 2); g.fillStyle = pp.css; g.fillText(pp.name, w / 2, hh / 2); });
@@ -81,7 +82,7 @@ export default {
       const pools = { spark: [], rock: [], gap: [], pad: [], fire: [], wall: [] };
       const mk = (type, fn, n) => { for (let k = 0; k < n; k++) { const m = fn(); m.visible = false; scene.add(m); pools[type].push(m); } };
       mk('spark', makeSpark, 10); mk('rock', makeRock, 4); mk('gap', makePit, 10); mk('pad', makePad, 14); mk('fire', makeFire, 6); mk('wall', makeWall, 3);
-      const dragon = new Dragon(i ? 0x2f7ad4 : 0x7a2fd4, 0.62); dragon.group.visible = false; scene.add(dragon.group);
+      const dragon = new Dragon([0x7a2fd4, 0x2f7ad4, 0xd4722f, 0xd42f9e][i], 0.62); dragon.group.visible = false; scene.add(dragon.group);
       const breath = new THREE.Mesh(new THREE.ConeGeometry(1.4, 1, 8, 1, true), new THREE.MeshBasicMaterial({ color: 0xff9a2a, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); breath.visible = false; scene.add(breath);
       return {
         i, cart, blob, tag, meter, flame, pools, dragon, breath, lane: 1, x: laneX(i, 1), vx: 0, d: 0, v: 0, y: 0, vy: 0, state: 'run', stateT: 0, inv: 0, slowT: 0, slowDur: 1, slowF: 1, boostT: 0, boostF: 1, charge: 0, braking: false,
@@ -95,7 +96,8 @@ export default {
     hud.setTimer(null);
     function bar(d) { const n = Math.round(clamp(d / COURSE, 0, 1) * 8); return '█'.repeat(n) + '░'.repeat(8 - n); }
     function refreshHud() {
-      hud.setScore(`${names[0]} ${bar(pl[0].d)}   🏁   ${bar(pl[1].d)} ${names[1]}`);
+      if (NP === 2) hud.setScore(`${names[0]} ${bar(pl[0].d)}   🏁   ${bar(pl[1].d)} ${names[1]}`);
+      else { const lead = pl.reduce((a, q) => (q.d > a.d ? q : a), pl[0]); hud.setScore(`🏁 ${Math.min(COURSE, Math.floor(lead.d))}/${COURSE} m · ${names[lead.i]}`); }
       pl.forEach((p, i) => hud.setPlayerInfo(i, `${Math.min(COURSE, Math.floor(p.d))} m  ${'●'.repeat(Math.round(p.charge * 5))}${'○'.repeat(5 - Math.round(p.charge * 5))}${p.boostT > 0 ? ' TURBO!' : ''}`));
     }
 
@@ -107,10 +109,10 @@ export default {
       return res;
     }
     function maybeSpawnExtras(p) {
-      const q = pl[1 - p.i];
+      const qd = Math.max(...pl.filter((o) => o !== p).map((o) => o.d));   // koploper van de anderen
       while (p.nextChunk - 80 < p.d && p.nextChunk < COURSE - 30) {
         const D0 = p.nextChunk; p.nextChunk += 45;
-        const lead = p.d - q.d;
+        const lead = p.d - qd;
         let n = 0;
         if (lead < -60) n = 1 + (rng() < 0.7 ? 1 : 0); else if (lead < -25) n = rng() < 0.75 ? 1 : 0; else if (lead < -8) n = rng() < 0.4 ? 1 : 0; else if (lead < 12) n = rng() < 0.12 ? 1 : 0; else n = 0;
         for (let k = 0; k < n; k++) {
@@ -210,7 +212,6 @@ export default {
     }
     function collisions(p, d0, d1) {
       if (p.state !== 'run') return;
-      const q = pl[1 - p.i];
       const near = obstaclesNear(p, d0 - 3, d1 + 8);
       const cm = p.sizeMul;     // grotere kar = groter doel
       for (const o of near) {
@@ -281,6 +282,7 @@ export default {
     // ---------------- draak ----------------
     function updateDragon(p, dt) {
       const f = p.fireActive; const dr = p.dragon;
+      if (NP > 2) { dr.group.visible = false; p.breath.visible = false; return; }   // met 3-4 sporen alleen de vlammen (geen draken): anders is het beeld te druk
       const want = f ? 6.6 : 15; p.dragonY = damp(p.dragonY, want, f ? 4 : 2, dt);
       const tx = f ? f.x : p.dragonX; p.dragonX = damp(p.dragonX, tx, 5, dt);
       dr.group.visible = p.dragonY < 13.5;
@@ -308,7 +310,7 @@ export default {
     function updateCart(p, dt, animate = true) {
       const c = p.cart, ud = c.userData;
       const sc = Math.pow(ctx.pvp.size(p.i), 0.7); p.sizeMul = sc;
-      c.scale.setScalar(sc * 1.1);
+      c.scale.setScalar(sc * 1.1 * CS);
       const bobS = p.state === 'run' ? Math.sin(T * 30 + p.i) * 0.018 * Math.min(1, p.v / 18) : 0;
       let yy = p.y + bobS; if (p.state === 'fall') yy = Math.min(p.y, 0) ;
       c.position.set(p.x, p.state === 'fall' ? Math.max(-6, p.y) : yy, p.zc);
@@ -337,15 +339,15 @@ export default {
     // ---------------- camera ----------------
     const camP = new THREE.Vector3(), camL = new THREE.Vector3();
     let aspect = 1.7;
-    function fitFov() { const hf = 74 * Math.PI / 360; camera.fov = clamp(2 * Math.atan(Math.tan(hf) / aspect) * 180 / Math.PI, 52, 80); camera.updateProjectionMatrix(); }
+    const CAMZ = 12.4 + (NP - 2) * 2.6, HF = 74 + (NP - 2) * 7, CS = NP === 2 ? 1 : NP === 3 ? 1.2 : 1.3;   // CS: karren iets groter bij meer sporen   // meer sporen: verder weg en breder beeld
+    function fitFov() { const hf = HF * Math.PI / 360; camera.fov = clamp(2 * Math.atan(Math.tan(hf) / aspect) * 180 / Math.PI, 52, 80); camera.updateProjectionMatrix(); }
     function cam(dt, mode) {
       const sway = Math.sin(introT * 0.3 + T * 0.2);
       let pos, look, roll = 0;
-      if (mode === 'intro') { const k = 0.5 + 0.5 * Math.sin(introT * 0.45); pos = [sway * 5, 4.5 + k * 3, 16 - k * 3]; look = [0, 1.5, -18]; }
-      else if (mode === 'result') { pos = [sway * 2, 6.0, 13.5]; look = [0, 1.2, -14]; }
+      if (mode === 'intro') { const k = 0.5 + 0.5 * Math.sin(introT * 0.45); pos = [sway * 5, 4.5 + k * 3 + (NP - 2) * 1.5, 16 - k * 3 + (NP - 2) * 4]; look = [0, 1.5, -18]; }
+      else if (mode === 'result') { pos = [sway * 2, 6.0 + (NP - 2) * 0.8, 13.5 + (NP - 2) * 4]; look = [0, 1.2, -14]; }
       else {
-        const lead = Math.abs(pl[0].d - pl[1].d) > 25 ? 0.8 : 0.4;
-        pos = [B.bx(10) * 0.5 + sway * 0.25, 6.9 + B.hy(8) * 0.4, 12.4 + (pl[0].v + pl[1].v) * 0.012]; look = [B.bx(28) * 0.35, 1.2 + B.hy(30) * 0.45, -16]; roll = -B.cx * 28;
+                pos = [B.bx(10) * 0.5 + sway * 0.25, 6.9 + (NP - 2) * 0.6 + B.hy(8) * 0.4, CAMZ + pl.reduce((a, q) => a + q.v, 0) / NP * 0.024]; look = [B.bx(28) * 0.35, 1.2 + B.hy(30) * 0.45, -16]; roll = -B.cx * 28;
       }
       if (!camP.lengthSq()) { camP.set(...pos); camL.set(...look); }
       const f = 1 - Math.exp(-4 * dt);
@@ -355,11 +357,11 @@ export default {
 
     // ---------------- wereld bijwerken ----------------
     function world(dt, mode) {
-      const dAvg = (pl[0].d + pl[1].d) / 2;
+      const dAvg = pl.reduce((a, q) => a + q.d, 0) / NP, ZK = NP === 2 ? 0.22 : 0.16, ZM = NP === 2 ? 5 : NP === 3 ? 3.5 : 2.5;
       const intensity = mode === 'play' ? smoothstep(2, 9, T) : 0;
       B.update(T * 0.9 + 3, intensity);
       for (const p of pl) {
-        p.zc = clamp((dAvg - p.d) * 0.22, -5, 5);
+        p.zc = clamp((dAvg - p.d) * ZK, -ZM, ZM);
         Mw.updateTrack(p.i, p.d, p.zc);
         showObstacles(p, dt);
         updateDragon(p, dt);
@@ -368,7 +370,7 @@ export default {
         updateCart(p, dt, mode !== 'frozen');
       }
       Mw.updateDecor(dAvg, T + introT, 0, dt);
-      if (mode === 'play') { const vv = (pl[0].v + pl[1].v) / 2; if (Math.random() < dt * 22) { const sd = Math.random() < 0.5 ? -1 : 1; fx.particles.emit(sd * (4 + Math.random() * 11), 0.6 + Math.random() * 9, -48 - Math.random() * 10, 0, Math.random() * 0.3, vv * 1.0, { life: 2.4, size: 0.2, color: [0x7ae8ff, 0xff7ad8, 0xa0ff8a, 0xffe14a][Math.floor(Math.random() * 4)], gravity: 0 }); } }
+      if (mode === 'play') { const vv = pl.reduce((a, q) => a + q.v, 0) / NP; if (Math.random() < dt * 22) { const sd = Math.random() < 0.5 ? -1 : 1; fx.particles.emit(sd * (4 + Math.random() * 11), 0.6 + Math.random() * 9, -48 - Math.random() * 10, 0, Math.random() * 0.3, vv * 1.0, { life: 2.4, size: 0.2, color: [0x7ae8ff, 0xff7ad8, 0xa0ff8a, 0xffe14a][Math.floor(Math.random() * 4)], gravity: 0 }); } }
       station.position.set(0, 0, 6 + dAvg); station.visible = dAvg < 40;
     }
 
@@ -377,9 +379,8 @@ export default {
       if (done) { resultUpdate(dt); return; }
       T += dt;
       for (const p of pl) {
-        const q = pl[1 - p.i];
-        // comeback: achterligger krijgt een licht snelheidsvoordeel
-        const behind = q.d - p.d; p.rubber = 1 + clamp(behind / 400, 0, 0.05);
+        // comeback: achterligger krijgt een licht snelheidsvoordeel (t.o.v. de koploper van de anderen)
+        const behind = Math.max(...pl.filter((o) => o !== p).map((o) => o.d)) - p.d; p.rubber = 1 + clamp(behind / 400, 0, 0.05);
         if (p.stunT > 0) p.stunT -= dt;
         const d0 = p.d;
         if (!p.finished) control(p, dt);
@@ -390,28 +391,29 @@ export default {
         if (!p.finished && p.d >= COURSE) {
           p.finished = true; p.crossT = T - (p.d - COURSE) / Math.max(1, p.v);
           finishOrder.push(p.i); audio.sfx('win', { vol: 0.7 });
-          if (finishOrder.length === 1) { atFinish = [Math.min(COURSE, Math.round(pl[0].d)), Math.min(COURSE, Math.round(pl[1].d))]; atFinish[p.i] = COURSE; hud.showBig('FINISH!', 1400, '#ffe14a'); hud.toast(`${names[p.i]} is als eerste binnen!`, 2200); endAt = T + 2.6; }
+          if (finishOrder.length === 1) { atFinish = pl.map((q) => Math.min(COURSE, Math.round(q.d))); atFinish[p.i] = COURSE; hud.showBig('FINISH!', 1400, '#ffe14a'); hud.toast(`${names[p.i]} is als eerste binnen!`, 2200); endAt = T + (NP > 2 ? 3.6 : 2.6); }
           p.cart.userData.c.pose = 'cheer';
         }
       }
       world(dt, 'play');
       cam(dt, 'play');
       refreshHud();
-      if (finishOrder.length === 2) endAt = Math.min(endAt, T + 0.6);
+      if (finishOrder.length === NP) endAt = Math.min(endAt, T + 0.6);
       if (T > MAX_T && endAt < 0) endAt = T;
       if (endAt >= 0 && T >= endAt) finishRace();
     }
     function finishRace() {
       if (done) return; done = true;
+      // volgorde: eerst wie de finish haalde (op kruistijd), dan op afgelegde afstand
+      const order = pl.slice().sort((a, b) => (b.finished - a.finished) || (a.finished && b.finished ? a.crossT - b.crossT : b.d - a.d) || (a.i - b.i));
       let w = null;
-      const a = pl[0], b = pl[1];
-      if (a.finished && b.finished) w = a.crossT < b.crossT ? 0 : 1;
-      else if (a.finished) w = 0; else if (b.finished) w = 1;
-      else if (Math.abs(a.d - b.d) > 1) w = a.d > b.d ? 0 : 1;
-      const sc = atFinish || [Math.round(Math.min(COURSE, a.d)), Math.round(Math.min(COURSE, b.d))];
+      if (order[0].finished) w = order[0].i;
+      else if (NP === 2 ? Math.abs(pl[0].d - pl[1].d) > 1 : order[0].d - order[1].d > 1) w = order[0].i;
+      const sc = atFinish || pl.map((q) => Math.round(Math.min(COURSE, q.d)));
       pl.forEach((p, i) => { p.cart.userData.c.pose = i === w ? 'cheer' : 'sad'; });
-      const gap = Math.abs(sc[0] - sc[1]);
-      const champ = w != null ? names[w] : null, other = w != null ? names[1 - w] : null;
+      const last = order[order.length - 1];
+      const gap = NP === 2 ? Math.abs(sc[0] - sc[1]) : Math.max(0, sc[w == null ? 0 : w] - sc[last.i]);
+      const champ = w != null ? names[w] : null, other = w != null ? names[NP === 2 ? 1 - w : last.i] : null;
       const jokes = champ ? [
         `${champ} raast als een kristal-komeet over de finish! ${other} stond nog ${gap} m te zwoegen.`,
         `${champ} wint de Mijnkar-Race${gap < 25 ? ' op het nippertje!' : '!'} ${other} heeft zijn kar nog vol stof.`,
@@ -419,7 +421,9 @@ export default {
         `${champ} pakte de snelste rails. ${other} zag de brokkelmuur te laat...`,
       ] : ['Precies gelijk! De kristallen weten niet wie er won.'];
       for (let k = 0; k < 6; k++) setTimeout(() => { try { fx.particles.burst(rand(-6, 6), 5 + rand(0, 3), -4 + rand(-3, 3), { count: 36, speed: 7, up: 1.2, life: 1.5, size: 0.45, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 }); audio.sfx('sparkle', { vol: 0.4 }); } catch (e) { /* weg */ } }, k * 250);
-      ctx.finishPvp({ winner: w, score: sc, delay: 1300, summary: `${pick(jokes)}<br><small>Pads: ${pl[0].stats.pads} - ${pl[1].stats.pads} · Snelweg: ${pl[0].stats.walls} - ${pl[1].stats.walls}</small>` });
+      const args = { winner: w, score: sc, delay: 1300, summary: `${pick(jokes)}<br><small>Pads: ${pl.map((q) => q.stats.pads).join(' - ')} · Snelweg: ${pl.map((q) => q.stats.walls).join(' - ')}</small>` };
+      if (NP > 2) args.place = order.map((q) => q.i);
+      ctx.finishPvp(args);
     }
     function resultUpdate(dt) { T += dt; for (const p of pl) { p.v = damp(p.v, p.finished ? 6 : 0, 2, dt); p.d += p.v * dt * 0.5; } world(dt, 'result'); cam(dt, 'result'); }
     function introUpdate(dt) { introT += dt; pl.forEach((p) => { p.cart.userData.c.pose = 'push'; p.v = 0; }); world(dt, 'intro'); cam(dt, 'intro'); }
@@ -434,11 +438,11 @@ export default {
       onResize(w, h) { aspect = w / h; fitFov(); },
       onSwap(sw) { for (const p of pl) { fx.particles.burst(p.x, 1.6, p.zc, { count: 26, speed: 5, up: 1.2, life: 0.7, size: 0.35, colors: [0xffe14a, 0xff9ad5, 0x9fe4ff], gravity: 3 }); fx.texts.add('WISSEL!', p.x, 3.8, p.zc, '#ffe14a', 1.0); } },
       onDeurman(movers) { movers.forEach((m, i) => { if (!m) return; const p = pl[i]; p.stunT = 1.6; say(p, 'BEWOOOG!', '#ff5a5a', 1.2); audio.sfx('hurt', { vol: 0.5 }); p.cart.userData.c.pose = 'scared'; setTimeout(() => { if (!done) p.cart.userData.c.pose = 'push'; }, 1600); }); },
-      celebrate(w) { pl.forEach((p, i) => { p.cart.userData.c.pose = i === w ? 'cheer' : 'sad'; }); },
+      celebrate(w, ws = [w]) { pl.forEach((p, i) => { p.cart.userData.c.pose = ws.includes(i) ? 'cheer' : 'sad'; }); },
       dispose() {},
       dbg: {
         state: () => ({ T, done, finished: pl.map((p) => p.finished), finishOrder, d: pl.map((p) => p.d), v: pl.map((p) => p.v), lane: pl.map((p) => p.lane), x: pl.map((p) => p.x), y: pl.map((p) => p.y), st: pl.map((p) => p.state), boost: pl.map((p) => p.boostT), charge: pl.map((p) => p.charge), hits: pl.map((p) => p.hits), stats: pl.map((p) => p.stats), inv: pl.map((p) => p.inv), slow: pl.map((p) => p.slowT) }),
-        setT: (v) => { T = v; }, players: pl, course, near: (i, lo, hi) => obstaclesNear(pl[i], pl[i].d + lo, pl[i].d + hi), hurt, boost, finishRace, B, T: () => T,
+        lx: (i, l) => laneX(i, l), setT: (v) => { T = v; }, players: pl, course, near: (i, lo, hi) => obstaclesNear(pl[i], pl[i].d + lo, pl[i].d + hi), hurt, boost, finishRace, B, T: () => T,
         sparkX: (o, i) => laneX(i, 1) + (o.c + o.amp * Math.sin(T * TAU / o.period + o.ph) - 1) * RAIL_GAP, rockTh: (o) => 0.56 * Math.sin(T * TAU / o.period + o.ph),
         fireBurn: (i, id) => { const f = pl[i].fireT.get(id); return f ? (f.burn ? 2 : (T - f.t0 < 0.9 ? 1 : 3)) : 0; },
       },

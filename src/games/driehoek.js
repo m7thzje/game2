@@ -2,19 +2,19 @@ import * as THREE from 'three';
 import { mat, mesh, clamp, lerp, TAU, canvasTex, smoothstep } from '../engine/util.js';
 import { makeBrother, makeDeurman } from '../engine/chars.js';
 import * as P from '../engine/props.js';
-import { buildArena, TRI, NORM, TANG, VERT, planes } from './driehoek_world.js';
+import { buildArena, TRI, NORM, TANG, VERT, planes, setShape } from './driehoek_world.js';
 
-// Driehoek-Hockey — party-spel voor 3 (Wes, Jor en Juul tegelijk, vrij voor allen).
-//  * driehoekige ijsarena, ieder verdedigt het doel in zijn eigen muur (links = slot 0, onder = slot 1, rechts = slot 2)
+// Driehoek-Hockey — party-spel voor 3 of 4 (Wes, Jor, Juul en Sam tegelijk, vrij voor allen). Met 4 spelers wordt de driehoek een vierkant met vier doelen.
+//  * driehoekige ijsarena, ieder verdedigt het doel in zijn eigen muur (links = slot 0, onder = slot 1, rechts = slot 2); met 4 spelers een vierkante arena (links = 0, boven = 1, rechts = 2, onder = 3)
 //  * richtingen = je schijf bewegen (alleen in een strook langs je eigen muur), A = SMASH (uitval naar voren), B = MAGNEET (puck vangen, richting kiezen, loslaten = schieten)
 //  * goal tegen = een hartje kwijt (3 levens); wie 0 heeft is een geest: zijn doel gaat dicht, zijn schijf blijft meespelen
 //  * gimmicks: bumper-kristallen, tweede puck, turbo-kristal, de Deurman sluit uit medelijden het doel van wie het zwaarst heeft
 //  * comeback: wie minder hartjes heeft dan de leider krijgt een grotere schijf en snellere cooldowns; na een goal gaat de puck naar de leider
 const TIME = 90, OT_MAX = 20, LIVES = 3;
 const PUCK_R = 0.8, RP = 1.55;
-const STRIP_U = 7.4, W_MIN = 1.95, W_MAX = 4.6, LUNGE_MAX = 4.3;
+const STRIP_U = 7.4, STRIP_U4 = 5.3, W_MIN = 1.95, W_MAX = 4.6, LUNGE_MAX = 4.3;
 const PAD_SPEED = 17, VMAX = 29, MAGR = 5.2;
-const PLN = planes();
+let PLN = planes();   // wordt in create() opnieuw bepaald (de vorm hangt af van het aantal spelers)
 
 function drawTag(p, lives) {
   const t = p.tagTex, c = t.image.getContext('2d'); c.clearRect(0, 0, 256, 128);
@@ -31,20 +31,21 @@ export default {
   giver: 'IJskoningin Ina',
   icon: '🔺',
   mode: 'pvp',
-  players: [3],
+  players: [3, 4],
   time: TIME,
   music: 'game_fast',
-  blurb: 'Hockey op <b>driehoekig ijs</b> met <b>drie doelen</b>! Een goal tegen kost een <b>hartje</b> (je hebt er 3). Wie als laatste hartjes heeft, wint.',
+  blurb: 'Hockey op <b>driekantig ijs</b> met <b>drie doelen</b> (met vier spelers: een <b>vierkant</b> met vier doelen)! Een goal tegen kost een <b>hartje</b> (je hebt er 3). Wie als laatste hartjes heeft, wint.',
   controls: ['{move} schijf bewegen', '{a} SMASH (uitval)', '{b} MAGNEET (vasthouden = vangen)'],
   tip: 'Vang de puck, stuur een kant op, laat los en schiet op de zwakste!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp, n = players.length, names = players.map((p) => p.name);
+    setShape(n === 4 ? 4 : 3); PLN = planes();
     const tw = ctx.twist.id, GRV = pv.gravity || 1, SLIP = pv.slip || 0;
     const TEMPO = tw === 'turbo' || tw === 'slowmo' ? ctx.twist.speed : 1;
     const PT = 1 + (TEMPO - 1) * 0.55, PUCK_V = VMAX * (GRV < 1 ? 0.88 : 1) * (TEMPO > 1 ? 1.1 : 1);
-    const L = ctx.lights('ice', { shadow: 24, center: [0, 0, 0], fogNear: 70, fogFar: 170 });
+    const L = ctx.lights('ice', { shadow: n === 4 ? 30 : 24, center: [0, 0, 0], fogNear: 70, fogFar: 170 });
     L.sun.color.set(0xcfe0ff); L.sun.intensity = 1.5; L.sun.position.set(-10, 34, 16); L.hemi.color.set(0x9ec4ff); L.hemi.groundColor.set(0x2a3a70); L.hemi.intensity = 1.2;
     camera.fov = 48; camera.updateProjectionMatrix();
     const colors = players.map((p) => p.color), css = players.map((p) => p.css), rgba = css.map((c) => { const k = parseInt(c.slice(1), 16); return `rgba(${(k >> 16) & 255},${(k >> 8) & 255},${k & 255},1)`; });
@@ -92,8 +93,8 @@ export default {
     // ---------------- toestand ----------------
     let T = 0, clock = 0, introT = 0, started = false, finished = false, slow = 1, slowHold = 0, gt = 0, otT = 0, overtime = false;
     const G = { state: 'init', t: 0, serveTo: 1, lastConceder: -1, end: false, winner: -1 };
-    const door = [0, 0, 0], doorT = [0, 0, 0], doorTarget = [0, 0, 0];   // 0 open .. 1 dicht
-    const blockK = [0, 0, 0];
+    const door = pads.map(() => 0), doorT = pads.map(() => 0), doorTarget = pads.map(() => 0);   // 0 open .. 1 dicht
+    const blockK = pads.map(() => 0);
     const ev = { bump: false, bumpK: 0, boost: 0, puck2: 0, doors: 0, boostPos: null, boostT: 0, p2End: 0 };
     const stats = { smashes: 0, catches: 0, shots: 0, goals: 0, bumper: 0, doorsShut: 0, puck2: 0, turbo: 0, walls: 0 };
     const deur = makeDeurman(2.6); deur.group.visible = false; scene.add(deur.group);
@@ -112,7 +113,7 @@ export default {
     };
 
     // ---------------- camera ----------------
-    const tgt = new THREE.Vector3(0, 0, -4.8), camDir = new THREE.Vector3(0, Math.sin(1.2), Math.cos(1.2));
+    const tgt = new THREE.Vector3(0, 0, n === 4 ? -0.8 : -4.8), camDir = new THREE.Vector3(0, Math.sin(1.2), Math.cos(1.2));
     const fitPts = []; for (const [x, z] of require_poly()) { fitPts.push([x, 0, z], [x, 1.3, z]); }
     pads.forEach((p) => { const gp = A.goals[p.i].avatarPos; fitPts.push([gp[0], 4.6, gp[2]], [gp[0], 0, gp[2] + 1.5]); });
     function require_poly() { const o = []; for (const v of VERT) o.push([v[0] * (TRI.BEV + 1.2), v[1] * (TRI.BEV + 1.2)]); NORM.forEach(([nx, nz], i) => { o.push([nx * (TRI.a + 1.5), nz * (TRI.a + 1.5)]); }); return o; }
@@ -120,7 +121,7 @@ export default {
       const v = new THREE.Vector3(); let lo = 10, hi = 130;
       for (let it = 0; it < 22; it++) {
         const d = (lo + hi) / 2; camera.position.copy(tgt).addScaledVector(camDir, d); camera.lookAt(tgt); camera.updateMatrixWorld(); camera.updateProjectionMatrix();
-        let ok = true; for (const q of fitPts) { v.set(q[0], q[1], q[2]).project(camera); if (Math.abs(v.x) > 0.96 || v.y > (Math.abs(v.x) < 0.3 ? 0.5 : 0.88) || v.y < -0.96) { ok = false; break; } }
+        let ok = true; for (const q of fitPts) { v.set(q[0], q[1], q[2]).project(camera); if (Math.abs(v.x) > 0.96 || v.y > (Math.abs(v.x) < 0.3 ? (n === 4 ? 0.66 : 0.5) : 0.88) || v.y < -0.96) { ok = false; break; } }
         if (ok) hi = d; else lo = d;
       }
       camera.position.copy(tgt).addScaledVector(camDir, hi); camera.lookAt(tgt);
@@ -185,9 +186,10 @@ export default {
     function finish(w) {
       if (finished) return; finished = true; G.state = 'end';
       const sc = pads.map((p) => p.lives);
-      hud.showBig(`${names[w]} WINT!`, 1800, w === 0 ? '#7dffb0' : w === 1 ? '#8fb8ff' : '#ffb070'); audio.sfx('win', { vol: 0.6 });
+      hud.showBig(`${names[w]} WINT!`, 1800, ['#7dffb0', '#8fb8ff', '#ffb070', '#e9a2ff'][players[w].id]); audio.sfx('win', { vol: 0.6 });
+      const place = pads.slice().sort((a, b) => (a.i === w ? -1 : b.i === w ? 1 : 0) || (b.lives - a.lives) || (b.goalsFor - a.goalsFor) || (a.goalsAgainst - b.goalsAgainst)).map((p) => p.i);   // winnaar, dan hartjes, goals voor, goals tegen
       const jokes = ['De Deurman klapt beleefd mee.', 'De sneeuwpoppen zijn helemaal van slag.', 'Het ijs heeft het overleefd. Net.', 'De puck wil een trui met jouw naam.', 'De pinguïns twijfelen over een carrière als keeper.'];
-      ctx.finishPvp({ winner: w, score: sc, delay: 900, summary: `<b>${names[w]}</b> houdt als laatste hartjes over! ${pads.map((p) => `${p.pp.name} ${p.lives}♥ (${p.goalsFor} goals gemaakt)`).join(' · ')}.<br>${stats.smashes} smashes, ${stats.catches} magneetvangsten, ${stats.bumper} bumper-botsingen${stats.doorsShut ? ` en ${stats.doorsShut}x een dichte deur van de Deurman` : ''}. ${jokes[Math.floor(ctx.rng() * jokes.length)]}` });
+      ctx.finishPvp({ winner: w, score: sc, place, delay: 900, summary: `<b>${names[w]}</b> houdt als laatste hartjes over! ${pads.map((p) => `${p.pp.name} ${p.lives}♥ (${p.goalsFor} goals gemaakt)`).join(' · ')}.<br>${stats.smashes} smashes, ${stats.catches} magneetvangsten, ${stats.bumper} bumper-botsingen${stats.doorsShut ? ` en ${stats.doorsShut}x een dichte deur van de Deurman` : ''}. ${jokes[Math.floor(ctx.rng() * jokes.length)]}` });
     }
 
     // ---------------- Deurman-deur ----------------
@@ -212,7 +214,7 @@ export default {
       p.wvx += (dx - p.wvx) * k; p.wvz += (dz - p.wvz) * k;
       const du = p.wvx * p.tx + p.wvz * p.tz, dw = -(p.wvx * p.nx + p.wvz * p.nz);
       p.u += du * dt; p.w += dw * dt;
-      const U = STRIP_U, W0 = p.R + 1.75, W1 = W0 + 2.7;   // altijd ruimte genoeg tussen schijf en muur voor de puck
+      const U = n === 4 ? STRIP_U4 : STRIP_U, W0 = p.R + 1.75, W1 = W0 + 2.7;   // altijd ruimte genoeg tussen schijf en muur voor de puck
       if (p.u > U) { p.u = U; } if (p.u < -U) { p.u = -U; } if (p.w < W0) { p.w = W0; } if (p.w > W1) { p.w = W1; }
       // smash (uitval)
       if (can && inp.aP && p.lcd <= 0 && p.lst === 'idle' && !p.mag.on) { p.lst = 'out'; p.lcd = 1.25; p.smashes++; stats.smashes++; audio.sfx('swing', { vol: 0.6 }); p.c.swing(); fx.particles.ring(p.x, 0.3, p.z, { count: 12, speed: 4, color: p.pp.color, size: 0.35, life: 0.4 }); }
@@ -353,7 +355,7 @@ export default {
     // animaties van deuren, Deurman, bumpers en kristal (lopen ook tijdens goal-pauzes)
     function animate(dt) {
       // deuren
-      for (let i = 0; i < 3; i++) {
+      for (let i = 0; i < pads.length; i++) {
         if (doorTarget[i] && doorT[i] > 0) { doorT[i] -= dt; if (doorT[i] <= 0) { doorTarget[i] = 0; if (deurWho === i) { /* hij zwaait weg */ } } }
         const was = door[i]; door[i] += Math.sign(doorTarget[i] - door[i]) * Math.min(Math.abs(doorTarget[i] - door[i]), dt * 1.8);
         const G_ = A.goals[i]; G_.door.visible = door[i] > 0.01 && !pads[i].elim; G_.door.position.x = (1 - door[i]) * (TRI.GH * 2 + 1) * (i % 2 ? 1 : -1);

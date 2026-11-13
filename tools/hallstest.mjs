@@ -1,13 +1,16 @@
 // Test: Sporthal (dichtgetimmerd -> gebouwd), GEHEIME Deurenhal (vermomd -> ontgrendelen met stickers -> betreden -> terug),
 // Feestbord-tafel (-> BoardMode -> terug), Vriendenboek (standaard + pauzemenu), nieuwe hallen in toernooi/wiel.
 // Gebruik: node tools/hallstest.mjs     Screenshots: /tmp/hallstest_*.png
+// GAMEHAL=1 PLAYERS=2|3|4 node tools/hallstest.mjs: de Impactid Gamehal (gamehal.html): lobby -> hal -> spel via kast (alles samen / teams / knock-out) -> toernooi -> winkel -> lobby (tools/gh_hall.mjs).
 // PLAYERS=3 node tools/hallstest.mjs: met Juul erbij (?players=3) + extra: 3 personages, keuzescherm 'Wie spelen?', winnaar-blijft over 3 duels, scorebord met 3 kolommen, ranglijst.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath, BROWSER_ARGS } from './chrome_path.mjs';
+import { wantGamehal } from './gh_lib.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const server = http.createServer((req, res) => { let p = decodeURIComponent(req.url.split('?')[0]); if (p === '/') p = '/index.html'; const f = path.join(root, p); if (!f.startsWith(root) || !fs.existsSync(f)) { res.writeHead(404); res.end(); return; } const m = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png' }; res.writeHead(200, { 'content-type': m[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(res); });
 await new Promise((r) => server.listen(0, r)); const port = server.address().port;
-const b = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+const b = await chromium.launch({ executablePath: chromePath(), args: BROWSER_ARGS });
 const page = await b.newPage({ viewport: { width: 1100, height: 650 } });
 const P3 = process.env.PLAYERS === '3';
 const errors = []; page.on('pageerror', (e) => errors.push(e.message + ' ' + (e.stack || '').split('\n').slice(1, 3).join('|'))); page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT/.test(m.text())) errors.push(m.text().slice(0, 200)); });
@@ -25,6 +28,12 @@ const modeName = () => page.evaluate(() => window.__app.mode && window.__app.mod
 const hallOf = () => page.evaluate(() => window.__app.mode && window.__app.mode.hallId);
 const waitHall = (n) => page.waitForFunction((n) => window.__app.mode && window.__app.mode.constructor.name === 'ArcadeMode' && window.__app.mode.hallId === n && window.__app.mode.cabs && window.__app.mode.life, n, { timeout: 60000 });
 
+if (wantGamehal()) {   // Impactid Gamehal: eigen flow
+  const { ghHallTest } = await import('./gh_hall.mjs');
+  try { await ghHallTest({ page, port, check, shot }); } catch (e) { fails++; console.log('FOUT (uitzondering)', e.message.split('\n')[0]); await shot('crash').catch(() => {}); }
+  console.log(errors.length ? 'ERRORS ' + errors.slice(0, 6).join(' || ') : 'NO ERRORS', '| fouten:', fails);
+  await b.close(); server.close(); process.exit(fails || errors.length ? 1 : 0);
+}
 await page.goto(`http://localhost:${port}/?quality=low${P3 ? '&players=3' : ''}`);
 await page.waitForFunction(() => window.__app && window.__app.games && Object.keys(window.__app.games).length > 40, null, { timeout: 120000 });
 await page.waitForTimeout(1200);
@@ -55,7 +64,7 @@ if (P3) {
     return info;
   };
   const st3 = () => page.evaluate(async () => { const { S } = await import('/src/save.js'); return { wins: [...S.arcade.wins], plays: S.arcade.plays, g: S.arcade.byGame.dodgeball && [...S.arcade.byGame.dodgeball.wins], by: S.arcade.queueMode }; });
-  await page.evaluate(async () => { const { S } = await import('/src/save.js'); S.arcade.wins = [0, 0, 0]; S.arcade.byGame = {}; S.arcade.plays = 0; S.arcade.queueMode = null; });
+  await page.evaluate(async () => { const { S } = await import('/src/save.js'); S.arcade.wins = [0, 0, 0, 0]; S.arcade.byGame = {}; S.arcade.plays = 0; S.arcade.queueMode = null; });
   const pl = await page.evaluate(() => window.__app.mode.players.map((p) => [p.i, !!p.c.group.parent, p.ring.material.color.getHex()]));
   check(pl.length === 3 && pl.map((x) => x[0]).join() === '0,1,2' && pl.every((x) => x[1]), '3 personages in de hal (Wes, Jor, Juul): ' + JSON.stringify(pl));
   await goto(0, 12); await page.waitForTimeout(2200); await shot('p3_1_drie_in_hal');
@@ -72,7 +81,7 @@ if (P3) {
   await choose(0); let d1 = await playDuel(0);
   check(d1.ids.join() === '0,1', 'duel 1 (winnaar blijft): Wes tegen Jor: ' + d1.ids.join());
   await clickUntil(isIdle, 60);
-  let s1 = await st3(); check(s1.wins.join() === '1,0,0' && s1.plays === 1 && s1.by === 'queue', 'stand per speler na duel 1: ' + s1.wins.join('-') + ', keuze onthouden: ' + s1.by);
+  let s1 = await st3(); check(s1.wins.join() === '1,0,0,0' && s1.plays === 1 && s1.by === 'queue', 'stand per speler na duel 1: ' + s1.wins.join('-') + ', keuze onthouden: ' + s1.by);
   // duel 2: Wes blijft, Juul komt: Juul (slot 1) wint
   await toCab('dodgeball'); await page.waitForTimeout(600); await press(0, 'a'); await waitMenu(); await choose(0); await page.waitForTimeout(600); await waitMenu();
   check(/Wes vs Juul, Jor wacht/.test(await modalText()), 'wachtrij: nu Wes vs Juul, Jor wacht'); await shot('p3_4_wachtrij');
@@ -85,7 +94,7 @@ if (P3) {
   await choose(0); let d3 = await playDuel(1);
   check(d3.ids.join() === '1,2', 'duel 3: Jor tegen Juul: ' + d3.ids.join());
   await clickUntil(isIdle, 60);
-  let s3 = await st3(); check(s3.wins.join() === '1,0,2' && s3.plays === 3 && s3.g.join() === '1,0,2', 'statistieken per speler na 3 duels: wins ' + s3.wins.join('-') + ' / dodgeball ' + (s3.g || []).join('-'));
+  let s3 = await st3(); check(s3.wins.join() === '1,0,2,0' && s3.plays === 3 && s3.g.join() === '1,0,2,0', 'statistieken per speler na 3 duels: wins ' + s3.wins.join('-') + ' / dodgeball ' + (s3.g || []).join('-'));
   // zelf kiezen: Jor-Juul, en de keuze wordt onthouden
   await toCab('dodgeball'); await page.waitForTimeout(600); await press(0, 'a'); await waitMenu(); await choose(0); await page.waitForTimeout(600); await waitMenu();
   await choose(1); await page.waitForTimeout(600); await waitMenu(); await shot('p3_5_zelf_kiezen');

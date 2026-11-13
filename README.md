@@ -17,13 +17,25 @@ Een moderne browser met WebGL is genoeg (Chrome, Edge, Firefox). Het spel werkt 
 
 ### Besturing
 
-| | Speler 1 (Wes) | Speler 2 (Jor) |
-|---|---|---|
-| Lopen | `W` `A` `S` `D` | pijltjestoetsen |
-| Actie A (praten / springen / acties) | `F` (of spatiebalk) | `Enter` |
-| Actie B (selfie-licht / tweede actie) | `G` (of `E`) | `Shift` rechts |
+| | Speler 1 (Wes) | Speler 2 (Jor) | Speler 3 (Juul) | Speler 4 (Sam, alleen Gamehal) |
+|---|---|---|---|---|
+| Lopen | `W` `A` `S` `D` | pijltjestoetsen | `I` `J` `K` `L` | Numpad `8` `4` `5` `6` |
+| Actie A (praten / springen / acties) | `F` (of spatiebalk) | `Enter` | `U` | Numpad `7` |
+| Actie B (selfie-licht / tweede actie) | `G` (of `E`) | `Shift` rechts | `O` | Numpad `9` |
 
 Gamepads werken ook (pad 1 = Wes, pad 2 = Jor). Online mag de gast zowel WASD als de pijltjes gebruiken. `Esc` = pauze/menu, `Tab` = dagboek, `M` = geluid uit/aan.
+
+## Impactid Gamehal (aparte versie voor 2 tot 4 spelers, zonder dorp)
+
+Naast het gewone spel staat `gamehal.html` ("Impactid Gamehal", bijv. `http://localhost:8080/gamehal.html`): dezelfde Speelhal, maar **zonder dorp, opening en karweitjes**. Je start in een lobby, kiest 2, 3 of 4 spelers
+(Wes, Jor, Juul en **Sam**; klik op een naam om die aan te passen) en loopt direct de Speelhal in. Alle vijf hallen zijn open. Eigen opslag, dus het gewone spel blijft ongemoeid.
+
+* **Spellen voor 4**: de meeste spellen kennen een 4-spelersvorm: vrij voor allen (bijv. Boem-Man, Lichtspoor, Smash-Arena, Kartrace, Koning van de Berg, Driehoek-Hockey, Vier-Buzzer, Sneeuwballen-Slag), **2 tegen 2** (volley, voetbal, airhockey, touwtrekken, dodgeball, dubbelspel pingpong, penalty's, kanonnen, de heist...) of gelijktijdig/om-de-beurt (golf, darts, bowling, curling, boogschieten, quiz, memory, dansen...). Een badge boven elke kast laat zien wat er kan: `👥 2-4`, `👥 4`, `🏆 knock-out`.
+* **Knock-out**: spellen die echt 1-tegen-1 zijn (o.a. Vier-op-een-rij, Basket, Stapelen, Blokken, Code, Bakken) spelen met 4 spelers als **knock-out**: twee halve finales en een finale, de anderen kijken toe, aan het eind een eindstand 1e-4e.
+* **Feestbord** met 4 pionnen, toernooi (spellen uitsluiten), dagelijkse uitdaging, ranglijst en hoedjes-winkel werken met 2 tot 4 spelers.
+* **Online** met 1, 2 of 3 gasten (links `?join=CODE&as=jor|juul|sam`, de gastlinks wijzen naar dezelfde pagina als de host).
+* **Besturing Sam**: Numpad (zie de tabel); 4 spelers op één toetsenbord geeft vaak toetsen die elkaar blokkeren, gebruik liever gamepads (pad 4 = Sam) of online.
+* Tests: `GAMEHAL=1 PLAYERS=4 node tools/hallstest.mjs`, `... tools/e2e.mjs`, `PLAYERS=4 node tools/arcadetest.mjs`, `PLAYERS=4 node tools/playerstest.mjs`. Techniek in `docs/PLAYERS4.md`.
 
 ## Online spelen met 2 of 3 apparaten (eigen link per gast)
 

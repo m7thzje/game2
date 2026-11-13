@@ -1,9 +1,12 @@
 // Integratietest Speelhal: laadt de hal, speelt (kort) elk duel via de echte route playGame -> finishPvp -> terug in de hal.
 // Gebruik: node tools/arcadetest.mjs [id ...]   (zonder ids: alle 54, uit ARCADE_IDS).   TWIST=<id> forceert een twist.
 //   PLAYERS=3 draait met 3 spelers: de duels worden gespeeld door wisselende paren ([0,2], [1,2], [0,1]) en de winnaar-als-slot wordt vertaald naar een spelers-id (statistieken per id).
+//   PLAYERS=4 draait met 4 spelers: spellen met 4 in def.players worden door alle vier gespeeld (winnaar = wisselend slot 0..3, bij teams winnen de teamgenoten mee),
+//   de rest (1-tegen-1) door wisselende paren waar Sam vaak in zit ([0,3], [1,3], [2,3], ...; PAIR=0,1 forceert een paar); spellen alleen voor 3 spelen met [0,1,2]. CHROME=<pad> kiest een andere Chromium.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+const CHROME = process.env.CHROME || ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium-1243/chrome-linux64/chrome'].find((p) => fs.existsSync(p));   // eerste bestaande Chromium
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   let p = decodeURIComponent(req.url.split('?')[0]); if (p === '/') p = '/index.html';
@@ -17,9 +20,11 @@ const ALL_OLD = ['dodgeball', 'cakefight', 'tugwar', 'airhockey', 'quickdraw', '
 const ALL = (await import('/home/user/game2/src/games/index.js')).ARCADE_IDS;
 const ids = process.argv.slice(2).length ? process.argv.slice(2) : ALL;
 const errors = [];
-const PLAYERS = process.env.PLAYERS === '3' ? 3 : 2;
+const PLAYERS = process.env.PLAYERS === '4' ? 4 : process.env.PLAYERS === '3' ? 3 : 2;
 const PAIRS = [[0, 2], [1, 2], [0, 1]];
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+const PAIRS4 = [[0, 3], [1, 3], [2, 3], [0, 1], [1, 2], [0, 2]];
+const FIXED = process.env.PAIR ? process.env.PAIR.split(',').map(Number) : null;   // PAIR=0,1: speel alle duels met dit paar (PLAYERS=4)
+const browser = await chromium.launch({ executablePath: CHROME, args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
 const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
 let cur = '-';
 page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY/.test(m.text())) errors.push(`[${cur}] ${m.text()}`); });
@@ -40,13 +45,16 @@ for (const id of ids) {
   cur = id; const t0 = Date.now();
   const pl = await page.evaluate((id) => (window.__app.games[id] && window.__app.games[id].players) || [2], id);
   if (PLAYERS === 2 && !pl.includes(2)) { console.log('SKIP', id.padEnd(10), `(alleen voor ${pl.join('/')} spelers)`); continue; }
+  if (PLAYERS === 3 && !pl.includes(2) && !pl.includes(3)) { console.log('SKIP', id.padEnd(10), `(alleen voor ${pl.join('/')} spelers)`); continue; }
   try {
-    const only3 = !pl.includes(2); const pair = (PLAYERS === 3 && !only3) ? PAIRS[ids.indexOf(id) % 3] : null;   // 3 spelers: wisselend paar
+    const only3 = PLAYERS < 4 ? !pl.includes(2) : (!pl.includes(2) && !pl.includes(4));   // spel dat alleen met 3 spelers kan
+    const all4 = PLAYERS === 4 && pl.includes(4);   // 4 spelers: alle vier doen mee
+    const pair = (PLAYERS === 3 && !only3) ? PAIRS[ids.indexOf(id) % 3] : (PLAYERS === 4 && !only3 && !all4) ? (FIXED || PAIRS4[ids.indexOf(id) % PAIRS4.length]) : null;   // 3/4 spelers: wisselend paar
     const before = await page.evaluate(async () => { const { S } = await import('/src/save.js'); return { plays: S.arcade.plays, wins: S.arcade.wins.slice() }; });
     await page.evaluate(([id, tw, pair]) => { window.__app.mode.leaving = true; return window.__app.playGame(id, { back: 'arcade', twist: tw || null, extra: pair ? { players: pair } : null }); }, [id, process.env.TWIST || null, pair]);
     await page.waitForFunction(() => window.__app.mode && window.__app.mode.ctx, null, { timeout: 60000 });
     await page.waitForTimeout(600);
-    const info = await page.evaluate(async (k) => {
+    const info = await page.evaluate(async ([k, P4]) => {
       const app = window.__app, m = app.mode, inp = app.input;
       for (const q of m.ids) inp.virtual[q].a = true; inp.update(); m.update(0.016);
       for (const q of m.ids) inp.virtual[q].a = false; inp.update(); m.update(0.016);
@@ -54,19 +62,24 @@ for (const id of ids) {
       let g = 0; while (m.state !== 'play' && g++ < 3000) { inp.update(); m.update(0.016); }
       for (let i = 0; i < 120; i++) { inp.update(); m.update(0.016); }
       const tw = m.ctx.twist && m.ctx.twist.id;
-      m.ctx.finishPvp({ winner: k % 2, score: [k % 2 ? 1 : 2, k % 2 ? 2 : 1], summary: 'testduel' });
-      return { state: m.state, tw, ids: m.ids.slice(), winnerId: m.ids[k % 2] };   // winner = SLOT; winnerId = spelers-id
-    }, ids.indexOf(id));
+      const w = P4 ? k % m.ids.length : k % 2;   // winnaar = SLOT (bij 4 spelers wisselend 0..3)
+      m.ctx.finishPvp({ winner: w, score: P4 ? m.ids.map((_, s) => (s === w ? 2 : 1)) : [k % 2 ? 1 : 2, k % 2 ? 2 : 1], summary: 'testduel' });
+      return { state: m.state, tw, ids: m.ids.slice(), winnerId: m.ids[w], winnerIds: m.result.winnerIds.slice(), teams: m.ctx.teams };   // winnerId = spelers-id; winnerIds = alle winnaars (teams)
+    }, [ids.indexOf(id), PLAYERS === 4]);
     await page.waitForFunction(() => window.__app.mode.resultReady, null, { timeout: 20000 }).catch(() => { throw new Error('resultaat niet klaar: ' + JSON.stringify(info)); });
     await page.evaluate(() => { const app = window.__app, m = app.mode, inp = app.input; if (m.canRematch) { m.resSel = 1; } const q = m.ids[0]; inp.virtual[q].a = true; inp.update(); m.update(0.016); inp.virtual[q].a = false; inp.update(); m.update(0.016); });
     await page.waitForFunction(() => window.__app.mode && window.__app.mode.cabs && window.__app.mode.interact, null, { timeout: 60000 });
     await page.waitForTimeout(1200);
     const after = await page.evaluate(async (id) => { const { S } = await import('/src/save.js'); return { plays: S.arcade.plays, wins: S.arcade.wins.slice(), g: S.arcade.byGame[id] }; }, id);
-    const exp = before.wins.slice(); exp[info.winnerId]++;
-    const ok = after.plays === before.plays + 1 && after.g && after.g.plays >= 1 && after.wins.join() === exp.join() && (only3 ? info.ids.slice().sort().join() === '0,1,2' : info.ids.join() === (pair || [0, 1]).join());   // winst op het juiste spelers-id
-    console.log(`${ok ? 'OK  ' : 'FOUT'} ${id.padEnd(10)} twist=${info.tw} paar=${info.ids} winnaar-id=${info.winnerId} plays ${before.plays}->${after.plays} ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+    const exp = before.wins.slice(); for (const w of info.winnerIds) exp[w]++;
+    const want = only3 ? '0,1,2' : all4 ? '0,1,2,3' : (pair || [0, 1]).join();
+    const ok = after.plays === before.plays + 1 && after.g && after.g.plays >= 1 && after.wins.join() === exp.join() && (only3 || all4 ? info.ids.slice().sort().join() === want : info.ids.join() === want);   // winst op het juiste spelers-id (bij teams: alle teamgenoten)
+    console.log(`${ok ? 'OK  ' : 'FOUT'} ${id.padEnd(10)} twist=${info.tw} paar=${info.ids} winnaar-id=${info.winnerIds} plays ${before.plays}->${after.plays} ${((Date.now() - t0) / 1000).toFixed(0)}s`);
     if (!ok) fails++;
-  } catch (e) { fails++; console.log('FOUT', id, e.message.split('\n')[0]); try { await page.screenshot({ path: `/tmp/arcade_fail_${id}.png` }); } catch {} }
+  } catch (e) { fails++; console.log('FOUT', id, e.message.split('\n')[0]); try { await page.screenshot({ path: `/tmp/arcade_fail_${id}.png` }); } catch {}
+    // herstel: terug naar de hal, zodat een kapot spel de rest van de run niet meeneemt
+    try { await page.evaluate(() => { const m = window.__app.mode; if (m && m.dispose && m.ctx) m.dispose(); window.__app.setMode(null); return window.__app.goArcade({}); }); await page.waitForFunction(() => window.__app.mode && window.__app.mode.cabs && window.__app.mode.interact, null, { timeout: 60000 }); await page.waitForTimeout(800); } catch {}
+  }
 }
 await page.screenshot({ path: '/tmp/arcade_after.png' });
 console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 20).join('\n') : 'NO ERRORS', '| fouten:', fails);

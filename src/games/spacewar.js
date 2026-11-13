@@ -8,6 +8,8 @@ import { buildSpace, buildDragonShip, buildBroomShip, AX, AZ } from './spacewar_
 //  * wrap-around arena; de Toverster trekt schepen, kogels en rotsen aan (en eet ze op); rotsen splitsen als je ze raakt
 //  * power-ups: drievoudig schot, zoekraketten, mijnenlegger. Gimmicks: ruimte-koe (schiet haar voor cadeautjes), komeet-waarschuwing, hongerige ster
 //  * eerste tot 5 treffers; na 90 s wint wie voorstaat, bij gelijkstand SUDDEN DEATH: de ster wordt een zwart gat dat steeds harder trekt
+//  * 2 spelers: duel (ster/rots/komeet = punt voor de ander). 3-4 spelers: vrij voor allen (een treffer = punt voor de schutter; eigen schot, ster, rots of komeet kost je zelf een punt);
+//    bij gelijkstand aan kop doen alleen de gelijkstaanden mee aan sudden death (wie als eerste raak schiet wint, of als laatste overblijft)
 //  * comeback: wie 2+ achterstaat laadt sneller op, krijgt na een knal een gouden schild en ziet de power-ups dichtbij verschijnen
 
 const WIN = 5, MATCH = 90, SD_MAX = 38;
@@ -50,15 +52,16 @@ export default {
   icon: '🚀',
   mode: 'pvp',
   time: 90,
+  players: [2, 3, 4],                    // 2 = duel, 3-4 = vrij voor allen
   music: 'game_fast',
-  blurb: 'Twee sprookjesschepen en één hongerige <b>Toverster</b> die alles aantrekt! Schiet je broer uit de ruimte. Vlieg je links de rand uit, dan kom je rechts terug. <b>Eerste tot 5 treffers</b> wint!',
+  blurb: 'Sprookjesschepen (2 tot 4 spelers) en één hongerige <b>Toverster</b> die alles aantrekt! Schiet de anderen uit de ruimte. Vlieg je links de rand uit, dan kom je rechts terug. <b>Eerste tot 5 treffers</b> wint!',
   controls: ['{move} draaien en gas geven', '{a} schieten (munitie laadt op)', '{b} schild (+ omlaag = hyperspring)'],
-  tip: 'Tegen de ster aan vliegen is een zonnesteek!',
+  tip: 'Tegen de ster aan vliegen is een zonnesteek! Met 3 of 4 spelers kost een eigen schot of een zonnesteek je zelf een punt. Je schild kaatst kogels terug naar de schutter.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
-    const names = players.map((p) => p.name);
+    const N = players.length, names = players.map((p) => p.name);
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const PK = 1.6;                                    // deeltjes en tekst iets groter: de camera hangt ver weg
     const pb = (x, y, z, o) => fx.particles.burst(x, y, z, { ...o, size: (o.size ?? 0.25) * PK });
@@ -72,16 +75,18 @@ export default {
     camera.fov = 44; camera.near = 5; camera.far = 400; camera.updateProjectionMatrix();
     function fitCamera() {
       const asp = camera.aspect || 1.7, tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-      const hh = Math.max(18.9, (AX + 2.4) / asp);
+      const hh = Math.max(18.9, (AX + 2.4) / asp) * (N > 2 ? 1.13 : 1);   // 3-4 spelers: iets uitzoomen zodat de tweede HUD-rij niet over het speelveld valt
       const cz = AZ + 0.6 - hh, H = hh / tanV;
       camera.up.set(0, 0, -1); camera.position.set(0, H, cz); camera.lookAt(0, 0, cz);
     }
     fitCamera();
 
     // ---------------- schepen ----------------
+    // startplek per slot: 2 spelers links-onder/rechts-boven (zoals altijd); 3-4 spelers vier hoeken rond de ster, ieder tangentieel (met de klok mee)
+    const SPAWN = [{ x: -AX * 0.72, z: 6, a: 0 }, { x: AX * 0.72, z: -6, a: Math.PI }, { x: AX * 0.72, z: 6, a: Math.PI }, { x: -AX * 0.72, z: -6, a: 0 }];
     const ships = players.map((pp, i) => {
       const size = pv.size(i);
-      const g = i ? buildBroomShip(PLAYER_COLORS[i]) : buildDragonShip(PLAYER_COLORS[i]);
+      const g = i % 2 ? buildBroomShip(PLAYER_COLORS[i]) : buildDragonShip(PLAYER_COLORS[i]);
       const c = makeBrother(i); const sc = 1.55 / c.height; c.group.scale.setScalar(sc * 1.35); c.pose = 'sit';
       const seat = g.userData.seat; c.group.position.set(seat.x, seat.y - 0.25, seat.z); g.userData.body.add(c.group);
       const holder = new THREE.Group(); holder.add(g); holder.scale.setScalar(size * VS); scene.add(holder);
@@ -92,27 +97,30 @@ export default {
       const bubble = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.32, blending: THREE.AdditiveBlending, depthWrite: false })); bubble.visible = false; scene.add(bubble);
       const rim = new THREE.Mesh(new THREE.RingGeometry(0.93, 1, 28), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false })); rim.rotation.x = -Math.PI / 2; bubble.add(rim); rim.position.y = 0;
       const mark = new THREE.Mesh(new THREE.RingGeometry(1.35, 1.6, 24), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false })); mark.rotation.x = -Math.PI / 2; scene.add(mark);
-      const dir = i ? -1 : 1;
+      const sp0 = SPAWN[i];
       const s = {
         i, g, holder, ghosts, c, bubble, mark, flame: g.userData.flame, body: g.userData.body, col, size, r: 1.25 * size, spd: pv.speed(i),
-        x: -dir * AX * 0.72, z: dir * 6, vx: 0, vz: 0, a: i ? Math.PI : 0, alive: true, respT: 0, inv: 1.5, shield: 0, cd: 0, ammo: AMMO, fireCd: 0, triple: 0, missiles: 0, mineT: 0, mineCd: 0, gold: 0,
+        x: sp0.x, z: sp0.z, vx: 0, vz: 0, a: sp0.a, alive: true, out: false, respT: 0, inv: 1.5, shield: 0, cd: 0, ammo: AMMO, fireCd: 0, triple: 0, missiles: 0, mineT: 0, mineCd: 0, gold: 0,
         bank: 0, trail: 0, warp: 0, thrusting: false, hits: 0, deaths: 0, wasA: false, lastKillBy: -1, tagKey: '',
       };
       return s;
     });
-    const other = (s) => ships[1 - s.i];
+    const other = (s) => ships[1 - s.i];   // alleen bij 2 spelers
+    const foes = (s) => ships.filter((q) => q.i !== s.i && !q.out);
+    const envK = (s) => (N === 2 ? 1 - s.i : -1);   // dood door ster/rots/komeet: bij een duel punt voor de ander, anders kost het jezelf een punt
+    const nearestFoe = (s, alive = true) => { let b = null, bd = 1e9; for (const q of foes(s)) { if (alive && !q.alive) continue; const d = Math.hypot(wd(q.x - s.x, WX), wd(q.z - s.z, WZ)); if (d < bd) { bd = d; b = q; } } return b; };
 
     // ---------------- toestand ----------------
-    const score = [0, 0];
+    const score = players.map(() => 0);
     let T = 0, clock = MATCH, started = false, finished = false, over = false, endT = 0, winner = -1, sd = false, sdT = 0, slowK = 1, slowHold = 0, stop = 0;
     let eventT = 13, lastEvent = '', rockT = 3, puT = 7, hudT = 0, pulseT = 0, burpT = 0;
     let gMul = 1;
-    const stat = { rocks: 0, kills: [0, 0], cow: 0, comets: 0, hyper: 0, reflects: 0, eaten: 0, selfHit: 0, mines: 0, missiles: 0 };
+    const stat = { rocks: 0, kills: players.map(() => 0), cow: 0, comets: 0, hyper: 0, reflects: 0, eaten: 0, selfHit: 0, mines: 0, missiles: 0 };
 
     // ---------------- visuals-pools ----------------
     // kogels (geinstantieerd: kern + gloed per speler)
     const BN = 40;
-    const bulletIM = [0, 1].map((i) => {
+    const bulletIM = players.map((_, i) => {
       const col = PLAYER_COLORS[i];
       const core = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshBasicMaterial({ color: 0xffffff }), BN); core.frustumCulled = false; core.count = 0; scene.add(core);
       const glow = new THREE.InstancedMesh(new THREE.SphereGeometry(1, 8, 6), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55, blending: THREE.AdditiveBlending, depthWrite: false }), BN); glow.frustumCulled = false; glow.count = 0; scene.add(glow);
@@ -149,7 +157,7 @@ export default {
       g.userData.rg = rg; return g;
     }
     // ammo-bolletjes onder de schepen (1 draw call)
-    const pips = new THREE.InstancedMesh(new THREE.CircleGeometry(0.24, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }), AMMO * 2 + 2); pips.frustumCulled = false; scene.add(pips);
+    const pips = new THREE.InstancedMesh(new THREE.CircleGeometry(0.24, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }), AMMO * N + 2); pips.frustumCulled = false; scene.add(pips);
     pips.geometry.rotateX(-Math.PI / 2);
     // ruimte-koe
     const cow = { alive: false, x: 0, z: 0, vx: 0, vz: 0, spin: 0, holder: new THREE.Group(), animal: null, respT: 6, r: 1.7 };
@@ -173,8 +181,8 @@ export default {
     }
     function say(text, x, z, col = '#ffe14a', sc = 1.3) { fx.texts.add(text, clamp(x, -AX + 3, AX - 3), 1.5, clamp(z, -AZ + 1.5, AZ - 1), col, sc * 1.7); }
     function nearestShipToStar() { let b = null, bd = 1e9; for (const s of ships) if (s.alive) { const d = s.x * s.x + s.z * s.z; if (d < bd) { bd = d; b = s; } } return b; }
-    function behindIdx() { return score[0] === score[1] ? -1 : score[0] < score[1] ? 0 : 1; }
-    const trailing2 = (s) => score[other(s).i] - score[s.i] >= 2;
+    function behindIdx() { const m = Math.min(...score), M = Math.max(...score); if (m === M) return -1; const lo = score.map((v, i) => (v === m ? i : -1)).filter((i) => i >= 0); return lo.length === 1 ? lo[0] : lo[Math.floor(Math.random() * lo.length)]; }
+    const trailing2 = (s) => Math.max(...score.filter((_, i) => i !== s.i)) - score[s.i] >= 2;
 
     // ---------------- bullets / missiles / mines ----------------
     function shoot(s) {
@@ -192,7 +200,7 @@ export default {
     function launchMissile(s) {
       const g = missilePool.find((m) => !m.visible); if (!g) { shoot(s); return; }
       g.visible = true; const f = [Math.sin(s.a), -Math.cos(s.a)];
-      missiles.push({ x: wrapX(s.x + f[0] * 2.6 * s.size), z: wrapZ(s.z + f[1] * 2.6 * s.size), vx: f[0] * 13 + s.vx * 0.6, vz: f[1] * 13 + s.vz * 0.6, a: s.a, owner: s.i, target: 1 - s.i, life: 5, age: 0, g });
+      missiles.push({ x: wrapX(s.x + f[0] * 2.6 * s.size), z: wrapZ(s.z + f[1] * 2.6 * s.size), vx: f[0] * 13 + s.vx * 0.6, vz: f[1] * 13 + s.vz * 0.6, a: s.a, owner: s.i, target: (nearestFoe(s, false) || ships[(s.i + 1) % N]).i, life: 5, age: 0, g });
       stat.missiles++; audio.sfx('whoosh', { vol: 0.6, rate: 1.4 }); audio.sfx('throw', { vol: 0.3 });
     }
     function dropMine(s) {
@@ -259,22 +267,27 @@ export default {
       if (s.inv > 0 || s.warp > 0.15) return false;
       s.alive = false; s.respT = 2.2; s.deaths++; s.g.visible = false; s.bubble.visible = false; s.mark.visible = false; s.ghosts.forEach((o) => (o.gh.visible = false)); s.holder.visible = false;
       s.triple = 0; s.missiles = 0; s.mineT = 0; s.shield = 0;
-      const col = s.col, k = 1 - s.i;
+      const col = s.col, k = N === 2 ? 1 - s.i : (killer >= 0 && killer !== s.i ? killer : -1);
       burst(s.x, s.z, [col, 0xffffff, 0xffe14a, 0xff7a4a], 60, 12, 0.7, 1.1); ring(s.x, s.z, col, 6, 0.6); ring(s.x, s.z, 0xffffff, 3.5, 0.35);
       ctx.shake(0.55); audio.sfx('explode', { vol: 0.9 }); slowK = 0.3; slowHold = 0.5; stop = 0.06;
       // puin
       for (let d = 0; d < 8; d++) { const a = d / 8 * TAU; pe(s.x, 0.5, s.z, Math.cos(a) * 7 + s.vx * 0.4, 0, Math.sin(a) * 7 + s.vz * 0.4, { life: 1.4, size: 0.9, color: d % 2 ? col : 0xffe14a, gravity: 0 }); }
       const text = { ster: 'ZONNESTEEK!', rots: 'BOENG! Rots!', komeet: 'KOMEET!', eigen: 'EIGEN SCHOT!', kogel: 'BOEM!', raket: 'RAKET!', mijn: 'MIJN!', gat: 'HAPS!' }[why] || 'BOEM!';
       say(text, s.x, s.z - 2, '#ff9a6a', 1.6);
-      score[k]++; stat.kills[k]++; ships[k].hits++;
+      if (k >= 0) { score[k]++; stat.kills[k]++; ships[k].hits++; } else score[s.i] = Math.max(0, score[s.i] - 1);   // (alleen bij 3-4 spelers is k = -1)
       if (why === 'eigen') stat.selfHit++;
+      if (k < 0) say(`-1 ${names[s.i]}`, s.x, s.z + 1.6, '#ff9a6a', 1.1);
       refreshHud();
-      if (score[k] >= WIN) endMatch(k, `${names[k]} haalde als eerste 5 treffers.`);
-      else if (sd && !over) endMatch(k, 'Sudden death: de eerste treffer wint!');
+      if (k >= 0 && score[k] >= WIN) endMatch(k, `${names[k]} haalde als eerste ${WIN} treffers.`);
+      else if (sd && !over) {
+        if (k >= 0) endMatch(k, 'Sudden death: de eerste treffer wint!');
+        else { s.out = true; const left = ships.filter((q) => !q.out && q.sd); if (left.length === 1) { score[left[0].i]++; refreshHud(); endMatch(left[0].i, 'Sudden death: als enige overgebleven.'); } }
+      }
       return true;
     }
     function respawn(s) {
-      s.alive = true; const dir = s.i ? 1 : -1; s.x = dir * AX * 0.72; s.z = -dir * 6; s.vx = s.vz = 0; s.a = s.i ? Math.PI : 0; s.inv = 2.6; s.shield = 0; s.cd = 0; s.ammo = AMMO; s.fireCd = 0.3;
+      if (s.out) return;
+      s.alive = true; const sp = SPAWN[s.i]; s.x = sp.x; s.z = sp.z; s.vx = s.vz = 0; s.a = sp.a; s.inv = 2.6; s.shield = 0; s.cd = 0; s.ammo = AMMO; s.fireCd = 0.3;
       s.g.visible = true; s.holder.visible = true; s.mark.visible = true;
       if (trailing2(s)) { s.gold = 4.2; say('GOUDEN SCHILD!', s.x, s.z - 2.5, '#ffd23f', 1.4); audio.sfx('sparkle', { vol: 0.7 }); }
       ring(s.x, s.z, s.col, 4, 0.5); burst(s.x, s.z, [s.col, 0xffffff], 20, 6, 0.4, 0.6); audio.sfx('go', { vol: 0.3, rate: 1.3 });
@@ -284,33 +297,41 @@ export default {
     function endMatch(w, why) {
       if (over) return; over = true; winner = w; endT = 2.2; slowK = 0.4; slowHold = 2; endWhy = why || '';
       hud.setTimer(null); hud.showBig(`${names[w]} WINT!`, 2000, '#ffe14a'); audio.sfx('win', { vol: 0.8 });
-      ships[w].c.pose = 'cheer'; ships[1 - w].c.pose = 'sad';
+      for (const q of ships) q.c.pose = q.i === w ? 'cheer' : 'sad';
     }
     let endWhy = '';
     function finishMatch() {
       if (finished) return; finished = true;
-      const w = winner, l = 1 - w;
-      const jokes = [`${names[w]} zweeft als een held door het heelal. ${names[l]} zoekt zijn bezem.`, `De Toverster knipoogt naar ${names[w]}.`, `${names[l]} vliegt nog steeds rondjes om de ster. Gelukkig is er niemand die kijkt.`, `${names[w]} schiet raak, ${names[l]} schiet raar.`];
+      const w = winner, l = N === 2 ? 1 - w : (ships.filter((q) => q.i !== w).sort((a, b) => score[a.i] - score[b.i])[0] || ships[(w + 1) % N]).i;   // l = de laatste (bij een duel de ander)
+      const jokes = N === 2 ? [`${names[w]} zweeft als een held door het heelal. ${names[l]} zoekt zijn bezem.`, `De Toverster knipoogt naar ${names[w]}.`, `${names[l]} vliegt nog steeds rondjes om de ster. Gelukkig is er niemand die kijkt.`, `${names[w]} schiet raak, ${names[l]} schiet raar.`]
+        : [`${names[w]} zweeft als een held door het heelal. ${names[l]} zoekt zijn bezem.`, `De Toverster knipoogt naar ${names[w]}.`, `${names[l]} vliegt nog steeds rondjes om de ster.`, `${names[w]} schiet raak, de rest schiet raar.`];
       const bits = [];
       if (stat.rocks) bits.push(`${stat.rocks} rotsen kapotgeschoten`); if (stat.cow) bits.push('de koe is geraakt (moeee!)'); if (stat.eaten) bits.push(`${stat.eaten} dingen door de ster opgegeten`); if (stat.selfHit) bits.push(`${stat.selfHit}x eigen schot`);
-      ctx.finishPvp({ winner: w, score: [score[0], score[1]], delay: 700, summary: `${pick(jokes)} ${endWhy}<br><small>${bits.join(' · ')}</small>` });
+      ctx.finishPvp({ winner: w, score: score.slice(), delay: 700, summary: `${pick(jokes)} ${endWhy}<br><small>${bits.join(' · ')}</small>` });
     }
     function timeUp() {
-      if (score[0] !== score[1]) { endMatch(score[0] > score[1] ? 0 : 1, 'Meeste treffers na 90 seconden.'); return; }
-      startSD();
+      const best = Math.max(...score), tops = score.map((v, i) => (v === best ? i : -1)).filter((i) => i >= 0);
+      if (tops.length === 1) { endMatch(tops[0], 'Meeste treffers na 90 seconden.'); return; }
+      startSD(tops);
     }
-    function startSD() {
+    function startSD(tops) {
+      if (!tops) { const best = Math.max(...score); tops = score.map((v, i) => (v === best ? i : -1)).filter((i) => i >= 0); }
+      for (const q of ships) { q.sd = tops.includes(q.i); if (!q.sd) { q.out = true; q.alive = false; q.g.visible = false; q.holder.visible = false; q.bubble.visible = false; q.mark.visible = false; q.ghosts.forEach((o) => (o.gh.visible = false)); } }   // alleen wie gelijk aan kop staat doet mee
       sd = true; sdT = 0; hud.setTimer(null); hud.showBig('SUDDEN DEATH!', 1600, '#ff4a4a'); hud.toast('De ster wordt een zwart gat! Eerste treffer wint!', 3000);
       audio.sfx('buzz', { vol: 0.9 }); ctx.shake(0.6); W.setMood('grump'); refreshHud();
-      for (const s of ships) { s.ammo = AMMO; s.cd = 0; if (!s.alive) s.respT = 0.2; }
+      for (const s of ships) { s.ammo = AMMO; s.cd = 0; if (!s.alive && !s.out) s.respT = 0.2; }
     }
 
     // ---------------- HUD ----------------
-    function refreshHud() { hud.setScore(sd ? `SUDDEN DEATH · ${names[0]} ${score[0]} – ${score[1]} ${names[1]}` : `${names[0]} ${score[0]} – ${score[1]} ${names[1]}`); }
+    function refreshHud() {
+      if (N === 2) { hud.setScore(sd ? `SUDDEN DEATH · ${names[0]} ${score[0]} – ${score[1]} ${names[1]}` : `${names[0]} ${score[0]} – ${score[1]} ${names[1]}`); return; }
+      const m = Math.max(...score), top = ships.filter((q) => score[q.i] === m);
+      hud.setScore(sd ? `SUDDEN DEATH · ${ships.filter((q) => q.sd).map((q) => names[q.i]).join(' · ')}` : top.length === 1 ? `${names[top[0].i]} voorop: ${m} (eerste tot ${WIN})` : `Gelijk aan kop: ${m} (eerste tot ${WIN})`);
+    }
     function updateHudInfo() {
       for (const s of ships) {
         const n = Math.floor(s.ammo + 0.001);
-        let t = `${'●'.repeat(n)}${'○'.repeat(AMMO - n)}`;
+        let t = `${N > 2 ? `★${score[s.i]} ` : ''}${'●'.repeat(n)}${'○'.repeat(AMMO - n)}`;
         t += s.cd <= 0 ? '  schild klaar' : `  schild ${Math.ceil(s.cd)}s`;
         if (s.triple > 0) t += '  ×3'; if (s.missiles > 0) t += `  🚀${s.missiles}`; if (s.mineT > 0) t += '  💣';
         hud.setPlayerInfo(s.i, t);
@@ -338,6 +359,7 @@ export default {
     // ---------------- ship update ----------------
     function updateShip(s, dt, first) {
       const inp = pv.input(s.i);
+      if (s.out) return;
       if (!s.alive) { if (first) { s.respT -= dt; if (s.respT <= 0 && !over) respawn(s); } return; }
       s.inv = Math.max(0, s.inv - dt); s.shield = Math.max(0, s.shield - dt); s.cd = Math.max(0, s.cd - dt); s.fireCd = Math.max(0, s.fireCd - dt); s.gold = Math.max(0, s.gold - dt); s.warp = Math.max(0, s.warp - dt);
       s.triple = Math.max(0, s.triple - dt); s.mineT = Math.max(0, s.mineT - dt); s.mineCd -= dt;
@@ -359,7 +381,7 @@ export default {
       s.x = wrapX(s.x + s.vx * dt); s.z = wrapZ(s.z + s.vz * dt);
       // zon / zwart gat
       const killR = sd ? holeR() : STAR_R;
-      if (r < killR + s.r * 0.4 && s.warp <= 0) { if (hitShip(s, 1 - s.i, sd ? 'gat' : 'ster', true)) { burpT = 0.7; audio.sfx('pop', { vol: 0.6, rate: 0.6 }); return; } }
+      if (r < killR + s.r * 0.4 && s.warp <= 0) { if (hitShip(s, envK(s), sd ? 'gat' : 'ster', true)) { burpT = 0.7; audio.sfx('pop', { vol: 0.6, rate: 0.6 }); return; } }
       // laden
       const ra = trailing2(s) ? 1.6 : 1;
       if (s.ammo < AMMO) s.ammo = Math.min(AMMO, s.ammo + dt / RELOAD * ra);
@@ -386,7 +408,7 @@ export default {
       let best = null, bs = -1;
       for (let k = 0; k < 14; k++) {
         const x = rand(-AX + 3, AX - 3), z = rand(-AZ + 2.5, AZ - 2.5); let sc = Math.min(Math.hypot(x, z) - 6, 8);
-        const o = other(s); sc += Math.min(10, Math.hypot(wd(x - o.x, WX), wd(z - o.z, WZ)) - 6);
+        for (const o of foes(s)) sc += Math.min(10, Math.hypot(wd(x - o.x, WX), wd(z - o.z, WZ)) - 6) / (N === 2 ? 1 : N - 1);
         for (const q of asts) sc -= Math.max(0, 5 - Math.hypot(wd(x - q.x, WX), wd(z - q.z, WZ)) + q.r) * 2;
         if (sc > bs) { bs = sc; best = [x, z]; }
       }
@@ -401,8 +423,8 @@ export default {
       // schepen
       for (const s of ships) updateShip(s, dt, first);
       // schip-schip botsing
-      const A = ships[0], B = ships[1];
-      if (A.alive && B.alive) {
+      for (let ia = 0; ia < N; ia++) for (let ib = ia + 1; ib < N; ib++) {
+        const A = ships[ia], B = ships[ib]; if (!(A.alive && B.alive)) continue;
         const dx = wd(B.x - A.x, WX), dz = wd(B.z - A.z, WZ), d = Math.hypot(dx, dz), mind = A.r + B.r;
         if (d < mind && d > 0.001) {
           const nx = dx / d, nz = dz / d, rel = (B.vx - A.vx) * nx + (B.vz - A.vz) * nz;
@@ -438,7 +460,8 @@ export default {
       // raketten
       for (const m of missiles) {
         m.age += dt; m.life -= dt;
-        const tg = ships[m.target];
+        let tg = ships[m.target];
+        if ((!tg.alive || tg.out) && N > 2) { const nf = nearestFoe({ x: m.x, z: m.z, i: m.owner }, true); if (nf) { tg = nf; m.target = nf.i; } }
         if (tg.alive) {
           const dx = wd(tg.x - m.x, WX), dz = wd(tg.z - m.z, WZ), want = Math.atan2(dx, -dz); let da = want - m.a; da = Math.atan2(Math.sin(da), Math.cos(da));
           m.a += clamp(da, -3.4 * dt, 3.4 * dt);
@@ -453,7 +476,7 @@ export default {
           if (!s.alive || s.i === m.owner) continue;
           const dx = wd(s.x - m.x, WX), dz = wd(s.z - m.z, WZ), rr = s.r + (s.shield > 0 ? 0.9 : 0.5);
           if (dx * dx + dz * dz < rr * rr) {
-            if (s.shield > 0) { m.owner = s.i; m.target = 1 - s.i; m.a += Math.PI; m.age = 0; m.life = 5; stat.reflects++; audio.sfx('ding', { vol: 0.6 }); ring(m.x, m.z, s.col, 2.6, 0.3); say('TERUG!', m.x, m.z - 1.5, '#ff9a9a', 1); }
+            if (s.shield > 0) { const prevO = m.owner; m.owner = s.i; m.target = N === 2 ? 1 - s.i : prevO; m.a += Math.PI; m.age = 0; m.life = 5; stat.reflects++; audio.sfx('ding', { vol: 0.6 }); ring(m.x, m.z, s.col, 2.6, 0.3); say('TERUG!', m.x, m.z - 1.5, '#ff9a9a', 1); }
             else if (s.inv <= 0 && s.warp <= 0) { m.dead = true; burst(m.x, m.z, [0xff7a1a, 0xffd070, 0xffffff], 24, 8, 0.6, 0.6); hitShip(s, m.owner, 'raket'); }
             break;
           }
@@ -477,7 +500,7 @@ export default {
               const nx = dx / (d || 1), nz = dz / (d || 1), rel = (s.vx - q.vx) * nx + (s.vz - q.vz) * nz;
               if (rel < 0) { s.vx -= 1.8 * rel * nx * 0.7; s.vz -= 1.8 * rel * nz * 0.7; q.vx += 1.8 * rel * nx * 0.4; q.vz += 1.8 * rel * nz * 0.4; audio.sfx('boing', { vol: 0.4, rate: 1.4 }); ring(s.x - dx / 2 * 0, s.z, s.col, 2.4, 0.25); }
               s.x = wrapX(s.x + nx * (mind - d)); s.z = wrapZ(s.z + nz * (mind - d));
-            } else hitShip(s, 1 - s.i, 'rots');
+            } else hitShip(s, envK(s), 'rots');
           }
         }
       }
@@ -503,7 +526,7 @@ export default {
       if (comet.warn > 0) { comet.warn -= dt; comet.strip.material.opacity = (Math.sin(T * 24) > 0 ? 0.32 : 0.12) * Math.min(1, comet.warn * 2 + 0.3); if (comet.warn <= 0) { comet.on = true; comet.x = comet.dir > 0 ? -AX - 5 : AX + 5; comet.vx = comet.dir * 44; comet.g.visible = true; comet.strip.visible = false; audio.sfx('whoosh', { vol: 0.9, rate: 0.6 }); ctx.shake(0.3); } }
       if (comet.on) {
         comet.x += comet.vx * dt; comet.g.position.set(comet.x, 0.4, comet.z); comet.g.rotation.y = comet.dir > 0 ? 0 : Math.PI; pe(comet.x - comet.dir * 1, 0.4, comet.z + rand(-0.8, 0.8), -comet.dir * rand(1, 4), 0, rand(-1, 1), { life: 0.7, size: 0.9, color: pick([0x7fd8ff, 0xffffff, 0xb8f0ff]), gravity: 0 });
-        for (const s of ships) if (s.alive && Math.abs(s.x - comet.x) < s.r + 1.3 && Math.abs(s.z - comet.z) < s.r + 1.3) hitShip(s, 1 - s.i, 'komeet', true);
+        for (const s of ships) if (s.alive && Math.abs(s.x - comet.x) < s.r + 1.3 && Math.abs(s.z - comet.z) < s.r + 1.3) hitShip(s, envK(s), 'komeet', true);
         if (Math.abs(comet.x) > AX + 8) { comet.on = false; comet.g.visible = false; }
       }
       // power-ups
@@ -542,7 +565,7 @@ export default {
     }
     function drawPools(dt) {
       // kogels
-      for (let i = 0; i < 2; i++) { let n = 0; const { core, glow } = bulletIM[i]; for (const b of bullets) { if (b.owner !== i || n >= BN) continue; const rot = Math.atan2(b.vx, b.vz); D.position.set(b.x, 0.4, b.z); D.rotation.set(0, rot, 0); D.scale.set(0.2, 0.2, 0.85); D.updateMatrix(); core.setMatrixAt(n, D.matrix); D.scale.set(0.5, 0.4, 1.7); D.updateMatrix(); glow.setMatrixAt(n, D.matrix); n++; } core.count = glow.count = n; core.instanceMatrix.needsUpdate = glow.instanceMatrix.needsUpdate = true; }
+      for (let i = 0; i < N; i++) { let n = 0; const { core, glow } = bulletIM[i]; for (const b of bullets) { if (b.owner !== i || n >= BN) continue; const rot = Math.atan2(b.vx, b.vz); D.position.set(b.x, 0.4, b.z); D.rotation.set(0, rot, 0); D.scale.set(0.2, 0.2, 0.85); D.updateMatrix(); core.setMatrixAt(n, D.matrix); D.scale.set(0.5, 0.4, 1.7); D.updateMatrix(); glow.setMatrixAt(n, D.matrix); n++; } core.count = glow.count = n; core.instanceMatrix.needsUpdate = glow.instanceMatrix.needsUpdate = true; }
       // asteroiden (met wrap-spoken)
       let n = 0;
       for (const q of asts) {
@@ -601,7 +624,7 @@ export default {
           if (clock <= 0) { clock = 0; audio.sfx('bell', { vol: 1 }); timeUp(); }
         } else {
           sdT += sdt; gMul = 1 + clamp(sdT / 30, 0, 1) * 3;
-          if (sdT >= SD_MAX) { const a = ships[0], b = ships[1]; const da = a.alive ? Math.hypot(a.x, a.z) : -1, db = b.alive ? Math.hypot(b.x, b.z) : -1; endMatch(da >= db ? 0 : 1, 'Sudden death: wie het verst van het zwarte gat zat, wint.'); }
+          if (sdT >= SD_MAX) { const cand = ships.filter((q) => q.sd !== false && !q.out || (N === 2)); const dist = (q) => (q.alive ? Math.hypot(q.x, q.z) : -1); const win = (N === 2 ? ships : cand).reduce((bq, q) => (dist(q) > dist(bq) ? q : bq)); endMatch(win.i, 'Sudden death: wie het verst van het zwarte gat zat, wint.'); }
         }
         burpT -= sdt; if (pulseT > 0) { pulseT -= sdt; gMul *= 1 + 1.4 * clamp(pulseT, 0, 1); }
         eventT -= sdt; if (eventT <= 0 && !comet.on && comet.warn <= 0) nextEvent();
@@ -633,14 +656,14 @@ export default {
       onResize() { fitCamera(); },
       onSwap() { for (const s of ships) burst(s.x, s.z, [0xffe14a, 0xffffff], 16, 5, 0.4, 0.5); },
       onDeurman(movers) { movers.forEach((m, i) => { if (m && score[i] > 0) { score[i]--; refreshHud(); say('BEWOOG! -1', ships[i].x, ships[i].z - 2.2, '#ff6b6b', 1.5); } else if (m) say('BEWOOG!', ships[i].x, ships[i].z - 2.2, '#ff6b6b', 1.4); }); },
-      celebrate(w) { ships[w].c.pose = 'cheer'; ships[1 - w].c.pose = 'sad'; },
+      celebrate(w) { for (const q of ships) q.c.pose = q.i === w ? 'cheer' : 'sad'; },
       dispose() {},
       dbg: {
         ships, bullets, asts, missiles, mines, pups, cow, comet,
         state: () => ({ T, clock, sd, sdT, over, finished, winner, score: [...score], gMul, stats: stat, started,
           ships: ships.map((s) => ({ x: s.x, z: s.z, vx: s.vx, vz: s.vz, a: s.a, alive: s.alive, ammo: s.ammo, shield: s.shield, cd: s.cd, inv: s.inv, triple: s.triple, missiles: s.missiles, mineT: s.mineT, gold: s.gold, warp: s.warp, r: s.r })),
           n: { bullets: bullets.length, asts: asts.length, missiles: missiles.length, mines: mines.length, pups: pups.length }, pups: pups.map((p) => ({ type: p.type, x: p.x, z: p.z })), cow: { alive: cow.alive, x: cow.x, z: cow.z }, comet: { on: comet.on, warn: comet.warn }, rocks: asts.map((q) => ({ x: q.x, z: q.z, r: q.r })) }),
-        setTime(s) { clock = s; }, setScore(a, b) { score[0] = a; score[1] = b; refreshHud(); }, startSD, nextEvent, startComet, spawnCow, spawnPowerup, givePower: (i, t) => givePower(ships[i], t), hitShip: (i, k, w) => hitShip(ships[i], k, w, true),
+        setTime(s) { clock = s; }, setScore(...v) { v.forEach((x, i) => { if (i < N && x != null) score[i] = x; }); refreshHud(); }, startSD, nextEvent, startComet, spawnCow, spawnPowerup, givePower: (i, t) => givePower(ships[i], t), hitShip: (i, k, w) => hitShip(ships[i], k, w, true),
         setPos(i, x, z, vx = 0, vz = 0) { ships[i].x = x; ships[i].z = z; ships[i].vx = vx; ships[i].vz = vz; }, setEventT(t) { eventT = t; },
       },
     };

@@ -6,8 +6,10 @@ import { friendlyDeurman } from './deurenrace_man.js';
 
 // Omgeving van de Deurenrace: een kasteelgang met honderden kleurige deuren. Twee banen naast elkaar (z loopt naar -z),
 // per baan rijen muren met 3-4 deuren, orbs (item-blokken), vlaggetjes, fakkels en een finishboog met de Deurman erachter.
-export const ROWS = 14, LW = 10.4, T = 0.8, RS = 10, Z0 = -10, WALLH = 4.4, DOORH = 3.2;
-export const LANE_CX = [-5.7, 5.7];
+export const ROWS = 14, T = 0.8, RS = 10, Z0 = -10, WALLH = 4.4, DOORH = 3.2;
+export let LW = 10.4;                 // baanbreedte (live binding: smaller bij 4 banen)
+export const LANE_CX = [-5.7, 5.7];   // x-midden van elke baan; setLanes(n) vult dit (2 of 4 banen)
+export function setLanes(n) { LW = n > 2 ? 8.4 : 10.4; LANE_CX.length = 0; for (let i = 0; i < n; i++) LANE_CX.push((i - (n - 1) / 2) * (LW + 1.0)); }
 export const rowZ = (r) => Z0 - r * RS;
 export const FINISH_Z = rowZ(ROWS - 1) - 11;
 export const START_Z = 2.8;
@@ -51,7 +53,12 @@ function boxTex() {
 export function buildWorld(ctx, rows) {
   const { scene } = ctx;
   const rng = mulberry32(4242);
-  const W = { doors: [[], []], orbs: [[], []], t: 0, deurman: null };
+  const NL = LANE_CX.length;
+  const lanes = ctx.players.map((pl, i) => {   // kleuren per baan: bij 2 spelers de bekende groen/blauw, anders de spelerskleur
+    if (NL === 2) return i ? { t1: '#6fa0ff', t2: '#8fb8ff', rail: 0x2f6fe0, band: 0x3a78e0 } : { t1: '#5fd48a', t2: '#82e6a6', rail: 0x2f9e5b, band: 0x2f9e5b };
+    const c = new THREE.Color(pl.color); return { t1: '#' + c.clone().lerp(new THREE.Color(0xffffff), 0.1).getHexString(), t2: '#' + c.clone().lerp(new THREE.Color(0xffffff), 0.35).getHexString(), rail: pl.color, band: pl.color };
+  });
+  const W = { doors: lanes.map(() => []), orbs: lanes.map(() => []), t: 0, deurman: null };
   scene.background = skyTexture('#1a0d33', '#3b2158');
   scene.fog = new THREE.Fog(0x2a1648, 48, 118);
   const first = scene.children.length;
@@ -59,23 +66,25 @@ export function buildWorld(ctx, rows) {
 
   // ---- vloer ----
   scene.add(mesh(new THREE.PlaneGeometry(90, wallLen + 40), mat(0x2b1f3d), { cast: false, pos: [0, -0.02, midZ], rot: [-Math.PI / 2, 0, 0] }));
-  for (let p = 0; p < 2; p++) {
-    const tx = p ? tileTex('#6fa0ff', '#8fb8ff') : tileTex('#5fd48a', '#82e6a6'); tx.repeat.set(LW / 3.4, wallLen / 3.4);
+  for (let p = 0; p < NL; p++) {
+    const tx = tileTex(lanes[p].t1, lanes[p].t2); tx.repeat.set(LW / 3.4, wallLen / 3.4);
     const f = new THREE.Mesh(new THREE.PlaneGeometry(LW, wallLen), new THREE.MeshStandardMaterial({ map: tx, roughness: 0.75 })); f.rotation.x = -Math.PI / 2; f.position.set(LANE_CX[p], 0, midZ); f.receiveShadow = true; scene.add(f);
     // loper in de kleur van de speler (gouden rand)
-    scene.add(mesh(new THREE.BoxGeometry(0.16, 0.04, wallLen), mat(p ? 0x2f6fe0 : 0x2f9e5b), { cast: false, pos: [LANE_CX[p] - LW / 2 + 0.3, 0.03, midZ] }));
-    scene.add(mesh(new THREE.BoxGeometry(0.16, 0.04, wallLen), mat(p ? 0x2f6fe0 : 0x2f9e5b), { cast: false, pos: [LANE_CX[p] + LW / 2 - 0.3, 0.03, midZ] }));
+    scene.add(mesh(new THREE.BoxGeometry(0.16, 0.04, wallLen), mat(lanes[p].rail), { cast: false, pos: [LANE_CX[p] - LW / 2 + 0.3, 0.03, midZ] }));
+    scene.add(mesh(new THREE.BoxGeometry(0.16, 0.04, wallLen), mat(lanes[p].rail), { cast: false, pos: [LANE_CX[p] + LW / 2 - 0.3, 0.03, midZ] }));
   }
   // startlijn + finishlijn (dambord)
   const chk = canvasTex(256, 64, (g, w, h) => { for (let i = 0; i < 16; i++) for (let j = 0; j < 4; j++) { g.fillStyle = (i + j) % 2 ? '#111' : '#fff'; g.fillRect(i * 16, j * 16, 16, 16); } });
-  const startL = new THREE.Mesh(new THREE.PlaneGeometry(LW * 2 + 1, 1.2), new THREE.MeshBasicMaterial({ map: chk })); startL.rotation.x = -Math.PI / 2; startL.position.set(0, 0.05, START_Z - 1.2); scene.add(startL);
-  const finL = new THREE.Mesh(new THREE.PlaneGeometry(LW * 2 + 1, 1.6), new THREE.MeshBasicMaterial({ map: chk })); finL.rotation.x = -Math.PI / 2; finL.position.set(0, 0.05, FINISH_Z); scene.add(finL);
+  const startL = new THREE.Mesh(new THREE.PlaneGeometry(LW * NL + (NL - 1) + 1, 1.2), new THREE.MeshBasicMaterial({ map: chk })); startL.rotation.x = -Math.PI / 2; startL.position.set(0, 0.05, START_Z - 1.2); scene.add(startL);
+  const finL = new THREE.Mesh(new THREE.PlaneGeometry(LW * NL + (NL - 1) + 1, 1.6), new THREE.MeshBasicMaterial({ map: chk })); finL.rotation.x = -Math.PI / 2; finL.position.set(0, 0.05, FINISH_Z); scene.add(finL);
 
   // ---- buitenmuren + middenmuur ----
   const wallM = mat(0x5a3f7a), wallM2 = mat(0x6b4a8e), capM = mat(0xe8c24a, { metalness: 0.4, roughness: 0.5 });
-  const outerX = LANE_CX[1] + LW / 2 + 0.5;
-  for (const [x, w, h, m] of [[-outerX, 1, 7, wallM], [outerX, 1, 7, wallM], [0, 1.0, 3.4, wallM2]]) {
-    const len = x === 0 ? zA - (FINISH_Z - 1) : wallLen, zc = x === 0 ? (zA + FINISH_Z - 1) / 2 : midZ;      // de middenmuur stopt bij de finish
+  const outerX = LANE_CX[NL - 1] + LW / 2 + 0.5;
+  const dividers = LANE_CX.slice(1).map((x, i) => (x + LANE_CX[i]) / 2);   // muren tussen de banen
+  for (const [x, w, h, m] of [[-outerX, 1, 7, wallM], [outerX, 1, 7, wallM], ...dividers.map((xd) => [xd, 1.0, 3.4, wallM2])]) {
+    const mid = dividers.includes(x);
+    const len = mid ? zA - (FINISH_Z - 1) : wallLen, zc = mid ? (zA + FINISH_Z - 1) / 2 : midZ;      // de tussenmuren stoppen bij de finish
     scene.add(mesh(new THREE.BoxGeometry(w, h, len), m, { cast: false, pos: [x, h / 2, zc] }));
     scene.add(mesh(new THREE.BoxGeometry(w + 0.3, 0.25, len), capM, { cast: false, pos: [x, h + 0.1, zc] }));
   }
@@ -99,7 +108,7 @@ export function buildWorld(ctx, rows) {
   const crossGeo = new THREE.PlaneGeometry(1.5, 0.75), crossM = new THREE.MeshBasicMaterial({ map: crossTex, transparent: true, depthWrite: false });
   const scratchT = scratchTex(), scratchM = new THREE.MeshBasicMaterial({ map: scratchT, transparent: true, depthWrite: false, opacity: 0.9 });
   const lightM = new THREE.MeshBasicMaterial({ map: glowTex(), color: 0xffe9a0, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.85 });
-  for (let p = 0; p < 2; p++) {
+  for (let p = 0; p < NL; p++) {
     for (let r = 0; r < ROWS; r++) {
       const row = rows[r], n = row.n, z = rowZ(r), { slotW, leafW } = doorGeo(n), openW = leafW + 0.24;
       const wm = mat(WALLS[(r + p * 0) % WALLS.length]);
@@ -140,14 +149,14 @@ export function buildWorld(ctx, rows) {
       }
       // rijnummer-bord boven de muur
       const sg = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.5), new THREE.MeshBasicMaterial({ map: numTex[r], transparent: true })); sg.position.set(LANE_CX[p], WALLH + 0.9, z + T / 2 + 0.1); sg.userData.dynamic = true; scene.add(sg);
-      scene.add(mesh(new THREE.BoxGeometry(LW, 0.25, T + 0.2), mat(p ? 0x3a78e0 : 0x2f9e5b), { cast: false, pos: [LANE_CX[p], WALLH + 0.12, z] }));
+      scene.add(mesh(new THREE.BoxGeometry(LW, 0.25, T + 0.2), mat(lanes[p].band), { cast: false, pos: [LANE_CX[p], WALLH + 0.12, z] }));
     }
   }
 
   // ---- decor-deuren op de muren (instanced): honderden deuren ----
   const decor = [];
-  for (const [x, ry, face] of [[-outerX + 0.55, Math.PI / 2, 0], [outerX - 0.55, -Math.PI / 2, 0], [-0.55, -Math.PI / 2, 0], [0.55, Math.PI / 2, 0]]) {
-    for (let z = START_Z + 2; z > backZ + 3; z -= 3.3) { if (Math.abs(x) < 1 && z < FINISH_Z - 1) continue; decor.push({ x, z, ry, big: rng() < 0.25 }); }
+  for (const [x, ry, face, mid] of [[-outerX + 0.55, Math.PI / 2, 0, false], [outerX - 0.55, -Math.PI / 2, 0, false], ...dividers.flatMap((xd) => [[xd - 0.55, -Math.PI / 2, 0, true], [xd + 0.55, Math.PI / 2, 0, true]])]) {
+    for (let z = START_Z + 2; z > backZ + 3; z -= 3.3) { if (mid && z < FINISH_Z - 1) continue; decor.push({ x, z, ry, big: rng() < 0.25 }); }
   }
   const ND = decor.length;
   const dLeaf = new THREE.InstancedMesh(new THREE.BoxGeometry(1.4, 2.8, 0.12), new THREE.MeshStandardMaterial({ map: doorTex(), roughness: 0.8 }), ND);
@@ -178,14 +187,12 @@ export function buildWorld(ctx, rows) {
   torchZ.forEach((z) => { W.torchPos.push([-outerX + 0.7, z - 1.65], [outerX - 0.7, z - 1.65]); });
 
   // ---- vlaggetjes + lantaarns boven de banen ----
-  const flagsN = 130, flags = new THREE.InstancedMesh(new THREE.ConeGeometry(0.34, 0.8, 3), new THREE.MeshBasicMaterial({ color: 0xffffff }), flagsN);
+  const flagsN = NL > 2 ? 300 : 130, flags = new THREE.InstancedMesh(new THREE.ConeGeometry(0.34, 0.8, 3), new THREE.MeshBasicMaterial({ color: 0xffffff }), flagsN);
   let fi = 0;
-  for (let z = START_Z + 2; z > backZ + 4 && fi < flagsN - 2; z -= 4.3) for (const x of [-LW / 2 - 0.4, 0, LW / 2 + 0.4]) { m4.compose(v3.set(x, 6.7 + Math.sin(z) * 0.2, z), q.setFromEuler(e.set(Math.PI, 0.3, 0)), s3.set(1, 1, 1)); flags.setMatrixAt(fi, m4); flags.setColorAt(fi, c4.setHex(PALETTE[(fi * 3 + 1) % PALETTE.length])); fi++; }
+  for (let z = START_Z + 2; z > backZ + 4 && fi < flagsN - 2; z -= 4.3) for (const x of (NL === 2 ? [-LW / 2 - 0.4, 0, LW / 2 + 0.4] : [...LANE_CX, ...dividers])) { m4.compose(v3.set(x, 6.7 + Math.sin(z) * 0.2, z), q.setFromEuler(e.set(Math.PI, 0.3, 0)), s3.set(1, 1, 1)); flags.setMatrixAt(fi, m4); flags.setColorAt(fi, c4.setHex(PALETTE[(fi * 3 + 1) % PALETTE.length])); fi++; }
   flags.count = fi; flags.frustumCulled = false; scene.add(flags);
   // touwtjes met lampjes (statisch)
-  scene.add(mesh(new THREE.BoxGeometry(0.06, 0.06, wallLen), mat(0x222222), { cast: false, pos: [0, 7.1, midZ] }));
-  scene.add(mesh(new THREE.BoxGeometry(0.06, 0.06, wallLen), mat(0x222222), { cast: false, pos: [LANE_CX[1], 7.1, midZ] }));
-  scene.add(mesh(new THREE.BoxGeometry(0.06, 0.06, wallLen), mat(0x222222), { cast: false, pos: [LANE_CX[0], 7.1, midZ] }));
+  for (const rx of (NL === 2 ? [0, LANE_CX[1], LANE_CX[0]] : [...dividers, ...LANE_CX])) scene.add(mesh(new THREE.BoxGeometry(0.06, 0.06, wallLen), mat(0x222222), { cast: false, pos: [rx, 7.1, midZ] }));
 
   // ---- start- en finishboog ----
   const archM = mat(0xff6ac0), archM2 = mat(0x3ad0e8);
@@ -202,7 +209,7 @@ export function buildWorld(ctx, rows) {
   // ---- orbs (item-blokken): per baan 2 per gat tussen de muren ----
   const bt = boxTex(); const boxM = new THREE.MeshStandardMaterial({ map: bt, emissive: 0x553366, emissiveIntensity: 0.5, roughness: 0.4 });
   const boxG = new THREE.BoxGeometry(0.95, 0.95, 0.95), ringG = new THREE.TorusGeometry(0.75, 0.05, 6, 20);
-  for (let p = 0; p < 2; p++) {
+  for (let p = 0; p < NL; p++) {
     W.orbs[p] = rows.orbs.map((o) => {
       const g = new THREE.Group(); g.userData.dynamic = true; g.position.set(LANE_CX[p] + o.dx, 1.2, o.z);
       const b = new THREE.Mesh(boxG, boxM); b.castShadow = false; g.add(b);
@@ -213,7 +220,7 @@ export function buildWorld(ctx, rows) {
   }
 
   // ---- kijkgat-gloed (per baan), Deurman bij de finish ----
-  W.glow = [0, 1].map(() => {
+  W.glow = LANE_CX.map(() => {
     const g = new THREE.Group(); g.visible = false;
     g.add(new THREE.Mesh(new THREE.PlaneGeometry(3, 4.4), new THREE.MeshBasicMaterial({ map: glowTex(), color: 0x6aff9a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.8 })));
     const ar = new THREE.Mesh(new THREE.ConeGeometry(0.35, 0.7, 4), new THREE.MeshBasicMaterial({ color: 0x6aff9a })); ar.rotation.x = Math.PI; ar.position.y = 3.1; g.add(ar); g.userData.arrow = ar;
@@ -226,7 +233,7 @@ export function buildWorld(ctx, rows) {
   W.update = (dt, t, camZ) => {
     W.t = t;
     // deuren (ver weg: niet tekenen, spaart draw calls)
-    for (let p = 0; p < 2; p++) for (let r = 0; r < ROWS; r++) { const vis = Math.abs(rowZ(r) - camZ) < 62; for (const d of W.doors[p][r]) {
+    for (let p = 0; p < NL; p++) for (let r = 0; r < ROWS; r++) { const vis = Math.abs(rowZ(r) - camZ) < 62; for (const d of W.doors[p][r]) {
       if (d.g.visible !== vis) d.g.visible = vis; if (!vis) continue;
       const tg = Math.max(d.target, d.peek);
       d.open = damp(d.open, tg, d.target > 0 ? 9 : 7, dt);
@@ -236,7 +243,7 @@ export function buildWorld(ctx, rows) {
       d.g.rotation.y = d.hinge * (d.open * 1.75) + sh;
     } }
     // orbs
-    for (let p = 0; p < 2; p++) for (const o of W.orbs[p]) {
+    for (let p = 0; p < NL; p++) for (const o of W.orbs[p]) {
       if (o.alive) { const v = Math.abs(o.z - camZ) < 62; if (o.g.visible !== v) o.g.visible = v; if (!v) continue; }
       if (!o.alive) { if (o.g.visible) { o.pop += dt * 4; o.g.scale.setScalar(Math.max(0.001, 1 - o.pop)); if (o.pop >= 1) o.g.visible = false; } continue; }
       o.g.position.y = 1.25 + Math.sin(t * 2.4 + o.ph) * 0.18; o.b.rotation.y = t * 1.6 + o.ph; o.b.rotation.x = Math.sin(t + o.ph) * 0.3; o.ring.rotation.z = t * 2;

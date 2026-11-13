@@ -8,6 +8,7 @@ import { MinigameMode } from './engine/harness.js';
 import { loadGame, loadAllGames } from './games/index.js';
 import { Host } from './net/host.js';
 import { Particles } from './engine/particles.js';
+import { GAMEHAL } from './variant.js';
 
 load();
 ui.names = S.names;
@@ -26,8 +27,9 @@ export const app = {
     if (app.mode && app.mode.exit && !app.mode._exited) { app.mode._exited = true; app.mode.exit(); }
     app.mode = m; if (m) { m._exited = false; m.resize && m.resize(innerWidth, innerHeight); m.enter && m.enter(); }
   },
-  async goMenu() { const { MenuMode } = await import('./world/menu.js'); app.setMode(null); app.setMode(new MenuMode(app)); },
-  async goHub(opts = {}) { const { HubMode } = await import('./world/hub.js'); app.setMode(null); app.setMode(await HubMode.create(app, opts)); },
+  async goLobby() { const { GamehalLobby } = await import('./gamehal/lobby.js'); app.setMode(null); app.setMode(new GamehalLobby(app)); },   // Impactid Gamehal: de lobby is het 'titelscherm'
+  async goMenu() { if (GAMEHAL) return app.goLobby(); const { MenuMode } = await import('./world/menu.js'); app.setMode(null); app.setMode(new MenuMode(app)); },
+  async goHub(opts = {}) { if (GAMEHAL) return app.goArcade(opts); const { HubMode } = await import('./world/hub.js'); app.setMode(null); app.setMode(await HubMode.create(app, opts)); },
   async goEnding(opts = {}) { const { EndingMode } = await import('./world/ending.js'); app.setMode(null); app.setMode(await EndingMode.create(app, opts)); },
   async goBoard(opts = {}) { const { BoardMode } = await import('./world/board.js'); app.setMode(null); app.setMode(await BoardMode.create(app, opts)); },
   async goOpening(opts = {}) { const { OpeningMode } = await import('./world/opening.js'); app.setMode(null); app.setMode(new OpeningMode(app, opts)); },
@@ -89,7 +91,7 @@ setInterval(() => persist(), 15000);
 async function boot() {
   const q = new URLSearchParams(location.search);
   if (q.has('scare')) S.settings.scare = +q.get('scare');
-  if (q.has('players')) S.settings.players = +q.get('players') === 3 ? 3 : 2;   // ?players=3 / ?players=2 (tests)
+  if (q.has('players')) { const n = +q.get('players'); S.settings.players = n === 4 ? 4 : n === 3 ? 3 : 2; }   // ?players=2|3|4 (tests)
   if (q.has('unlock')) S.settings.unlockAll = q.get('unlock') !== '0';   // ?unlock=1: alle hallen open (handig voor tests)
   if (q.has('quality')) { S.settings.quality = q.get('quality'); renderer.shadowMap.enabled = S.settings.quality !== 'low'; resize(); }
   app.games = await loadAllGames();
@@ -99,6 +101,7 @@ async function boot() {
   else if (q.has('hub')) await app.goHub({});
   else if (q.has('opening')) await app.goOpening({});
   else if (q.has('arcade')) await app.goArcade({ intro: q.get('arcade') === 'intro' });
+  else if (GAMEHAL) await app.goLobby();
   else await app.goMenu();
 }
 app.net = new Host(app);

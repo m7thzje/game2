@@ -50,9 +50,11 @@ export default {
   giver: 'Kermisman Kees',
   icon: '🕹️',
   mode: 'pvp',
+  players: [2, 4],   // 2 = duel, 4 = 2 tegen 2 (elk team een eigen gat, vier klauwen in één kast)
+  teams: true,
   time: 75,
   music: 'game_fast',
-  blurb: 'Eén <b>grijpkast</b>, twee wiebelige klauwen! Laat <b>knuffels, kisten en gouden kippen</b> in <b>jouw gat</b> vallen. Pas op voor <b>bommen</b> (tikken!) en de <b>Deurman-pop</b> (min punten). Meeste punten na 75 s wint.',
+  blurb: 'Eén <b>grijpkast</b>, twee wiebelige klauwen (met 4 spelers: <b>2 tegen 2</b>, vier klauwen, elk team een eigen gat)! Laat <b>knuffels, kisten en gouden kippen</b> in <b>jouw gat</b> vallen. Pas op voor <b>bommen</b> (tikken!) en de <b>Deurman-pop</b> (min punten). Meeste punten na 75 s wint.',
   controls: ['{move} klauw sturen', '{a} zakken (2e keer = sterker)', '{a} met prijs = loslaten', '{b} RUK je broer / KRACHTGRIP'],
   tip: 'Een bom naar het gat van je broer slepen? Hij tikt!',
 
@@ -60,6 +62,10 @@ export default {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
+    const N = players.length;
+    const teamOf = ctx.teams ? ctx.teamOf.slice() : players.map((_, i) => i);   // team = gat: 0 = links, 1 = rechts (bij 2 spelers: ieder zijn eigen gat)
+    const members = [0, 1].map((t) => players.map((_, i) => i).filter((i) => teamOf[i] === t));
+    const teamName = (t) => members[t].map((i) => names[i]).join(' & ');
     const SLIP = pv.slip || 0, GR = pv.gravity || 1;
     const L = ctx.lights('night', { shadow: 17, center: [0, 5, 0], fogNear: 90, fogFar: 220 });
     L.sun.position.set(5, 34, 22); L.sun.intensity = 1.5; L.sun.color.set(0xffe8ff);
@@ -92,7 +98,7 @@ export default {
     function spawn(key, x, y, z, vx = 0, vy = 0, vz = 0) {
       const d = TYPES[key]; const p = d ? d.pool.find((q) => !q.alive) : chickens.find((q) => !q.alive);
       if (!p) return null;
-      Object.assign(p, { alive: true, held: -1, x, y, z, vx, vy, vz, fuse: -1, flash: 0, gr: false, yaw: Math.random() * TAU, ai: 0 });
+      Object.assign(p, { alive: true, held: -1, lastBy: null, x, y, z, vx, vy, vz, fuse: -1, flash: 0, gr: false, yaw: Math.random() * TAU, ai: 0 });
       p.tilt.identity();
       if (p.type === 'bal') { p.tint = pick(BALL_TINTS); p.im.setColorAt(p.idx, _col.set(p.tint)); p.im.instanceColor.needsUpdate = true; }
       if (p.type === 'bom') { p.im.setColorAt(p.idx, _col.set(0xffffff)); p.im.instanceColor.needsUpdate = true; }
@@ -102,11 +108,13 @@ export default {
     function kill(p) { p.alive = false; p.held = -1; p.y = -50; if (p.obj) p.obj.group.visible = false; else p.im.setMatrixAt(p.idx, _m.makeScale(0, 0, 0)), (p.im.instanceMatrix.needsUpdate = true); }
 
     // ---------------- toestand ----------------
-    const score = [0, 0], counts = [0, 0];
+    const score = [0, 0], counts = [0, 0];   // per TEAM (= gat)
+    const pscore = new Array(N).fill(0);       // per speler (wie liet de prijs vallen)
     let T = 0, introT = 0, timeLeft = MATCH_TIME, finished = false, started = false, over = false, overT = 0;
     let beltDir = 1, beltPrizeT = 0, glassShake = 0, doubleOn = false, banner = 0;
-    const stats = { grabs: [0, 0], slips: [0, 0], perfects: [0, 0], rucks: [0, 0], bombs: 0, deurmans: 0, chickens: 0, crowns: 0, powers: [0, 0], stolen: [0, 0] };
-    const lastTxt = ['', ''];
+    const z = () => new Array(N).fill(0);
+    const stats = { grabs: z(), slips: z(), perfects: z(), rucks: z(), bombs: 0, deurmans: 0, chickens: 0, crowns: 0, powers: z(), stolen: z() };
+    const lastTxt = players.map(() => '');
     const events = [
       { t: 13 + rand(0, 5), f: () => spawnChicken() },
       { t: 24 + rand(0, 3), f: () => spawnCrown() },
@@ -205,23 +213,24 @@ export default {
     }
 
     // ---------------- scoren ----------------
-    function addScore(i, v, x, z, label) {
-      score[i] += v;
+    function addScore(i, v, x, z, by = -1) {   // i = team (gat); by = speler die het veroorzaakte (voor zijn eigen punten)
+      score[i] += v; if (by >= 0) pscore[by] += v;
       fx.texts.add((v > 0 ? '+' : '') + v, x, 2.6, z, v > 0 ? '#ffe14a' : '#ff6a6a', 1.5);
       refreshHud(); redrawBoard(i);
     }
     function collect(i, p) {
+      const by = p.lastBy != null && teamOf[p.lastBy] === i ? p.lastBy : (members[i].length === 1 ? members[i][0] : -1);
       const mult = doubleOn ? 2 : 1; const cx = (i ? 1 : -1) * (X - HOLE_W / 2), cz = (HOLE_Z0 + ZF) / 2;
       const v = p.val * mult; const key = p.type;
       kill(p);
       if (key === 'bom') {
-        stats.bombs++; addScore(i, v, cx, cz); explode(cx, 0.5, cz, -1); fx.texts.add('BOEM!', cx, 4.2, cz, '#ff9a3a', 1.6);
-        chars[i].c.pose = 'sad'; chars[i].poseT = 1.5;
+        stats.bombs++; addScore(i, v, cx, cz, by); explode(cx, 0.5, cz, -1); fx.texts.add('BOEM!', cx, 4.2, cz, '#ff9a3a', 1.6);
+        for (const q of members[i]) { chars[q].c.pose = 'sad'; chars[q].poseT = 1.5; }
       } else if (key === 'deurman') {
-        stats.deurmans++; addScore(i, v, cx, cz); audio.sfx('bad'); audio.sfx('scare', { vol: 0.25 }); ctx.shake(0.4); chars[i].c.pose = 'scared'; chars[i].poseT = 1.4;
+        stats.deurmans++; addScore(i, v, cx, cz, by); audio.sfx('bad'); audio.sfx('scare', { vol: 0.25 }); ctx.shake(0.4); for (const q of members[i]) { chars[q].c.pose = 'scared'; chars[q].poseT = 1.4; }
         fx.texts.add('DEURMAN!', cx, 4.2, cz, '#c8b8ff', 1.4);
       } else {
-        counts[i]++; addScore(i, v, cx, cz); audio.sfx(v >= 25 ? 'sparkle' : 'coin'); chars[i].c.pose = 'cheer'; chars[i].poseT = 1.2;
+        counts[i]++; addScore(i, v, cx, cz, by); audio.sfx(v >= 25 ? 'sparkle' : 'coin'); for (const q of members[i]) { chars[q].c.pose = 'cheer'; chars[q].poseT = 1.2; }
         fx.particles.burst(cx, 1.5, cz, { count: v >= 25 ? 26 : 12, speed: 5, up: 2, life: 0.9, size: 0.34, colors: v >= 25 ? [0xffe14a, 0xffffff, 0xff9ad5] : [0xffe14a, 0xffffff], gravity: 5 });
         if (key === 'goudkip' || key === 'kroon') fx.texts.add(TYPES[key].name.toUpperCase() + '!', cx, 4.6, cz, '#ffe14a', 1.3);
         W.lamps[i].material.opacity = 1.4;
@@ -248,7 +257,7 @@ export default {
     // ---------------- klauwen ----------------
     const clawMat = (i) => new THREE.MeshStandardMaterial({ color: 0xc8ccd8, roughness: 0.35, metalness: 0.75, emissive: 0x000000 });
     const claws = players.map((pp, i) => {
-      const sd = i ? 1 : -1, col = PLAYER_COLORS[i];
+      const sd = teamOf[i] ? 1 : -1, col = PLAYER_COLORS[i], mi = members[teamOf[i]].indexOf(i);   // mi = eerste/tweede klauw van het team
       const sc = lerp(1, pv.size(i), 0.55) * 1.25;
       const cm = clawMat(i);
       const band = new THREE.MeshStandardMaterial({ color: col, roughness: 0.35, metalness: 0.2, emissive: col, emissiveIntensity: 0.25 });
@@ -273,28 +282,30 @@ export default {
       const tring = new THREE.Mesh(new THREE.RingGeometry(0.92, 1.1, 32), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.95, depthTest: false, depthWrite: false, side: THREE.DoubleSide })); tring.rotation.x = -Math.PI / 2; tring.renderOrder = 13; tring.visible = false; scene.add(tring);
       const tcore = new THREE.Mesh(new THREE.RingGeometry(0.97, 1.05, 32), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9, depthTest: false, depthWrite: false, side: THREE.DoubleSide })); tcore.rotation.x = -Math.PI / 2; tcore.renderOrder = 14; tcore.visible = false; scene.add(tcore);
       const lab = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex(' ', '#fff'), transparent: true, depthTest: false })); lab.scale.set(4.2, 1.05, 1); lab.renderOrder = 15; scene.add(lab);
-      const home = [sd * 8.0, 0.6];
-      return { i, sd, sc, grp, fingers, cable, beam, aim, tring, tcore, lab, cm, band, col, x: home[0], z: home[1], vx: 0, vz: 0, ax: 0, az: 0, thx: 0, thz: 0, wx: 0, wz: 0, hy: HUB_TOP, hx: home[0], hz: home[1], state: 'idle', t: 0, hold: null, strength: 0.4, pressT: -1, cdB: 0, powerT: 0, stun: 0, g: 0, gTarget: 0, rg: 1.4 * sc, lastLab: '', assist: false, openT: 0, speedAbs: 0, perfectT: 0 };
+      const home = members[teamOf[i]].length === 1 ? [sd * 8.0, 0.6] : [sd * (mi ? 6.4 : 9.0), mi ? -1.0 : 1.5];
+      return { i, sd, mi, team: teamOf[i], home, sc, grp, fingers, cable, beam, aim, tring, tcore, lab, cm, band, col, x: home[0], z: home[1], vx: 0, vz: 0, ax: 0, az: 0, thx: 0, thz: 0, wx: 0, wz: 0, hy: HUB_TOP, hx: home[0], hz: home[1], state: 'idle', t: 0, hold: null, strength: 0.4, pressT: -1, cdB: 0, powerT: 0, stun: 0, g: 0, gTarget: 0, rg: 1.4 * sc, lastLab: '', assist: false, openT: 0, speedAbs: 0, perfectT: 0 };
     });
     const board = [0, 1].map((i) => null);
 
     // ---------------- poppetjes naast de kast ----------------
+    const CHX = (i) => { const sd = teamOf[i] ? 1 : -1; return sd * (N > 2 ? (members[teamOf[i]].indexOf(i) ? 16.4 : 14.0) : 15.0); };   // bij 4 spelers staan er twee naast elk gat
     const chars = players.map((pp, i) => {
-      const sd = i ? 1 : -1; const c = makeBrother(i); const k = 5.2 / c.height; const holder = new THREE.Group(); holder.add(c.group); holder.scale.setScalar(k);
-      holder.position.set(sd * 15.0, -4.2, ZF + 3.0); scene.add(holder);
+      const sd = teamOf[i] ? 1 : -1; const c = makeBrother(i); const k = (N > 2 ? 4.6 : 5.2) / c.height; const holder = new THREE.Group(); holder.add(c.group); holder.scale.setScalar(k);
+      holder.position.set(CHX(i), -4.2, ZF + 3.0); scene.add(holder);
       c.faceDir(-sd * 0.8, 1); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw; c.pose = 'carry';
       const tagTex = canvasTex(256, 96, (g, w, hh) => { g.font = 'bold 58px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(10,10,30,.9)'; g.lineJoin = 'round'; g.strokeText(pp.name, w / 2, hh / 2); g.fillStyle = pp.css; g.fillText(pp.name, w / 2, hh / 2); });
-      const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false })); tag.scale.set(3.2, 1.2, 1); tag.position.set(sd * 15.0, 1.9, ZF + 3.0); tag.renderOrder = 15; scene.add(tag);
+      const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false })); tag.scale.set(3.2, 1.2, 1); tag.position.set(CHX(i), N > 2 ? 1.5 : 1.9, ZF + 3.0); tag.renderOrder = 15; scene.add(tag);
       return { c, holder, poseT: 0 };
     });
 
     // ---------------- scorebordjes op de kast ----------------
     const boardTex = [0, 1].map(() => null);
+    const tcss = (t) => (ctx.teams ? ctx.teamInfo[t].css : players[t].css);
     function redrawBoard(i) {
       const b = board[i]; if (!b) return;
       const g = b.g, w = 320, h = 160;
-      g.fillStyle = '#12081e'; g.fillRect(0, 0, w, h); g.strokeStyle = players[i].css; g.lineWidth = 8; g.strokeRect(5, 5, w - 10, h - 10);
-      g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = 'bold 40px Fredoka, Arial Black, sans-serif'; g.fillStyle = players[i].css; g.fillText(names[i].toUpperCase(), w / 2, 36);
+      g.fillStyle = '#12081e'; g.fillRect(0, 0, w, h); g.strokeStyle = tcss(i); g.lineWidth = 8; g.strokeRect(5, 5, w - 10, h - 10);
+      g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `bold ${N > 2 ? 30 : 40}px Fredoka, Arial Black, sans-serif`; g.fillStyle = tcss(i); g.fillText(teamName(i).toUpperCase(), w / 2, 36, w - 24);
       g.font = 'bold 84px Fredoka, Arial Black, sans-serif'; g.fillStyle = score[i] < 0 ? '#ff6a6a' : '#ffe14a'; g.fillText(String(score[i]), w / 2, 100);
       g.font = 'bold 26px Fredoka, Arial Black, sans-serif'; g.fillStyle = '#9ac8ff'; g.fillText(`${counts[i]} prijzen`, w / 2, 144);
       b.tex.needsUpdate = true;
@@ -307,13 +318,13 @@ export default {
     }
     // gat-zuilen (waar je moet loslaten)
     const columns = [0, 1].map((i) => {
-      const m = new THREE.Mesh(new THREE.BoxGeometry(HOLE_W - 0.3, CEIL - 1, HOLE_D - 0.3), new THREE.MeshBasicMaterial({ color: i ? 0x58a0ff : 0x58ff9a, transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
+      const m = new THREE.Mesh(new THREE.BoxGeometry(HOLE_W - 0.3, CEIL - 1, HOLE_D - 0.3), new THREE.MeshBasicMaterial({ color: ctx.teams ? ctx.teamInfo[i].color : (i ? 0x58a0ff : 0x58ff9a), transparent: true, opacity: 0.12, blending: THREE.AdditiveBlending, depthWrite: false }));
       m.position.set((i ? 1 : -1) * (X - HOLE_W / 2), CEIL / 2 + 0.5, (HOLE_Z0 + ZF) / 2); m.renderOrder = 3; scene.add(m); return m;
     });
 
     // ---------------- camera ----------------
     const tgt = new THREE.Vector3(0, 2.4, 1.0), PITCH = 0.4, camDir = new THREE.Vector3(0, Math.sin(PITCH), Math.cos(PITCH));
-    const fitPts = [[-X - 1.8, -4.2, ZF + 3.6], [X + 1.8, -4.2, ZF + 3.6], [-X - 1.8, CEIL + 0.6, ZB], [X + 1.8, CEIL + 0.6, ZB], [-16.6, 1.2, ZF + 3.0], [16.6, 1.2, ZF + 3.0], [-16.6, -4.2, ZF + 3.0], [16.6, -4.2, ZF + 3.0]];
+    const fitPts = [[-X - 1.8, -4.2, ZF + 3.6], [X + 1.8, -4.2, ZF + 3.6], [-X - 1.8, CEIL + 0.6, ZB], [X + 1.8, CEIL + 0.6, ZB], [-(N > 2 ? 17.8 : 16.6), 1.2, ZF + 3.0], [N > 2 ? 17.8 : 16.6, 1.2, ZF + 3.0], [-(N > 2 ? 17.8 : 16.6), -4.2, ZF + 3.0], [N > 2 ? 17.8 : 16.6, -4.2, ZF + 3.0]];
     let camD = 40;
     function fitCamera() {
       const v = new THREE.Vector3(); let lo = 12, hi = 120;
@@ -331,7 +342,7 @@ export default {
     function releasePrize(c, why) {
       const p = c.hold; if (!p) return;
       p.held = -1; p.vx = c.vx * 0.9 + (Math.random() - 0.5) * 1.5; p.vz = c.vz * 0.9 + (Math.random() - 0.5) * 1.5; p.vy = 1;
-      c.hold = null; c.powerT = 0;
+      c.hold = null; c.powerT = 0; p.lastBy = c.i;
       if (why) say(c.i, why, '#ff9a9a');
     }
     function startFuse(p) {
@@ -350,13 +361,13 @@ export default {
       }
       if (!best) { say(c.i, 'NIKS!', '#c8c8d8', 1.0); audio.sfx('miss', { vol: 0.5 }); return; }
       const acc = 1 - clamp(bd / (c.rg + 0.3), 0, 1) * 0.75;
-      const lead = score[1 - c.i] - score[c.i];
+      const lead = score[1 - c.team] - score[c.team];
       c.assist = lead >= 25;
       let pr = 0.2 + c.strength * acc * (1.12 - 0.3 * best.w) + (c.assist ? 0.12 : 0);
       if (best.type === 'kip') pr -= 0.12;
       pr = clamp(pr, 0.12, 0.97);
       if (Math.random() < pr) {
-        c.hold = best; best.held = c.i; stats.grabs[c.i]++; startFuse(best);
+        c.hold = best; best.held = c.i; best.lastBy = c.i; stats.grabs[c.i]++; startFuse(best);
         say(c.i, c.strength > 0.88 ? 'STEVIG!' : 'GEGRABBELD!', c.strength > 0.88 ? '#7affb0' : '#ffe14a', 1.0); audio.sfx('click', { vol: 0.7 });
         if (best.type === 'kip') { audio.sfx('boing', { vol: 0.5, rate: 1.5 }); fx.particles.burst(hx, c.hy - 1, hz, { count: 10, speed: 3, up: 1, life: 0.8, size: 0.25, colors: [0xffffff, 0xf0e8d0], gravity: 3 }); }
       } else {
@@ -365,7 +376,6 @@ export default {
       }
     }
     function ruk(c) {
-      const o = claws[1 - c.i];
       c.cdB = 4.0; stats.rucks[c.i]++;
       audio.sfx('thud', { vol: 0.8 }); audio.sfx('buzz', { vol: 0.3, rate: 1.4 }); ctx.shake(0.35); glassShake = Math.max(glassShake, 0.8);
       c.wx += (Math.random() - 0.5) * 5; c.wz += (Math.random() - 0.5) * 5;
@@ -377,16 +387,19 @@ export default {
         const k = (1 - d / 3.4);
         p.vy += (4 + 6 * k) / p.w; p.vx += (dx / (d + 0.1)) * 3 * k; p.vz += (dz / (d + 0.1)) * 3 * k;
       }
-      // de klauw van de ander
-      const d = Math.hypot(o.hx - c.hx, o.hz - c.hz);
-      if (d < 5.2 && o.hold) {
-        if (o.powerT > 0) { say(o.i, 'KRACHT!', '#7affb0', 1.2); audio.sfx('ding'); o.wx += (Math.random() - 0.5) * 3; }
-        else { releasePrize(o, 'GERUKT!'); stats.stolen[o.i]++; ctx.shake(0.5); audio.sfx('hurt', { vol: 0.5 }); chars[o.i].c.pose = 'scared'; chars[o.i].poseT = 0.9; chars[c.i].c.pose = 'cheer'; chars[c.i].poseT = 0.8; }
+      // de klauwen van de tegenstanders (niet van je eigen team)
+      for (const o of claws) {
+        if (o.team === c.team) continue;
+        const d = Math.hypot(o.hx - c.hx, o.hz - c.hz);
+        if (d < 5.2 && o.hold) {
+          if (o.powerT > 0) { say(o.i, 'KRACHT!', '#7affb0', 1.2); audio.sfx('ding'); o.wx += (Math.random() - 0.5) * 3; }
+          else { releasePrize(o, 'GERUKT!'); stats.stolen[o.i]++; ctx.shake(0.5); audio.sfx('hurt', { vol: 0.5 }); chars[o.i].c.pose = 'scared'; chars[o.i].poseT = 0.9; chars[c.i].c.pose = 'cheer'; chars[c.i].poseT = 0.8; }
+        }
+        if (d < 6) { o.wx += (Math.random() - 0.5) * 6; o.wz += (Math.random() - 0.5) * 6; }
       }
-      if (d < 6) { o.wx += (Math.random() - 0.5) * 6; o.wz += (Math.random() - 0.5) * 6; }
     }
     function updateClaw(c, dt) {
-      const inp = pv.input(c.i), o = claws[1 - c.i];
+      const inp = pv.input(c.i);
       const tm = clamp(pv.speed(c.i), 0.65, 1.6);
       c.cdB = Math.max(0, c.cdB - dt); c.powerT = Math.max(0, c.powerT - dt); c.stun = Math.max(0, c.stun - dt); c.perfectT = Math.max(0, c.perfectT - dt);
       const busy = c.state === 'drop' || c.state === 'close' || c.state === 'rise';
@@ -563,7 +576,6 @@ export default {
           const near = Math.abs(c.t - 0.62) < 0.075; c.tring.material.color.setHex(near ? 0x7affb0 : 0xffffff);
         }
         // label
-        const o = claws[1 - c.i];
         let txt;
         if (c.stun > 0) txt = 'AU!'; else if (c.state === 'idle' || c.state === 'open') txt = c.cdB > 0 ? `A zak · B ${c.cdB.toFixed(0)}s` : 'A zakken · B RUK'; else if (c.state === 'carry') txt = c.cdB > 0 ? `A los · B ${c.cdB.toFixed(0)}s` : 'A los · B KRACHT'; else if (c.state === 'close') txt = 'NU OP TIJD: A!'; else txt = '';
         if (c.powerT > 0) txt = 'KRACHTGRIP!';
@@ -571,7 +583,7 @@ export default {
         c.lab.position.set(c.hx, Math.min(c.hy + 1.9, CEIL - 0.7), c.hz + 0.6); c.lab.visible = !!txt && started && !over;
       }
       // poppetjes
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < N; i++) {
         const ch = chars[i], c = claws[i];
         ch.poseT -= dt; if (ch.poseT <= 0 && !over) ch.c.pose = 'carry';
         ch.c.speed = clamp(c.speedAbs / 10, 0, 0.5);
@@ -590,11 +602,11 @@ export default {
     }
 
     function refreshHud() {
-      hud.setScore(`${names[0]} ${score[0]} – ${score[1]} ${names[1]}${doubleOn ? '  (DUBBEL!)' : ''}`);
+      hud.setScore(N > 2 ? `${score[0]} – ${score[1]}${doubleOn ? '  (DUBBEL!)' : ''}` : `${names[0]} ${score[0]} – ${score[1]} ${names[1]}${doubleOn ? '  (DUBBEL!)' : ''}`);
     }
     function playerInfo(i) {
       const c = claws[i]; let st = c.stun > 0 ? 'Versuft!' : c.hold ? `Heeft: ${c.hold.d.name}` : c.state === 'idle' ? 'Zoek een prijs' : c.state === 'drop' ? 'Zakt...' : c.state === 'close' ? 'Grijpt!' : c.state === 'rise' ? 'Omhoog' : '';
-      const txt = `${score[i]} pnt · ${st}${c.cdB > 0 ? ` · B ${c.cdB.toFixed(0)}s` : ''}`;
+      const txt = `${N > 2 ? pscore[i] : score[i]} pnt · ${st}${c.cdB > 0 ? ` · B ${c.cdB.toFixed(0)}s` : ''}`;
       if (txt !== lastTxt[i]) { lastTxt[i] = txt; hud.setPlayerInfo(i, txt); }
     }
 
@@ -602,14 +614,20 @@ export default {
     function endGame() {
       if (finished) return; finished = true;
       for (const c of claws) if (c.hold) releasePrize(c);
-      let winner = score[0] > score[1] ? 0 : score[1] > score[0] ? 1 : counts[0] > counts[1] ? 0 : counts[1] > counts[0] ? 1 : (Math.random() < 0.5 ? 0 : 1);
+      const wt = score[0] > score[1] ? 0 : score[1] > score[0] ? 1 : counts[0] > counts[1] ? 0 : counts[1] > counts[0] ? 1 : (Math.random() < 0.5 ? 0 : 1);   // winnend team (= gat)
       const tie = score[0] === score[1];
       const jokes = ['De kermisman wrijft in zijn ogen: zoveel prijzen weg!', 'De knuffels in de kast hebben nog nooit zo gescholden.', 'Alleen de kip heeft nergens spijt van.', 'De Deurman keek mee en was niet onder de indruk.'];
       const bits = [];
-      if (stats.bombs) bits.push(`${stats.bombs}× BOEM`); if (stats.deurmans) bits.push(`${stats.deurmans}× Deurman-pop`); if (stats.stolen[0] + stats.stolen[1]) bits.push(`${stats.stolen[0] + stats.stolen[1]}× geruk uit de klauw`);
-      bits.push(`slips: ${names[0]} ${stats.slips[0]}, ${names[1]} ${stats.slips[1]}`);
+      if (stats.bombs) bits.push(`${stats.bombs}× BOEM`); if (stats.deurmans) bits.push(`${stats.deurmans}× Deurman-pop`); const stolen = stats.stolen.reduce((a, b) => a + b, 0); if (stolen) bits.push(`${stolen}× geruk uit de klauw`);
+      bits.push(`slips: ${names.map((n, i) => `${n} ${stats.slips[i]}`).join(', ')}`);
       hud.showBig('TIJD OP!', 900, '#ffe14a');
-      ctx.finishPvp({ winner, score: [score[0], score[1]], delay: 1100, summary: `${names[winner]} wint de grijpkast met <b>${score[winner]}</b> tegen ${score[1 - winner]} punten${tie ? ' (gelijk: de meeste prijzen beslisten)' : ''}.<br><small>${bits.join(' · ')}. ${pick(jokes)}</small>` });
+      if (N === 2) {
+        const winner = wt;
+        ctx.finishPvp({ winner, score: [score[0], score[1]], delay: 1100, summary: `${names[winner]} wint de grijpkast met <b>${score[winner]}</b> tegen ${score[1 - winner]} punten${tie ? ' (gelijk: de meeste prijzen beslisten)' : ''}.<br><small>${bits.join(' · ')}. ${pick(jokes)}</small>` });
+      } else {
+        const order = players.map((_, i) => i).sort((a, b) => (teamOf[b] === wt) - (teamOf[a] === wt) || pscore[b] - pscore[a]);   // winnend team eerst, daarbinnen op eigen punten
+        ctx.finishPvp({ winners: members[wt].slice(), score: players.map((_, i) => score[teamOf[i]]), place: order, delay: 1100, summary: `Team ${teamName(wt)} wint de grijpkast met <b>${score[wt]}</b> tegen ${score[1 - wt]} punten${tie ? ' (gelijk: de meeste prijzen beslisten)' : ''}.<br><small>Eigen punten: ${names.map((n, i) => `${n} ${pscore[i]}`).join(', ')}. ${bits.join(' · ')}. ${pick(jokes)}</small>` });
+      }
       over = true; overT = 0;
     }
 
@@ -632,11 +650,11 @@ export default {
         const tn = Math.ceil(p.fuse); if (tn < p.tickN && tn >= 1) { p.tickN = tn; audio.sfx('tick', { vol: 0.7, rate: 1.2 }); fx.texts.add(String(tn), p.x, p.y + 1.8, p.z, '#ff6a3a', 1.1); }
         if (p.fuse <= 0) {
           const holder = p.held >= 0 ? claws[p.held] : null; const bx = p.x, by = p.y, bz = p.z;
-          if (holder) { addScore(holder.i, -10 * (doubleOn ? 2 : 1), bx, bz); holder.hold = null; }
+          if (holder) { addScore(holder.team, -10 * (doubleOn ? 2 : 1), bx, bz, holder.i); holder.hold = null; }
           kill(p); explode(bx, by, bz, holder ? holder.i : -1); fx.texts.add('BOEM!', bx, by + 2.4, bz, '#ff9a3a', 1.6);
         }
       }
-      for (let i = 0; i < 2; i++) playerInfo(i);
+      for (let i = 0; i < N; i++) playerInfo(i);
       if (timeLeft <= 0) endGame();
       updateVisuals(dt, T + introT);
       camera.position.copy(tgt).addScaledVector(camDir, camD); camera.lookAt(tgt);
@@ -644,16 +662,16 @@ export default {
     function resultUpdate(dt) {
       overT += dt; T += dt;
       for (let s = 0; s < 2; s++) stepPhys(dt / 2, true);
-      for (const c of claws) { c.g = damp(c.g, 0, 6, dt); c.x += (c.sd * 8 - c.x) * 0.03; }
+      for (const c of claws) { c.g = damp(c.g, 0, 6, dt); c.x += (c.home[0] - c.x) * 0.03; }
       for (const c of claws) { const Lc = TROLLEY_Y - c.hy; c.hx = c.x; c.hz = c.z; }
       updateVisuals(dt, T + introT);
     }
     function introUpdate(dt) {
       introT += dt;
-      for (const c of claws) { c.x = c.sd * 8 + Math.sin(introT * 0.9 + c.i * 2) * 1.5; c.z = 0.6 + Math.cos(introT * 0.7 + c.i) * 1.2; c.hx = c.x; c.hz = c.z; c.hy = HUB_TOP + Math.sin(introT * 1.3 + c.i) * 0.3; c.thx = Math.sin(introT * 1.5 + c.i) * 0.06; c.gTarget = 0; c.g = damp(c.g, 0.2 + 0.3 * Math.sin(introT * 2), 4, dt); }
+      for (const c of claws) { c.x = c.home[0] + Math.sin(introT * 0.9 + c.i * 2) * 1.5; c.z = c.home[1] + Math.cos(introT * 0.7 + c.i) * (N > 2 ? 0.6 : 1.2); c.hx = c.x; c.hz = c.z; c.hy = HUB_TOP + Math.sin(introT * 1.3 + c.i) * 0.3; c.thx = Math.sin(introT * 1.5 + c.i) * 0.06; c.gTarget = 0; c.g = damp(c.g, 0.2 + 0.3 * Math.sin(introT * 2), 4, dt); }
       updateVisuals(dt, introT);
     }
-    refreshHud(); hud.setTimer(MATCH_TIME, 15); for (let i = 0; i < 2; i++) playerInfo(i);
+    refreshHud(); hud.setTimer(MATCH_TIME, 15); for (let i = 0; i < N; i++) playerInfo(i);
     updateVisuals(0.016, 0);
 
     return {
@@ -661,17 +679,17 @@ export default {
       onResize() { fitCamera(); },
       onSwap() { for (const c of claws) { fx.particles.burst(c.hx, c.hy, c.hz, { count: 14, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); } },
       onDeurman(movers) {
-        movers.forEach((m, i) => { if (m && !finished) { const c = claws[i]; score[i] -= 10; refreshHud(); redrawBoard(i); fx.texts.add('-10', c.hx, c.hy + 1, c.hz, '#ff6a6a', 1.5); if (c.hold) { releasePrize(c, 'SCHRIK!'); if (c.state === 'carry') { c.state = 'idle'; } } c.stun = 1.2; audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
+        movers.forEach((m, i) => { if (m && !finished) { const c = claws[i]; score[c.team] -= 10; pscore[i] -= 10; refreshHud(); redrawBoard(c.team); fx.texts.add('-10', c.hx, c.hy + 1, c.hz, '#ff6a6a', 1.5); if (c.hold) { releasePrize(c, 'SCHRIK!'); if (c.state === 'carry') { c.state = 'idle'; } } c.stun = 1.2; audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
       },
-      celebrate(w) {
-        chars[w].c.pose = 'cheer'; chars[1 - w].c.pose = 'sad'; chars[0].poseT = chars[1].poseT = 1e9;
+      celebrate(w, winners = [w]) {
+        chars.forEach((ch, i) => { ch.c.pose = winners.includes(i) ? 'cheer' : 'sad'; ch.poseT = 1e9; });
         for (let k = 0; k < 6; k++) setTimeout(() => { try { fx.particles.burst((Math.random() - 0.5) * 20, 8 + Math.random() * 6, 6, { count: 24, speed: 7, up: 1, life: 1.2, size: 0.5, colors: BULB_COLS, gravity: 4 }); } catch (e) { /* scene al weg */ } }, k * 250);
       },
       dispose() {},
       dbg: {
         state: () => ({
-          T, timeLeft, finished, started, score: [...score], counts: [...counts], doubleOn, beltDir, stats,
-          claws: claws.map((c) => ({ x: c.x, z: c.z, hx: c.hx, hz: c.hz, hy: c.hy, state: c.state, t: c.t, hold: c.hold ? c.hold.type : null, cdB: c.cdB, powerT: c.powerT, stun: c.stun, strength: c.strength, thx: c.thx, thz: c.thz })),
+          T, timeLeft, finished, started, score: [...score], counts: [...counts], pscore: [...pscore], doubleOn, beltDir, stats,
+          claws: claws.map((c) => ({ team: c.team, x: c.x, z: c.z, hx: c.hx, hz: c.hz, hy: c.hy, state: c.state, t: c.t, hold: c.hold ? c.hold.type : null, cdB: c.cdB, powerT: c.powerT, stun: c.stun, strength: c.strength, thx: c.thx, thz: c.thz })),
           prizes: prizes.filter((p) => p.alive).map((p) => ({ type: p.type, x: p.x, y: p.y, z: p.z, vx: p.vx, vy: p.vy, vz: p.vz, r: p.r, val: p.val, held: p.held, fuse: p.fuse })),
         }),
         setScore: (a, b) => { score[0] = a; score[1] = b; refreshHud(); redrawBoard(0); redrawBoard(1); },

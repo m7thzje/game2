@@ -69,6 +69,10 @@ export class Character {
       const tail = mesh(new THREE.BoxGeometry(0.1 * s, 0.4 * s, 0.04 * s), spec.scarfFx === 'rainbow' ? rainbowMat() : fxMat(spec.scarf, spec.scarfFx), { pos: [0.1 * s, torsoH - 0.25 * s, -0.22 * s] });
       torsoG.add(tail); this.scarfTail = tail;
     }
+    if (spec.collar) {   // hoodie: dikke kraag om de nek + buidelzak voorop (Sam)
+      torsoG.add(mesh(new THREE.TorusGeometry(0.22 * s, 0.09 * s, 6, 12), mat(spec.collar), { pos: [0, torsoH - 0.03 * s, -0.02 * s], rot: [Math.PI / 2, 0, 0] }));
+      torsoG.add(mesh(new THREE.BoxGeometry(0.3 * s * W, 0.16 * s, 0.05 * s), mat(spec.collar), { pos: [0, 0.34 * s, 0.27 * s * W] }));
+    }
     if (spec.backpack) {
       torsoG.add(mesh(new THREE.BoxGeometry(0.34 * s, 0.4 * s, 0.18 * s), mat(spec.backpack), { pos: [0, 0.4 * s, -0.3 * s * W] }));
       torsoG.add(mesh(new THREE.BoxGeometry(0.36 * s, 0.1 * s, 0.2 * s), mat(0x3a2a1e), { pos: [0, 0.6 * s, -0.3 * s * W] }));
@@ -111,7 +115,7 @@ export class Character {
     // neus + mond
     const noseS = spec.nose ?? 1;
     headG.add(mesh(new THREE.SphereGeometry(0.045 * s * noseS, 8, 6), mat(skin, { flatShading: false }), { cast: false, pos: [0, 0.02 * s, hr * 0.98], scale: [1, 1, 1 + (noseS - 1) * 0.8] }));
-    this.mouth = mesh(new THREE.TorusGeometry(0.06 * s, 0.012 * s, 5, 12, Math.PI), new THREE.MeshBasicMaterial({ color: 0x3d1b1b }), { cast: false, pos: [0, -0.06 * s, hr * 0.9], rot: [0, 0, Math.PI] });
+    this.mouth = mesh(new THREE.TorusGeometry(0.06 * s * (spec.grin ?? 1), 0.012 * s, 5, 12, Math.PI), new THREE.MeshBasicMaterial({ color: 0x3d1b1b }), { cast: false, pos: [0, -0.06 * s, hr * 0.9], rot: [0, 0, Math.PI] });
     headG.add(this.mouth);
     if (spec.ears === 'pointy') for (const sd of [1, -1]) headG.add(mesh(new THREE.ConeGeometry(0.07 * s, 0.28 * s, 4), mat(skin), { pos: [sd * hr * 1.05, 0.08 * s, 0], rot: [0, 0, -sd * 1.35] }));
     else for (const sd of [1, -1]) headG.add(mesh(new THREE.SphereGeometry(0.05 * s, 6, 5), mat(skin), { cast: false, pos: [sd * hr * 0.98, 0.02 * s, 0] }));
@@ -311,19 +315,25 @@ BROTHER_SPECS.push({
   scale: 0.92, skin: 0xd9a07a, shirt: 0xf0862a, sleeve: 0xf0862a, tunic: 0xf0862a, pants: 0x4a3566, boots: 0x7a3b5e, belt: 0x6a2e4e,
   hair: 0x2a1a30, hairStyle: 'bun', scarf: 0xff6fb5, glasses: 0x2a2a34, eyeScale: 1.1, hat: null,
 });
-// Kleuren per spelers-id (basis) en de ACTIEVE view. Buiten een spel is de view = per spelers-id [Wes, Jor, Juul].
+// Sam, de vierde speler: paarse hoodie (kraag + buidelzak), witte pet achterstevoren, donkere huid, zwart haar, witte sneakers
+// en een grote grijns; wat groter dan Jor/Juul. Leest naast groene Wes, blauwe Jor en oranje Juul als paars/magenta.
+BROTHER_SPECS.push({
+  scale: 1.05, skin: 0x8d5a3b, shirt: 0x9b3fe0, sleeve: 0x9b3fe0, collar: 0x6a2aa8, pants: 0x2a2838, boots: 0xf2f0ea, belt: 0xc844e8,
+  hair: 0x16101a, hairStyle: 'short', hat: 'capback', hatColor: 0xf2f0ea, eyeScale: 1.1, grin: 1.55,
+});
+// Kleuren per spelers-id (basis) en de ACTIEVE view. Buiten een spel is de view = per spelers-id [Wes, Jor, Juul, Sam].
 // Tijdens een spel zet de harness met setSlotPlayers(ids) de view om naar SLOTS: PLAYER_COLORS[slot] = kleur van de speler in dat slot
 // (zo werken duels die PLAYER_COLORS[i] met slot i gebruiken ongewijzigd). Bij dispose herstelt de harness de identiteit.
-export const BASE_COLORS = [0x2f9e5b, 0x3a78e0, 0xf08a2a];
-export const BASE_CSS = ['#35c46f', '#4a8cff', '#ff9a3c'];
+export const BASE_COLORS = [0x2f9e5b, 0x3a78e0, 0xf08a2a, 0xc844e8];
+export const BASE_CSS = ['#35c46f', '#4a8cff', '#ff9a3c', '#d45cf0'];
 export const PLAYER_COLORS = BASE_COLORS.slice();
 export const PLAYER_CSS = BASE_CSS.slice();
-let slotPlayers = [0, 1, 2];
+let slotPlayers = [0, 1, 2, 3];
 export const getSlotPlayers = () => slotPlayers.slice();
-// ids = spelers-id per slot (2 of 3); de rest wordt aangevuld zodat slot 0..2 altijd een speler heeft
-export function setSlotPlayers(ids = [0, 1, 2]) {
-  const full = ids.slice(); for (const k of [0, 1, 2]) if (!full.includes(k)) full.push(k);
-  slotPlayers = full.slice(0, 3);
+// ids = spelers-id per slot (2, 3 of 4); de rest wordt aangevuld zodat slot 0..3 altijd een speler heeft
+export function setSlotPlayers(ids = [0, 1, 2, 3]) {
+  const full = ids.slice(); for (const k of [0, 1, 2, 3]) if (!full.includes(k)) full.push(k);
+  slotPlayers = full.slice(0, 4);
   slotPlayers.forEach((id, slot) => { PLAYER_COLORS[slot] = BASE_COLORS[id]; PLAYER_CSS[slot] = BASE_CSS[id]; });
 }
 // Uiterlijk van een speler = standaardspec + wat in de winkel is gekocht/aangetrokken (S.cosmetics.equipped[id])

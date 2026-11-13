@@ -7,6 +7,7 @@ import { h } from '../engine/util.js';
 import { Character, brotherSpec, PLAYER_CSS, PLAYER_COLORS } from '../engine/chars.js';
 import { CATS, CAT_ICON, catLabel, itemsFor, owns, equippedId, equip, buy, cosm } from '../engine/cosmetics.js';
 import { nPlayers, inp, pcol, pcss, pname, klabel } from './players3.js';
+import { GAMEHAL } from '../variant.js';
 
 // ============================================================================
 // Hoedenmaker Hettie: winkel voor hoeden en kleuren, twee kolommen (Wes links, Jor rechts), met Juul erbij drie kolommen,
@@ -22,7 +23,7 @@ export function openShop(app, { onClose } = {}) {
     const itemOf = (i) => { const cat = CATS[st[i].cat]; return itemsFor(i, cat)[st[i].sel[st[i].cat]]; };
 
     // ---------- DOM ----------
-    const coinEl = h('div', { class: 'shop-coins' }), warn = h('div', { class: 'shop-warn' }, '💡 Heitjes zijn ook nodig om nieuwe hallen in de Speelhal te laten bouwen!');
+    const coinEl = h('div', { class: 'shop-coins' }), warn = h('div', { class: 'shop-warn' }, GAMEHAL ? '💡 Je verdient heitjes met elk spel dat je speelt (20 per spel).' : '💡 Heitjes zijn ook nodig om nieuwe hallen in de Speelhal te laten bouwen!');
     const view = h('canvas', { class: 'shop-view', width: 960, height: 210 });
     const caps = IDS.map(() => h('div', { class: 'shop-cap' }));
     const cols = IDS.map((i) => {
@@ -32,7 +33,7 @@ export function openShop(app, { onClose } = {}) {
       const el = h('div', { class: 'shop-col', style: { '--c': pcss(i) } }, h('h3', {}, pname(i)), tabs, list, msg, foot, done);
       return { el, tabs, list, msg, done };
     });
-    const card = h('div', { class: 'card shop' + (N === 3 ? ' shop3' : '') }, N === 3 ? h('style', {}, '.shop3{width:min(1180px,98vw)!important}.shop3 .shop-cols,.shop3 .shop-caps{grid-template-columns:repeat(3,1fr)!important;gap:8px}.shop3 .shop-tab{font-size:12px;padding:3px 0}.shop3 .shop-row{font-size:14px;padding:3px 5px;gap:5px}.shop3 .shop-row .st{font-size:12px}.shop3 .shop-foot{font-size:11px}@media (max-width:900px){.shop3 .shop-cols,.shop3 .shop-caps{grid-template-columns:1fr!important}}') : null, h('h2', {}, '👒 Hoedenmaker Hettie'), h('div', { class: 'shop-top' }, coinEl, warn), view, h('div', { class: 'shop-caps' }, ...caps), h('div', { class: 'shop-cols' }, ...cols.map((c) => c.el)),
+    const card = h('div', { class: 'card shop' + (N >= 3 ? ' shop3' : '') }, N >= 3 ? h('style', {}, '.shop3{width:min(' + (N === 4 ? 1380 : 1180) + 'px,98vw)!important}.shop3 .shop-cols,.shop3 .shop-caps{grid-template-columns:repeat(' + N + ',' + (N === 4 ? 'minmax(0,1fr)' : '1fr') + ')!important;gap:8px}.shop3 .shop-tab{font-size:12px;padding:3px 0}.shop3 .shop-row{font-size:14px;padding:3px 5px;gap:5px}.shop3 .shop-row .st{font-size:12px}.shop3 .shop-foot{font-size:11px}' + (N === 4 ? '.shop3 .shop-col{min-width:0;padding:6px 6px 4px}.shop3 .shop-tabs{gap:2px}.shop3 .shop-tab{font-size:11px;overflow:hidden}.shop3 .shop-cap{font-size:14px}.shop3 .shop-foot{font-size:10px}.shop3 .shop-row{font-size:13px;padding:3px 4px;gap:4px}.shop3 .shop-ic{width:22px}' : '') + '@media (max-width:900px){.shop3 .shop-cols,.shop3 .shop-caps{grid-template-columns:1fr!important}}') : null, h('h2', {}, '👒 Hoedenmaker Hettie'), h('div', { class: 'shop-top' }, coinEl, warn), view, h('div', { class: 'shop-caps' }, ...caps), h('div', { class: 'shop-cols' }, ...cols.map((c) => c.el)),
       h('div', { class: 'shop-bottom' }, h('div', { class: 'btn small', onClick: () => close() }, 'Klaar (Esc)')));
     const el = ui.overlay(card); el.style.overflow = 'auto';
 
@@ -44,7 +45,7 @@ export function openShop(app, { onClose } = {}) {
       scene = new THREE.Scene(); cam = new THREE.PerspectiveCamera(24, 960 / 210, 0.1, 50); cam.position.set(0, 1.05, 6.8); cam.lookAt(0, 1.05, 0);
       scene.add(new THREE.HemisphereLight(0xffffff, 0x8a7a9a, 1.7)); const dl = new THREE.DirectionalLight(0xffffff, 1.9); dl.position.set(2, 4, 5); scene.add(dl);
       for (let i = 0; i < N; i++) {
-        const x = N === 3 ? (i - 1) * 3.9 : i ? 2.9 : -2.9;
+        const x = N === 4 ? (i - 1.5) * 3.2 : N === 3 ? (i - 1) * 3.9 : i ? 2.9 : -2.9;
         const ring = new THREE.Mesh(new THREE.RingGeometry(0.75, 0.95, 28), new THREE.MeshBasicMaterial({ color: pcol(i), transparent: true, opacity: 0.7 })); ring.rotation.x = -Math.PI / 2; ring.position.set(x, 0.01, 0); scene.add(ring);
         chars[i] = new Character(brotherSpec(i)); chars[i].group.position.set(x, 0, 0); chars[i].targetYaw = chars[i].yaw = 0; scene.add(chars[i].group);
       }

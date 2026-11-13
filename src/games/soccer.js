@@ -39,9 +39,10 @@ export default {
   giver: 'Scheids Rocky',
   icon: '⚽',
   mode: 'pvp',
+  players: [2, 4], teams: true,   // 1 tegen 1, of met 4 spelers 2 tegen 2 (twee karretjes per doel)
   time: 80,
   music: 'game_fast',
-  blurb: 'Mini-voetbal met <b>bumper-karretjes</b> in het neon-stadion! Beuk de grote bal in het doel van je broer: eerste tot <b>5 goals</b> of de meeste na 80 s. Pak <b>power-ups</b> en pas op voor de <b>UFO</b>!',
+  blurb: 'Mini-voetbal met <b>bumper-karretjes</b> in het neon-stadion! Beuk de grote bal in het doel van je broer (met vier spelers: <b>2 tegen 2</b>): eerste tot <b>5 goals</b> of de meeste na 80 s. Pak <b>power-ups</b> en pas op voor de <b>UFO</b>!',
   controls: ['{move} sturen', '{a} TURBO (tank vullen op pads)', '{b} SCHOT: beuk de bal weg'],
   tip: 'Rij met turbo over de gloeiende pads om bij te tanken. Wie 2 achterstaat krijgt gratis turbo en een harder schot.',
 
@@ -49,19 +50,26 @@ export default {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
+    const NP = players.length, TM = NP === 4 && ctx.teams ? ctx.teams : null;          // TM = 2 tegen 2 (slots per team), anders 1 tegen 1
+    const teamOf = (i) => (TM ? ctx.teamOf[i] : i);
+    const tNames = [0, 1].map((t) => (TM ? ctx.teamInfo[t].name : names[t]));
+    const tHex = [0, 1].map((t) => (TM ? ctx.teamInfo[t].color : PLAYER_COLORS[t]));
+    const tCss = [0, 1].map((t) => (TM ? ctx.teamInfo[t].css : players[t].css));
+    const DIRT = [1, -1];                                  // team 0 valt aan richting +x, team 1 richting -x
+    const hexRgba = (h) => `rgba(${(h >> 16) & 255},${(h >> 8) & 255},${h & 255},1)`;
     const tw = ctx.twist.id;
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const TEMPO = ctx.twist.speed && (tw === 'turbo' || tw === 'slowmo') ? ctx.twist.speed : 1;
     const PHYS_T = 1 + (TEMPO - 1) * 0.45;
     const GBALL = 26 * lerp(1, GRAV, 0.8);
-    const colorsCss = ['rgba(60,200,120,1)', 'rgba(70,140,255,1)'];
+    const colorsCss = [hexRgba(tHex[0]), hexRgba(tHex[1])];
 
     const L = ctx.lights('cave', { shadow: 28, center: [0, 0, 0], fog: false });
     L.hemi.intensity = 1.2; L.hemi.color.set(0x9a8cff); L.hemi.groundColor.set(0x3a1a6a);
     L.sun.color.set(0xffe6ff); L.sun.intensity = 1.9; L.sun.position.set(-10, 40, 22);
     camera.fov = 40; camera.updateProjectionMatrix();
     scene.add(camera);                                    // nodig voor de herhaling-balken die aan de camera hangen
-    const A = buildArena(ctx, L, colorsCss);
+    const A = buildArena(ctx, L, colorsCss, tHex, tCss);
 
     // ---------------- ballen ----------------
     const balls = [0, 1].map((k) => {
@@ -73,8 +81,10 @@ export default {
     const main = balls[0];
 
     // ---------------- auto's ----------------
+    const memberIdx = [0, 0];
+    const spawnOf = (c) => (TM ? [-c.dir * 8.8, c.kIn ? 3.4 : -3.4] : [-c.dir * 8.5, 0]);
     const cars = players.map((pp, i) => {
-      const dir = i ? -1 : 1; const m = makeCar(i); scene.add(m.g);
+      const t = teamOf(i), kIn = memberIdx[t]++, dir = DIRT[t]; const m = makeCar(i, tHex[t]); scene.add(m.g);
       const shadow = P.shadowBlob(1.9); scene.add(shadow);
       const tagTex = canvasTex(256, 96, (c, w, hh) => { c.font = 'bold 58px Fredoka, Arial Black, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 12; c.strokeStyle = 'rgba(10,10,30,.9)'; c.lineJoin = 'round'; c.strokeText(pp.name, w / 2, hh / 2); c.fillStyle = pp.css; c.fillText(pp.name, w / 2, hh / 2); });
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false })); tag.scale.set(3.0, 1.12, 1); tag.renderOrder = 15; scene.add(tag);
@@ -83,7 +93,7 @@ export default {
       scene.add(barBg, barFill);
       const R = CR0 * lerp(1, pv.size(i), 0.6);
       m.g.scale.setScalar(lerp(1, pv.size(i), 0.6));
-      return { i, dir, m, shadow, tag, barBg, barFill, R, R0: R, x: -dir * 8.5, z: 0, vx: 0, vz: 0, yaw: dir > 0 ? Math.PI / 2 : -Math.PI / 2, fx: dir, fz: 0, boost: 60, boosting: false, kickT: 9, kickDone: true, cd: 0, hop: 0, stun: 0, frozen: 0, assist: false, magnet: 0, mood: 'play', touches: 0, kicks: 0, ix: 0, iz: 0, mag: 0, wheelRot: 0, infoTxt: '', flameT: 0, bump: 0 };
+      return { i, t, kIn, dir, m, shadow, tag, barBg, barFill, R, R0: R, x: -dir * (TM ? 8.8 : 8.5), z: TM ? (kIn ? 3.4 : -3.4) : 0, vx: 0, vz: 0, yaw: dir > 0 ? Math.PI / 2 : -Math.PI / 2, fx: dir, fz: 0, boost: 60, boosting: false, kickT: 9, kickDone: true, cd: 0, hop: 0, stun: 0, frozen: 0, assist: false, magnet: 0, mood: 'play', touches: 0, kicks: 0, ix: 0, iz: 0, mag: 0, wheelRot: 0, infoTxt: '', flameT: 0, bump: 0 };
     });
     cars.forEach((c) => { c.m.g.position.set(c.x, 0, c.z); c.m.g.rotation.y = c.yaw; });
 
@@ -91,9 +101,11 @@ export default {
     const score = [0, 0];
     let T = 0, introT = 0, started = false, finished = false, slow = 1, slowHold = 0, camShake = 0;
     const G = { state: 'kick', t: 0, timeLeft: MATCH_TIME, golden: false, goldT: 0, scorer: -1, end: false, winner: -1, lastGoalSide: 1, kickCount: 4, camX: 0, camPunch: 0, noTouchT: 0, tiebreak: false, goalT: 0 };
-    const FX = { giant: 0, magnet: [0, 0], twin: 0 };
-    const stats = { goals: [0, 0], kicks: [0, 0], items: 0, ufos: 0, bonks: 0, pads: [0, 0], replays: 0 };
-    const lead = (i) => score[1 - i] - score[i];
+    const FX = { giant: 0, magnet: new Array(NP).fill(0), twin: 0 };
+    const stats = { goals: [0, 0], kicks: new Array(NP).fill(0), items: 0, ufos: 0, bonks: 0, pads: new Array(NP).fill(0), replays: 0 };
+    const lead = (t) => score[1 - t] - score[t];
+    const teamAssist = [false, false];
+    const lastCol = (b) => (b.last >= 0 && cars[b.last] ? tHex[cars[b.last].t] : 0xffffff);
     // power-up op het veld
     let item = null, itemT = 7; const itemTex = Object.fromEntries(ITEMS.map((it) => [it.id, iconTex(it.id)]));
     const itemG = new THREE.Group(); itemG.visible = false; scene.add(itemG);
@@ -108,31 +120,32 @@ export default {
     const U = { on: false, st: '', t: 0, x: 0, z: 0, y: 13, sx: 0, sz: 0, tx: 0, tz: 0, ball: null };
     let ufoT = rand(15, 21);
     // herhaling
-    const rec = new Float32Array(REPLAY_FPS * 4 * 16); let recN = 0, recAcc = 0;
+    const RS = 8 + 4 * NP;   // floats per opname-frame
+    const rec = new Float32Array(REPLAY_FPS * 4 * RS); let recN = 0, recAcc = 0;
     const R = { on: false, t: 0, i0: 0, n: 0, sg: 0 };
     const REC_N = REPLAY_FPS * 4;
-    const frameData = new Float32Array(16);
     // letterbox + REC-label aan de camera
     const ov = new THREE.Group(); ov.visible = false; camera.add(ov);
     const barM = new THREE.MeshBasicMaterial({ color: 0x000000, depthTest: false, depthWrite: false, transparent: true, opacity: 0.92, fog: false });
     const barT = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), barM), barB = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), barM); barT.renderOrder = barB.renderOrder = 60; ov.add(barT, barB);
     const recLabel = new THREE.Sprite(new THREE.SpriteMaterial({ map: canvasTex(384, 96, (c, w, hh) => { c.font = 'bold 54px Fredoka, Arial Black, sans-serif'; c.textAlign = 'left'; c.textBaseline = 'middle'; c.lineWidth = 10; c.strokeStyle = 'rgba(0,0,0,.9)'; c.lineJoin = 'round'; c.strokeText('HERHALING', 70, hh / 2); c.fillStyle = '#ffffff'; c.fillText('HERHALING', 70, hh / 2); c.fillStyle = '#ff3a3a'; c.beginPath(); c.arc(36, hh / 2, 20, 0, TAU); c.fill(); }), transparent: true, depthTest: false })); recLabel.renderOrder = 61; ov.add(recLabel);
 
+    const sbNames = TM ? ['TEAM 1', 'TEAM 2'] : names;
     function refreshHud() {
-      hud.setScore(`${names[0]} ${score[0]} – ${score[1]} ${names[1]}${G.golden ? '  (GOUDEN GOAL)' : ''}`);
-      A.scoreboard(names, score, G.timeLeft, G.golden ? 'GOUDEN GOAL' : null);
+      hud.setScore(`${tNames[0]} ${score[0]} – ${score[1]} ${tNames[1]}${G.golden ? '  (GOUDEN GOAL)' : ''}`);
+      A.scoreboard(sbNames, score, G.timeLeft, G.golden ? 'GOUDEN GOAL' : null);
     }
     function refreshInfo(c) {
       const txt = c.frozen > 0 ? 'Verstijfd!' : c.stun > 0 ? 'Duizelig!' : `⚡${Math.round(c.boost)}% · ${c.cd > 0 ? `schot ${c.cd.toFixed(1)}s` : 'schot klaar'}${c.assist ? ' · EXTRA TURBO' : ''}${c.magnet > 0 ? ' · 🧲' : ''}`;
-      if (txt !== c.infoTxt) { c.infoTxt = txt; hud.setPlayerInfo(c.i, `${score[c.i]} goals · ${txt}`); }
+      if (txt !== c.infoTxt) { c.infoTxt = txt; hud.setPlayerInfo(c.i, `${TM ? 'Team: ' : ''}${score[c.t]} goals · ${txt}`); }
     }
 
     // ---------------- flow ----------------
     function resetKickoff() {
-      for (const c of cars) { c.x = -c.dir * 8.5; c.z = 0; c.vx = c.vz = 0; c.yaw = c.dir > 0 ? Math.PI / 2 : -Math.PI / 2; c.fx = c.dir; c.fz = 0; c.stun = 0; c.kickT = 9; c.kickDone = true; c.boosting = false; c.mood = 'play'; c.boost = Math.max(c.boost, 45); c.magnet = 0; }
+      for (const c of cars) { [c.x, c.z] = spawnOf(c); c.vx = c.vz = 0; c.yaw = c.dir > 0 ? Math.PI / 2 : -Math.PI / 2; c.fx = c.dir; c.fz = 0; c.stun = 0; c.kickT = 9; c.kickDone = true; c.boosting = false; c.mood = 'play'; c.boost = Math.max(c.boost, 45); c.magnet = 0; }
       main.x = 0; main.z = 0; main.h = main.r; main.vx = main.vz = main.vh = 0; main.last = -1; main.frozen = false;
       balls[1].on = false; balls[1].m.visible = balls[1].shadow.visible = balls[1].ring.visible = false;
-      FX.giant = 0; FX.magnet[0] = FX.magnet[1] = 0; FX.twin = 0;
+      FX.giant = 0; FX.magnet.fill(0); FX.twin = 0;
       if (item) removeItem(false); itemT = Math.max(itemT, 4);
       G.state = 'kick'; G.t = 0; G.kickCount = 4; main.m.visible = main.shadow.visible = main.ring.visible = true;
       if (U.on) abortUfo(true);
@@ -144,15 +157,15 @@ export default {
       score[scorer]++; stats.goals[scorer]++; G.state = 'goal'; G.t = 0; G.scorer = scorer; G.lastGoalSide = side; slow = 0.28; slowHold = 0.9; G.camPunch = 1; G.goalT = 0;
       G.end = score[scorer] >= WIN || G.golden; if (U.on) abortUfo(false);
       refreshHud();
-      const col = scorer ? '#8fb8ff' : '#7dffb0';
-      hud.showBig(G.end ? `${names[scorer]} WINT!` : 'GOAAAL!', 1400, col);
+      const col = tCss[scorer];
+      hud.showBig(G.end ? `${tNames[scorer].toUpperCase()} WINT!` : 'GOAAAL!', 1400, col);
       fx.texts.add('GOAL!', side * (LX - 2), 5.5, 0, col, 2.4);
       audio.sfx('bell', { vol: 0.8 }); audio.sfx('win', { vol: 0.5 }); audio.sfx('explode', { vol: 0.35 }); ctx.shake(0.9);
       A.cheer(4); A.goalFlash(scorer === 0 ? 1 : 0);
       const gx = side * (LX + 1.5);
       fx.particles.burst(gx, 2, 0, { count: 80, speed: 10, up: 1.3, life: 1.5, size: 0.6, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 7 });
-      fx.particles.ring(gx, 1, 0, { count: 32, speed: 9, color: PLAYER_COLORS[scorer], size: 0.5, life: 0.9 });
-      cars[scorer].mood = 'cheer'; cars[1 - scorer].mood = 'sad';
+      fx.particles.ring(gx, 1, 0, { count: 32, speed: 9, color: tHex[scorer], size: 0.5, life: 0.9 });
+      for (const c of cars) c.mood = c.t === scorer ? 'cheer' : 'sad';
       applyAssist();
     }
     function startReplay() {
@@ -162,27 +175,30 @@ export default {
     }
     function endMatch(winner) {
       G.state = 'end'; G.t = 0; G.winner = winner; slow = 1; R.on = false; ov.visible = false; hud.setTimer(null);
-      if (winner != null) { cars[winner].mood = 'cheer'; cars[1 - winner].mood = 'sad'; A.cheer(5); }
+      if (winner != null) { for (const c of cars) c.mood = c.t === winner ? 'cheer' : 'sad'; A.cheer(5); }
     }
     function decideByCloseness() {
-      G.tiebreak = true; const d = cars.map((c) => Math.hypot(c.x - main.x, c.z - main.z));
+      G.tiebreak = true; const dt2 = (t) => Math.min(...cars.filter((c) => c.t === t).map((c) => Math.hypot(c.x - main.x, c.z - main.z))); const d = [dt2(0), dt2(1)];
       return Math.abs(d[0] - d[1]) < 0.01 ? (Math.random() < 0.5 ? 0 : 1) : (d[0] < d[1] ? 0 : 1);
     }
     function finishMatch(winner) {
       if (finished) return; finished = true;
       const w = winner, l = winner == null ? null : 1 - winner;
-      const jokes = [`${names[w]} vliegt naar de beker! ${names[l]} rijdt nog steeds in cirkels.`, `${names[w]} is de Raket-Koning van de Neonkelder. ${names[l]} zoekt de uitgang.`, `Wat een knal! ${names[w]} wint en ${names[l]} toetert van frustratie.`, `${names[w]} schoot de bal bijna de berg uit. ${names[l]} mist de bal... en het doel.`];
+      const nw = w == null ? '' : tNames[w], nl = w == null ? '' : tNames[l];
+      const jokes = TM ? [`${nw} vliegen naar de beker! ${nl} rijden nog steeds in cirkels.`, `${nw} zijn de Raket-Koningen van de Neonkelder. ${nl} zoeken de uitgang.`, `Wat een knal! ${nw} winnen en ${nl} toeteren van frustratie.`, `${nw} schoten de bal bijna de berg uit. ${nl} missen de bal... en het doel.`]
+        : [`${nw} vliegt naar de beker! ${nl} rijdt nog steeds in cirkels.`, `${nw} is de Raket-Koning van de Neonkelder. ${nl} zoekt de uitgang.`, `Wat een knal! ${nw} wint en ${nl} toetert van frustratie.`, `${nw} schoot de bal bijna de berg uit. ${nl} mist de bal... en het doel.`];
       const extra = [stats.ufos ? `De UFO pikte de bal ${stats.ufos}x mee` : '', stats.items ? `${stats.items} power-ups gepakt` : ''].filter(Boolean).join(' · ');
-      ctx.finishPvp({ winner, score: [score[0], score[1]], delay: 800, summary: `${pick(jokes)}${G.tiebreak ? ' Bij precies gelijk besliste: wie het dichtst bij de bal stond.' : ''}${extra ? ` (${extra}.)` : ''}` });
+      ctx.finishPvp({ winners: winner == null ? [] : (TM ? TM[winner].slice() : [winner]), score: cars.map((c) => score[c.t]), delay: 800, summary: `${pick(jokes)}${G.tiebreak ? ' Bij precies gelijk besliste: wie het dichtst bij de bal stond.' : ''}${extra ? ` (${extra}.)` : ''}` });
     }
     function applyAssist() {
       for (const c of cars) {
-        const want = lead(c.i) >= 2;
+        const want = lead(c.t) >= 2;
         if (want !== c.assist) {
           c.assist = want;
-          if (want) { fx.texts.add('EXTRA TURBO!', c.x, 3.4, c.z, '#ffd23f', 1.5); hud.toast(`✨ ${names[c.i]} krijgt gratis turbo en een harder schot!`, 2200); audio.sfx('powerup', { vol: 0.7 }); fx.particles.burst(c.x, 1, c.z, { count: 30, speed: 5, up: 1.4, life: 0.9, size: 0.4, colors: [0xffd23f, 0xffffff], gravity: 3 }); }
+          if (want) { fx.texts.add('EXTRA TURBO!', c.x, 3.4, c.z, '#ffd23f', 1.5); if (!teamAssist[c.t]) hud.toast(`✨ ${tNames[c.t]} ${TM ? 'krijgen' : 'krijgt'} gratis turbo en een harder schot!`, 2200); teamAssist[c.t] = true; audio.sfx('powerup', { vol: 0.7 }); fx.particles.burst(c.x, 1, c.z, { count: 30, speed: 5, up: 1.4, life: 0.9, size: 0.4, colors: [0xffd23f, 0xffffff], gravity: 3 }); }
         }
       }
+      for (let t = 0; t < 2; t++) if (lead(t) < 2) teamAssist[t] = false;
     }
 
     // ---------------- natuurkunde: muren ----------------
@@ -214,7 +230,7 @@ export default {
         b.vx += j * nx; b.vz += j * nz; c.vx -= j / 3.4 * nx; c.vz -= j / 3.4 * nz;
         b.vh += Math.min(7, -vn * 0.11); b.last = c.i; c.touches++; G.noTouchT = 0;
         const imp = clamp(-vn / 26, 0, 1);
-        if (imp > 0.08) { fx.particles.burst(b.x - nx * b.r, b.h, b.z - nz * b.r, { count: 4 + Math.round(imp * 12), speed: 2 + imp * 5, up: 0.8, life: 0.45, size: 0.3, colors: [0xffffff, PLAYER_COLORS[c.i]], gravity: 7 }); audio.sfx('hit', { vol: 0.15 + imp * 0.55, rate: 0.9 + imp * 0.5 }); if (imp > 0.5) ctx.shake(0.1 + imp * 0.2); }
+        if (imp > 0.08) { fx.particles.burst(b.x - nx * b.r, b.h, b.z - nz * b.r, { count: 4 + Math.round(imp * 12), speed: 2 + imp * 5, up: 0.8, life: 0.45, size: 0.3, colors: [0xffffff, tHex[c.t]], gravity: 7 }); audio.sfx('hit', { vol: 0.15 + imp * 0.55, rate: 0.9 + imp * 0.5 }); if (imp > 0.5) ctx.shake(0.1 + imp * 0.2); }
       }
     }
     function tryKick(c) {
@@ -228,13 +244,14 @@ export default {
       const sp = Math.min(BALL_VMAX, (25 + Math.max(0, c.vx * ox + c.vz * oz) * 0.4) * (c.assist ? 1.12 : 1) * (FX.giant > 0 ? 0.9 : 1));
       b.vx = ox * sp; b.vz = oz * sp; b.vh = Math.max(b.vh, 7.2 + (c.boosting ? 1.5 : 0)); b.last = c.i; c.touches++; c.kicks++; stats.kicks[c.i]++; c.kickDone = true; G.noTouchT = 0;
       c.cd = c.assist ? 0.5 : 0.75; c.vx -= ox * 3; c.vz -= oz * 3;
-      fx.particles.burst(b.x, b.h, b.z, { count: 26, speed: 8, up: 0.7, life: 0.6, size: 0.5, colors: [0xffffff, 0xffe14a, PLAYER_COLORS[c.i]], gravity: 6 });
+      fx.particles.burst(b.x, b.h, b.z, { count: 26, speed: 8, up: 0.7, life: 0.6, size: 0.5, colors: [0xffffff, 0xffe14a, tHex[c.t]], gravity: 6 });
       fx.particles.ring(b.x, b.h, b.z, { count: 22, speed: 9, color: 0xffe14a, size: 0.38, life: 0.45 });
       fx.texts.add('BAM!', b.x, b.h + 2.4, b.z, '#ffd24a', 1.4);
       audio.sfx('hit', { vol: 0.9 }); audio.sfx('explode', { vol: 0.22 }); audio.sfx('whoosh', { vol: 0.4 }); ctx.shake(0.4);
     }
-    function carCar() {
-      const a = cars[0], b = cars[1]; const dx = b.x - a.x, dz = b.z - a.z, mm = a.R + b.R, d2 = dx * dx + dz * dz; if (d2 >= mm * mm) return;
+    function carCar() { for (let i = 0; i < cars.length; i++) for (let j = i + 1; j < cars.length; j++) carPair(cars[i], cars[j]); }
+    function carPair(a, b) {
+      const dx = b.x - a.x, dz = b.z - a.z, mm = a.R + b.R, d2 = dx * dx + dz * dz; if (d2 >= mm * mm) return;
       const d = Math.sqrt(d2) || 1e-4, nx = dx / d, nz = dz / d, ov = (mm - d) / 2; a.x -= nx * ov; a.z -= nz * ov; b.x += nx * ov; b.z += nz * ov;
       const vn = (a.vx - b.vx) * nx + (a.vz - b.vz) * nz; if (vn <= 0) return;
       const ma = 1, mb = 1;
@@ -242,7 +259,7 @@ export default {
       if (vn > 4) {
         const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2; audio.sfx('thud', { vol: clamp(vn / 22, 0.15, 0.6), rate: 1.2 }); fx.particles.burst(mx, 0.8, mz, { count: 8 + Math.round(vn), speed: 4, up: 1, life: 0.5, size: 0.3, colors: [0xffffff, 0xffe14a], gravity: 6 }); ctx.shake(0.15 + clamp(vn / 40, 0, 0.35));
         // beuk met turbo: de ander wordt even duizelig
-        for (const [x, y] of [[a, b], [b, a]]) if (x.boosting && !y.boosting && vn > 8 && y.stun <= 0) { y.stun = 0.7; y.vx += (y.x - x.x) / d * 7; y.vz += (y.z - x.z) / d * 7; stats.bonks++; fx.texts.add('BONK!', y.x, 3, y.z, '#ff7a5a', 1.5); audio.sfx('boing', { vol: 0.5 }); }
+        for (const [x, y] of [[a, b], [b, a]]) if (x.boosting && !y.boosting && vn > 8 && y.stun <= 0 && (!TM || x.t !== y.t)) { y.stun = 0.7; y.vx += (y.x - x.x) / d * 7; y.vz += (y.z - x.z) / d * 7; stats.bonks++; fx.texts.add('BONK!', y.x, 3, y.z, '#ff7a5a', 1.5); audio.sfx('boing', { vol: 0.5 }); }
       }
     }
     function stepCar(c, h) {
@@ -312,7 +329,7 @@ export default {
       const tot = ITEMS.reduce((a, t) => a + t.w, 0); let r = Math.random() * tot, type = ITEMS[0]; for (const t of ITEMS) { r -= t.w; if (r <= 0) { type = t; break; } }
       let x = 0, z = 0;
       for (let tries = 0; tries < 12; tries++) {
-        const side = trailing >= 0 && Math.random() < 0.7 ? cars[trailing].dir : (Math.random() < 0.5 ? 1 : -1);      // aan de kant van de achterstaander (die in zijn aanvalshelft)
+        const side = trailing >= 0 && Math.random() < 0.7 ? DIRT[trailing] : (Math.random() < 0.5 ? 1 : -1);      // aan de kant van de achterstaander (die in zijn aanvalshelft)
         x = side * rand(2, 9); z = rand(-LZ + 3, LZ - 3);
         if (cars.every((c) => Math.hypot(c.x - x, c.z - z) > 4) && PADS.every(([px, pz]) => Math.hypot(px - x, pz - z) > 3)) break;
       }
@@ -353,7 +370,7 @@ export default {
         b.h = lerp(b.h, 7.5, 1 - Math.exp(-4 * dt)); b.vx = b.vz = b.vh = 0;
         if (u >= 1) {
           U.st = 'carry'; U.t = 0; U.sx = U.x; U.sz = U.z; const trailing = score[0] === score[1] ? -1 : (score[0] < score[1] ? 0 : 1);
-          U.tx = (trailing >= 0 ? cars[trailing].dir : (Math.random() < 0.5 ? 1 : -1)) * rand(1, 7); U.tz = rand(-5.5, 5.5);
+          U.tx = (trailing >= 0 ? DIRT[trailing] : (Math.random() < 0.5 ? 1 : -1)) * rand(1, 7); U.tz = rand(-5.5, 5.5);
         }
       } else if (U.st === 'carry') {
         const u = clamp(U.t / 1.3, 0, 1), e = u * u * (3 - 2 * u); U.x = lerp(U.sx, U.tx, e); U.z = lerp(U.sz, U.tz, e); b.x = U.x; b.z = U.z; b.h = 7.5 + Math.sin(U.t * 7) * 0.25; b.vx = b.vz = b.vh = 0;
@@ -372,14 +389,14 @@ export default {
     // ---------------- herhaling ----------------
     function record(dt) {
       recAcc += dt; if (recAcc < 1 / REPLAY_FPS) return; recAcc -= 1 / REPLAY_FPS; if (recAcc > 0.1) recAcc = 0;
-      const o = (recN % REC_N) * 16, d = rec;
+      const o = (recN % REC_N) * RS, d = rec;
       d[o] = main.x; d[o + 1] = main.h; d[o + 2] = main.z; d[o + 3] = main.r; d[o + 4] = balls[1].on ? 1 : 0; d[o + 5] = balls[1].x; d[o + 6] = balls[1].h; d[o + 7] = balls[1].z;
       cars.forEach((c, i) => { const k = o + 8 + i * 4; d[k] = c.x; d[k + 1] = c.z; d[k + 2] = c.yaw; d[k + 3] = (c.boosting ? 1 : 0) + c.hop * 2; });
       recN++;
     }
     function playReplay(dt) {
       R.t += dt; const fi = R.t * REPLAY_FPS * 0.8; const i = Math.min(R.n - 1, Math.floor(fi)), j = Math.min(R.n - 1, i + 1), u = fi - Math.floor(fi);
-      const A0 = ((R.i0 + i) % REC_N) * 16, B0 = ((R.i0 + j) % REC_N) * 16;
+      const A0 = ((R.i0 + i) % REC_N) * RS, B0 = ((R.i0 + j) % REC_N) * RS;
       const g = (k) => lerp(rec[A0 + k], rec[B0 + k], u);
       main.x = g(0); main.h = g(1); main.z = g(2); main.r = rec[A0 + 3];
       const b1 = balls[1]; b1.on = rec[A0 + 4] > 0.5; b1.x = g(5); b1.h = g(6); b1.z = g(7);
@@ -409,7 +426,7 @@ export default {
       if (G.state === 'play') {
         if (!G.golden) {
           G.timeLeft -= dt; hud.setTimer(Math.max(0, G.timeLeft), 10);
-          if (Math.floor(G.timeLeft) !== lastSb) { lastSb = Math.floor(G.timeLeft); A.scoreboard(names, score, G.timeLeft, null); }
+          if (Math.floor(G.timeLeft) !== lastSb) { lastSb = Math.floor(G.timeLeft); A.scoreboard(sbNames, score, G.timeLeft, null); }
           if (G.timeLeft <= 0) {
             G.timeLeft = 0; audio.sfx('bell', { vol: 1 });
             if (score[0] !== score[1]) { hud.showBig('TIJD!', 1100, '#ffd23f'); endMatch(score[0] > score[1] ? 0 : 1); }
@@ -441,7 +458,7 @@ export default {
         }
         // tweede bal verdwijnt na zijn levensduur
         const b1 = balls[1]; if (b1.on) { b1.life -= dt; if (b1.life <= 0) { b1.on = false; b1.m.visible = b1.shadow.visible = b1.ring.visible = false; fx.particles.burst(b1.x, b1.h, b1.z, { count: 20, speed: 4, up: 1, life: 0.6, size: 0.4, colors: [0xffa040, 0xffffff], gravity: 4 }); audio.sfx('pop', { vol: 0.5 }); } }
-        FX.giant = Math.max(0, FX.giant - dt); FX.magnet[0] = Math.max(0, FX.magnet[0] - dt); FX.magnet[1] = Math.max(0, FX.magnet[1] - dt);
+        FX.giant = Math.max(0, FX.giant - dt); for (let k = 0; k < NP; k++) FX.magnet[k] = Math.max(0, FX.magnet[k] - dt);
         main.r = damp(main.r, FX.giant > 0 ? BR0 * 1.7 : BR0, 6, dt);
         if (G.state === 'play') {
           updatePads(dt);
@@ -501,8 +518,8 @@ export default {
         const hh = clamp(1 - (b.h - b.r) / 9, 0.3, 1);
         b.shadow.position.set(b.x, 0.04, b.z); b.shadow.scale.setScalar(b.r * 1.25 * hh); b.shadow.material.opacity = 0.35 + hh * 0.55;
         b.ring.position.set(b.x, 0.05, b.z); b.ring.scale.setScalar(b.r * (1 + (1 - hh) * 0.5)); b.ring.material.opacity = 0.25 + (1 - hh) * 0.5;
-        b.ring.material.color.setHex(b.last === 0 ? 0x7dffb0 : b.last === 1 ? 0x8fb8ff : 0xffffff);
-        if (sp > 14 && !R.on && Math.random() < dt * (10 + sp)) fx.particles.emit(b.x - b.vx * 0.02, b.h, b.z - b.vz * 0.02, 0, 0, 0, { life: 0.4, size: b.r * 0.7, color: b.last === 0 ? 0x7dffb0 : b.last === 1 ? 0x8fb8ff : 0xffffff, gravity: 0 });
+        b.ring.material.color.setHex(lastCol(b));
+        if (sp > 14 && !R.on && Math.random() < dt * (10 + sp)) fx.particles.emit(b.x - b.vx * 0.02, b.h, b.z - b.vz * 0.02, 0, 0, 0, { life: 0.4, size: b.r * 0.7, color: lastCol(b), gravity: 0 });
       }
       main.m.material.emissiveIntensity = FX.giant > 0 ? 0.5 + Math.sin(tt * 10) * 0.2 : 0.18;
       // auto's
@@ -517,7 +534,7 @@ export default {
         const fl = c.boosting && c.boost > 0;
         c.m.flame.visible = fl; if (fl) { const s = 0.8 + Math.random() * 0.5; c.m.f1.scale.set(s, 1 + Math.random() * 0.4, s); c.m.f2.scale.set(s, 1 + Math.random() * 0.3, s); if (Math.random() < dt * 40) fx.particles.emit(c.x - c.fx * 1.6, 0.6, c.z - c.fz * 1.6, -c.fx * 4 + rand(-1, 1), 0.6, -c.fz * 4 + rand(-1, 1), { life: 0.4, size: 0.5, color: Math.random() < 0.5 ? 0xffa020 : 0xffe9a0, gravity: -1 }); }
         c.m.under.material.opacity = 0.55 + (fl ? 0.4 : 0) + Math.sin(tt * 6 + c.i) * 0.1; c.m.paint.emissiveIntensity = 0.15 + (c.kickT < KICK_T ? 0.8 : 0) + (c.assist ? 0.3 + Math.sin(tt * 8) * 0.12 : 0) + (c.frozen > 0 ? 0.6 : 0);
-        c.m.paint.color.setHex(c.frozen > 0 ? 0x9fd8ff : PLAYER_COLORS[c.i]);
+        c.m.paint.color.setHex(c.frozen > 0 ? 0x9fd8ff : tHex[c.t]);
         if (c.assist && Math.random() < dt * 12) fx.particles.emit(c.x + rand(-1, 1), 0.5 + Math.random(), c.z + rand(-1, 1), 0, 1.2, 0, { life: 0.6, size: 0.3, color: 0xffd23f, gravity: -1 });
         if (c.magnet > 0 && Math.random() < dt * 20) { const a = Math.random() * TAU; fx.particles.emit(c.x + Math.cos(a) * 3.5, 0.8, c.z + Math.sin(a) * 3.5, -Math.cos(a) * 5, 0.4, -Math.sin(a) * 5, { life: 0.6, size: 0.3, color: 0x8fb8ff, gravity: 0 }); }
         if (G.state !== 'replay') c.m.c.pose = c.mood === 'cheer' ? 'cheer' : c.mood === 'sad' ? 'sad' : 'carry'; c.m.c.speed = 0; c.m.c.update(dt);
@@ -546,9 +563,9 @@ export default {
       resultUpdate, introUpdate,
       onSwap() { for (const c of cars) fx.particles.burst(c.x, 1, c.z, { count: 20, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) {
-        movers.forEach((m, i) => { if (m) { const c = cars[i]; c.frozen = 2.2; c.vx = c.vz = 0; if (score[i] > 0) { score[i]--; refreshHud(); applyAssist(); } fx.texts.add('BEWOGEN!', c.x, 3.6, c.z, '#9fe8ff', 1.4); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
+        movers.forEach((m, i) => { if (m) { const c = cars[i]; c.frozen = 2.2; c.vx = c.vz = 0; if (score[c.t] > 0) { score[c.t]--; refreshHud(); applyAssist(); } fx.texts.add('BEWOGEN!', c.x, 3.6, c.z, '#9fe8ff', 1.4); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
       },
-      celebrate(w) { cars[w].mood = 'cheer'; cars[1 - w].mood = 'sad'; A.cheer(6); },
+      celebrate(w, winners = [w]) { for (const c of cars) c.mood = winners.includes(c.i) ? 'cheer' : 'sad'; A.cheer(6); },
       dispose() {},
       dbg: {
         state: () => ({ T, gstate: G.state, timeLeft: G.timeLeft, golden: G.golden, goldT: G.goldT, score: [...score], finished, slow, replay: R.on, fx: { giant: FX.giant, magnet: [...FX.magnet] },

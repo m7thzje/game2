@@ -50,9 +50,10 @@ export default {
   giver: 'IJskoningin Ina',
   icon: '🏒',
   mode: 'pvp',
+  players: [2, 4], teams: true,   // 1 tegen 1, of met 4 spelers 2 tegen 2 (twee schijven per helft)
   time: 90,
   music: 'game_fast',
-  blurb: 'Air-hockey op een <b>enorme ijstafel</b> in een kristalgrot! Sla de puck in het doel van je broer. Eerste tot <b>5 goals</b> (of de meeste na 90 seconden). Pak <b>ijsbloemen</b> voor gekke power-ups, pas op voor de <b>draak en de pinguïn</b> die extra pucks schieten, en wie 2 achterstaat krijgt een <b>gouden schijf</b>!',
+  blurb: 'Air-hockey op een <b>enorme ijstafel</b> in een kristalgrot! Sla de puck in het doel van je broer (met vier spelers: <b>2 tegen 2</b>, twee schijven per helft). Eerste tot <b>5 goals</b> (of de meeste na 90 seconden). Pak <b>ijsbloemen</b> voor gekke power-ups, pas op voor de <b>draak en de pinguïn</b> die extra pucks schieten, en wie 2 achterstaat krijgt een <b>gouden schijf</b>!',
   controls: ['{move} beweeg je schijf (alleen in je eigen helft)', '{b} SMASH: ingedrukt houden = laden, loslaten = hard slaan'],
   tip: 'Een lange laadtijd geeft een keiharde smash, maar daarna moet je even wachten. Slaan met een korte tik is sneller maar zwakker.',
 
@@ -60,6 +61,12 @@ export default {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
+    const NP = players.length, TM = NP === 4 && ctx.teams ? ctx.teams : null;          // TM = 2 tegen 2 (slots per team), anders 1 tegen 1
+    const teamOf = (i) => (TM ? ctx.teamOf[i] : i);
+    const tNames = [0, 1].map((t) => (TM ? ctx.teamInfo[t].name : names[t]));
+    const tHex = [0, 1].map((t) => (TM ? ctx.teamInfo[t].color : PLAYER_COLORS[t]));
+    const tCss = [0, 1].map((t) => (TM ? ctx.teamInfo[t].css : players[t].css));
+    const hexRgba = (h) => `rgba(${(h >> 16) & 255},${(h >> 8) & 255},${h & 255},1)`;
     const tw = ctx.twist.id;
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const TEMPO = ctx.twist.speed && (tw === 'turbo' || tw === 'slowmo') ? ctx.twist.speed : 1;
@@ -71,8 +78,8 @@ export default {
     L.hemi.intensity = 1.3; L.hemi.color.set(0x9ec4ff); L.hemi.groundColor.set(0x3a3a80);
     L.sun.color.set(0xd6e6ff); L.sun.intensity = 1.5; L.sun.position.set(-8, 30, 16);
     camera.fov = 48; camera.updateProjectionMatrix();
-    const colorsCss = ['rgba(60,200,120,1)', 'rgba(70,140,255,1)'];
-    const A = buildArena(ctx, L, colorsCss);
+    const colorsCss = [hexRgba(tHex[0]), hexRgba(tHex[1])];
+    const A = buildArena(ctx, L, colorsCss, tHex, tCss);
 
     // ---------------- puck-pool ----------------
     const pucks = [];
@@ -90,8 +97,10 @@ export default {
     function setKind(q, kind) { q.kind = kind; const [c, e] = puckMats[kind] || puckMats.ice; q.body.material.color.set(c); q.rim.material.color.set(e); q.rim.material.emissive.set(e); q.glow.material.color.set(e); }
 
     // ---------------- schijven ----------------
+    const memberIdx = [0, 0];
     const pads = players.map((pp, i) => {
-      const colr = PLAYER_COLORS[i]; const dir = i ? -1 : 1;
+      const team = teamOf(i), kIn = memberIdx[team]++, colr = tHex[team]; const dir = team ? -1 : 1;   // pad-kleur = teamkleur; het poppetje achter het doel is de speler zelf
+      const zBase = TM ? (kIn ? 3.4 : -3.4) : 0;
       const g = new THREE.Group();
       const baseM = new THREE.MeshStandardMaterial({ color: colr, roughness: 0.3, metalness: 0.35 });
       const goldM = new THREE.MeshStandardMaterial({ color: 0xffd23f, roughness: 0.25, metalness: 0.85, emissive: 0xff9a10, emissiveIntensity: 0.35 });
@@ -108,12 +117,12 @@ export default {
       const tagTex = canvasTex(256, 96, (c, w, hh) => { c.font = 'bold 58px Fredoka, Arial Black, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 12; c.strokeStyle = 'rgba(10,10,30,.9)'; c.lineJoin = 'round'; c.strokeText(pp.name, w / 2, hh / 2); c.fillStyle = pp.css; c.fillText(pp.name, w / 2, hh / 2); });
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false })); tag.scale.set(2.6, 0.97, 1); tag.renderOrder = 15; scene.add(tag);
       // het poppetje achter het doel
-      const c = makeBrother(i); const kS = 3.3 / c.height; const holder = new THREE.Group(); holder.add(c.group); holder.scale.setScalar(kS); holder.position.set(dir * -(LX + SD + 0.9), 0.05, 0); scene.add(holder);
+      const c = makeBrother(i); const kS = 3.3 / c.height; const holder = new THREE.Group(); holder.add(c.group); holder.scale.setScalar(kS); holder.position.set(dir * -(LX + SD + 0.9), 0.05, zBase); scene.add(holder);
       c.faceDir(dir, 0); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
-      const stand = mesh(new THREE.CylinderGeometry(1.6, 1.9, 0.5, 14), mat(0x6a7ab8), { cast: false, pos: [dir * -(LX + SD + 0.9), -0.1, 0] }); scene.add(stand);
+      const stand = mesh(new THREE.CylinderGeometry(1.6, 1.9, 0.5, 14), mat(0x6a7ab8), { cast: false, pos: [dir * -(LX + SD + 0.9), -0.1, zBase] }); scene.add(stand);
       const R = RP * lerp(1, pv.size(i), 0.8);
-      return { i, dir, g, baseM, goldM, base, stem, ball, ring, shadow, tag, c, holder, R, R0: R, Rcur: R,
-        x: dir * -(LX * 0.55), z: 0, vx: 0, vz: 0, tvx: 0, tvz: 0, state: 'idle', chargeT: 0, lt: 0, ldx: dir, ldz: 0, lpow: 0, cd: 0, grace: 0, frozen: 0, golden: false, hits: 0, smashes: 0, pressure: 0, sc: 1, hitPuck: false };
+      return { i, t: team, kIn, zBase, dir, g, baseM, goldM, base, stem, ball, ring, shadow, tag, c, holder, R, R0: R, Rcur: R,
+        x: dir * -(LX * 0.55), z: zBase, vx: 0, vz: 0, tvx: 0, tvz: 0, state: 'idle', chargeT: 0, lt: 0, ldx: dir, ldz: 0, lpow: 0, cd: 0, grace: 0, frozen: 0, golden: false, hits: 0, smashes: 0, pressure: 0, sc: 1, hitPuck: false };
     });
     pads.forEach((p) => { p.g.position.set(p.x, 0, p.z); });
 
@@ -127,15 +136,17 @@ export default {
     const bumpers = []; let bumperT = 12;
     const bumperPool = Array.from({ length: 3 }, () => { const m = makeBumper(); m.visible = false; scene.add(m); return { m, on: false, x: 0, z: 0, t: 0, life: 0, hit: 0 }; });
     let eventT = 13, eventAlt = Math.random() < 0.5; let stallT = 0;
-    const stats = { smashes: [0, 0], flowers: 0, events: 0, bumpers: 0 };
+    const pressure = [0, 0];       // per team: hoe lang de puck op de helft van de tegenstander lag (beslist de gouden-goal-verlenging)
+    const stats = { smashes: new Array(NP).fill(0), flowers: 0, events: 0, bumpers: 0 };
     // ijsblokken die een krimpend doel dichtmaken
     const blocks = [0, 1].map((side) => [-1, 1].map((sz) => { const m = mesh(new THREE.BoxGeometry(1.0, 1.5, 1), new THREE.MeshStandardMaterial({ color: 0xbfeaff, emissive: 0x3a9ad8, emissiveIntensity: 0.4, roughness: 0.2, transparent: true, opacity: 0.93, flatShading: true }), { pos: [(side ? 1 : -1) * LX, 0.75, 0] }); m.visible = false; scene.add(m); return m; }));
 
-    const lead = (i) => score[1 - i] - score[i];     // >0: i staat achter
+    const lead = (t) => score[1 - t] - score[t];     // >0: team t staat achter
+    const teamAssist = [false, false];
+    const sbNames = TM ? ['TEAM 1', 'TEAM 2'] : names;
     function refreshHud() {
-      hud.setScore(`${names[0]} ${score[0]} – ${score[1]} ${names[1]}${G.ot ? '  (GOUDEN GOAL)' : ''}`);
-      hud.setPlayerInfo(0, `Goals: ${score[0]}`); hud.setPlayerInfo(1, `Goals: ${score[1]}`);
-      A.scoreboard(names, score, G.ot ? G.otLeft : G.timeLeft, G.ot ? 'GOUDEN GOAL' : null);
+      hud.setScore(`${tNames[0]} ${score[0]} – ${score[1]} ${tNames[1]}${G.ot ? '  (GOUDEN GOAL)' : ''}`);
+      A.scoreboard(sbNames, score, G.ot ? G.otLeft : G.timeLeft, G.ot ? 'GOUDEN GOAL' : null);
     }
 
     // ---------------- puck helpers ----------------
@@ -170,14 +181,15 @@ export default {
     }
     function applyGolden() {
       for (const p of pads) {
-        const want = lead(p.i) >= 2;
+        const want = lead(p.t) >= 2;
         if (want !== p.golden) {
           p.golden = want;
           p.base.material = want ? p.goldM : p.baseM; p.stem.material = p.ball.material = want ? p.goldM : p.baseM;
-          if (want) { fx.texts.add('GOUDEN SCHIJF!', p.x, 3.4, p.z, '#ffd23f', 1.6); hud.toast(`✨ ${names[p.i]} krijgt een gouden schijf!`, 2000); audio.sfx('powerup', { vol: 0.8 }); audio.sfx('sparkle', { vol: 0.6 }); fx.particles.burst(p.x, 0.8, p.z, { count: 40, speed: 6, up: 1.5, life: 1.0, size: 0.4, colors: [0xffd23f, 0xffffff, 0xffa020], gravity: 4 }); }
+          if (want) { fx.texts.add('GOUDEN SCHIJF!', p.x, 3.4, p.z, '#ffd23f', 1.6); if (!teamAssist[p.t]) hud.toast(`✨ ${tNames[p.t]} ${TM ? 'krijgen' : 'krijgt'} een gouden schijf!`, 2000); teamAssist[p.t] = true; audio.sfx('powerup', { vol: 0.8 }); audio.sfx('sparkle', { vol: 0.6 }); fx.particles.burst(p.x, 0.8, p.z, { count: 40, speed: 6, up: 1.5, life: 1.0, size: 0.4, colors: [0xffd23f, 0xffffff, 0xffa020], gravity: 4 }); }
           else fx.particles.burst(p.x, 0.8, p.z, { count: 16, speed: 3, up: 1, life: 0.6, size: 0.3, colors: [0xffd23f], gravity: 4 });
         }
       }
+      for (let t = 0; t < 2; t++) if (lead(t) < 2) teamAssist[t] = false;
     }
     function goal(q, scorer) {
       const side = scorer === 0 ? 1 : 0;        // doel waar de puck inging (0 = links, 1 = rechts)
@@ -185,26 +197,28 @@ export default {
       G.end = score[scorer] >= WIN_GOALS || G.ot;
       clearPucks(q); q.stuck = -1;
       refreshHud();
-      const col = scorer ? '#8fb8ff' : '#7dffb0';
-      hud.showBig(G.end ? `${names[scorer]} WINT!` : 'GOAAAL!', 1500, col);
+      const col = tCss[scorer];
+      hud.showBig(G.end ? `${tNames[scorer].toUpperCase()} WINT!` : 'GOAAAL!', 1500, col);
       audio.sfx('bell', { vol: 0.8 }); audio.sfx('win', { vol: 0.5 }); audio.sfx('explode', { vol: 0.3 }); ctx.shake(0.85);
       A.cheer(3.2); A.goalFlash(side);
       const gx = (side ? 1 : -1) * (LX + 1.2);
       fx.particles.burst(gx, 1.4, 0, { count: 70, speed: 9, up: 1.2, life: 1.4, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 6 });
-      fx.particles.ring(gx, 1, 0, { count: 30, speed: 8, color: scorer ? 0x8fb8ff : 0x7dffb0, size: 0.4, life: 0.8 });
+      fx.particles.ring(gx, 1, 0, { count: 30, speed: 8, color: tHex[scorer], size: 0.4, life: 0.8 });
       fx.texts.add('GOAL!', gx * 0.8, 4.5, 0, col, 2.0);
-      pads[scorer].c.pose = 'cheer'; pads[1 - scorer].c.pose = 'sad';
+      for (const p of pads) p.c.pose = p.t === scorer ? 'cheer' : 'sad';
       applyGolden();
     }
     function finishMatch(winner) {
       if (finished) return; finished = true;
+      const nw = winner == null ? '' : tNames[winner], nl = winner == null ? '' : tNames[1 - winner];
       const jokes = winner == null ? ['Gelijkspel! Niemand wil verliezen, dus de pinguïns delen de taart.', 'Precies gelijk. De yeti krabt zich verbaasd op zijn hoofd.']
-        : [`${names[winner]} is de nieuwe IJskoning${''}! ${names[1 - winner]} glijdt nog steeds uit.`, `${names[winner]} smash de puck als een echte ijsberserker. ${names[1 - winner]} zoekt de puck nog.`, `Het hele ijspubliek joelt voor ${names[winner]}. ${names[1 - winner]} heeft koude voeten.`, `${names[winner]} wint dit ijsgevecht! De draak is onder de indruk.`];
-      ctx.finishPvp({ winner, score: [score[0], score[1]], delay: 800, summary: `${pick(jokes)}${G.tiebreak ? ' Na de verlenging besliste het veldoverwicht (wie de puck het langst bij de ander hield).' : ''}${stats.flowers ? ` Er werden ${stats.flowers} ijsbloemen geplukt.` : ''}` });
+        : TM ? [`${nw} zijn de nieuwe IJskoningen! ${nl} glijden nog steeds uit.`, `${nw} smashen de puck als echte ijsberserkers. ${nl} zoeken de puck nog.`, `Het hele ijspubliek joelt voor ${nw}. ${nl} hebben koude voeten.`, `${nw} winnen dit ijsgevecht! De draak is onder de indruk.`]
+        : [`${nw} is de nieuwe IJskoning! ${nl} glijdt nog steeds uit.`, `${nw} smash de puck als een echte ijsberserker. ${nl} zoekt de puck nog.`, `Het hele ijspubliek joelt voor ${nw}. ${nl} heeft koude voeten.`, `${nw} wint dit ijsgevecht! De draak is onder de indruk.`];
+      ctx.finishPvp({ winners: winner == null ? [] : (TM ? TM[winner].slice() : [winner]), score: pads.map((p) => score[p.t]), delay: 800, summary: `${pick(jokes)}${G.tiebreak ? ' Na de verlenging besliste het veldoverwicht (wie de puck het langst bij de ander hield).' : ''}${stats.flowers ? ` Er werden ${stats.flowers} ijsbloemen geplukt.` : ''}` });
     }
     function endMatch(winner) {
       G.state = 'end'; G.t = 0; G.winner = winner; slow = 1;
-      if (winner != null) { pads[winner].c.pose = 'cheer'; pads[1 - winner].c.pose = 'sad'; A.cheer(5); }
+      if (winner != null) { for (const p of pads) p.c.pose = p.t === winner ? 'cheer' : 'sad'; A.cheer(5); }
       hud.setTimer(null);
       if (winner == null) hud.showBig('GELIJKSPEL!', 1400, '#ffd23f');
     }
@@ -228,7 +242,7 @@ export default {
       audio.sfx('powerup', { vol: 0.8 }); ctx.shake(0.3);
       if (f.id === 'multi') spawnPuck(p.x + dir * (p.R + 1.4), p.z, dir * 12, rand(-4, 4), 'ice', 14);
       else if (f.id === 'giant') { FX.giant = 12; for (const q of activePucks()) fx.particles.burst(q.x, 0.6, q.z, { count: 12, speed: 3, up: 1, life: 0.5, size: 0.4, colors: [0xffaa3a], gravity: 2 }); }
-      else if (f.id === 'shrink') { FX.shrink[i] = 10; }
+      else if (f.id === 'shrink') { FX.shrink[p.t] = 10; }
       else if (f.id === 'sticky') { FX.sticky = 12; }
       else if (f.id === 'ghost') { FX.ghost = 9; }
     }
@@ -279,7 +293,7 @@ export default {
         q.vx = ox * sp; q.vz = oz * sp; q.stuck = -1;
         p.grace = 0; p.smashes++; stats.smashes[p.i]++;
         const pw = p.lpow || 0.5;
-        if (p.state === 'lunge') { p.state = 'cool'; p.cd = (lead(p.i) >= 3 ? 0.6 : 1.1); }
+        if (p.state === 'lunge') { p.state = 'cool'; p.cd = (lead(p.t) >= 3 ? 0.6 : 1.1); }
         fx.particles.burst(q.x, 0.7, q.z, { count: 22 + Math.round(pw * 30), speed: 7 + pw * 5, up: 0.8, life: 0.6, size: 0.4, colors: [0xffffff, 0xffe14a, 0xffa020, 0x9fe8ff], gravity: 6 });
         fx.particles.ring(q.x, 0.5, q.z, { count: 22, speed: 8, color: 0xffe14a, size: 0.35, life: 0.45 });
         fx.texts.add(pw > 0.8 ? 'MEGA SMASH!' : 'SMASH!', q.x, 2.8, q.z, pw > 0.8 ? '#ff5a3a' : '#ffd24a', 1.2 + pw * 0.5);
@@ -337,6 +351,16 @@ export default {
         }
       }
     }
+    function padSeparate() {   // teamgenoten schuiven elkaar zachtjes opzij (geen botsing met stun)
+      for (let a = 0; a < pads.length; a++) for (let b = a + 1; b < pads.length; b++) {
+        const A_ = pads[a], B_ = pads[b]; if (A_.t !== B_.t) continue;
+        const dx = B_.x - A_.x, dz = B_.z - A_.z, mm = A_.Rcur + B_.Rcur, d2 = dx * dx + dz * dz;
+        if (d2 >= mm * mm) continue;
+        const d = Math.sqrt(d2) || 1e-3, nx = d2 > 1e-8 ? dx / d : 0, nz = d2 > 1e-8 ? dz / d : 1, ov = (mm - d) / 2;
+        A_.x -= nx * ov; A_.z -= nz * ov; B_.x += nx * ov; B_.z += nz * ov;
+        const vn = (A_.vx - B_.vx) * nx + (A_.vz - B_.vz) * nz; if (vn > 0) { A_.vx -= vn * nx * 0.5; A_.vz -= vn * nz * 0.5; B_.vx += vn * nx * 0.5; B_.vz += vn * nz * 0.5; }
+      }
+    }
     function stepPad(p, h) {
       const lam = lerp(18, 2.0, SLIP) * (p.state === 'lunge' ? 3 : 1);
       const k = 1 - Math.exp(-lam * h);
@@ -353,7 +377,7 @@ export default {
       p.grace = Math.max(0, p.grace - dt); p.cd = Math.max(0, p.cd - dt);
       if (p.frozen > 0) { p.frozen -= dt; p.tvx = p.tvz = 0; if (p.state === 'charge') p.state = 'idle'; return; }
       const spd = VMAX * pv.speed(p.i) * (p.state === 'charge' ? 0.55 : 1);
-      if (p.state === 'lunge') { p.lt += dt; p.tvx = p.ldx * (14 + 18 * p.lpow); p.tvz = p.ldz * (14 + 18 * p.lpow); if (p.lt >= 0.15 + 0.06 * p.lpow) { p.state = 'cool'; p.cd = (lead(p.i) >= 3 ? 0.6 : 1.1); p.grace = 0.1; } }
+      if (p.state === 'lunge') { p.lt += dt; p.tvx = p.ldx * (14 + 18 * p.lpow); p.tvz = p.ldz * (14 + 18 * p.lpow); if (p.lt >= 0.15 + 0.06 * p.lpow) { p.state = 'cool'; p.cd = (lead(p.t) >= 3 ? 0.6 : 1.1); p.grace = 0.1; } }
       else { p.tvx = inp.x * spd; p.tvz = inp.y * spd; }
       if (p.state === 'cool' && p.cd <= 0) p.state = 'idle';
       if (inp.bP && p.state === 'idle' && p.cd <= 0) { p.state = 'charge'; p.chargeT = 0; audio.sfx('select', { vol: 0.3, rate: 1.4 }); }
@@ -411,9 +435,9 @@ export default {
           hud.setTimer(G.timeLeft, 10);
         } else {
           G.otLeft -= dt; hud.setTimer(Math.max(0, G.otLeft), 8);
-          if (G.otLeft <= 0) { let w = pads[0].pressure === pads[1].pressure ? null : (pads[0].pressure > pads[1].pressure ? 0 : 1); G.tiebreak = true; audio.sfx('bell', { vol: 1 }); endMatch(w); }
+          if (G.otLeft <= 0) { let w = pressure[0] === pressure[1] ? null : (pressure[0] > pressure[1] ? 0 : 1); G.tiebreak = true; audio.sfx('bell', { vol: 1 }); endMatch(w); }
         }
-        if (Math.floor(G.timeLeft) !== lastScoreRefresh) { lastScoreRefresh = Math.floor(G.timeLeft); A.scoreboard(names, score, G.ot ? G.otLeft : G.timeLeft, G.ot ? 'GOUDEN GOAL' : null); }
+        if (Math.floor(G.timeLeft) !== lastScoreRefresh) { lastScoreRefresh = Math.floor(G.timeLeft); A.scoreboard(sbNames, score, G.ot ? G.otLeft : G.timeLeft, G.ot ? 'GOUDEN GOAL' : null); }
       }
 
       // serve: puck valt
@@ -436,6 +460,7 @@ export default {
         const n = clamp(Math.ceil(vmax * sdt / 0.26), 1, 14), h = sdt / n;
         for (let s = 0; s < n; s++) {
           for (const p of pads) stepPad(p, h);
+          if (TM) padSeparate();
           for (const q of pucks) {
             if (!q.on || q.falling) continue;
             stepPuck(q, h);
@@ -464,7 +489,7 @@ export default {
         for (const q of pucks) {
           if (!q.on || q.falling) continue;
           if (q.kind !== 'main') { q.life -= dt; if (q.life <= 0) { killPuck(q); continue; } else if (q.life < 2 && Math.random() < dt * 10) fx.particles.emit(q.x, 0.8, q.z, 0, 2, 0, { life: 0.4, size: 0.2, color: 0xffffff, gravity: 0 }); }
-          const side = q.x > 0 ? 1 : 0; pads[1 - side].pressure += dt * (1 / Math.max(1, activePucks().length));
+          const side = q.x > 0 ? 1 : 0; pressure[1 - side] += dt * (1 / Math.max(1, activePucks().length));
         }
         // vastzittende puck? (hele tijd stil)
         const mv = activePucks().filter((q) => !q.falling);
@@ -569,18 +594,18 @@ export default {
         p.tag.position.set(p.x, 2.7 + R * 0.5, p.z + 0.4);
         p.tag.visible = G.state !== 'goal' || G.t < 2;
         // trail bij lunge
-        if (p.state === 'lunge' && Math.random() < dt * 40) fx.particles.emit(p.x - p.ldx * R, 0.5, p.z - p.ldz * R, 0, 0.4, 0, { life: 0.3, size: 0.5, color: p.i ? 0x8fb8ff : 0x7dffb0, gravity: 0 });
+        if (p.state === 'lunge' && Math.random() < dt * 40) fx.particles.emit(p.x - p.ldx * R, 0.5, p.z - p.ldz * R, 0, 0.4, 0, { life: 0.3, size: 0.5, color: tHex[p.t], gravity: 0 });
         if (p.golden && Math.random() < dt * 14) fx.particles.emit(p.x + (Math.random() - 0.5) * R * 1.6, 0.5 + Math.random() * 0.8, p.z + (Math.random() - 0.5) * R * 1.6, 0, 1.2, 0, { life: 0.6, size: 0.3, color: 0xffd23f, gravity: -1 });
         if (p.frozen > 0) { if (Math.random() < dt * 20) fx.particles.emit(p.x + (Math.random() - 0.5) * R * 2, 0.8, p.z + (Math.random() - 0.5) * R * 2, 0, 1, 0, { life: 0.5, size: 0.3, color: 0xcff4ff, gravity: 0 }); }
         // speler-poppetje volgt z
-        const hz = clamp(p.z * 0.85, -5.5, 5.5);
+        const hz = TM ? p.zBase + clamp(p.z * 0.3, -1.5, 1.5) : clamp(p.z * 0.85, -5.5, 5.5);
         p.holder.position.z = damp(p.holder.position.z, hz, 6, dt);
         p.c.speed = clamp(Math.hypot(p.vz, 0) / 12, 0, 0.8);
         if (G.state !== 'goal' && G.state !== 'end') p.c.pose = p.state === 'charge' ? 'scared' : p.state === 'lunge' ? 'push' : 'carry';
         p.c.update(dt);
         // info
         const txt = p.frozen > 0 ? 'Bevroren!' : p.state === 'charge' ? 'LADEN...' : p.state === 'lunge' ? 'SMASH!' : p.cd > 0 ? `Smash: ${p.cd.toFixed(1)}s` : 'Smash: klaar!';
-        if (p.lastTxt !== txt) { p.lastTxt = txt; hud.setPlayerInfo(p.i, `${score[p.i]} goals · ${txt}`); }
+        if (p.lastTxt !== txt) { p.lastTxt = txt; hud.setPlayerInfo(p.i, `${TM ? 'Team: ' : ''}${score[p.t]} goals · ${txt}`); }
       }
       // bloem
       if (flower) {
@@ -613,13 +638,13 @@ export default {
       resultUpdate, introUpdate,
       onSwap() { for (const p of pads) fx.particles.burst(p.x, 1, p.z, { count: 20, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) {
-        movers.forEach((m, i) => { if (m) { const p = pads[i]; p.frozen = 2.5; p.state = 'idle'; if (score[i] > 0) { score[i]--; refreshHud(); applyGolden(); } fx.texts.add('IJSBLOK!', p.x, 3.4, p.z, '#9fe8ff', 1.4); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
+        movers.forEach((m, i) => { if (m) { const p = pads[i]; p.frozen = 2.5; p.state = 'idle'; if (score[p.t] > 0) { score[p.t]--; refreshHud(); applyGolden(); } fx.texts.add('IJSBLOK!', p.x, 3.4, p.z, '#9fe8ff', 1.4); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
       },
-      celebrate(w) { pads[w].c.pose = 'cheer'; pads[1 - w].c.pose = 'sad'; A.cheer(6); },
+      celebrate(w, winners = [w]) { for (const p of pads) p.c.pose = winners.includes(p.i) ? 'cheer' : 'sad'; A.cheer(6); },
       dispose() {},
       dbg: {
         state: () => ({ T, gstate: G.state, timeLeft: G.timeLeft, ot: G.ot, otLeft: G.otLeft, score: [...score], finished, slow, golden: pads.map((p) => p.golden), pucks: pucks.filter((q) => q.on).map((q) => ({ kind: q.kind, x: +q.x.toFixed(2), z: +q.z.toFixed(2), vx: +q.vx.toFixed(1), vz: +q.vz.toFixed(1), r: +q.r.toFixed(2), stuck: q.stuck, falling: q.falling, lastHit: q.lastHit })),
-          pads: pads.map((p) => ({ x: +p.x.toFixed(2), z: +p.z.toFixed(2), vx: p.vx, vz: p.vz, st: p.state, cd: +p.cd.toFixed(2), R: +p.Rcur.toFixed(2), frozen: p.frozen, smashes: p.smashes, hits: p.hits, pressure: +p.pressure.toFixed(1) })),
+          pads: pads.map((p) => ({ x: +p.x.toFixed(2), z: +p.z.toFixed(2), vx: p.vx, vz: p.vz, st: p.state, cd: +p.cd.toFixed(2), R: +p.Rcur.toFixed(2), frozen: p.frozen, smashes: p.smashes, hits: p.hits, t: p.t, pressure: +pressure[p.t].toFixed(1) })),
           fx: { giant: FX.giant, sticky: FX.sticky, ghost: FX.ghost, shrink: [...FX.shrink] }, gh: [...gh], flower: flower ? { id: flower.type.id, x: flower.x, z: flower.z } : null, bumpers: bumperPool.filter((b) => b.on).length, stats }),
         setScore: (a, b) => { score[0] = a; score[1] = b; refreshHud(); applyGolden(); },
         giveFlower: (id, i) => { flower = { x: 0, z: 0, t: 0, life: 10, type: FLOWERS.find((f) => f.id === id) }; takeFlower(i); },

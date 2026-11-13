@@ -19,6 +19,9 @@ export const C = {
   WATER_Y: 0,
 };
 export const vineX = (k) => C.X0 + k * C.DX;
+// banen per aantal spelers (in place, zodat C.LZ / C.OFF overal kloppen): z van elke baan en de x-verschuiving (de lianen van de banen staan verspreid over de liaan-afstand)
+const LANESET = { 2: { LZ: [3.0, -3.0], OFF: [0, 4.0] }, 3: { LZ: [5.0, 0.0, -5.0], OFF: [0, 3.0, 6.0] }, 4: { LZ: [6.0, 2.0, -2.0, -6.0], OFF: [0, 2.25, 4.5, 6.75] } };
+export function setLanes(n) { const q = LANESET[n] || LANESET[2]; C.LZ.length = 0; C.LZ.push(...q.LZ); C.OFF.length = 0; C.OFF.push(...q.OFF); }
 
 const rngW = mulberry32(777);
 const r = (a, b) => a + rngW() * (b - a);
@@ -107,7 +110,7 @@ export function makeBanana() {
 }
 
 // ---------------------------------------------------------------- de wereld
-export function buildJungle(ctx) {
+export function buildJungle(ctx, NP = 2) {
   const { scene, fx } = ctx;
   const root = new THREE.Group(); scene.add(root);
   const anim = [];
@@ -138,8 +141,16 @@ export function buildJungle(ctx) {
     b.position.set((x0 + x1) / 2, top - 7, (z0 + z1) / 2); b.receiveShadow = true; b.castShadow = false; root.add(b); return b;
   }
   const LX = 0.9, GX = C.GOAL_U;
-  bank(-34, LX, 0, 16, C.BANK_Y); bank(-34, LX + OFF[1], -16, 0, C.BANK_Y);
-  bank(GX, GX + 36, 0, 16, C.BANK_Y + 0.2); bank(GX + OFF[1], GX + 36, -16, 0, C.BANK_Y + 0.2);
+  if (NP === 2) {
+    bank(-34, LX, 0, 16, C.BANK_Y); bank(-34, LX + OFF[1], -16, 0, C.BANK_Y);
+    bank(GX, GX + 36, 0, 16, C.BANK_Y + 0.2); bank(GX + OFF[1], GX + 36, -16, 0, C.BANK_Y + 0.2);
+  } else {
+    // 3-4 banen: elke baan een eigen strook oever (de rand schuift mee met de verschuiving van de baan)
+    for (let i = 0; i < NP; i++) {
+      const zHi = i === 0 ? 16 : (L[i - 1] + L[i]) / 2, zLo = i === NP - 1 ? -16 : (L[i] + L[i + 1]) / 2;
+      bank(-34, LX + OFF[i], zLo, zHi, C.BANK_Y); bank(GX + OFF[i], GX + 36, zLo, zHi, C.BANK_Y + 0.2);
+    }
+  }
   // rand-details: struiken, rotsen, paddestoelen die gloeien
   const shroomCols = [0x7fffd0, 0xc08cff, 0xff8ad0];
   function shrooms(x0, x1, y) {
@@ -156,10 +167,11 @@ export function buildJungle(ctx) {
 
   // start-bord en finish-poort
   const sp = P.signpost(['START →'], 3.4); sp.position.set(-1.6, C.BANK_Y, 5.2); sp.rotation.y = -0.3; root.add(sp);
-  const sp2 = P.signpost(['START →'], 3.4); sp2.position.set(0.6 + OFF[1], C.BANK_Y, -5.2); sp2.rotation.y = -0.2; root.add(sp2);
+  if (NP === 2) { const sp2 = P.signpost(['START →'], 3.4); sp2.position.set(0.6 + OFF[1], C.BANK_Y, -5.2); sp2.rotation.y = -0.2; root.add(sp2); }
+  else for (let i = 1; i < NP; i++) { const spn = P.signpost(['START →'], 3.0); spn.position.set(-2.0 + OFF[i], C.BANK_Y, L[i] - 1.6); spn.rotation.y = -0.2; root.add(spn); }
   const finX = GX + 3.3;
-  for (const px of [finX - 2.2, finX + 6.2]) add(mesh(new THREE.CylinderGeometry(0.22, 0.28, 7.6, 7), mat(0x6b4a2e), { pos: [px, C.BANK_Y + 3.8, 5.6] }));
-  add(mesh(new THREE.BoxGeometry(8.9, 1.9, 0.3), new THREE.MeshStandardMaterial({ map: tex.sign('🏁 OVERKANT 🏁', { w: 512, h: 128, size: 58, bg: '#b8325a', fg: '#fff2b0' }), roughness: 0.8 }), { cast: false, pos: [finX + 2, C.BANK_Y + 7.0, 5.6] }));
+  for (const px of [finX - 2.2, finX + 6.2]) add(mesh(new THREE.CylinderGeometry(0.22, 0.28, 7.6, 7), mat(0x6b4a2e), { pos: [px, C.BANK_Y + 3.8, L[0] + 2.6] }));
+  add(mesh(new THREE.BoxGeometry(8.9, 1.9, 0.3), new THREE.MeshStandardMaterial({ map: tex.sign('🏁 OVERKANT 🏁', { w: 512, h: 128, size: 58, bg: '#b8325a', fg: '#fff2b0' }), roughness: 0.8 }), { cast: false, pos: [finX + 2, C.BANK_Y + 7.0, L[0] + 2.6] }));
   const chest = P.chest(true); chest.scale.setScalar(1.6); chest.position.set(finX + 5, C.BANK_Y + 0.2, 0); root.add(chest);
   for (let k = 0; k < 14; k++) { const c = P.coin(0.3); c.position.set(finX + 4 + Math.random() * 2.2, C.BANK_Y + 0.4 + k * 0.05, (Math.random() - 0.5) * 2.4); root.add(c); anim.push((t) => { c.rotation.y = t * 2 + k; }); }
   const flags = [];
@@ -171,7 +183,7 @@ export function buildJungle(ctx) {
   // takken waaraan de lianen hangen + reuzenbomen op de achtergrond
   const bark = mat(0x5a4230), bark2 = mat(0x6b5038);
   const x0 = -8, x1 = GX + 8;
-  for (const lane of [0, 1]) {
+  for (let lane = 0; lane < NP; lane++) {
     const z = L[lane], off = OFF[lane];
     let px = x0 + off, py = C.PY + 0.35;
     const segs = 11;
@@ -243,7 +255,7 @@ export function buildJungle(ctx) {
     ducks.push({ g: d, t: Math.random() * 10, spd: r(0.3, 0.8) * (d.rotation.y === 0 ? 1 : -1), hop: 0, vy: 0 });
   }
   // chompers (duiken op bij de speler die in het water valt)
-  const chompers = [0, 1].map(() => { const c = makeCroc(1.25); c.visible = false; root.add(c); return { g: c, t: 0, state: 'idle', x: 0, z: 0 }; });
+  const chompers = L.map(() => { const c = makeCroc(1.25); c.visible = false; root.add(c); return { g: c, t: 0, state: 'idle', x: 0, z: 0 }; });
 
   // rimpelringen
   const ripples = [];

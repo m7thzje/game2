@@ -1,6 +1,8 @@
 // Gebruik: node tools/test_ticktock.mjs [scenario...]   (twist kiezen: TWIST=giant node ...)
+//   Scenario's bots3 / bots4: drie / vier spelers (vrij voor allen, ?players=N): alle spelers krijgen een bot, uitslag + place volgen (ook idle3/idle4 en 'alleen één speelt').
 // Scenario's: look (screenshots van gimmicks), bots (volledige potjes met bots), idle (niemand beweegt), p0 / p1 (alleen die broer speelt goed), timeout
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath, BROWSER_ARGS } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -15,37 +17,39 @@ await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const twist = process.env.TWIST || 'none';
+let BAD = 0; const bad = (m) => { BAD++; console.log('FAIL:', m); };
 
 for (const name of scen) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const mN = /^(bots|idle|solo)([34])(?:_(\d))?$/.exec(name); const NPL = mN ? +mN[2] : 2, SOLO = mN && mN[1] === 'solo' ? +mN[3] : -1;   // bots3 bots4 idle3 idle4 solo4_2 (alleen speler 2 speelt)
+  const browser = await chromium.launch({ executablePath: chromePath(), args: BROWSER_ARGS });
   const page = await browser.newPage({ viewport: { width: 1000, height: 600 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=ticktock&quality=low&twist=${twist}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=ticktock&quality=low&twist=${twist}&scare=0${NPL > 2 ? '&players=' + NPL : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
   });
-  await page.evaluate((who) => {
+  await page.evaluate(([who, solo]) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
-    const st = { t: 0 };
+    const st = { t: 0 }, NN = m.ids.length;
     // Slimme bot voor speler i: springt vlak voor een wijzer/koekoek, rent voor de gouden wijzer uit
     window.__bot = (n, stop) => {
       const dt = 1 / 60;
       for (let k = 0; k < n && !m.finished; k++) {
         const s = inst.dbg.state(); if (stop && stop(s)) return true;
-        for (const i of [0, 1]) { const v = inp.virtual[i]; v.a = false; v.b = false; v.x = 0; v.y = 0; }
+        for (const q of m.ids) { const v = inp.virtual[q]; v.a = false; v.b = false; v.x = 0; v.y = 0; }
         if (s.rstate === 'fight' && who !== 'idle') {
           const D = inst.dbg;
-          for (const i of [0, 1]) {
-            if (who === 'p0' && i === 1) continue; if (who === 'p1' && i === 0) continue;
-            const me = s.p[i]; if (me.st !== 'play') continue; const v = inp.virtual[i];
+          for (let i = 0; i < NN; i++) {
+            if (who === 'p0' && i === 1) continue; if (who === 'p1' && i === 0) continue; if (solo >= 0 && i !== solo) continue;
+            const me = s.p[i]; if (me.st !== 'play') continue; const v = inp.virtual[m.ids[i]];
             const pr = 0.55; let jump = false; let mx = 0, mz = 0;
             for (const key of ['hour', 'minute', 'second', 'gold']) {
               const h = D.hands[key]; if (!h.on || h.dropY > 0.2) continue;
@@ -65,7 +69,7 @@ for (const name of scen) {
       }
       return false;
     };
-  }, name === 'idle' ? 'idle' : name === 'p0' ? 'p0' : name === 'p1' ? 'p1' : 'bots');
+  }, [/^idle/.test(name) ? 'idle' : name === 'p0' ? 'p0' : name === 'p1' ? 'p1' : 'bots', SOLO]);
 
   if (name === 'timeout') {
     const r = await page.evaluate(() => {
@@ -120,7 +124,12 @@ for (const name of scen) {
   console.log(`end T=${res.st.T.toFixed(1)} wins=${res.st.wins} draws=${res.st.draws} finished=${res.finished} surv=${res.st.surv.map((x) => x.toFixed(1))}`);
   console.log('hits: ' + res.st.hist.map((h) => `${h.cause}@${h.ht.toFixed(1)}(p${h.i},y${h.y.toFixed(1)})`).join(' '));
   if (res.result) console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, ' ')}`);
-  console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS');
+  if (NPL > 2) {
+    const r = res.result, okp = res.finished && r && r.place && r.place.length === NPL && new Set(r.place).size === NPL;
+    console.log(okp ? `OK   uitslag compleet: winnaarIds=${r.winnerIds} place=${r.place}` : 'FAIL: uitslag/place niet in orde'); if (!okp) bad('place');
+  }
+  if (errors.length) { console.log('ERRORS:\n' + errors.slice(0, 8).join('\n')); bad('console-fouten'); } else console.log('NO ERRORS');
   await browser.close();
 }
 server.close();
+if (BAD) process.exitCode = 1;

@@ -36,15 +36,20 @@ export default {
   giver: 'Kapitein Putter',
   icon: '⛳',
   mode: 'pvp',
+  players: [2, 3, 4],
   get time() { const n = holesSetting(); return Math.round(n * (PLAY_TARGET[n] + PAUSE_END[n] + 1.3) / 5) * 5; },
   music: 'game',
-  get blurb() { const n = holesSetting(); return `Minigolf voor twee, <b>tegelijk</b> op dezelfde baan: <b>${n} holes</b>, steeds lastiger. Eerst in het gat = de meeste punten. <b>Bonk</b> je broer in het water en pas op voor de <b>draak</b>! De laatste hole telt dubbel.`; },
+  get blurb() { const n = holesSetting(); return `Minigolf voor 2 tot 4 spelers, <b>tegelijk</b> op dezelfde baan: <b>${n} holes</b>, steeds lastiger. Eerst in het gat = de meeste punten. <b>Bonk</b> je broer in het water en pas op voor de <b>draak</b>! De laatste hole telt dubbel.`; },
   controls: ['{move} richten + max kracht', '{a} houd = meter, los = slaan', '{b} ballon: bonk of turbo (1x)'],
   tip: 'Laat los op de top van de meter voor een vol schot.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp; const names = players.map((p) => p.name);
+    const NPL = players.length, NIL = (v) => players.map(() => v);   // aantal spelers (N = aantal holes)
+    const sum = (a) => a.reduce((x, y) => x + y, 0);
+    // afslagplekken: 2 spelers zoals in de hole; 3-4 spelers verdeeld tussen de twee tee-punten
+    const teeOf = (i) => { if (NPL <= 2) return def.tee[i]; const a = def.tee[0], b = def.tee[1], u = i / (NPL - 1); return [a[0] + (b[0] - a[0]) * u, a[1] + (b[1] - a[1]) * u]; };
     const N = holesSetting(), matchHoles = pickHoles(N, ctx.rng);
     const tscale = Math.max(0.75, Math.min(1.3, PLAY_TARGET[N] / (matchHoles.reduce((a, h) => a + h.time, 0) / N)));
     const holeTime = (d) => (d.sudden ? d.time : Math.round(d.time * tscale));
@@ -79,7 +84,7 @@ export default {
     });
 
     // ---------------- toestand ----------------
-    const G = { state: 'init', t: 0, hole: -1, timeLeft: 0, grace: false, sunkCount: 0, sd: false, results: [], winner: -1, end: false, ready: 0, resT: 0, popT: 0, next: null, boardEl: null, boardOn: false };
+    const G = { state: 'init', t: 0, hole: -1, timeLeft: 0, grace: false, sunkCount: 0, sd: false, sdSet: [0, 1], results: [], winner: -1, end: false, ready: 0, resT: 0, popT: 0, next: null, boardEl: null, boardOn: false };
     let T = 0, introT = 0, started = false, finished = false;
     let C = null, Hh = null, def = null, bnd = null, maxS = MAX_STROKES;
     const D = { state: 'idle', t: 0, cd: 10, target: null, S: new THREE.Vector3(), Pp: new THREE.Vector3(), E: new THREE.Vector3(), Dp: new THREE.Vector3(), g: null, marker: null, count: 0 };
@@ -95,7 +100,7 @@ export default {
     const hudEl = document.getElementById('hud');
     const bars = pl.map((p, i) => {
       const el = document.createElement('div');
-      el.style.cssText = `position:absolute;bottom:14px;${i ? 'right' : 'left'}:14px;width:230px;padding:6px 10px;border-radius:12px;background:rgba(20,12,30,.62);border:3px solid ${players[i].css};pointer-events:none;font-size:13px;color:#fff`;
+      el.style.cssText = `position:absolute;bottom:14px;${NPL > 2 ? `left:${1 + i * 24.8}%` : (i ? 'right:14px' : 'left:14px')};width:${NPL > 2 ? '22.5%' : '230px'};box-sizing:border-box;padding:6px 10px;border-radius:12px;background:rgba(20,12,30,.62);border:3px solid ${players[i].css};pointer-events:none;font-size:13px;color:#fff`;
       el.innerHTML = '<div class="gl" style="margin-bottom:3px"></div><div style="position:relative;height:14px;background:rgba(255,255,255,.18);border-radius:7px;overflow:hidden"><div class="gf" style="position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#4aff7a,#ffe14a,#ff4a3a)"></div><div class="gc" style="position:absolute;top:0;bottom:0;width:3px;background:#fff"></div></div>';
       return { el, gl: el.querySelector('.gl'), gf: el.querySelector('.gf'), gc: el.querySelector('.gc'), last: '' };
     });
@@ -103,7 +108,7 @@ export default {
 
     const isFinal = () => !G.sd && G.hole === N - 1;
     const holeLabel = () => (G.sd ? 'GOUDEN PUTT' : `Hole ${Math.max(1, G.hole + 1)}/${N}${isFinal() ? ' · FINALE' : ''}`);
-    function refreshHud() { hud.setScore(`${holeLabel()} · ${names[0]} ${pl[0].total} – ${pl[1].total} ${names[1]}`); }
+    function refreshHud() { hud.setScore(NPL === 2 ? `${holeLabel()} · ${names[0]} ${pl[0].total} – ${pl[1].total} ${names[1]}` : holeLabel()); }
 
     // ---------------- baan laden ----------------
     // Alleen de huidige hole en de volgende staan in het geheugen: de volgende wordt tijdens het spelen alvast opgebouwd, de vorige meteen opgeruimd.
@@ -122,7 +127,7 @@ export default {
       G.timeLeft = holeTime(def); G.grace = false; G.sunkCount = 0; G.holeDone = false; G.nextBuilt = false; G.liftSnd = [];
       D.state = 'idle'; D.cd = 8 + Math.random() * 3; D.g.group.visible = false; D.marker.visible = false; D.target = null; for (const p of pl) p.carried = false;
       pl.forEach((p, i) => {
-        const t = def.tee[i]; p.ball = makeBall(t[0], t[1], p.r); p.rest = { x: t[0], z: t[1] }; p.safe = { x: t[0], z: t[1] }; p.strokes = 0; p.state = 'wait'; p.bonkUsed = false; p.boost = false; p.frozen = 0; p.pts = 0; p.charging = false; p.m = 0; p.pw = 0.75; p.outT = 0; p.penT = 0; p.restT = 0; p.sunkT = 0; p.slowT = 0;
+        const t = teeOf(i); p.ball = makeBall(t[0], t[1], p.r); p.rest = { x: t[0], z: t[1] }; p.safe = { x: t[0], z: t[1] }; p.strokes = 0; p.state = 'wait'; p.bonkUsed = false; p.boost = false; p.frozen = 0; p.pts = 0; p.charging = false; p.m = 0; p.pw = 0.75; p.outT = 0; p.penT = 0; p.restT = 0; p.sunkT = 0; p.slowT = 0;
         p.bm.visible = true; p.bm.scale.setScalar(p.r); p.c.pose = 'idle'; aimAtCup(p); p.hx = t[0] - Math.cos(p.ang) * 1.7; p.hz = t[1] - Math.sin(p.ang) * 1.7;
       });
       G.state = 'ready'; G.t = 0; refreshHud(); hud.setTimer(null);
@@ -150,15 +155,17 @@ export default {
     }
     function useBalloon(p) {
       if (p.bonkUsed || p.state === 'sunk' || p.state === 'out' || p.state === 'wait' || G.state !== 'play') { audio.sfx('click', { vol: 0.2, rate: 0.6 }); return; }
-      const o = pl[1 - p.i], b = p.ball, ob = o.ball; p.bonkUsed = true; p.bonks++;
-      const d = Math.hypot(ob.x - b.x, ob.z - b.z);
-      if (!ob.sunk && o.state !== 'out' && !o.carried && d < 9) {
+      const b = p.ball; p.bonkUsed = true; p.bonks++;
+      // bonk: de dichtstbijzijnde bal van een ander die nog meedoet (binnen bereik)
+      let o = null, d = 1e9; for (const q of pl) { if (q === p || q.ball.sunk || q.state === 'out' || q.carried) continue; const dd = Math.hypot(q.ball.x - b.x, q.ball.z - b.z); if (dd < d) { d = dd; o = q; } }
+      const ob = o ? o.ball : null;
+      if (o && d < 9) {
         const dx = ob.x - b.x, dz = ob.z - b.z, l = d || 1; ob.vx += dx / l * 16; ob.vz += dz / l * 16; if (o.state === 'aim') { o.state = 'roll'; o.charging = false; o.restT = 0; }
         o.c.pose = 'scared'; o.poseT = 1; stats.bonks++;
         balloon.on = true; balloon.t = 0; balloon.from = [b.x, b.z]; balloon.to = [ob.x, ob.z]; balloon.by = p.i;
         audio.sfx('pop', { vol: 0.8, rate: 0.8 }); audio.sfx('boing', { vol: 0.7 }); audio.sfx('whoosh', { vol: 0.6 }); ctx.shake(0.35);
         fx.particles.burst(ob.x, 0.6, ob.z, { count: 30, speed: 6, up: 1, life: 0.8, size: 0.4, colors: [0xff6ad0, 0xffffff, 0xffe14a], gravity: 5 });
-        fx.texts.add('BONK!', ob.x, 2.2, ob.z, '#ff6ad0', 1.5); hud.toast(`${names[p.i]} bonkt ${names[1 - p.i]}!`, 1400);
+        fx.texts.add('BONK!', ob.x, 2.2, ob.z, '#ff6ad0', 1.5); hud.toast(`${names[p.i]} bonkt ${names[o.i]}!`, 1400);
       } else {
         p.boost = true; audio.sfx('powerup', { vol: 0.8 }); fx.texts.add('TURBO-SLAG!', b.x, 2.2, b.z, '#ff6ad0', 1.4); fx.particles.burst(b.x, 0.6, b.z, { count: 24, speed: 4, up: 1.2, life: 0.8, size: 0.4, colors: [0xff6ad0, 0xffffff], gravity: 3 });
       }
@@ -169,20 +176,24 @@ export default {
       if (G.holeDone) return; G.holeDone = true; G.state = 'holeEnd'; G.t = 0; hud.setTimer(null); mountBars(false); D.state = 'idle'; D.g.group.visible = false; D.marker.visible = false;
       for (const p of pl) { p.charging = false; if (p.carried) { p.carried = false; } }
       const sunk = pl.filter((p) => p.state === 'sunk').sort((a, b) => a.sunkT - b.sunkT);
-      const add = [0, 0]; let first = -1;
+      const add = NIL(0); let first = -1;
       const mult = isFinal() ? 2 : 1;
-      if (sunk.length) { first = sunk[0].i; add[first] = 2 + (sunk[0].strokes <= def.par ? 1 : 0); if (sunk[1]) add[sunk[1].i] = 1; }
-      else { const d = pl.map((p) => Math.hypot(p.ball.x - C.cup[0], p.ball.z - C.cup[1])); first = Math.abs(d[0] - d[1]) < 0.05 ? Math.floor(Math.random() * 2) : (d[0] < d[1] ? 0 : 1); add[first] = 1; }
-      if (def.sudden) { add[0] = add[1] = 0; add[first] = 1; }
-      for (const i of [0, 1]) { add[i] *= mult; pl[i].pts = add[i]; pl[i].total += add[i]; }
+      if (sunk.length) { first = sunk[0].i; if (NPL === 2) { add[first] = 2 + (sunk[0].strokes <= def.par ? 1 : 0); if (sunk[1]) add[sunk[1].i] = 1; } else sunk.forEach((q, k) => { add[q.i] = NPL - k + (k === 0 && q.strokes <= def.par ? 1 : 0); }); }
+      else { const d = pl.map((p) => Math.hypot(p.ball.x - C.cup[0], p.ball.z - C.cup[1])); const bd = Math.min(...d), cs = d.map((v, i) => (v - bd < 0.05 ? i : -1)).filter((i) => i >= 0); first = cs[Math.floor(Math.random() * cs.length)]; add[first] = 1; }
+      if (def.sudden) {   // gouden putt: alleen de gelijkstaande koplopers (bij 2 spelers: beiden) strijden mee
+        add.fill(0); const cand = sunk.filter((q) => G.sdSet.includes(q.i));
+        if (cand.length) first = cand[0].i; else { const d = G.sdSet.map((i) => Math.hypot(pl[i].ball.x - C.cup[0], pl[i].ball.z - C.cup[1])); const bd = Math.min(...d), cs = G.sdSet.filter((i, k) => d[k] - bd < 0.05); first = cs[Math.floor(Math.random() * cs.length)]; }
+        add[first] = 1;
+      }
+      for (let i = 0; i < NPL; i++) { add[i] *= mult; pl[i].pts = add[i]; pl[i].total += add[i]; }
       G.results.push({ hole: def.name, add: [...add], strokes: pl.map((p) => p.strokes), first, reason, sd: G.sd, final: isFinal() });
       G.lastFirst = first;
       refreshHud();
       const w = first;
-      hud.showBig(sunk.length ? `${names[w]} wint de hole!` : (reason === 'time' ? 'TIJD OP! Dichtstbij wint' : `${names[w]} dichtbij!`), 1800, w ? '#8fb8ff' : '#7dffb0');
-      hud.toast(`+${add[0]} ${names[0]} · +${add[1]} ${names[1]}${mult > 1 ? ' (finale: dubbel!)' : ''}`, 2200);
+      hud.showBig(sunk.length ? `${names[w]} wint de hole!` : (reason === 'time' ? 'TIJD OP! Dichtstbij wint' : `${names[w]} dichtbij!`), 1800, players[w].css);
+      hud.toast(`${players.map((q, i) => `+${add[i]} ${names[i]}`).join(' · ')}${mult > 1 ? ' (finale: dubbel!)' : ''}`, 2200);
       audio.sfx('bell', { vol: 0.8 });
-      for (const p of pl) { p.c.pose = add[p.i] > add[1 - p.i] ? 'cheer' : (add[p.i] < add[1 - p.i] ? 'sad' : 'idle'); p.poseT = 5; }
+      { const mx = Math.max(...add), mn = Math.min(...add); for (const p of pl) { p.c.pose = mx === mn ? 'idle' : add[p.i] === mx ? 'cheer' : (add[p.i] === mn ? 'sad' : 'idle'); p.poseT = 5; } }
       S0.cheer(2.4);
     }
     // holeborden-tussenscherm: stand per hole
@@ -190,28 +201,29 @@ export default {
       if (!hudEl) return; if (G.boardEl) G.boardEl.remove();
       const el = document.createElement('div'); G.boardEl = el;
       const sd = G.sd, last = !sd && G.hole >= N - 1, nextName = !last && !sd ? defAt(G.hole + 1).name : '';
-      const rows = G.results.map((r, k) => `<div style="display:flex;gap:6px;align-items:center;white-space:nowrap"><span style="opacity:.6;width:20px;text-align:right">${r.sd ? '⭐' : k + 1}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis">${r.hole}${r.final ? ' ×2' : ''}</span><b style="width:22px;text-align:center;color:${players[0].css}">${r.add[0]}</b><b style="width:22px;text-align:center;color:${players[1].css}">${r.add[1]}</b></div>`);
+      const rows = G.results.map((r, k) => `<div style="display:flex;gap:6px;align-items:center;white-space:nowrap"><span style="opacity:.6;width:20px;text-align:right">${r.sd ? '⭐' : k + 1}</span><span style="flex:1;overflow:hidden;text-overflow:ellipsis">${r.hole}${r.final ? ' ×2' : ''}</span>${players.map((q, i) => `<b style="width:22px;text-align:center;color:${q.css}">${r.add[i]}</b>`).join('')}</div>`);
       const cols = rows.length > 6 ? 2 : 1;
       el.style.cssText = `position:absolute;left:50%;top:50%;transform:translate(-50%,-44%);width:${cols === 2 ? 560 : 330}px;max-width:94%;padding:10px 14px 12px;border-radius:16px;background:rgba(20,12,30,.86);border:3px solid #ffe14a;color:#fff;font-size:15px;pointer-events:none;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.45)`;
       el.innerHTML = `<div style="font-size:19px;font-weight:700;color:#ffe14a;margin-bottom:6px">${sd ? 'Gouden putt!' : last ? 'Eindstand' : `Stand na hole ${G.hole + 1}/${N}`}</div>`
         + `<div style="display:grid;grid-template-columns:repeat(${cols},1fr);gap:2px 18px;text-align:left;margin-bottom:8px">${rows.join('')}</div>`
-        + `<div style="font-size:22px;font-weight:700"><span style="color:${players[0].css}">${names[0]} ${pl[0].total}</span> – <span style="color:${players[1].css}">${pl[1].total} ${names[1]}</span></div>`
+        + (NPL === 2 ? `<div style="font-size:22px;font-weight:700"><span style="color:${players[0].css}">${names[0]} ${pl[0].total}</span> – <span style="color:${players[1].css}">${pl[1].total} ${names[1]}</span></div>` : `<div style="font-size:${NPL > 3 ? 17 : 20}px;font-weight:700;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">${players.map((q, i) => `<span style="color:${q.css}">${names[i]} ${pl[i].total}</span>`).join('')}</div>`)
         + (nextName ? `<div style="font-size:13px;opacity:.8;margin-top:6px">Straks: ${nextName}</div>` : '');
       hudEl.append(el);
     }
     function nextAfterHole() {
       if (G.sd) return finishMatch();
       if (G.hole + 1 < N) return loadHole(G.hole + 1);
-      if (pl[0].total !== pl[1].total) return finishMatch();
+      { const top = Math.max(...pl.map((q) => q.total)), tied = pl.filter((q) => q.total === top).map((q) => q.i); if (tied.length === 1) return finishMatch(); G.sdSet = tied; }
       hud.showBig('GELIJK! GOUDEN PUTT!', 1600, '#ffd23f'); audio.sfx('bell', { vol: 0.9 }); loadHole(N);
     }
     function finishMatch() {
       if (finished) return; finished = true; G.state = 'end'; hud.setTimer(null); mountBars(false); if (G.boardEl) { G.boardEl.remove(); G.boardEl = null; } if (G.next) { dropHole(G.next.H); G.next = null; }
-      let w = pl[0].total === pl[1].total ? Math.floor(Math.random() * 2) : (pl[0].total > pl[1].total ? 0 : 1);
-      const jokes = [`${names[w]} is de Putter-Koning! ${names[1 - w]} zoekt zijn bal nog in de vijver.`, `${names[w]} golft als een kampioen. De draak is onder de indruk.`, `${names[w]} wint de race! ${names[1 - w]} heeft stiekem een bonk gevoeld.`];
-      const holes = G.results.map((r, k) => `${r.sd ? '⭐' : k + 1}: ${r.add[0]}-${r.add[1]}`).join(', ');
+      const order = pl.map((q) => q.i).sort((a, b) => pl[b].total - pl[a].total || Math.random() - 0.5);
+      const w = order[0], l = order[NPL - 1];
+      const jokes = [`${names[w]} is de Putter-Koning! ${names[l]} zoekt zijn bal nog in de vijver.`, `${names[w]} golft als een kampioen. De draak is onder de indruk.`, `${names[w]} wint de race! ${names[l]} heeft stiekem een bonk gevoeld.`];
+      const holes = G.results.map((r, k) => `${r.sd ? '⭐' : k + 1}: ${r.add.join('-')}`).join(', ');
       for (const p of pl) { p.c.pose = p.i === w ? 'cheer' : 'sad'; p.poseT = 99; } S0.cheer(6);
-      ctx.finishPvp({ winner: w, score: [pl[0].total, pl[1].total], delay: 600, summary: `${jokes[Math.floor(Math.random() * jokes.length)]} Holes: ${holes}.${stats.bonks ? ` Er werd ${stats.bonks}x gebonkt` : ''}${stats.dragon ? ` en de draak kaapte ${stats.dragon}x een bal.` : stats.bonks ? '.' : ''}` });
+      ctx.finishPvp({ winner: w, score: pl.map((q) => q.total), place: NPL > 2 ? order : undefined, delay: 600, summary: `${jokes[Math.floor(Math.random() * jokes.length)]} Holes: ${holes}.${stats.bonks ? ` Er werd ${stats.bonks}x gebonkt` : ''}${stats.dragon ? ` en de draak kaapte ${stats.dragon}x een bal.` : stats.bonks ? '.' : ''}` });
     }
 
     // ---------------- draak ----------------
@@ -230,7 +242,7 @@ export default {
         if (C.walls.some((w) => { const dx = w[2] - w[0], dz = w[3] - w[1], l2 = dx * dx + dz * dz; const u = clamp(((x - w[0]) * dx + (z - w[1]) * dz) / l2, 0, 1); return Math.hypot(x - (w[0] + dx * u), z - (w[1] + dz * u)) < 1.1; })) continue;
         const d = Math.hypot(x - C.cup[0], z - C.cup[1]); const sc = Math.abs(d - (dc + 4)) + Math.random() * 6; if (!best || sc < best.sc) best = { x, z, sc };
       }
-      return best || { x: def.tee[0][0], z: def.tee[0][1] };
+      return best || { x: teeOf(0)[0], z: teeOf(0)[1] };
     }
     const bez = (a, b, h, u, out) => { out.set(lerp(a.x, b.x, u), lerp(a.y, b.y, u) + Math.sin(u * Math.PI) * h, lerp(a.z, b.z, u)); return out; };
     const tmpV = new THREE.Vector3(), prevV = new THREE.Vector3();
@@ -283,11 +295,11 @@ export default {
       const first = G.sunkCount === 1;
       audio.sfx('coin', { vol: 0.8, rate: 0.7 }); audio.sfx(first ? 'win' : 'good', { vol: 0.7 }); audio.sfx('ding', { vol: 0.5 }); ctx.shake(first ? 0.5 : 0.25);
       fx.particles.burst(C.cup[0], 0.8, C.cup[1], { count: first ? 60 : 30, speed: 7, up: 1.4, life: 1.2, size: 0.45, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 6 });
-      fx.particles.ring(C.cup[0], 0.3, C.cup[1], { count: 24, speed: 6, color: p.i ? 0x8fb8ff : 0x7dffb0, size: 0.35, life: 0.6 });
+      fx.particles.ring(C.cup[0], 0.3, C.cup[1], { count: 24, speed: 6, color: players[p.i].color, size: 0.35, life: 0.6 });
       const word = p.strokes === 1 ? 'HOLE-IN-ONE!' : p.strokes < def.par ? 'BIRDIE!' : first ? 'IN HET GAT!' : 'OOK IN!';
-      fx.texts.add(word, C.cup[0], 3.4, C.cup[1], first ? '#ffe14a' : '#ffffff', 1.8); if (first || p.strokes === 1) hud.showBig(word, 1200, p.i ? '#8fb8ff' : '#7dffb0');
+      fx.texts.add(word, C.cup[0], 3.4, C.cup[1], first ? '#ffe14a' : '#ffffff', 1.8); if (first || p.strokes === 1) hud.showBig(word, 1200, players[p.i].css);
       p.c.pose = 'cheer'; p.poseT = 99; S0.cheer(2);
-      if (first && !def.sudden) { G.grace = true; G.timeLeft = Math.min(G.timeLeft, GRACE); hud.toast(`${names[1 - p.i]} heeft nog ${GRACE} seconden!`, 1800); }
+      if (first && !def.sudden) { G.grace = true; G.timeLeft = Math.min(G.timeLeft, GRACE); hud.toast(NPL === 2 ? `${names[1 - p.i]} heeft nog ${GRACE} seconden!` : `De rest heeft nog ${GRACE} seconden!`, 1800); }
       if (def.sudden) { endHole('sudden'); }
     }
 
@@ -318,10 +330,12 @@ export default {
           else if (ev === 'sunk') ballSunk(p);
           if (p.state === 'aim' && Math.hypot(b.vx, b.vz) > 0.6) { p.state = 'roll'; p.charging = false; p.restT = 0; }
         }
-        const a = pl[0], b = pl[1];
+        for (let ia = 0; ia < NPL; ia++) for (let ib = ia + 1; ib < NPL; ib++) {
+        const a = pl[ia], b = pl[ib];
         if (!a.carried && !b.carried && a.state !== 'pen' && b.state !== 'pen' && a.state !== 'wait') {
           const rv = collideBalls(a.ball, b.ball);
           if (rv > 0 && a.hitCd <= 0) { a.hitCd = 0.12; stats.collisions++; const x = (a.ball.x + b.ball.x) / 2, z = (a.ball.z + b.ball.z) / 2; audio.sfx('hit', { vol: clamp(rv / 18, 0.15, 0.7), rate: 1.5 }); if (rv > 3) { fx.particles.burst(x, 0.5, z, { count: 6, speed: 3, up: 1, life: 0.4, size: 0.28, colors: [0xffffff, 0xffe14a], gravity: 6 }); if (rv > 8) fx.texts.add('KLONK!', x, 1.8, z, '#ffffff', 1.0); } }
+        }
         }
       }
     }
@@ -333,9 +347,9 @@ export default {
         p.restT = still ? p.restT + dt : 0;
         if (still && p.restT > 0.12) { p.state = 'aim'; p.rest = { x: b.x, z: b.z }; p.restT = 0; if (p.strokes >= maxS) { p.state = 'out'; audio.sfx('buzz', { vol: 0.4 }); fx.texts.add('MAX SLAGEN!', b.x, 2.2, b.z, '#ffb0b0', 1.3); p.c.pose = 'sad'; p.poseT = 99; } else aimAtCup(p); }
         { const sp = Math.hypot(b.vx, b.vz); p.slowT = sp > 0 && sp < 0.9 ? p.slowT + dt : 0; if (p.slowT > 1.2) { b.vx = b.vz = 0; p.slowT = 0; } }   // kruipt eindeloos (lopende band tegen een muur): laat hem stilstaan
-        if (Math.hypot(b.vx, b.vz) > 6 && Math.random() < dt * 24) fx.particles.emit(b.x, 0.25, b.z, 0, 0.4, 0, { life: 0.35, size: 0.28, color: p.i ? 0x8fb8ff : 0x7dffb0, gravity: 0 });
+        if (Math.hypot(b.vx, b.vz) > 6 && Math.random() < dt * 24) fx.particles.emit(b.x, 0.25, b.z, 0, 0.4, 0, { life: 0.35, size: 0.28, color: players[p.i].color, gravity: 0 });
       }
-      if (p.state === 'pen') { p.penT -= dt; if (p.penT <= 0) { if (p.strokes >= maxS) { p.state = 'out'; p.c.pose = 'sad'; p.poseT = 99; fx.texts.add('MAX SLAGEN!', p.rest.x, 2.2, p.rest.z, '#ffb0b0', 1.3); } else { const rp = unsafeAt(C, p.rest.x, p.rest.z) ? (p.safe || { x: def.tee[p.i][0], z: def.tee[p.i][1] }) : p.rest; p.rest = { x: rp.x, z: rp.z }; b.x = rp.x; b.z = rp.z; b.vx = b.vz = 0; b.y = 0.6; b.vy = 0; p.state = 'roll'; p.restT = 0; p.bm.visible = true; fx.particles.burst(b.x, 0.5, b.z, { count: 12, speed: 3, up: 1, life: 0.5, size: 0.3, colors: [0xffffff], gravity: 4 }); audio.sfx('pop', { vol: 0.4 }); } } }
+      if (p.state === 'pen') { p.penT -= dt; if (p.penT <= 0) { if (p.strokes >= maxS) { p.state = 'out'; p.c.pose = 'sad'; p.poseT = 99; fx.texts.add('MAX SLAGEN!', p.rest.x, 2.2, p.rest.z, '#ffb0b0', 1.3); } else { const rp = unsafeAt(C, p.rest.x, p.rest.z) ? (p.safe || { x: teeOf(p.i)[0], z: teeOf(p.i)[1] }) : p.rest; p.rest = { x: rp.x, z: rp.z }; b.x = rp.x; b.z = rp.z; b.vx = b.vz = 0; b.y = 0.6; b.vy = 0; p.state = 'roll'; p.restT = 0; p.bm.visible = true; fx.particles.burst(b.x, 0.5, b.z, { count: 12, speed: 3, up: 1, life: 0.5, size: 0.3, colors: [0xffffff], gravity: 4 }); audio.sfx('pop', { vol: 0.4 }); } } }
       if (p.state === 'sunk') { p.outT += dt; }
     }
     function update(dt) {
@@ -434,12 +448,12 @@ export default {
       resultUpdate, introUpdate,
       onSwap() { for (const p of pl) fx.particles.burst(p.ball.x, 1, p.ball.z, { count: 20, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) { movers.forEach((m, i) => { if (!m) return; const p = pl[i]; if (p.state === 'aim' || p.state === 'roll') { p.strokes = Math.min(maxS, p.strokes + 1); p.frozen = 1.5; p.charging = false; fx.texts.add('DEURMAN! +1', p.ball.x, 2.6, p.ball.z, '#ff9a9a', 1.3); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } }); },
-      celebrate(w) { pl[w].c.pose = 'cheer'; pl[1 - w].c.pose = 'sad'; for (const p of pl) p.poseT = 99; S0.cheer(8); },
+      celebrate(w) { for (const p of pl) { p.c.pose = p.i === w ? 'cheer' : 'sad'; p.poseT = 99; } S0.cheer(8); },
       dispose() { mountBars(false); if (G.boardEl) { G.boardEl.remove(); G.boardEl = null; } if (G.next) { dropHole(G.next.H); G.next = null; } },
       dbg: {
         state: () => ({ T, gstate: G.state, hole: G.hole, sd: G.sd, timeLeft: G.timeLeft, grace: G.grace, finished, totals: pl.map((p) => p.total), results: G.results, dragon: D.state, stats,
           mill: C ? C.t : 0, N, holeIds: matchHoles.map((h) => h.id), defId: def ? def.id : 0, tscale, maxS, finals: G.results.map((r) => r.final), pl: pl.map((p) => ({ x: p.ball.x, z: p.ball.z, vx: p.ball.vx, vz: p.ball.vz, y: p.ball.y, state: p.state, strokes: p.strokes, ang: p.ang, pw: p.pw, m: p.m, charging: p.charging, bonkUsed: p.bonkUsed, boost: p.boost, pts: p.pts, r: p.r, carried: p.carried })) }),
-        course: () => C, def: () => def, pl, fire: (i, ang, m) => { pl[i].ang = ang; pl[i].state = 'aim'; fire(pl[i], m); }, loadHole, setTime: (t) => { G.timeLeft = t; }, loadDef: (id) => { const d = HOLES.find((h) => h.id === id); loadHole(Math.max(0, G.hole), d); }, matchHoles: () => matchHoles, N, noCap: () => { G.noCap = true; }, setTotals: (a, b) => { pl[0].total = a; pl[1].total = b; refreshHud(); },
+        course: () => C, def: () => def, pl, fire: (i, ang, m) => { pl[i].ang = ang; pl[i].state = 'aim'; fire(pl[i], m); }, loadHole, setTime: (t) => { G.timeLeft = t; }, loadDef: (id) => { const d = HOLES.find((h) => h.id === id); loadHole(Math.max(0, G.hole), d); }, matchHoles: () => matchHoles, N, noCap: () => { G.noCap = true; }, setTotals: (...v) => { v.forEach((x, k) => { if (pl[k] && x != null) pl[k].total = x; }); refreshHud(); },
         startDragon, sink: (i) => { const p = pl[i]; p.ball.x = C.cup[0]; p.ball.z = C.cup[1]; p.ball.vx = p.ball.vz = 0; ballSunk(p); }, bonk: (i) => useBalloon(pl[i]), teleport: (i, x, z) => { pl[i].ball.x = x; pl[i].ball.z = z; pl[i].ball.vx = pl[i].ball.vz = 0; },
       },
     };

@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { mat, mesh, clamp, lerp, damp, rand, TAU, canvasTex } from '../engine/util.js';
-import { PLAYER_CSS } from '../engine/chars.js';
-import { FL, POW, makeCourse, buildLane } from './flappy_world.js';
+import { FL, POW, makeCourse, buildLane, setLayout } from './flappy_world.js';
 import { makeDragon, animateDragon } from './flappy_dragon.js';
 
 // Wolkenrace — duel: flappy-bird-race met twee draken, boven elkaar, twee banen met hetzelfde parcours (sidescroller met parallax).
+//  * 3-4 spelers: 3-4 banen boven elkaar (de camera gaat verder weg), vrij voor allen; bliksem raakt de koploper (of de nummer twee als jij leidt)
 //  * A = klapwiek (omhoog), zwaartekracht trekt omlaag; links/rechts = iets sneller/trager vliegen
 //  * B = vuurspuw (sloopt roze breekwolken, braadt vogels, jaagt stormwolken weg); met een BLIKSEM-power-up schiet B een bliksem naar je broer
 //  * power-ups: schild, magneet, reus (sloopt alles), bliksem. Munten = punten. Botsen = duizelig + teruggeslingerd (geen game over)
@@ -14,30 +14,30 @@ const G = 30, FLAP = 9.7, VFALL = -14.5, BASE_V = 11, RAD = 0.62;
 const FLOOR_Y = 1.75, CEIL_Y = H - 0.85;
 const FIRE_CD = 2.4, FIRE_T = 0.6, FIRE_LEN = 8.5;
 const MATCH_TIME = 85, FINISH_BONUS = 60;
-const PNAME = ['Wes', 'Jor'];
 
 export default {
-  id: 'flappy', name: 'Wolkenrace', giver: 'Wolkenwachter Wim', icon: '🐉', mode: 'pvp', time: 85, music: 'game_fast',
-  blurb: 'Draken-race door de wolken! Jullie vliegen <b>boven elkaar</b> door hetzelfde parcours. <b>Klapwiek</b> om te stijgen, <b>vang munten</b> en vlieg door de gaten tussen de wolken-pilaren. Met <b>vuur</b> sloop je roze breekwolken en braad je vogels. Eerste over de finish krijgt bonus; de meeste <b>punten</b> winnen!',
+  id: 'flappy', name: 'Wolkenrace', giver: 'Wolkenwachter Wim', icon: '🐉', mode: 'pvp', players: [2, 3, 4], time: 85, music: 'game_fast',
+  blurb: 'Draken-race door de wolken! Jullie vliegen <b>boven elkaar</b> door hetzelfde parcours. <b>Klapwiek</b> om te stijgen, <b>vang munten</b> en vlieg door de gaten tussen de wolken-pilaren. Met <b>vuur</b> sloop je roze breekwolken en braad je vogels. Eerste over de finish krijgt bonus; de meeste <b>punten</b> winnen! Met 3 of 4 spelers vliegen er 3 of 4 draken boven elkaar door hetzelfde parcours: vrij voor allen, de bliksem raakt de koploper.',
   controls: ['{a} KLAPWIEK (tikken = omhoog)', '{move} links/rechts = trager/sneller vliegen', '{b} VUURSPUW (of BLIKSEM als je die hebt)'],
   tip: 'Botsen kost alleen tijd. Wie achterligt vliegt in de zuiging en gaat sneller. Bliksem = broer duizelig!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
-    const pv = ctx.pvp; const names = players.map((p) => p.name);
+    const pv = ctx.pvp; const names = players.map((p) => p.name), N = players.length, pcss = players.map((p) => p.css);
+    setLayout(N);
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const rng = ctx.rng;
 
     ctx.lights('day', { shadows: false, fogNear: 400, fogFar: 900 });
     scene.fog = null; scene.background = new THREE.Color(0xffd9b0);
-    camera.fov = 50; camera.updateProjectionMatrix(); camera.position.set(0, 0, FL.DZ); camera.lookAt(0, 0, 0); scene.add(camera);
+    camera.fov = 50; camera.updateProjectionMatrix(); camera.position.set(0, FL.CY, FL.DZ); camera.lookAt(0, FL.CY, 0); scene.add(camera);
     const course = makeCourse(rng);
-    const lanes = [0, 1].map((i) => buildLane(ctx, i, course, rng));
+    const lanes = players.map((_, i) => buildLane(ctx, i, course, rng));
 
     // ---------------- draken ----------------
-    const D = [0, 1].map((i) => {
+    const D = players.map((_, i) => {
       const m = makeDragon(i); scene.add(m.root); const size = pv.size(i);
-      const tag = canvasTex(256, 96, () => {}); const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tag, transparent: true, depthTest: false })); spr.scale.set(3.4, 1.275, 1); spr.renderOrder = 15; scene.add(spr);
+      const tag = canvasTex(256, 96, () => {}); const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tag, transparent: true, depthTest: false })); spr.scale.set(3.4 * Math.sqrt(FL.DZ / 28), 1.275 * Math.sqrt(FL.DZ / 28), 1); spr.renderOrder = 15; scene.add(spr);
       const fire = new THREE.Group(); const fo = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 10, 1, true), new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide })); const fi = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 10, 1, true), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide }));
       fo.rotation.z = fi.rotation.z = Math.PI / 2; fire.add(fo, fi); fire.visible = false; scene.add(fire);
       // stormwolkje boven de draak (bliksem-effect)
@@ -66,7 +66,7 @@ export default {
     const barC = document.createElement('canvas'); barC.width = 1100; barC.height = 56; const bg2 = barC.getContext('2d');
     const barTex = new THREE.CanvasTexture(barC); barTex.colorSpace = THREE.SRGBColorSpace;
     const bar = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: barTex, transparent: true, depthWrite: false, fog: false })); bar.renderOrder = 30; scene.add(bar);
-    function placeBar() { const z = 2.0, k = (FL.DZ - z) / FL.DZ; const th = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)); const w = 2 * th * (FL.DZ - z) * (camera.aspect || 1.7); bar.scale.set(w, 1.25 * k, 1); bar.position.set(0, 0, z); }
+    function placeBar() { const z = 2.0, k = (FL.DZ - z) / FL.DZ; const th = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)); const w = 2 * th * (FL.DZ - z) * (camera.aspect || 1.7); bar.scale.set(w, (N === 2 ? 1.25 : 1.55) * k, 1); bar.position.set(0, 0, z); }
     let barT = 0;
     function drawBar() {
       const W2 = 1100, Hh = 56; bg2.clearRect(0, 0, W2, Hh);
@@ -74,8 +74,8 @@ export default {
       bg2.fillStyle = 'rgba(20,12,40,.55)'; bg2.fillRect(0, 4, W2, 48);
       const x0 = 70, x1 = 1030, y = 28; bg2.lineCap = 'round'; bg2.strokeStyle = 'rgba(255,255,255,.8)'; bg2.lineWidth = 5; bg2.beginPath(); bg2.moveTo(x0, y); bg2.lineTo(x1, y); bg2.stroke();
       for (let r = 0; r < 4; r++) for (let c = 0; c < 2; c++) { bg2.fillStyle = (r + c) % 2 ? '#111' : '#fff'; bg2.fillRect(x1 + 8 + c * 9, y - 18 + r * 9, 9, 9); }
-      for (const d of D) { const u = clamp(d.progress / L, 0, 1), cx = x0 + u * (x1 - x0); bg2.fillStyle = PLAYER_CSS[d.i]; bg2.strokeStyle = '#fff'; bg2.lineWidth = 3; bg2.beginPath(); bg2.arc(cx, y + (d.i ? 5 : -5), 12, 0, TAU); bg2.fill(); bg2.stroke(); bg2.fillStyle = '#fff'; bg2.font = 'bold 15px Fredoka, Arial, sans-serif'; bg2.textAlign = 'center'; bg2.textBaseline = 'middle'; bg2.fillText(PNAME[d.i][0], cx, y + (d.i ? 6 : -4)); }
-      bg2.font = 'bold 20px Fredoka, Arial, sans-serif'; bg2.textBaseline = 'middle'; bg2.textAlign = 'left'; bg2.fillStyle = PLAYER_CSS[0]; bg2.fillText(`${pts(D[0])}`, 12, y - 1); bg2.textAlign = 'right'; bg2.fillStyle = PLAYER_CSS[1]; bg2.fillText(`${pts(D[1])}`, W2 - 12, y - 1);
+      D.forEach((d) => { const u = clamp(d.progress / L, 0, 1), cx = x0 + u * (x1 - x0), dy = N === 2 ? (d.i ? 5 : -5) : (d.i - (N - 1) / 2) * 4; bg2.fillStyle = pcss[d.i]; bg2.strokeStyle = '#fff'; bg2.lineWidth = 3; bg2.beginPath(); bg2.arc(cx, y + dy, 12, 0, TAU); bg2.fill(); bg2.stroke(); bg2.fillStyle = '#fff'; bg2.font = 'bold 15px Fredoka, Arial, sans-serif'; bg2.textAlign = 'center'; bg2.textBaseline = 'middle'; bg2.fillText(names[d.i][0], cx, y + dy + 1); });
+      if (N === 2) { bg2.font = 'bold 20px Fredoka, Arial, sans-serif'; bg2.textBaseline = 'middle'; bg2.textAlign = 'left'; bg2.fillStyle = pcss[0]; bg2.fillText(`${pts(D[0])}`, 12, y - 1); bg2.textAlign = 'right'; bg2.fillStyle = pcss[1]; bg2.fillText(`${pts(D[1])}`, W2 - 12, y - 1); }
       barTex.needsUpdate = true;
     }
 
@@ -84,7 +84,7 @@ export default {
       const fcd = d.fireCd <= 0 ? 6 : Math.ceil((1 - d.fireCd / FIRE_CD) * 5);
       const key = `${fcd}|${d.zap ? 1 : 0}|${d.shield > 0 ? 1 : 0}|${d.magnet > 0 ? Math.ceil(d.magnet) : 0}|${d.giant > 0 ? Math.ceil(d.giant) : 0}|${d.heavy > 0 ? 1 : 0}`; if (key === d.tagKey) return; d.tagKey = key;
       const c = d.tag.image, g = c.getContext('2d'); g.clearRect(0, 0, 256, 96);
-      g.font = 'bold 48px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; g.lineWidth = 10; g.strokeStyle = 'rgba(20,10,40,.9)'; g.strokeText(names[d.i], 128, 26); g.fillStyle = PLAYER_CSS[d.i]; g.fillText(names[d.i], 128, 26);
+      g.font = 'bold 48px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineJoin = 'round'; g.lineWidth = 10; g.strokeStyle = 'rgba(20,10,40,.9)'; g.strokeText(names[d.i], 128, 26); g.fillStyle = pcss[d.i]; g.fillText(names[d.i], 128, 26);
       g.font = '30px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
       const items = []; items.push(d.zap ? '⚡' : fcd >= 6 ? '🔥' : '·'); if (d.shield > 0) items.push('🛡️'); if (d.magnet > 0) items.push('🧲'); if (d.giant > 0) items.push('🦖'); if (d.heavy > 0) items.push('🌧️');
       items.forEach((ic, k) => { g.globalAlpha = ic === '·' || (ic === '🔥' && false) ? 0.5 : 1; g.fillText(ic, 128 + (k - (items.length - 1) / 2) * 44, 68); }); g.globalAlpha = 1;
@@ -94,7 +94,7 @@ export default {
 
     // ---------------- hulpfuncties ----------------
     function refreshHud() {
-      hud.setScore(`${names[0]} ${pts(D[0])} – ${pts(D[1])} ${names[1]}`); hud.setTimer(Math.max(0, Math.ceil(timeLeft)), 10);
+      hud.setScore(N === 2 ? `${names[0]} ${pts(D[0])} – ${pts(D[1])} ${names[1]}` : D.map((q) => pts(q)).join(' – ')); hud.setTimer(Math.max(0, Math.ceil(timeLeft)), 10);
       for (const d of D) { const f = d.zap ? '⚡klaar!' : d.fireCd > 0 ? `🔥${d.fireCd.toFixed(0)}s` : '🔥klaar'; const txt = `${pts(d)} pt · 🪙${d.coins} · ${f}${d.slipB > 0.05 ? ' 💨' : ''}`; if (txt !== d.hudTxt) { d.hudTxt = txt; hud.setPlayerInfo(d.i, txt); } }
     }
     function puff(x, y, n = 12, cols = [0xffffff, 0xe8e0ff], sp = 3.5) { fx.particles.burst(x, y, 1, { count: n, speed: sp, up: 0.5, life: 0.7, size: 0.5, colors: cols, gravity: 1 }); }
@@ -125,21 +125,26 @@ export default {
     // ---------------- ronde-flow ----------------
     function endRace(w, reason) {
       if (ended) return; ended = true; endT = 0; winner = w; why = reason;
-      hud.showBig(`${names[w]} WINT!`, 1800, w ? '#8fb8ff' : '#7dffb0'); audio.sfx('bell', { vol: 0.8 }); audio.sfx('win', { vol: 0.5 }); ctx.shake(0.5);
+      hud.showBig(`${names[w]} WINT!`, 1800, pcss[w]); audio.sfx('bell', { vol: 0.8 }); audio.sfx('win', { vol: 0.5 }); ctx.shake(0.5);
       const d = D[w]; fx.particles.burst(X0 + d.lean + 2, wy(d), 1, { count: 70, speed: 9, up: 1.2, life: 1.5, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 6 });
       D[w].cheer = 99;
     }
     function finishMatch() {
       if (finished) return; finished = true; const w = winner;
-      const a = pts(D[0]), b = pts(D[1]);
+      const order = D.slice().sort((a, b) => (b.i === w) - (a.i === w) || (pts(b) - pts(a)) || (b.progress - a.progress) || (a.i - b.i));
       const sum = why === 'finish' ? `<b>${names[w]}</b> vloog als eerste over de finish (+${FINISH_BONUS})!` : `Tijd om! <b>${names[w]}</b> had de meeste punten.`;
-      ctx.finishPvp({ winner: w, score: [a, b], summary: `${sum}<br>🪙 munten ${D[0].coins}/${D[1].coins} · 🔥 gebraden ${D[0].roasts}/${D[1].roasts} · 💥 botsingen ${D[0].hits}/${D[1].hits}` });
+      const args = { winner: w, score: D.map(pts), summary: `${sum}<br>🪙 munten ${D.map((q) => q.coins).join('/')} · 🔥 gebraden ${D.map((q) => q.roasts).join('/')} · 💥 botsingen ${D.map((q) => q.hits).join('/')}` };
+      if (N > 2) args.place = order.map((q) => q.i);
+      ctx.finishPvp(args);
     }
-    function judge(reason) { const a = pts(D[0]), b = pts(D[1]); let w = a > b ? 0 : b > a ? 1 : (D[0].progress >= D[1].progress ? 0 : 1); if (a === b && D[0].progress === D[1].progress) w = Math.random() < 0.5 ? 0 : 1; endRace(w, reason); }
+    function judge(reason) {
+      const sorted = D.slice().sort((a, b) => (pts(b) - pts(a)) || (b.progress - a.progress)), top = sorted[0], tie = sorted.filter((q) => pts(q) === pts(top) && q.progress === top.progress);
+      endRace(tie.length > 1 ? tie[Math.floor(Math.random() * tie.length)].i : top.i, reason);
+    }
 
     // ---------------- spelstap per draak ----------------
     function dragonStep(d, dt) {
-      const i = d.i, st = lanes[i].st, o = D[1 - i]; const inp = pv.input(i); const y0 = lanes[i].y0;
+      const i = d.i, st = lanes[i].st; const others = D.filter((q) => q !== d), o = others.reduce((a, q) => (q.progress > a.progress ? q : a), others[0]); const inp = pv.input(i); const y0 = lanes[i].y0;   // o = de koploper van de anderen
       d.t += dt; d.dizzy = Math.max(0, d.dizzy - dt); d.inv = Math.max(0, d.inv - dt); d.heavy = Math.max(0, d.heavy - dt); d.slow = Math.max(0, d.slow - dt); d.magnet = Math.max(0, d.magnet - dt); d.giant = Math.max(0, d.giant - dt); d.fireCd = Math.max(0, d.fireCd - dt); d.fireT = Math.max(0, d.fireT - dt); d.bounceCd -= dt;
       d.comboT -= dt; if (d.comboT <= 0) d.combo = 0; if (d.giant <= 0 && d.szT > 1) d.szT = 1; d.stormT = Math.max(0, d.stormT - dt);
       // zuiging (comeback)
@@ -241,7 +246,7 @@ export default {
       const tt = T + introT;
       for (const d of D) {
         const i = d.i, y0 = lanes[i].y0, m = d.m; const sx = X0 + d.lean, y = y0 + d.y;
-        m.root.position.set(sx, y, 0.4); const sc = d.size * d.sz; m.root.scale.setScalar(sc);
+        m.root.position.set(sx, y, 0.4); const sc = d.size * d.sz; m.root.scale.setScalar(sc * FL.DS);   // DS: bij 3-4 banen de draak iets groter getekend (de baan is dan klein in beeld)
         m.root.visible = d.inv > 0 && d.dizzy <= 0 ? Math.sin(tt * 40) > -0.3 : true;
         animateDragon(m, dt, { flapT: d.flapT, vy: d.vy, fire: d.fireT > 0, dizzy: d.dizzy, heavy: d.heavy, t: d.t, cheer: d.cheer > 0 });
         if (d.cheer > 0 && d.cheer < 90) d.cheer -= dt;
@@ -269,10 +274,10 @@ export default {
       for (const d of D) {
         const st = lanes[d.i].st, ln = lanes[d.i]; const cx = X0 + d.lean + d.progress;
         course.birds.forEach((b, k) => { const s = st.bird[k], g = ln.birdsM[k].group; const rel = b.x - d.progress;
-          if (s.s === 0) { if (rel > -22 && rel < 30) s.t += dt; g.position.set(b.x, birdY(b, s), 0); g.rotation.z = Math.cos(s.t * TAU / b.per + b.ph) * 0.15; }
+          if (s.s === 0) { if (rel > -FL.BEHIND && rel < FL.AHEAD + 2) s.t += dt; g.position.set(b.x, birdY(b, s), 0); g.rotation.z = Math.cos(s.t * TAU / b.per + b.ph) * 0.15; }
           else if (s.s === 1) { s.vy -= 22 * dt; s.y = (s.y || birdY(b, { t: s.t })) + s.vy * dt; g.position.set(b.x + s.rot * 2, s.y, 0); s.rot += dt; g.rotation.z += dt * 9; if (s.y < -2) { s.s = 2; g.visible = false; } if (Math.random() < dt * 30) fx.particles.emit(b.x - d.progress, ln.y0 + s.y, 0.5, 0, 1, 0, { life: 0.5, size: 0.4, color: Math.random() < 0.5 ? 0xff7a1a : 0x444444, gravity: -1 }); }
         });
-        course.storms.forEach((s, k) => { if (!st.storm[k]) return; const rel = s.x - d.progress; if (rel < -8 || rel > 28) return; if (Math.random() < dt * 28) fx.particles.emit(rel + rand(-2, 2), ln.y0 + s.y - 0.8, 0.5, -1, -8, 0, { life: 0.55, size: 0.2, color: 0x9ac0ff, gravity: 0 }); });
+        course.storms.forEach((s, k) => { if (!st.storm[k]) return; const rel = s.x - d.progress; if (rel < -8 || rel > FL.AHEAD) return; if (Math.random() < dt * 28) fx.particles.emit(rel + rand(-2, 2), ln.y0 + s.y - 0.8, 0.5, -1, -8, 0, { life: 0.55, size: 0.2, color: 0x9ac0ff, gravity: 0 }); });
       }
       if (boltT > 0) { boltT -= dt; for (const m of boltSeg) { m.material.opacity = clamp(boltT / 0.3, 0, 1) * (Math.random() < 0.3 ? 0.4 : 1); if (boltT <= 0) m.visible = false; } }
       placeBar(); barT -= dt; if (barT <= 0) { barT = 0.06; drawBar(); }
@@ -287,7 +292,7 @@ export default {
       onResize() { placeBar(); },
       onSwap() { for (const d of D) puff(X0 + d.lean, wy(d), 16, [0xffe14a, 0xffffff], 4); },
       onDeurman(movers) { movers.forEach((m, i) => { if (m && !ended) { const d = D[i]; d.dizzy = 2.0; d.heavy = 3; d.stormT = 3; d.inv = 0.3; d.vy = -4; text('DEURMAN!', X0 + d.lean, wy(d) + 2.2, '#ff8a6a', 1.5); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } }); },
-      celebrate(w) { D[w].cheer = 99; },
+      celebrate(w, ws = [w]) { for (const k of ws) D[k].cheer = 99; },
       dispose() {},
       dbg: {
         state: () => ({ T, timeLeft, started, ended, finished, winner, why, d: D.map((d) => ({ progress: +d.progress.toFixed(1), y: +d.y.toFixed(2), vy: +d.vy.toFixed(1), coins: d.coins, pts: pts(d), hits: d.hits, roasts: d.roasts, smashes: d.smashes, dizzy: +d.dizzy.toFixed(1), shield: d.shield > 0, magnet: +d.magnet.toFixed(1), giant: +d.giant.toFixed(1), zap: d.zap, heavy: +d.heavy.toFixed(1), fireCd: +d.fireCd.toFixed(1), slipB: +d.slipB.toFixed(2), done: d.done })), stats: { ...stats } }),

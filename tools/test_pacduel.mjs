@@ -1,8 +1,10 @@
 // Gebruik: node tools/test_pacduel.mjs [scenario...]   scenario: maze | bots | twists | idle | timeout | sudden | shots
+//   four | three: 4 (of 3) spelers vrij voor allen (bots voor iedereen), four-maze: vier-hoeken-doolhof, four-shots: screenshots /tmp/pd4_*.png
 //   TW=<twist-id> kiest een twist (anders: "none"). Q=low|high kwaliteit.
 // Bots spelen versneld (zonder renderen) hele potjes; controleert dat finishPvp precies 1x komt, beide spelers kunnen winnen,
 // elke twist werkt en er geen console-fouten zijn.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -20,13 +22,13 @@ const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant',
 let failures = 0;
 const check = (ok, msg) => { console.log(`${ok ? 'OK  ' : 'FAIL'} ${msg}`); if (!ok) failures++; };
 
-async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+async function open(twist, np = 2) {
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=pacduel&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=pacduel&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0&players=${np}`);
   await page.waitForFunction(() => window.__app && window.__app.mode && window.__app.mode.instance, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
@@ -34,8 +36,8 @@ async function open(twist) {
     mode.paused = false;
     // finishPvp-teller
     window.__fin = 0; const ctx = mode.ctx, orig = ctx.finishPvp; ctx.finishPvp = (r) => { window.__fin++; return orig(r); };
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -49,7 +51,7 @@ async function installBots(page, cfg) {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input, d = inst.dbg;
     let s = 4242; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
     window.__cfg = cfg;
-    const W = 21, H = 15, DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const NP = m.ids.length, W = 21, H = 15, DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
     const key = (x, z) => z * W + x;
     function nb(x, z) {
       const out = [];
@@ -65,13 +67,14 @@ async function installBots(page, cfg) {
       }
       return { dist, first };
     }
-    const bot = [0, 1].map(() => ({ sprintT: 0, lastGoal: null }));
+    const bot = m.ids.map(() => ({ sprintT: 0, lastGoal: null }));
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = d.state(); if (stop && stop(st)) { m.paused = true; return true; }
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i], c = window.__cfg[i], me = st.pl[i], ot = st.pl[1 - i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
+        for (let i = 0; i < NP; i++) {
+          const me = st.pl[i], v = inp.virtual[m.ids[i]], c = window.__cfg[i] || window.__cfg[0];
+          const ot = st.pl.filter((_, k) => k !== i).reduce((b, q) => (!b || (q.hunter > 0 && !(b.hunter > 0)) || Math.hypot(q.x - me.x, q.z - me.z) < Math.hypot(b.x - me.x, b.z - me.z) ? q : b), null); v.a = false; v.b = false; v.x = 0; v.y = 0;
           if (c.style === 'idle' || me.resp > 0 || me.stun > 0 || !(st.gstate === 'play' || st.gstate === 'sudden')) continue;
           const cx = Math.round(me.x), cz = Math.round(me.z);
           // spookjes ontwijken
@@ -106,8 +109,8 @@ async function installBots(page, cfg) {
   }, cfg);
 }
 
-async function runMatch(label, twist, cfg, pre) {
-  const { browser, page, errors } = await open(twist);
+async function runMatch(label, twist, cfg, pre, np = 2) {
+  const { browser, page, errors } = await open(twist, np);
   await installBots(page, cfg);
   if (pre) await page.evaluate(pre);
   const res = await page.evaluate(() => {
@@ -128,6 +131,7 @@ async function runMatch(label, twist, cfg, pre) {
   if (res.result) console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, ' ')}`);
   check(res.finished && res.fin === 1, `${label}: finishPvp precies 1x (fin=${res.fin}, finished=${res.finished})`);
   check(res.result && res.result.winner != null, `${label}: altijd een winnaar (winner=${res.result && res.result.winner})`);
+  if (np > 2) check(res.result && res.result.ids.length === np && res.result.place.length === np && res.result.scoreArr.length === np, `${label}: uitslag voor ${np} spelers (ids=${res.result && res.result.ids}, plaatsen=${res.result && res.result.place}, score=${res.result && res.result.scoreArr})`);
   check(!errors.length, `${label}: geen console-fouten ${errors.length ? '\n' + errors.slice(0, 6).join('\n') : ''}`);
   await browser.close();
   return res;
@@ -144,6 +148,45 @@ for (const name of scen) {
     check(sym, 'doolhof is links-rechts symmetrisch'); check(dead === 0, `geen doodlopende gangen (${dead})`); check(seen.size === mz.cells.length, `alle ${mz.cells.length} vakjes bereikbaar (${seen.size})`);
     check(mz.starts.length === 2 && mz.starts[0][0] + mz.starts[1][0] === W - 1 && mz.starts[0][1] === mz.starts[1][1], 'startplekken gespiegeld');
     continue;
+  }
+  if (name === 'four-maze') {
+    const M = await import(path.join(root, 'src/games/pacduel_maze.js'));
+    const mz = M.buildMaze(true); const { W, H } = M; const wall = mz.wall;
+    const open = (x, z) => x >= 0 && x < W && z >= 0 && z < H && !wall[z * W + x];
+    let sym = true, dead = 0; for (let z = 0; z < H; z++) for (let x = 0; x < W; x++) { if (wall[z * W + x] !== wall[z * W + (W - 1 - x)] || wall[z * W + x] !== wall[(H - 1 - z) * W + x]) sym = false; if (open(x, z)) { const dg = [[1, 0], [-1, 0], [0, 1], [0, -1]].filter(([a, b]) => open(x + a, z + b)).length; if (dg < 2 && x > 0 && x < W - 1) dead++; } }
+    const seen = new Set(['7,13']), q = [[7, 13]]; while (q.length) { const [x, z] = q.pop(); for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (open(x + a, z + b) && !seen.has((x + a) + ',' + (z + b))) { seen.add((x + a) + ',' + (z + b)); q.push([x + a, z + b]); } }
+    check(sym, 'vier-spelers-doolhof is links-rechts én boven-onder symmetrisch'); check(dead === 0, `geen doodlopende gangen (${dead})`); check(seen.size === mz.cells.length, `alle ${mz.cells.length} vakjes bereikbaar vanaf start 0 (${seen.size})`);
+    check(mz.starts.length === 4 && mz.orbs.length === 4 && mz.starts.every((s2) => open(s2[0], s2[1])), 'vier startplekken en vier krachtbollen');
+    // eerlijk: de afstand (BFS) van elke start tot alle 4 de krachtbollen heeft hetzelfde gesorteerde patroon
+    const bfs = (sx, sz) => { const d = new Map([[sx + ',' + sz, 0]]); const qq = [[sx, sz]]; for (let h = 0; h < qq.length; h++) { const [x, z] = qq[h]; for (const [a, b] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { let nx = x + a; const nz = z + b; if ((nx < 0 || nx >= W) && M.TUNNEL_ROWS.includes(nz)) nx = (nx + W) % W; if (open(nx, nz) && !d.has(nx + ',' + nz)) { d.set(nx + ',' + nz, d.get(x + ',' + z) + 1); qq.push([nx, nz]); } } } return d; };
+    const pat = mz.starts.map((s2) => { const d = bfs(s2[0], s2[1]); return mz.orbs.map((o) => d.get(o[0] + ',' + o[1])).sort((a, b) => a - b).join(); });
+    check(new Set(pat).size === 1, `orb-afstanden gelijk voor alle starts (${pat.join(' | ')})`);
+    continue;
+  }
+  if (name === 'four' || name === 'three') {
+    const np = name === 'four' ? 4 : 3;
+    const A = { skill: 0.9, style: 'hunt', block: 0.002, sprint: 0.04 }, B = { skill: 0.7, style: 'coins', block: 0.001, sprint: 0.02 };
+    const cfg = [A, B, B, A].slice(0, np);
+    const tws = process.env.TW ? process.env.TW.split(',') : ['none', 'bodyswap', 'giant', 'deurman'];
+    for (const t of tws) await runMatch(`${name} ${t}`, t, cfg, null, np);
+    await runMatch(`${name} gouden munt (3 gelijk aan kop)`, 'none', cfg, () => { const d = window.__app.mode.instance.dbg; d.setTime(0.05); d.pl.forEach((p, k) => { p.coins = k < 3 ? 10 : 4; }); }, np);
+    await runMatch(`${name} idle`, 'none', cfg.map(() => ({ style: 'idle' })), () => { const d = window.__app.mode.instance.dbg; d.setTime(3); d.pl.forEach((p) => { p.coins = 7; }); }, np);
+    continue;
+  }
+  if (name === 'four-shots') {
+    const { browser, page, errors } = await open('none', 4);
+    await installBots(page, [{ skill: 0.85, style: 'hunt', block: 0.003, sprint: 0.04 }, { skill: 0.8, style: 'coins', block: 0.002, sprint: 0.03 }, { skill: 0.8, style: 'coins', block: 0.002, sprint: 0.03 }, { skill: 0.85, style: 'hunt', block: 0.003, sprint: 0.04 }]);
+    const snap = async (tag) => { await page.waitForTimeout(700); await page.screenshot({ path: `/tmp/pd4_${tag}.png` }); console.log('shot', tag); };
+    const dbg = (fn, ...a) => page.evaluate(([f, a]) => window.__app.mode.instance.dbg[f](...a), [fn, a]);
+    const run = (n, cond) => page.evaluate(([n, c]) => window.__bot(n, c ? new Function('s', 'return ' + c) : null), [n, cond || null]);
+    await snap('start'); await run(60 * 8); await snap('play1');
+    await dbg('spawnFruit'); await run(30); await snap('fruit');
+    await dbg('giveOrb', 2); await run(40); await snap('hunter');
+    await run(60 * 6); await snap('play2');
+    await page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.setTime(0.3); d.pl.forEach((p, k) => { p.coins = k < 3 ? 12 : 5; }); }); await run(240); await snap('sudden');
+    await run(60 * 30, 's.gstate==="end"'); await run(60); await snap('end');
+    console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS'); if (errors.length) failures++;
+    await browser.close(); continue;
   }
   if (name === 'bots') {
     const A = { skill: 0.95, style: 'hunt', block: 0.002, sprint: 0.05 }, B = { skill: 0.55, style: 'coins', block: 0.001, sprint: 0.02 };

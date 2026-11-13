@@ -7,14 +7,14 @@ import { setupLights, skyTexture } from '../engine/lights.js';
 import { tex } from '../engine/textures.js';
 import * as P from '../engine/props.js';
 import { floatLabel } from './build.js';
+import { nameOf } from '../engine/party.js';
 import { GRAPH, TILES, TILE_ORDER } from './board_data.js';
 
 export const ISLE = { A: 25, B: 19.5 };   // halve assen van het eiland
 export const TOKEN_S = 1.3;               // formaat van de poppetjes op het bord
 export const TILE_TOP = 0.32;            // hoogte van de bovenkant van een vakje
-// per speler (0 Wes, 1 Jor, 2 Juul): pijl-, label- en ringkleur (met vaste terugval als de kern nog geen derde kleur heeft)
-const TOK = [{ arrow: 0x5aef90, label: '#8dffb5', ring: 0x2f9e5b }, { arrow: 0x6ab0ff, label: '#9cc8ff', ring: 0x3a78e0 }, { arrow: 0xffa05a, label: '#ffc09a', ring: 0xff8a3a }];
-const TOKEN_NAMES = ['Wes', 'Jor', 'Juul'];
+// per speler (0 Wes, 1 Jor, 2 Juul, 3 Sam): pijl-, label- en ringkleur (met vaste terugval als de kern een kleur niet kent)
+const TOK = [{ arrow: 0x5aef90, label: '#8dffb5', ring: 0x2f9e5b }, { arrow: 0x6ab0ff, label: '#9cc8ff', ring: 0x3a78e0 }, { arrow: 0xffa05a, label: '#ffc09a', ring: 0xff8a3a }, { arrow: 0xe27aff, label: '#eeb0ff', ring: 0xc844e8 }];
 
 // ---------------------------------------------------------------- Merger: veel kleine stukjes -> één geometrie met vertexkleuren
 const GC = new Map();
@@ -327,7 +327,7 @@ export class BoardWorld {
       c.group.scale.setScalar(TOKEN_S); this.scene.add(c.group);
       const ring = mesh(new THREE.RingGeometry(0.62, 0.8, 24), new THREE.MeshBasicMaterial({ color: PLAYER_COLORS[i] ?? TOK[i].ring, transparent: true, opacity: 0.85, depthWrite: false }), { cast: false, receive: false, rot: [-Math.PI / 2, 0, 0] }); this.scene.add(ring);
       const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.65, 4).rotateX(Math.PI), new THREE.MeshBasicMaterial({ color: TOK[i].arrow })); arrow.visible = false; this.scene.add(arrow);
-      const label = floatLabel(TOKEN_NAMES[i], '', TOK[i].label); label.scale.set(2.2, 0.68, 1); label.material.depthTest = false; this.scene.add(label);
+      const label = floatLabel(nameOf(i), '', TOK[i].label); label.scale.set(2.2, 0.68, 1); label.material.depthTest = false; this.scene.add(label);
       const cnt = numSprite('', '#ffe14a', 1.5); cnt.visible = false; this.scene.add(cnt);
       return { c, ring, arrow, label, cnt, pos: new THREE.Vector3(), y: 0, hat: null };
     });
@@ -336,7 +336,9 @@ export class BoardWorld {
   slotAt(id, idx, cnt) {
     const n = this.nodes[id]; if (cnt <= 1) return new THREE.Vector3(n.x, n.y + TILE_TOP, n.z);
     if (cnt === 2) return new THREE.Vector3(n.x + (idx ? 0.55 : -0.55), n.y + TILE_TOP, n.z + 0.1);
-    return new THREE.Vector3(n.x + (idx - 1) * 0.85, n.y + TILE_TOP, n.z + (idx === 1 ? -0.3 : 0.3));
+    if (cnt === 3) return new THREE.Vector3(n.x + (idx - 1) * 0.85, n.y + TILE_TOP, n.z + (idx === 1 ? -0.3 : 0.3));
+    // vier poppetjes: een rij van links naar rechts (de camera kijkt van voren) met afwisselend een stapje naar voren/achteren, zodat niemand een ander afdekt
+    return new THREE.Vector3(n.x + (idx - 1.5) * 0.82, n.y + TILE_TOP, n.z + (idx % 2 ? 0.34 : -0.34));
   }
   slot(id, i, shared) { return this.slotAt(id, i ? 1 : 0, shared ? 2 : 1); }
   setHat(i, kind) {
@@ -378,7 +380,7 @@ export class BoardWorld {
     for (const tk of this.tokens) {
       tk.c.group.position.copy(tk.pos); tk.c.group.position.y = tk.pos.y + tk.y; tk.c.update(dt);
       tk.ring.position.set(tk.pos.x, tk.pos.y + 0.03, tk.pos.z); tk.ring.visible = tk.y < 0.6;
-      const hy = tk.c.height * TOKEN_S + 0.7; tk.label.position.set(tk.pos.x, tk.pos.y + tk.y + hy + 0.1, tk.pos.z);
+      const hy = tk.c.height * TOKEN_S + 0.7; tk.label.position.set(tk.pos.x, tk.pos.y + tk.y + hy + 0.1 + (tk.lift || 0), tk.pos.z);
       tk.arrow.position.set(tk.pos.x, tk.pos.y + tk.y + hy + 1.0 + Math.sin(t * 5) * 0.18, tk.pos.z); tk.arrow.rotation.y = t * 2;
       tk.cnt.position.set(tk.pos.x, tk.pos.y + tk.y + hy + 1.0, tk.pos.z);
     }

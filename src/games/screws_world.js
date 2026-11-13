@@ -32,7 +32,7 @@ export function helixGeo({ len, pitch = PITCH, r0 = R_CORE, r1 = R_RIDGE, w = 0.
 // ---------------- een reuzenschroef ----------------
 // Retourneert { group, spinner, head, mats, collars, setRust(k) }. Oorsprong = bovenkant van de schroefkop (standplek).
 export function buildScrew(i, { shaftLen, collarDepths, color }) {
-  const wood = i === 1;
+  const wood = i % 2 === 1;
   const group = new THREE.Group(); const spinner = new THREE.Group(); group.add(spinner);
   const shaftMat = new THREE.MeshStandardMaterial(wood
     ? { color: 0xc58a4e, roughness: 0.85, metalness: 0, flatShading: true, vertexColors: true, side: THREE.DoubleSide }

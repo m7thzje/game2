@@ -11,16 +11,19 @@ import { T as TW, setArena, cellX, cellZ, setI, buildWorld, itemTexture, NEON, N
 //  * comeback: wie achterstaat begint de ronde met volle turbo en een dubbele sprong. Gelijkspel? De draak kiest.
 //  * 3 spelers (Juul): arena 46 x 34, driehoeksstart (links onder en rechts onder kijken omhoog, boven in het midden kijkt omlaag: niemand begint kop-aan-kop), laatste in leven wint de ronde;
 //    obstakels en kristallen links-rechts gespiegeld; de draak mikt op de leider; bij gelijkspel eet de draak alle gelijke leiders op behalve één.
+//  * 4 spelers (Sam): vierkante arena 40 x 40 met een "molen"-start (elk bordje start in een hoek en rijdt langs een rand, 90 graden gedraaid ten opzichte van de vorige: niemand begint kop-aan-kop),
+//    obstakels en kristallen in viervoud gedraaid (precies eerlijk), tot 4 rondes (eerste tot 2 winsten), draak mikt op de leider.
 let W = TW.W, H = TW.H, N = W * H;                          // afmetingen worden in create() gezet (setArena)
 const idx = (c, r) => r * W + c;
 const DX = [1, 0, -1, 0], DZ = [0, 1, 0, -1];             // 0 = +x (rechts), 1 = +z (omlaag), 2 = -x, 3 = -z
-const startsFor = (n) => (n === 3 ? [[8, 28, 3], [W - 9, 28, 3], [W / 2 - 1, 10, 1]] : [[6, 15, 0], [W - 7, H - 16, 2]]);   // 2: punt-gespiegeld (c,r) -> (39-c, 29-r)
+const startsFor = (n) => (n === 4 ? [[7, 7, 0], [W - 8, 7, 1], [W - 8, H - 8, 2], [7, H - 8, 3]] : n === 3 ? [[8, 28, 3], [W - 9, 28, 3], [W / 2 - 1, 10, 1]] : [[6, 15, 0], [W - 7, H - 16, 2]]);   // 2: punt-gespiegeld (c,r) -> (39-c, 29-r); 4: molen, elk bordje 90 graden gedraaid ten opzichte van het vorige
 const BASE_CPS = 8.5, BOOST = 1.7, JUMP_LEN = 5, JUMP_CD = 3.2, METER_DRAIN = 0.45;
 let SHRINK_START = 17, SHRINK_START_FINAL = 11, MIN_W = 14, MIN_H = 8;
-const SHRINK_V = 0.85, ROUND_CAP = 55;
-const TRK = [3, 4, 6];                                     // occ-code van het spoor per slot (5 = vuur)
-const trailOwner = (o) => (o === 3 ? 0 : o === 4 ? 1 : o === 6 ? 2 : -1), isTrail = (o) => o === 3 || o === 4 || o === 6;
-const NEED_WINS = 2, MAX_ROUNDS = 3;
+const SHRINK_V = 0.85;
+let ROUND_CAP = 55;
+const TRK = [3, 4, 6, 7];                                  // occ-code van het spoor per slot (5 = vuur)
+const trailOwner = (o) => (o === 3 ? 0 : o === 4 ? 1 : o === 6 ? 2 : o === 7 ? 3 : -1), isTrail = (o) => o === 3 || o === 4 || o === 6 || o === 7;
+const NEED_WINS = 2;
 const ITEM_TYPES = ['eraser', 'gap', 'charge'];
 const ITEM_NAME = { eraser: 'WISSER!', gap: 'DUBBEL GAT!', charge: 'TURBO-VOL!' };
 const ITEM_COL = { eraser: '#ff7ad8', gap: '#ffe14a', charge: '#4af0ff' };
@@ -32,10 +35,10 @@ export default {
   giver: 'Neon-Nico',
   icon: '🏍️',
   mode: 'pvp',
-  players: [2, 3],                       // 2 spelers (duel) of 3 spelers (vrij voor allen, Juul doet mee)
+  players: [2, 3, 4],                    // 2 spelers (duel), 3 of 4 spelers (vrij voor allen)
   time: 80,
   music: 'game_fast',
-  blurb: 'Twee <b>lichtbordjes</b> laten een muur van licht achter zich. Botsen = af! Pak <b>turbo</b> door vlak langs muren te scheren en <b>spring</b> over sporen heen. Beste van <b>3 rondes</b>. De lava-muren komen dichterbij en de <b>draak</b> brandt banen vrij! Met drie spelers wint wie als laatste nog rijdt.',
+  blurb: 'Twee <b>lichtbordjes</b> laten een muur van licht achter zich. Botsen = af! Pak <b>turbo</b> door vlak langs muren te scheren en <b>spring</b> over sporen heen. Beste van <b>3 rondes</b>. De lava-muren komen dichterbij en de <b>draak</b> brandt banen vrij! Met drie of vier spelers (vierkante arena, molen-start) wint wie als laatste nog rijdt.',
   controls: ['{move} sturen (omhoog, omlaag, links, rechts)', '{a} turbo (ingedrukt houden)', '{b} sprong over sporen'],
   tip: 'Scheer vlak langs een muur of spoor: dat laadt je turbo op. Spring over het spoor van je broer en laat hem crashen!',
 
@@ -43,11 +46,13 @@ export default {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
-    const n = players.length;                                 // 2 of 3 deelnemers (slots)
+    const n = players.length;                                 // 2, 3 of 4 deelnemers (slots)
+    const MAX_ROUNDS = n === 4 ? 4 : 3;                       // vier spelers: 1-1-1-0 na drie rondes is te waarschijnlijk
     setArena(n); W = TW.W; H = TW.H; N = W * H;
-    if (n === 3) { SHRINK_START = 20; SHRINK_START_FINAL = 13; MIN_W = 16; MIN_H = 10; } else { SHRINK_START = 17; SHRINK_START_FINAL = 11; MIN_W = 14; MIN_H = 8; }
+    ROUND_CAP = n === 4 ? 62 : 55;
+    if (n === 4) { SHRINK_START = 22; SHRINK_START_FINAL = 14; MIN_W = 18; MIN_H = 18; } else if (n === 3) { SHRINK_START = 20; SHRINK_START_FINAL = 13; MIN_W = 16; MIN_H = 10; } else { SHRINK_START = 17; SHRINK_START_FINAL = 11; MIN_W = 14; MIN_H = 8; }
     const START = startsFor(n), mirC = (c) => W - 1 - c, mirR = (r) => H - 1 - r;
-    const COL = players.map((p) => NEON[p.id]), CSS = players.map((p) => NEON_CSS[p.id]), IDS = players.map((p) => p.id), PCSS = players.map((p) => ['#7dffb0', '#8fb8ff', '#ffc58a'][p.id]);   // kleur per slot (volgt de speler)
+    const COL = players.map((p) => NEON[p.id]), CSS = players.map((p) => NEON_CSS[p.id]), IDS = players.map((p) => p.id), PCSS = players.map((p) => ['#7dffb0', '#8fb8ff', '#ffc58a', '#e9a2ff'][p.id]);   // kleur per slot (volgt de speler)
     const tw = ctx.twist.id;
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const TEMPO = tw === 'turbo' || tw === 'slowmo' ? ctx.twist.speed : 1;
@@ -95,7 +100,7 @@ export default {
 
     // ---------------- items ----------------
     const itemTex = {}; for (const t of ITEM_TYPES) itemTex[t] = itemTexture(t);
-    const items = Array.from({ length: 10 }, () => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: itemTex.eraser, transparent: true, depthWrite: false })); s.scale.set(1.6, 1.6, 1); s.visible = false; scene.add(s); const sh = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.8, 18), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false })); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.06; sh.visible = false; scene.add(sh); return { on: false, s, sh, c: 0, r: 0, type: '', t: 0, life: 0 }; });
+    const items = Array.from({ length: n === 4 ? 14 : 10 }, () => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: itemTex.eraser, transparent: true, depthWrite: false })); s.scale.set(1.6, 1.6, 1); s.visible = false; scene.add(s); const sh = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.8, 18), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false })); sh.rotation.x = -Math.PI / 2; sh.position.y = 0.06; sh.visible = false; scene.add(sh); return { on: false, s, sh, c: 0, r: 0, type: '', t: 0, life: 0 }; });
     let itemT = 4;
 
     // ---------------- draak ----------------
@@ -131,13 +136,18 @@ export default {
       const rects = [];
       // vrije baan voor de startrijders: 2 spelers de middenrij links/rechts, 3 spelers 4 achter en 12 voor elke start (3 breed aan elke kant)
       const lane = (c, r) => START.some(([sc, sr, sd]) => { const fc = c - sc, fr = r - sr, along = DX[sd] * fc + DZ[sd] * fr, side = Math.abs(DX[sd] * fr - DZ[sd] * fc); return along >= -4 && along <= 12 && side <= 3; });
-      const okCell = (c, r) => c >= 2 && c <= W - 3 && r >= 2 && r <= H - 3 && (n === 3 ? !lane(c, r) : !((c <= 11 || c >= W - 12) && Math.abs(r - 14.5) <= 3.5));
+      const okCell = (c, r) => c >= 2 && c <= W - 3 && r >= 2 && r <= H - 3 && (n >= 3 ? !lane(c, r) : !((c <= 11 || c >= W - 12) && Math.abs(r - 14.5) <= 3.5));
       const mC = (c) => mirC(c), mR = (r) => (n === 3 ? r : mirR(r));       // 2 spelers: puntspiegeling, 3 spelers: links-rechts gespiegeld
+      const rot = (c, r) => [W - 1 - r, c];                                  // 4 spelers: kwartslag draaien (vierkante arena)
       let tries = 0;
-      while (rects.length < (n === 3 ? 9 : 7) && tries++ < 300) {
+      while (rects.length < (n === 4 ? 5 : n === 3 ? 9 : 7) && tries++ < 300) {
         const w = 1 + ((lr() * 3) | 0), h = 1 + ((lr() * (w === 1 ? 4 : 3)) | 0), c0 = 3 + ((lr() * (W - 6 - w)) | 0), r0 = 3 + ((lr() * (H - 6 - h)) | 0);
         let ok = true; const cells = [], mir = [];
-        for (let dr = 0; dr < h && ok; dr++) for (let dc = 0; dc < w; dc++) { const c = c0 + dc, r = r0 + dr; if (!okCell(c, r) || !okCell(mC(c), mR(r))) { ok = false; break; } cells.push([c, r]); mir.push([mC(c), mR(r)]); }
+        for (let dr = 0; dr < h && ok; dr++) for (let dc = 0; dc < w; dc++) {
+          const c = c0 + dc, r = r0 + dr;
+          if (n === 4) { const r1 = rot(c, r), r2 = rot(...r1), r3 = rot(...r2); if (![[c, r], r1, r2, r3].every(([a, b]) => okCell(a, b))) { ok = false; break; } cells.push([c, r]); mir.push(r1, r2, r3); continue; }
+          if (!okCell(c, r) || !okCell(mC(c), mR(r))) { ok = false; break; } cells.push([c, r]); mir.push([mC(c), mR(r)]);
+        }
         if (!ok) continue;
         // geen overlap (met 1 cel ruimte) met eerdere stukken en zichzelf
         const all = [...cells, ...mir]; const key = (c, r) => c + ',' + r; const mine = new Set(all.map(([c, r]) => key(c, r)));
@@ -169,7 +179,7 @@ export default {
       refreshHud();
       if (n > 1) { hud.showBig(G.final ? 'LAATSTE RONDE!' : `RONDE ${n}!`, 1300, '#ffe14a'); audio.sfx('bell', { vol: 0.5 }); }
     }
-    function refreshHud() { hud.setScore(n === 3 ? `${names[0]} ${G.wins[0]} – ${G.wins[1]} ${names[1]} – ${G.wins[2]} ${names[2]}   (ronde ${G.round}/${MAX_ROUNDS})` : `${names[0]} ${G.wins[0]} – ${G.wins[1]} ${names[1]}   (ronde ${G.round}/${MAX_ROUNDS})`); }
+    function refreshHud() { hud.setScore(n === 4 ? `Ronde ${G.round}/${MAX_ROUNDS}   (eerste met 2 winsten)` : n === 3 ? `${names[0]} ${G.wins[0]} – ${G.wins[1]} ${names[1]} – ${G.wins[2]} ${names[2]}   (ronde ${G.round}/${MAX_ROUNDS})` : `${names[0]} ${G.wins[0]} – ${G.wins[1]} ${names[1]}   (ronde ${G.round}/${MAX_ROUNDS})`); }
     const infoText = (b) => { const m = Math.round(b.meter * 5); return `⚡${'▮'.repeat(m)}${'▯'.repeat(5 - m)}  🦘${b.jumpCd > 0 && b.jumpLeft === 0 ? b.jumpCd.toFixed(1) + 's' : b.jumpLeft > 0 ? '...' : (b.dbl ? 'x2!' : 'klaar')}  ·  ${G.wins[b.i]} gewonnen`; };
 
     // ---------------- invoer -> bochten ----------------
@@ -286,11 +296,12 @@ export default {
     }
     // kristallen in eerlijke sets van dezelfde soort: 2 spelers puntgespiegeld; 3 spelers een links-rechts-paar onderin + een bij de bovenste speler
     function spawnItemPair() {
-      if (items.filter((q) => q.on).length >= 6) return;
+      if (items.filter((q) => q.on).length >= (n === 4 ? 8 : 6)) return;
       for (let tries = 0; tries < 40; tries++) {
         const c = 4 + ((rnd() * (W - 8)) | 0);
         let spots;
-        if (n === 3) { const r = Math.round(H * 0.5) + ((rnd() * (H * 0.5 - 5)) | 0), ar = 4 + ((rnd() * (H * 0.35)) | 0); spots = [[c, r], [mirC(c), r], [W / 2 - (rnd() < 0.5 ? 1 : 0), ar]]; }
+        if (n === 4) { const r = 4 + ((rnd() * (H - 8)) | 0), p1 = [W - 1 - r, c], p2 = [W - 1 - p1[1], p1[0]], p3 = [W - 1 - p2[1], p2[0]]; spots = [[c, r], p1, p2, p3]; }   // 4 spelers: kwartslagen
+        else if (n === 3) { const r = Math.round(H * 0.5) + ((rnd() * (H * 0.5 - 5)) | 0), ar = 4 + ((rnd() * (H * 0.35)) | 0); spots = [[c, r], [mirC(c), r], [W / 2 - (rnd() < 0.5 ? 1 : 0), ar]]; }
         else { const r = 4 + ((rnd() * (H - 8)) | 0); spots = [[c, r], [mirC(c), mirR(r)]]; }
         const ok = (cc, rr) => !solid(cc, rr) && occ[idx(cc, rr)] === 0 && bikes.every((b) => Math.abs(b.c0 - cc) + Math.abs(b.r0 - rr) > 6) && !items.some((q) => q.on && q.c === cc && q.r === rr);
         if (!spots.every(([cc, rr]) => ok(cc, rr)) || spots.some(([cc, rr], i) => spots.some(([c2, r2], j) => j > i && c2 === cc && r2 === rr))) continue;
@@ -303,7 +314,7 @@ export default {
       D.t -= dt;
       if (D.state === 'idle' && D.t <= 0 && !G.ending) {
         D.axis = rnd() < 0.5 ? 0 : 1; D.dir = rnd() < 0.5 ? -1 : 1; const lim = D.axis === 0 ? H : W; D.k0 = 5 + ((rnd() * (lim - 10)) | 0); D.state = 'warn';
-        if (n === 3) { const al = bikes.filter((b) => b.alive); if (al.length) { const mw = Math.max(...al.map((b) => G.wins[b.i])), ld = al.filter((b) => G.wins[b.i] === mw), lead = ld[(rnd() * ld.length) | 0]; D.k0 = clamp(D.axis === 0 ? lead.r0 : lead.c0, 5, lim - 6); } }   // 3 spelers: de baan loopt door de leider
+        if (n >= 3) { const al = bikes.filter((b) => b.alive); if (al.length) { const mw = Math.max(...al.map((b) => G.wins[b.i])), ld = al.filter((b) => G.wins[b.i] === mw), lead = ld[(rnd() * ld.length) | 0]; D.k0 = clamp(D.axis === 0 ? lead.r0 : lead.c0, 5, lim - 6); } }   // 3 spelers: de baan loopt door de leider
         D.ft = 0; D.burned = 0; stats.dragons++;
         Wd.lane.visible = true; dragon.group.visible = true;
         const cw = D.axis === 0 ? W : 3, ch = D.axis === 0 ? 3 : H; Wd.lane.scale.set(D.axis === 0 ? W : 3, D.axis === 0 ? 3 : H, 1);
@@ -324,7 +335,7 @@ export default {
             const passed = D.dir > 0 ? k <= frontCell : k >= frontCell; if (!passed) continue;
             for (let o = -1; o <= 1; o++) {
               const c = D.axis === 0 ? k : D.k0 + o, r = D.axis === 0 ? D.k0 + o : k; if (c < 0 || r < 0 || c >= W || r >= H) continue; const cell = idx(c, r); if (occ[cell] === 5 || occ[cell] === 2) continue;
-              if (occ[cell] === 3 || occ[cell] === 4) { eraseCell(cell); stats.burned++; }
+              if (isTrail(occ[cell])) { eraseCell(cell); stats.burned++; }
               occ[cell] = 5; fireList.push({ cell, t: 1.3 + rnd() * 0.3 }); D.burned++;
               if (rnd() < 0.4) fx.particles.burst(cellX(c), 0.7, cellZ(r), { count: 3, speed: 2.5, up: 2, life: 0.6, size: 0.5, colors: [0xff7a1a, 0xffd23f, 0xff3a0a], gravity: -2 });
               for (const b of bikes) if (b.alive && b.c0 === c && b.r0 === r && b.jumpLeft === 0) { crashBike(b, 'vuur'); fireHit = true; }
@@ -351,7 +362,7 @@ export default {
       G.state = 'roundEnd'; G.t = 0; G.slow = 1; G.ending = false; hud.setTimer(null);
       if (w == null) {
         const set = G.pendingSet || bikes.map((b) => b.i); for (const i of set) G.wins[i]++;
-        hud.showBig(set.length > 2 ? 'ALLEMAAL BOEM!' : 'TWEE KEER BOEM!', 1800, '#ffd23f');
+        hud.showBig(set.length >= n ? 'ALLEMAAL BOEM!' : set.length > 2 ? 'DRIE KEER BOEM!' : 'TWEE KEER BOEM!', 1800, '#ffd23f');
       }
       else { G.wins[w]++; hud.showBig(`${names[w]} wint ronde ${G.round}!`, 1800, PCSS[w]); bikes[w].c.pose = 'cheer'; bikes[w].c.jump(); audio.sfx('win', { vol: 0.5 }); }
       G.lastW = w; refreshHud(); audio.sfx('bell', { vol: 0.5 });
@@ -473,6 +484,7 @@ export default {
     return {
       update: (dt) => { if (finished) { resultUpdate(dt); return; } intro0(); update(dt); },
       onStart: intro0, resultUpdate, introUpdate,
+      onCountdown() { refreshHud(); for (const b of bikes) b.lastTxt = ''; },   // de harness bouwt de HUD bij het aftellen opnieuw op
       onSwap() { for (const b of bikes) fx.particles.burst(cellX(b.c0), 1, cellZ(b.r0), { count: 20, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) {
         movers.forEach((m, i) => {

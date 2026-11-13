@@ -1,10 +1,12 @@
 // Gebruik: node tools/test_kalaha.mjs [scenario...]   scenario: rules | bots | twists | idle | timeout | events | shots
+//   bots4 | idle4 | timeout4 = vier spelers (2 tegen 2, ?players=4): per team sturen beide teamleden samen één cursor (de bot laat per beurt een ander teamlid spelen).
 //   TW=<twist-id> kiest een twist. Q=low|high kwaliteit.
 // rules: pure Kalaha-regels in node (conserveert stenen, einde, extra beurt, vangst). De rest draait de echte game in headless chromium
 // met bots die via de virtuele invoer spelen (versneld, zonder renderen) en controleren: finishPvp precies 1x, beide spelers kunnen winnen,
 // visuele telling == logische stand bij elke beurt, geen console-errors.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
+import { chromePath, BROWSER_ARGS } from './chrome_path.mjs';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['rules', 'bots'];
@@ -54,13 +56,13 @@ const server = http.createServer((req, res) => {
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
 
-async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+async function open(twist, N = 2) {
+  const browser = await chromium.launch({ executablePath: chromePath(), args: BROWSER_ARGS });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=kalaha&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=kalaha&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${N === 4 ? '&players=4' : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
@@ -68,8 +70,8 @@ async function open(twist) {
     mode.paused = false;
     // finishPvp tellen
     window.__fin = 0; const orig = mode.ctx.finishPvp; mode.ctx.finishPvp = (r) => { window.__fin++; window.__finRes = r; return orig(r); };
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -90,8 +92,9 @@ async function installBots(page, cfg) {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
-        for (const i of [0, 1]) { const v = inp.virtual[i]; v.a = false; v.b = false; v.x = 0; v.y = 0; }
-        if (tw === 'deurman' && st.T > (window.__nextDeur ??= 15)) { window.__nextDeur = st.T + 12; inst.onDeurman([rnd() < 0.6, rnd() < 0.6]); }
+        for (const v of inp.virtual) { v.a = false; v.b = false; v.x = 0; v.y = 0; }
+        const N = m.ids.length;
+        if (tw === 'deurman' && st.T > (window.__nextDeur ??= 15)) { window.__nextDeur = st.T + 12; inst.onDeurman(m.ids.map(() => rnd() < 0.6)); }
         if (st.phase === 'choose' && !st.auto) {
           const i = st.turn, c = window.__cfg[i], b = B[i];
           if (b.seq !== st.turnSeq) {
@@ -99,7 +102,7 @@ async function installBots(page, cfg) {
             const bad = inst.dbg.check(); if (bad.length) { window.__mism++; window.__lastBad = bad.join(','); }
           }
           if (c.style !== 'idle') {
-            const vi = m.swapped ? 1 - i : i; const v = inp.virtual[vi];
+            const vi = N === 4 ? m.ids[2 * i + (st.turnSeq % 2)] : (m.swapped ? 1 - i : i); const v = inp.virtual[vi];   // 4 spelers: per beurt speelt een ander teamlid
             if (b.wait > 0) b.wait--;
             else if (b.thief && st.pits[12 - st.sel[i]] > 0) { b.thief = false; if (swapAB) v.a = true; else v.b = true; }
             else if (st.sel[i] !== b.target) {
@@ -116,8 +119,8 @@ async function installBots(page, cfg) {
   }, cfg);
 }
 
-async function playMatch(name, tw, cfg, preset) {
-  const { browser, page, errors } = await open(tw);
+async function playMatch(name, tw, cfg, preset, NP = 2) {
+  const { browser, page, errors } = await open(tw, NP);
   await installBots(page, cfg);
   if (preset) await page.evaluate(preset);
   const res = await page.evaluate(() => {
@@ -137,6 +140,13 @@ async function playMatch(name, tw, cfg, preset) {
   console.log(`end T=${s.T.toFixed(1)} pits=${s.pits.join(',')} finished=${res.finished} finishPvp-calls=${res.fin} turns=${res.turns} mismatches=${res.mism}${res.lastBad ? ' (' + res.lastBad + ')' : ''} stats=${JSON.stringify(s.stats)}`);
   if (res.result) console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, ' ')}`);
   if (res.fin !== 1) FAIL(`${name}: finishPvp ${res.fin}x aangeroepen`);
+  if (NP === 4) {
+    const r = res.result;
+    if (!(r && r.winners.length === 2 && (r.winners.join() === '0,1' || r.winners.join() === '2,3'))) FAIL(`${name}: winnend team moet 2 slots zijn (${r && r.winners})`);
+    if (!(r && r.scoreArr[0] === r.scoreArr[1] && r.scoreArr[2] === r.scoreArr[3])) FAIL(`${name}: teamscore voor beide teamgenoten (${r && r.scoreArr})`);
+    if (!(r && [...r.placeSlots].sort().join() === '0,1,2,3' && r.winners.includes(r.placeSlots[0]) && r.winners.includes(r.placeSlots[1]))) FAIL(`${name}: plaatsen ${r && r.placeSlots}`);
+    if (r && r.scoreArr[0] + r.scoreArr[2] !== 48 + res.st.stats.eggs) FAIL(`${name}: stenen tellen niet op tot 48 + gouden eieren (${r.scoreArr}, eieren ${res.st.stats.eggs})`);
+  }
   if (res.mism) FAIL(`${name}: visuele telling wijkt af van logica (${res.lastBad})`);
   if (errors.length) { FAIL(`${name}: console-errors`); console.log(errors.slice(0, 6).join('\n')); } else console.log('NO ERRORS');
   await browser.close();
@@ -150,6 +160,16 @@ for (const name of scen) {
     for (const c of cfgs) { const w = await playMatch('bots', process.env.TW || 'none', c); wins[w == null ? 2 : w]++; }
     console.log('winnaars (Wes, Jor, gelijk):', wins);
     if (!wins[0] || !wins[1]) FAIL('bots: niet beide spelers wonnen');
+  } else if (name === 'bots4') {
+    const cfgs = [[{ skill: 0.95, think: 1.5, thief: 0.5 }, { skill: 0.3, think: 2, thief: 0.3 }], [{ skill: 0.3, think: 2, thief: 0.3 }, { skill: 0.95, think: 1.5, thief: 0.5 }]];
+    for (const c of cfgs) { const w = await playMatch('bots4', process.env.TW || 'none', c, null, 4); wins[w == null ? 2 : w]++; }
+    console.log('winnende teams (team 0 = slots 0+1, team 1 = slots 2+3, gelijk):', wins);
+  } else if (name === 'idle4') {
+    await playMatch('idle4', 'none', [{ style: 'idle' }, { style: 'idle' }], null, 4);
+  } else if (name === 'timeout4') {
+    await playMatch('timeout4', process.env.TW || 'none', [{ skill: 0.5, think: 2 }, { skill: 0.5, think: 2 }], () => { window.__app.mode.instance.dbg.setTime(14); }, 4);
+  } else if (name === 'twists4') {
+    for (const t of (process.env.ONLY ? process.env.ONLY.split(',') : TWISTS)) await playMatch('twists4', t, [{ skill: 0.8, think: 1.5, thief: 0.4 }, { skill: 0.6, think: 1.5, thief: 0.4 }], null, 4);
   } else if (name === 'twists') {
     for (const t of TWISTS) await playMatch('twists', t, [{ skill: 0.8, think: 1.5, thief: 0.4 }, { skill: 0.6, think: 1.5, thief: 0.4 }]);
   } else if (name === 'idle') {

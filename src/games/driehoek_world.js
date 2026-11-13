@@ -7,12 +7,23 @@ import { mergeStatic } from '../world/merge.js';
 
 // Wereld van "Driehoek-Hockey": een afgeknotte driehoekige ijsvloer, drie doelen (links = slot 0, onder = slot 1, rechts = slot 2),
 // een poolnacht met noorderlicht, sneeuwdennen, iglo's en een sneeuwpoppen-publiek.
+// Met 4 spelers (Sam) is de arena een vierkant met vier doelen (links = slot 0, boven = slot 1, rechts = slot 2, onder = slot 3); setShape(n) zet de vorm
+// (TRI, NORM, TANG, VERT en POLY worden ter plekke aangepast, dus de importerende code ziet de actuele vorm).
 export const TRI = { a: 9.5, GH: 4.0, BEV: 15.9, POCKET: 2.6, WALLH: 1.15, WT: 0.9 };
 // uitwaartse normalen per muur/slot en de bijbehorende raaklijn (t = (n.z, -n.x))
 export const NORM = [[-Math.sqrt(3) / 2, -0.5], [0, 1], [Math.sqrt(3) / 2, -0.5]];
 export const TANG = NORM.map(([x, z]) => [z, -x]);
 // afkapvlakken op de hoeken: [richting x, richting z] (afstand TRI.BEV)
 export const VERT = [[-Math.sqrt(3) / 2, 0.5], [Math.sqrt(3) / 2, 0.5], [0, -1]];
+export const POLY = [];
+export function setShape(n) {
+  const h = Math.SQRT1_2;
+  NORM.length = 0; VERT.length = 0; TANG.length = 0;
+  if (n === 4) { TRI.a = 10.5; TRI.BEV = 13.4; NORM.push([-1, 0], [0, -1], [1, 0], [0, 1]); VERT.push([-h, -h], [h, -h], [h, h], [-h, h]); }
+  else { TRI.a = 9.5; TRI.BEV = 15.9; NORM.push([-Math.sqrt(3) / 2, -0.5], [0, 1], [Math.sqrt(3) / 2, -0.5]); VERT.push([-Math.sqrt(3) / 2, 0.5], [Math.sqrt(3) / 2, 0.5], [0, -1]); }
+  NORM.forEach(([x, z]) => TANG.push([z, -x]));
+  POLY.length = 0; POLY.push(...arenaPolygon());
+}
 
 // begrenzing als reeks halfvlakken {nx,nz,off,goal}: nOut·p <= off
 export function planes() {
@@ -36,7 +47,7 @@ function arenaPolygon() {
   }
   return poly;
 }
-export const POLY = arenaPolygon();
+setShape(3);
 
 function iceTexture(colorsCss) {
   const W = 1024, H = 1024, X0 = -18, X1 = 18, Z0 = -17, Z1 = 11;   // wereld -> pixels
@@ -51,7 +62,7 @@ function iceTexture(colorsCss) {
     for (let i = 0; i < 40; i++) { g.strokeStyle = 'rgba(90,160,210,.25)'; g.lineWidth = 1.5; let x = r() * W, y = r() * H; g.beginPath(); g.moveTo(x, y); for (let k = 0; k < 4; k++) { x += (r() - 0.5) * 100; y += (r() - 0.5) * 100; g.lineTo(x, y); } g.stroke(); }
     // middencirkel + driehoeksembleem
     g.strokeStyle = 'rgba(40,110,190,.75)'; g.lineWidth = 8; g.beginPath(); g.ellipse(px(0), pz(0), 3.6 * sx, 3.6 * sz, 0, 0, TAU); g.stroke();
-    g.lineWidth = 6; g.beginPath(); for (let k = 0; k < 3; k++) { const a = k * TAU / 3 + Math.PI; const x = px(Math.sin(a) * 2.6), z = pz(Math.cos(a) * 2.6); if (k) g.lineTo(x, z); else g.moveTo(x, z); } g.closePath(); g.stroke();
+    g.lineWidth = 6; g.beginPath(); const SIDES = NORM.length; for (let k = 0; k < SIDES; k++) { const a = k * TAU / SIDES + (SIDES === 4 ? Math.PI / 4 : Math.PI); const x = px(Math.sin(a) * 2.6), z = pz(Math.cos(a) * 2.6); if (k) g.lineTo(x, z); else g.moveTo(x, z); } g.closePath(); g.stroke();
     g.fillStyle = 'rgba(40,110,190,.85)'; g.beginPath(); g.ellipse(px(0), pz(0), 0.5 * sx, 0.5 * sz, 0, 0, TAU); g.fill();
     // doelgebieden in spelerskleur + doellijn
     NORM.forEach(([nx, nz], i) => {
@@ -101,7 +112,7 @@ function snowman() {
 
 export function buildArena(ctx, colorsCss, colors) {
   const { scene } = ctx;
-  const A = { t: 0, crowd: [], flash: [0, 0, 0] };
+  const A = { t: 0, crowd: [], flash: NORM.map(() => 0) };
   const start = scene.children.length;
   scene.background = skyTexture('#050a22', '#12285a');
   scene.fog = new THREE.Fog(0x0c1a40, 60, 160);
@@ -151,7 +162,7 @@ export function buildArena(ctx, colorsCss, colors) {
     }
   });
   // hoek-kristallen buiten de afkapping
-  VERT.forEach(([vx, vz], k) => { const c = crystalCluster([0x7ad8ff, 0xb8f0ff, 0x9ac8ff][k], 3.4); c.position.set(vx * (TRI.BEV + 2.4), 0, vz * (TRI.BEV + 2.4)); scene.add(c); });
+  VERT.forEach(([vx, vz], k) => { const c = crystalCluster([0x7ad8ff, 0xb8f0ff, 0x9ac8ff, 0xd8b8ff][k], 3.4); c.position.set(vx * (TRI.BEV + 2.4), 0, vz * (TRI.BEV + 2.4)); scene.add(c); });
 
   // doelen: palen, net, gloeiende doellijn, avatar-sokkel
   const netT = netTex(); A.goals = [];

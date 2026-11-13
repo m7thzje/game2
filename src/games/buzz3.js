@@ -4,11 +4,11 @@ import { buildStudio, LEC_X, LEC_Z, CAM } from './buzz3_world.js';
 import { ROUND_FACTORY, roundA } from './buzz3_rounds.js';
 import { txt, rr, shape, burst } from './buzz3_draw.js';
 
-// Drie-Buzzer — quizshow voor drie: Wes, Jor en Juul achter hun lessenaar, de Deurman (met feesthoed) als presentator.
-// 10 rondes: Groen!, Welk is het meest?, Deurman zegt, Schat het getal, Volg de volgorde. Snelste goede antwoord = 3 punten, daarna 2 en 1,
+// Drie-Buzzer — quizshow voor drie of vier: Wes, Jor, Juul (en Sam) achter hun lessenaar, de Deurman (met feesthoed) als presentator.
+// 10 rondes: Groen!, Welk is het meest?, Deurman zegt, Schat het getal, Volg de volgorde. Snelste goede antwoord = 3 punten (bij 4 spelers 4), daarna 2 en 1 (4: 3, 2, 1),
 // fout = -1. Ronde 10 is GOUD (dubbel). Wie achterstaat krijgt een hulpje. Bij gelijkstand: beslissingsronde.
 const PLAN = ['a', 'b', 'd', 'e', 'c', 'a', 'd', 'b', 'c', 'e'];
-const PCOL = ['#35c46f', '#4a8cff', '#ff9a3c'];
+const PCOL = ['#35c46f', '#4a8cff', '#ff9a3c', '#d45cf0'];
 const T_CAP = 92;   // na zoveel seconden stopt het quizzen na de lopende ronde
 const CONF = [0xff5a5a, 0xffd23f, 0xff6fb5, 0x35d6c8, 0x8a6aff, 0x7bff7b];
 
@@ -18,11 +18,11 @@ export default {
   giver: 'Presentator de Deurman',
   icon: '🔔',
   mode: 'pvp',
-  players: [3],
+  players: [3, 4],
   time: 90,
   twists: ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'bodyswap', 'deurman'],
   music: 'game_fast',
-  blurb: 'Welkom bij de quiz van <b>de Deurman</b>! <b>10 rondes</b>: reageer op groen, tel vormpjes, onthoud pijlen, trap niet in de Deurman-valstrik en schat het getal. <b>Snelste goede antwoord = 3 punten</b>, fout = -1. Ronde 10 is <b>goud (dubbel)</b>!',
+  blurb: 'Welkom bij de quiz van <b>de Deurman</b>! <b>10 rondes</b>: reageer op groen, tel vormpjes, onthoud pijlen, trap niet in de Deurman-valstrik en schat het getal. <b>Snelste goede antwoord = 3 punten</b> (bij vier spelers 4), fout = -1. Voor drie of vier spelers tegelijk. Ronde 10 is <b>goud (dubbel)</b>!',
   controls: ['{move} pijl kiezen / schuiven', '{a} BUZZER!', '{b} gekke streek (hoi!)'],
   tip: 'Te vroeg buzzeren kost een punt. Wie achterstaat krijgt een hulpje!',
 
@@ -63,12 +63,11 @@ export default {
 
     // ---------------- spel-API voor de rondes ----------------
     const dirOf = (inp) => { const ax = Math.abs(inp.x), ay = Math.abs(inp.y); if (Math.max(ax, ay) < 0.55) return null; return ax > ay ? (inp.x < 0 ? 'left' : 'right') : (inp.y < 0 ? 'up' : 'down'); };
-    const at3 = (i) => [LEC_X[i], 0, LEC_Z];
     const floatAt = (i, text, col, s = 0.8, y = 3.5) => fx.texts.add(text, W.pods[i].x, y, LEC_Z + 1.6, col, s);
     const pose = (i, p, secs) => { W.chars[i].pose = p; poseT[i] = secs; };
     const confetti = (i, k = 1) => fx.particles.burst(W.pods[i].x, 3.2, LEC_Z + 0.6, { count: Math.round(26 * k), speed: 5.5, up: 1.4, spread: 1.3, life: 1.2, size: 0.4, colors: CONF, gravity: 8 });
     const G = {
-      n, pl, rot: 0, gold: false,
+      n, pl, rot: 0, gold: false, pts: n === 4 ? [4, 3, 2, 1] : [3, 2, 1], pts2: n === 4 ? [2, 1, 1, 1] : [2, 1, 1],
       rng: () => rng(), name: (i) => names[i],
       aEdge: (i) => aE[i], dirEdge: (i) => dE[i], inp: (i) => pv.input(i),
       helped: (i) => helpedNow[i], spd: (i) => pv.speed(i), get slip() { return pv.slip; },
@@ -141,7 +140,7 @@ export default {
       if (tiebreak && tbWinner != null) winner = tbWinner;
       W.chars.forEach((c, i) => { c.pose = i === winner ? 'cheer' : 'sad'; poseT[i] = 99; });
       W.host.pose = 'cheer'; hostT.t = 99; W.cheerCrowd(2);
-      caption = `${names[winner]} is de Drie-Buzzer-kampioen!`;
+      caption = `${names[winner]} is de ${n === 4 ? 'Vier' : 'Drie'}-Buzzer-kampioen!`;
       ctx.sfx('tada'); ctx.sfx('cheer', { vol: 0.8 }); W.beam(winner, 1.5); W.lamp(winner, '#ffd23f', 3);
       for (let k = 0; k < 3; k++) confetti(winner, 2);
     };
@@ -150,7 +149,8 @@ export default {
       if (done) return; done = true;
       const sc = pl.map((p) => p.score);
       const best = pl.map((p, i) => i).sort((a, b) => pl[b].firsts - pl[a].firsts)[0];
-      ctx.finishPvp({ winner, score: sc, delay: 500, summary: `<b style="color:${ctx.players[winner].css}">${names[winner]}</b> wint de quiz met <b>${sc[winner]}</b> punten!<br>Snelste buzzer: ${names[best]} (${pl[best].firsts}x eerste).` + (tbWinner != null ? ' <i>Beslist in de beslissingsronde!</i>' : '') });
+      const place = pl.map((p, i) => i).sort((a, b) => (a === winner ? -1 : b === winner ? 1 : 0) || pl[b].score - pl[a].score || pl[b].firsts - pl[a].firsts || pl[a].fouls - pl[b].fouls);
+      ctx.finishPvp({ winner, score: sc, place, delay: 500, summary: `<b style="color:${ctx.players[winner].css}">${names[winner]}</b> wint de quiz met <b>${sc[winner]}</b> punten!<br>Snelste buzzer: ${names[best]} (${pl[best].firsts}x eerste).` + (tbWinner != null ? ' <i>Beslist in de beslissingsronde!</i>' : '') });
     };
 
     // ---------------- grote scherm ----------------
@@ -163,8 +163,8 @@ export default {
       const b = W.big, g = b.g, w = b.w, h = b.h;
       drawBg(g, w, h, tm);
       if (ph === 'intro') {
-        txt(g, 'DRIE-BUZZER', w / 2, 170, 120, '#ffe14a'); txt(g, 'de grote quiz van de Deurman', w / 2, 262, 40, '#ffffff');
-        names.forEach((nm, i) => txt(g, nm, w * (0.2 + 0.3 * i), 360, 64, ctx.players[i].css)); txt(g, '10 rondes · snelste goede antwoord wint!', w / 2, 470, 34, '#9ad8ff');
+        txt(g, n === 4 ? 'VIER-BUZZER' : 'DRIE-BUZZER', w / 2, 170, 120, '#ffe14a'); txt(g, 'de grote quiz van de Deurman', w / 2, 262, 40, '#ffffff');
+        names.forEach((nm, i) => txt(g, nm, w * (n === 4 ? 0.125 + 0.25 * i : 0.2 + 0.3 * i), 360, n === 4 ? 56 : 64, ctx.players[i].css, { max: n === 4 ? 230 : 300 })); txt(g, '10 rondes · snelste goede antwoord wint!', w / 2, 470, 34, '#9ad8ff');
         shape(g, 'star', 90, 90, 40, '#ffd23f', tm); shape(g, 'star', w - 90, 90, 40, '#ffd23f', tm);
       } else if (ph === 'title') {
         const k = Math.min(1, tPh / 0.25), sc = 0.7 + 0.3 * (1 - Math.pow(1 - k, 3));
@@ -197,8 +197,8 @@ export default {
       txt(g, 'EINDSTAND', w / 2, 62, 56, '#ffe14a');
       const max = Math.max(1, ...pl.map((p) => p.score));
       pl.forEach((p, i) => {
-        const bh = (120 + 180 * (p.score / max)) * Math.min(1, finalT / 1.0), x = w * (0.2 + 0.3 * i), y = 442;
-        g.fillStyle = ctx.players[i].css; g.strokeStyle = i === winner ? '#ffd23f' : '#ffffff'; g.lineWidth = i === winner ? 8 : 3; rr(g, x - 70, y - bh, 140, bh, 14); g.fill(); g.stroke();
+        const bh = (120 + 180 * (p.score / max)) * Math.min(1, finalT / 1.0), x = w * (n === 4 ? 0.125 + 0.25 * i : 0.2 + 0.3 * i), y = 442;
+        g.fillStyle = ctx.players[i].css; g.strokeStyle = i === winner ? '#ffd23f' : '#ffffff'; g.lineWidth = i === winner ? 8 : 3; rr(g, x - (n === 4 ? 60 : 70), y - bh, n === 4 ? 120 : 140, bh, 14); g.fill(); g.stroke();
         if (bh > 100) { txt(g, String(p.score), x, y - bh + 40, 54, '#ffffff'); txt(g, names[i], x, y - bh + 92, 34, '#ffffff', { max: 130 }); }
         if (i === winner) { shape(g, 'star', x, y - bh - 36 + Math.sin(tm * 6) * 6, 30, '#ffd23f', tm); }
       });
@@ -219,11 +219,11 @@ export default {
       drawT -= dt; if (drawT <= 0) { drawT = 1 / 18; drawBig(bgT); }
     }
     for (let i = 0; i < n; i++) { drawLec(i); drawSign(i); signDirty[i] = false; }
-    hud.setScore('Drie-Buzzer');
+    hud.setScore(n === 4 ? 'Vier-Buzzer' : 'Drie-Buzzer');
     drawBig(0);
 
     return {
-      onStart() { hud.setTimer(null); hud.setScore('Drie-Buzzer'); beginRound(0); },
+      onStart() { hud.setTimer(null); hud.setScore(n === 4 ? 'Vier-Buzzer' : 'Drie-Buzzer'); beginRound(0); },
       introUpdate(dt) { W.update(dt); drawT -= dt; if (drawT <= 0) { drawT = 1 / 15; bgT += 1 / 15; drawBig(bgT); } },
       update(dt) {
         T += dt; tPh += dt;

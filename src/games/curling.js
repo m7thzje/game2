@@ -11,7 +11,7 @@ import * as WD from './curling_world.js';
 
 const { HW, HACK, HZ, HOG, HR, BACK, SR } = WD.SH;
 const Z0 = WD.SH.Z0;
-const ENDS = 4, PER = 3, DEC = 3.6, KC = 1.1, STEER = 0.5, E_STONE = 0.9, E_WALL = 0.6, VMIN = 7, VMAX = 16.5, RELEASE_GAP = 1.1, AUTO_T = 9, SOFT_TIME = 150;
+const DEC = 3.6, KC = 1.1, STEER = 0.5, E_STONE = 0.9, E_WALL = 0.6, VMIN = 7, VMAX = 16.5, RELEASE_GAP = 1.1, AUTO_T = 9, SOFT_TIME = 150;
 const HILL_R = 2.2, SEAL_R = 0.85;
 const SCHEDULE = [[['bear', 9]], [['seal', 5], ['penguin', 13]], [['bear', 4], ['seal', 10]], [['penguin', 3], ['seal', 8], ['bear', 15]]];   // gimmicks per end: [soort, seconde in het end]
 const tri = (u) => { u = ((u % 2) + 2) % 2; return u < 1 ? u : 2 - u; };
@@ -22,27 +22,31 @@ export default {
   giver: 'Pinguïn Piet',
   icon: '🥌',
   mode: 'pvp',
+  players: [2, 3, 4],
   time: 100,
   music: 'game',
-  blurb: 'Curling op een bevroren zee! Slinger je steen naar het <b>huis</b>, <b>veeg</b> met B en knal elkaars stenen weg. Pas op voor <b>ijsheuvel, ijsbeer en zeehond</b>! Dichtste bij de roos scoort, laatste end <b>dubbel</b>.',
+  blurb: 'Curling op een bevroren zee (om de beurt, tot 4 spelers)! Slinger je steen naar het <b>huis</b>, <b>veeg</b> met B en knal elkaars stenen weg. Pas op voor <b>ijsheuvel, ijsbeer en zeehond</b>! Dichtste bij de roos scoort, laatste end <b>dubbel</b>.',
   controls: ['{move} richting en draai', '{a} vast = kracht, los = gooien', '{b} tikken tijdens glijden = vegen'],
   tip: 'Gouden steen = dubbel, bomsteen = knal!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp; const names = players.map((p) => p.name); const tw = ctx.twist.id;
+    const N = players.length, NIL = (v) => players.map(() => v);
+    const ENDS = N === 4 ? 3 : 4, PER = N === 2 ? 3 : 2;      // 24 worpen per potje, bij elk aantal spelers
+    const nextP = (k) => (k + 1) % N;
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const FM = lerp(1, 0.38, SLIP) * lerp(1, 0.72, clamp((1 - GRAV) / 0.6, 0, 1));    // wrijving (zeepvloer / maan: glad)
     const VS = Math.sqrt(FM);                                                          // zelfde meter-bereik, ook als het glad is
     const L = ctx.lights('ice', { shadow: 24, center: [0, 0, -2], fogNear: 90, fogFar: 240 });
     L.hemi.intensity = 1.25; L.sun.intensity = 2.3; L.sun.position.set(-16, 34, 18);
     camera.fov = 40; camera.updateProjectionMatrix();
-    const W = WD.buildWorld(ctx);
+    const W = WD.buildWorld(ctx, N);
     const rnd = Math.random;
-    const cssCols = ['#7dffb0', '#8fb8ff'];
+    const cssCols = players.map((pp) => ['#7dffb0', '#8fb8ff', '#ffb36b', '#e08aff'][pp.id]);
 
     // ---------------- stenen-pool (7 stuks: 6 + beslissende) ----------------
-    const objs = Array.from({ length: 7 }, () => {
+    const objs = Array.from({ length: Math.max(7, N * PER + 1) }, () => {
       const s = WD.makeStone(); s.g.visible = false; scene.add(s.g);
       const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: canvasTex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 2, 32, 32, 30); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); }), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0 })); glow.scale.set(3.4, 3.4, 1); glow.position.y = 0.5; scene.add(glow);
       const shadow = mesh(new THREE.CircleGeometry(1, 16), new THREE.MeshBasicMaterial({ color: 0x103050, transparent: true, opacity: 0.28, depthWrite: false }), { cast: false, receive: false, rot: [-Math.PI / 2, 0, 0] }); shadow.position.y = 0.025; scene.add(shadow);
@@ -58,7 +62,7 @@ export default {
     // ---------------- spelers ----------------
     const pl = players.map((pp, i) => {
       const c = makeBrother(i); const kS = (2.5 / c.height) * lerp(1, pv.size(i), 0.5);
-      const holder = new THREE.Group(); holder.add(c.group); holder.scale.setScalar(kS); const side = i ? 1 : -1; holder.position.set(side * 7.6, 0.3, HACK + 0.5); scene.add(holder);
+      const holder = new THREE.Group(); holder.add(c.group); holder.scale.setScalar(kS); const side = i % 2 ? 1 : -1, hx0 = side * (7.6 + (i >> 1) * 2.8); holder.position.set(hx0, 0.3, HACK + 0.5); scene.add(holder);
       const broom = WD.makeBroom(); c.hold(broom, 'r'); broom.rotation.set(-0.9, 0, 0.0); broom.scale.setScalar(1 / kS * 1.3); broom.position.set(0, -0.05, 0.05);
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: canvasTex(256, 96, (g, w, h) => { g.font = 'bold 58px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(10,10,30,.9)'; g.lineJoin = 'round'; g.strokeText(pp.name, w / 2, h / 2); g.fillStyle = pp.css; g.fillText(pp.name, w / 2, h / 2); }), transparent: true, depthTest: false })); tag.scale.set(2.6, 0.97, 1); tag.renderOrder = 15; scene.add(tag);
       // richting-markering + stippellijn + stop-ring + meter
@@ -68,7 +72,7 @@ export default {
       const stopR = mesh(new THREE.RingGeometry(0.62, 0.86, 28), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.95, depthWrite: false, side: THREE.DoubleSide }), { cast: false, receive: false, rot: [-Math.PI / 2, 0, 0] }); stopR.position.y = 0.06; stopR.visible = false; scene.add(stopR);
       const gc = document.createElement('canvas'); gc.width = 128; gc.height = 320; const gg = gc.getContext('2d'); const gt = new THREE.CanvasTexture(gc); gt.colorSpace = THREE.SRGBColorSpace;
       const gauge = new THREE.Sprite(new THREE.SpriteMaterial({ map: gt, transparent: true, depthTest: false })); gauge.scale.set(1.5, 3.75, 1); gauge.renderOrder = 14; gauge.visible = false; scene.add(gauge);
-      return { i, c, holder, broom, tag, side, kS, marker, dots, stopR, gauge, gg, gt, gkey: '', mx: 0, spin: 0, st: 'wait', charging: false, gT: 0, power: 0.44, pending: -1, aimT: 0, sweep: 0, tapT: 0, stone: null, score: 0, hx: side * 7.6, hz: HACK + 0.5, react: 0, run: 0, bounceT: 0 };
+      return { i, c, holder, broom, tag, side, kS, marker, dots, stopR, gauge, gg, gt, gkey: '', mx: 0, spin: 0, st: 'wait', charging: false, gT: 0, power: 0.44, pending: -1, aimT: 0, sweep: 0, tapT: 0, stone: null, score: 0, hx: hx0, hz: HACK + 0.5, react: 0, run: 0, bounceT: 0 };
     });
     function drawGauge(p) {
       const key = `${Math.round(p.power * 40)}|${p.spin}|${p.charging ? 1 : 0}|${p.pending >= 0 ? 1 : 0}|${canRelease() ? 1 : 0}`; if (key === p.gkey) return; p.gkey = key; const g = p.gg;
@@ -88,10 +92,10 @@ export default {
 
     // ---------------- toestand ----------------
     let T0 = 0, introT = 0, started = false, finished = false, slow = 1, slowHold = 0, timeLeft = SOFT_TIME, hudSec = -1, impactCd = 0;
-    const G = { st: 'init', t: 0, end: 0, endT: 0, turnIdx: 0, sinceThrow: 9, first: Math.floor(rnd() * 2), sd: false, rush: false, winner: -1, order: [], results: [] };
-    const ends = [];                 // per end [scoreP0, scoreP1]
+    const G = { st: 'init', t: 0, end: 0, endT: 0, turnIdx: 0, sinceThrow: 9, first: Math.floor(rnd() * N), sd: false, sdSet: [], rush: false, winner: -1, order: [], results: [] };
+    const ends = [];                 // per end [score per speler]
     let stones = [];                 // stenen van het huidige end
-    const stats = { collisions: 0, bombs: 0, seal: 0, walker: 0, outs: 0, tekort: 0, gold: 0, sweeps: [0, 0], throws: 0, knock: 0 };
+    const stats = { collisions: 0, bombs: 0, seal: 0, walker: 0, outs: 0, tekort: 0, gold: 0, sweeps: NIL(0), throws: 0, knock: 0 };
     const hill = { x: 0, z: -2.5, m: WD.makeHill() }; hill.m.scale.set(HILL_R, HILL_R, HILL_R); scene.add(hill.m);
     const hole = { m: WD.makeHole(), seal: WD.makeSeal(), st: 'idle', t: 0, x: 0, z: -6, kicked: false }; hole.m.visible = false; hole.seal.visible = false; scene.add(hole.m, hole.seal);
     const walker = { on: false, kind: 'bear', obj: null, x: 0, z: -2, vx: 0, r: 1, t: 0 };
@@ -103,9 +107,9 @@ export default {
     const total = (i) => pl[i].score;
     const curEndMul = () => (G.sd ? 1 : G.end === ENDS - 1 ? 2 : 1);
     function refreshHud() {
-      hud.setScore(`${names[0]} ${pl[0].score} – ${pl[1].score} ${names[1]}  ·  ${G.sd ? 'BESLISSENDE STEEN' : `eind ${Math.min(G.end + 1, ENDS)}/${ENDS}${G.end === ENDS - 1 ? ' (dubbel!)' : ''}`}`);
+      hud.setScore((N === 2 ? `${names[0]} ${pl[0].score} – ${pl[1].score} ${names[1]}  ·  ` : '') + (G.sd ? 'BESLISSENDE STEEN' : `eind ${Math.min(G.end + 1, ENDS)}/${ENDS}${G.end === ENDS - 1 ? ' (dubbel!)' : ''}`));
       for (const p of pl) { const left = stones.filter((q) => q.owner === p.i && q.st === 'queued').length + (p.stone && p.stone.st === 'ready' ? 1 : 0); hud.setPlayerInfo(p.i, `${p.score} pt · ${left} stenen`); }
-      W.board(names, cssCols, ends, [pl[0].score, pl[1].score], G.sd ? 4 : G.end);
+      W.board(names, cssCols, ends, pl.map((q) => q.score), G.sd ? 4 : G.end);
     }
     function say(text, x, y, z, col = '#ffe14a', sc = 1.6) { fx.texts.add(text, x, y, z, col, sc); }
 
@@ -206,7 +210,7 @@ export default {
       G.sd = !!sd; G.t = 0; G.endT = 0; G.turnIdx = 0; G.sinceThrow = 9;
       for (const o of objs) { o.g.visible = false; o.glow.material.opacity = 0; o.shadow.visible = false; o.label.visible = false; }
       for (const r of rings) r.visible = false;
-      const f = G.first; G.order = sd ? [f, 1 - f] : [f, 1 - f, f, 1 - f, f, 1 - f];
+      const f = G.first; G.order = sd ? G.sdSet.map((_, k) => G.sdSet[(G.sdSet.indexOf(f) < 0 ? k : (G.sdSet.indexOf(f) + k)) % G.sdSet.length]) : Array.from({ length: N * PER }, (_, k) => (f + k) % N);
       stones = G.order.map((owner, k) => {
         const p = pl[owner]; const r = SR * lerp(1, pv.size(owner), 0.35);
         return { k, owner, o: objs[k], r, m: (r / SR) ** 2, x: 0, z: HACK, vx: 0, vz: 0, spin: 0, sweep: 0, steer: 0, st: 'queued', gold: false, bomb: false, fuse: 0, outT: 0, y: 0, hit: 0, ang: 0 };
@@ -215,8 +219,9 @@ export default {
       // gimmicks per end: heuvel, gouden steen (achterstaander), bomstenen (eind 2 en 3)
       if (!sd) {
         const e = G.end;
-        if (e >= 1 && pl[0].score !== pl[1].score) { const tr = pl[0].score < pl[1].score ? 0 : 1; const lastK = G.order.map((o, k) => (o === tr ? k : -1)).filter((k) => k >= 0).pop(); stones[lastK].gold = true; stats.gold++; }
-        if (e === 1 || e === 2) for (const o of [0, 1]) { const ks = stones.filter((q) => q.owner === o && !q.gold); pick(ks).bomb = true; }
+        const mnS = Math.min(...pl.map((q) => q.score)), mxS = Math.max(...pl.map((q) => q.score));
+        if (e >= 1 && mnS !== mxS) { const tr = pl.findIndex((q) => q.score === mnS); const lastK = G.order.map((o, k) => (o === tr ? k : -1)).filter((k) => k >= 0).pop(); stones[lastK].gold = true; stats.gold++; }
+        if (e === 1 || e === 2) for (const o of NIL(0).map((_, k) => k)) { const ks = stones.filter((q) => q.owner === o && !q.gold); pick(ks).bomb = true; }
       }
       stones.forEach((q) => { q.o.hm.color.setHex(q.gold ? 0xffd23f : PLAYER_COLORS[q.owner]); q.o.hm.emissive.setHex(q.gold ? 0x8a5a00 : 0x000000); q.o.bodyMat.color.setHex(q.gold ? 0xd8b24a : q.bomb ? 0x23252c : 0x8e939c); q.o.bodyMat.metalness = q.gold ? 0.7 : 0.1; q.o.fuse.visible = q.bomb; q.o.g.scale.setScalar(q.r); q.o.shadow.scale.setScalar(q.r * 1.15); });
       // heuvel
@@ -301,31 +306,32 @@ export default {
     }
     function finishScoring() {
       if (G.sd) { sdResolve(); return; }
-      const r = scoreEnd(); const mul = curEndMul(); const res = [0, 0];
+      const r = scoreEnd(); const mul = curEndMul(); const res = NIL(0);
       if (r.winner >= 0) res[r.winner] = r.pts * mul;
       ends[G.end] = res; for (const p of pl) p.score += res[p.i];
       G.st = 'scoring'; G.t = 0;
       for (let k = 0; k < rings.length; k++) { const q = r.sc[k]; rings[k].visible = !!q; if (q) rings[k].position.set(q.x, 0.07, q.z); }
-      if (r.winner >= 0) { const w = r.winner; hud.showBig(`${names[w]} scoort ${res[w]}!${mul > 1 ? ' (dubbel)' : ''}`, 1800, w ? '#8fb8ff' : '#7dffb0'); audio.sfx('win', { vol: 0.5 }); audio.sfx('coin', { vol: 0.5 }); W.cheer(2.5, 1); pl[w].react = 1.6; pl[w].c.pose = 'cheer'; G.first = 1 - w; for (const q of r.sc) fx.particles.burst(q.x, 0.8, q.z, { count: 22, speed: 5, up: 1.2, life: 0.9, size: 0.4, colors: [0xffd23f, 0xffffff, 0xff9a3a], gravity: 4 }); }
-      else { hud.showBig('Niemand scoort!', 1500, '#cfe0ff'); audio.sfx('buzz', { vol: 0.3 }); G.first = 1 - G.first; }
+      if (r.winner >= 0) { const w = r.winner; hud.showBig(`${names[w]} scoort ${res[w]}!${mul > 1 ? ' (dubbel)' : ''}`, 1800, cssCols[w]); audio.sfx('win', { vol: 0.5 }); audio.sfx('coin', { vol: 0.5 }); W.cheer(2.5, 1); pl[w].react = 1.6; pl[w].c.pose = 'cheer'; G.first = nextP(w); for (const q of r.sc) fx.particles.burst(q.x, 0.8, q.z, { count: 22, speed: 5, up: 1.2, life: 0.9, size: 0.4, colors: [0xffd23f, 0xffffff, 0xff9a3a], gravity: 4 }); }
+      else { hud.showBig('Niemand scoort!', 1500, '#cfe0ff'); audio.sfx('buzz', { vol: 0.3 }); G.first = nextP(G.first); }
       refreshHud();
     }
     function sdResolve() {
-      const R = 99; const d = [0, 1].map((o) => { const q = stones.find((s) => s.owner === o); return q && q.st === 'rest' ? Math.hypot(q.x, q.z - HZ) : R; });
-      let w; if (d[0] !== d[1]) w = d[0] < d[1] ? 0 : 1; else w = rnd() < 0.5 ? 0 : 1;
-      G.sdD = d; for (const k of [0, 1]) { const q = stones.find((s) => s.owner === k); if (q && q.st === 'rest') { rings[k].visible = true; rings[k].position.set(q.x, 0.07, q.z); } }
+      const R = 99; const d = NIL(0).map((_, o) => { if (!G.sdSet.includes(o)) return Infinity; const q = stones.find((s) => s.owner === o); return q && q.st === 'rest' ? Math.hypot(q.x, q.z - HZ) : R; });
+      const bd = Math.min(...d), cs = d.map((v, k) => (v === bd ? k : -1)).filter((k) => k >= 0); const w = cs[Math.floor(rnd() * cs.length)];
+      G.sdD = d; for (const k of G.sdSet) { const q = stones.find((s) => s.owner === k); if (q && q.st === 'rest') { rings[k].visible = true; rings[k].position.set(q.x, 0.07, q.z); } }
       G.winner = w; endMatch(w, true);
     }
     function endMatch(w, viaSd) {
       if (G.st === 'end') return; G.st = 'end'; G.t = 0; G.winner = w; G.viaSd = !!viaSd; slow = 1; hud.setTimer(null);
-      if (w != null) { pl[w].c.pose = 'cheer'; pl[1 - w].c.pose = 'sad'; pl[w].react = 99; pl[1 - w].react = 99; hud.showBig(`${names[w]} WINT!`, 1600, w ? '#8fb8ff' : '#7dffb0'); W.cheer(6, 1); audio.sfx('win', { vol: 0.6 }); }
+      if (w != null) { for (const q of pl) { q.c.pose = q.i === w ? 'cheer' : 'sad'; q.react = 99; } hud.showBig(`${names[w]} WINT!`, 1600, cssCols[w]); W.cheer(6, 1); audio.sfx('win', { vol: 0.6 }); }
     }
     function finishMatch() {
       if (finished) return; finished = true; const w = G.winner;
-      const l = 1 - w;
+      const order = [w, ...pl.map((q) => q.i).filter((i) => i !== w).sort((a, b) => pl[b].score - pl[a].score || a - b)];
+      const l = order[N - 1];
       const jokes = [`${names[w]} is de Curling-Koning! ${names[l]} veegt nog steeds.`, `${names[w]} slingert als een pro. ${names[l]} slingerde vooral in het water.`, `De pinguïns joelen voor ${names[w]}. ${names[l]} krijgt een troostvis.`, `Dikke knal van ${names[w]}! ${names[l]} zoekt de steen nog.`];
       const bits = []; if (stats.bombs) bits.push(`${stats.bombs} bom${stats.bombs > 1 ? 'men' : ''}`); if (stats.walker) bits.push(`${stats.walker}× weggeduwd door een dier`); if (stats.outs) bits.push(`${stats.outs} stenen uit het spel`);
-      ctx.finishPvp({ winner: w, score: [pl[0].score, pl[1].score], delay: 900, summary: `${pick(jokes)}${G.viaSd ? ' De beslissende steen gaf de doorslag.' : ''}${bits.length ? ' (' + bits.join(', ') + ')' : ''}` });
+      ctx.finishPvp({ winner: w, score: pl.map((q) => q.score), place: N > 2 ? order : undefined, delay: 900, summary: `${pick(jokes)}${G.viaSd ? ' De beslissende steen gaf de doorslag.' : ''}${bits.length ? ' (' + bits.join(', ') + ')' : ''}` });
     }
 
     // ---------------- hoofd-flow ----------------
@@ -335,7 +341,7 @@ export default {
       impactCd -= dt;
       if (slowHold > 0) slowHold -= dt; else slow = damp(slow, 1, 3.5, dt);
       const sdt = dt * slow;
-      if (T0 > 330 && !finished && G.st !== 'end') endMatch(pl[0].score === pl[1].score ? (rnd() < 0.5 ? 0 : 1) : (pl[0].score > pl[1].score ? 0 : 1));
+      if (T0 > 330 && !finished && G.st !== 'end') { const mx = Math.max(...pl.map((q) => q.score)), c = pl.filter((q) => q.score === mx); endMatch(c[Math.floor(rnd() * c.length)].i); }
       if (G.st === 'play' || G.st === 'sudden') {
         G.endT += sdt; G.sinceThrow += sdt; if (!G.sd) { timeLeft -= sdt; if (Math.floor(timeLeft) !== hudSec) { hudSec = Math.floor(timeLeft); hud.setTimer(Math.max(0, timeLeft), 15); } if (timeLeft <= 0 && !G.rush) { G.rush = true; hud.showBig('TIJD! Snel afmaken', 1400, '#ffd23f'); audio.sfx('bell', { vol: 0.8 }); } }
         for (const p of pl) updatePlayer(p, sdt);
@@ -348,7 +354,7 @@ export default {
       } else if (G.st === 'scoring') {
         G.t += dt; physics(sdt);
         if (G.t > 3.4) {
-          if (G.end + 1 >= ENDS || G.rush) { if (pl[0].score !== pl[1].score) endMatch(pl[0].score > pl[1].score ? 0 : 1); else { G.st = 'sudden'; G.first = Math.floor(rnd() * 2); G.sdMode = true; beginEnd(true); G.st = 'sudden'; } }
+          if (G.end + 1 >= ENDS || G.rush) { { const mx = Math.max(...pl.map((q) => q.score)), tops = pl.filter((q) => q.score === mx).map((q) => q.i); if (tops.length === 1) endMatch(tops[0]); else { G.sdSet = tops; G.st = 'sudden'; G.first = tops[Math.floor(rnd() * tops.length)]; G.sdMode = true; beginEnd(true); G.st = 'sudden'; } } }
           else { G.end++; G.st = 'play'; beginEnd(false); }
         }
       } else if (G.st === 'end') { G.t += dt; if (G.t > 2.4 && !finished) finishMatch(); }
@@ -437,7 +443,7 @@ export default {
           for (let k = 0; k < p.dots.count; k++) { dm.position.set(path[k * 2], 0.05, path[k * 2 + 1]); dm.scale.setScalar(0.6 + 0.4 * (k / p.dots.count)); dm.updateMatrix(); p.dots.setMatrixAt(k, dm.matrix); }
           p.dots.instanceMatrix.needsUpdate = true;
           p.stopR.position.set(res.x, 0.06, Math.max(res.z, BACK)); p.stopR.scale.setScalar(res.out ? 1.15 : 1); p.stopR.material.opacity = res.out ? 0.35 : 0.95;
-          p.gauge.position.set(side * (HW + 1.5), 2.3, HACK + 0.3); p.gauge.material.opacity = canRelease() || p.charging ? 1 : 0.65; drawGauge(p);
+          p.gauge.position.set(side * (HW + (N > 2 ? 0.9 : 1.5)), 2.3, HACK + 0.3); p.gauge.material.opacity = canRelease() || p.charging ? 1 : 0.65; drawGauge(p);
         }
       }
       W.update(tt, dt);
@@ -447,7 +453,7 @@ export default {
       for (const q of stones) if (q.st === 'glide' && (!lead || q.z < lead.z)) lead = q;
       const want = lead ? clamp(lead.z + 8, -4, 4) : (G.st === 'scoring' || G.st === 'end' ? -4 : 0);
       camFocus = damp(camFocus, want * 0.4, 1.8, dt);
-      const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)); const k = Math.max(1, 15.5 / (tanH * asp * 28));
+      const tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)); const k = Math.max(N > 2 ? 1.14 : 1, (N > 2 ? 18.5 : 15.5) / (tanH * asp * 28));
       const sway = Math.sin((T0 + introT) * 0.22) * 0.6;
       camera.position.set(sway, 25 * k, 27 * k + camFocus);
       camera.lookAt(0, 0, -1.2 + camFocus);
@@ -468,13 +474,13 @@ export default {
       onDeurman(movers) {
         movers.forEach((m, i) => { if (!m || G.st === 'end') return; const p = pl[i]; if (p.score > 0) { p.score--; refreshHud(); } const q = p.stone; if (q && q.st === 'glide') { q.vx = q.vz = 0; } say('BEVROREN! -1', p.holder.position.x, 3.8, p.holder.position.z, '#9fe8ff', 1.5); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.3); });
       },
-      celebrate(w) { for (const p of pl) p.react = 99; pl[w].c.pose = 'cheer'; pl[1 - w].c.pose = 'sad'; W.cheer(6, 1); },
+      celebrate(w) { for (const p of pl) { p.react = 99; p.c.pose = p.i === w ? 'cheer' : 'sad'; } W.cheer(6, 1); },
       dispose() {},
       dbg: {
-        state: () => ({ T: T0, st: G.st, end: G.end, sd: G.sd, turnIdx: G.turnIdx, order: [...G.order], score: [pl[0].score, pl[1].score], ends: ends.map((e) => [...e]), finished, timeLeft, rush: G.rush, sinceThrow: G.sinceThrow,
+        state: () => ({ T: T0, st: G.st, end: G.end, sd: G.sd, turnIdx: G.turnIdx, order: [...G.order], score: pl.map((q) => q.score), ends: ends.map((e) => [...e]), finished, timeLeft, rush: G.rush, sinceThrow: G.sinceThrow,
           p: pl.map((p) => ({ st: p.st, mx: p.mx, spin: p.spin, power: p.power, charging: p.charging, sweep: p.sweep, aimT: p.aimT })),
           stones: stones.map((q) => ({ k: q.k, owner: q.owner, x: +q.x.toFixed(2), z: +q.z.toFixed(2), vx: +q.vx.toFixed(2), vz: +q.vz.toFixed(2), st: q.st, gold: q.gold, bomb: q.bomb })), stats, walker: walker.on, seal: hole.st, hill: [hill.x, hill.z], canRelease: canRelease() }),
-        predict: (mx, spin, power) => predict(mx, spin, power), setTime: (t) => { timeLeft = t; }, setScore: (a, b) => { pl[0].score = a; pl[1].score = b; refreshHud(); },
+        predict: (mx, spin, power) => predict(mx, spin, power), setTime: (t) => { timeLeft = t; }, setScore: (a, b, c, d) => { [a, b, c, d].forEach((v, k) => { if (v != null && pl[k]) pl[k].score = v; }); refreshHud(); },
         spawnWalker: (k) => spawnWalker(k), spawnSeal: () => spawnSeal(), pl, get stones() { return stones; },
       },
     };

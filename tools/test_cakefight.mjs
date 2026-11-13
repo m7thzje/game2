@@ -3,9 +3,12 @@
 //   twists : één potje per twist
 //   idle   : niemand doet iets (-> gelijkspel -> gouden taart -> eindigt)
 //   logic  : deterministische mini-tests van de mechanics (pakken, gooien, dienblad, Bram, plassen, gouden taart...)
-//   shots / shots2 : screenshots (/tmp/cf_*.png)
+//   four / three : 4 of 3 spelers vrij voor allen (alle spelers krijgen input; uitslag, 1x finishPvp, geen console-errors, plaatsen)
+//   four-logic   : mechanics bij 4 spelers (doelwit kiezen, eigen taart, Bram, gouden taart alleen voor gelijkstaanden)
+//   shots / shots2 : screenshots (/tmp/cf_*.png);  four-shots: 4-spelers-screenshots (/tmp/cf4_*.png)
 // Omgeving: TWIST=<id>, Q=high (schaduwen)
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -20,32 +23,34 @@ await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const ALL_TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
-const errors = [];
+const errors = []; let fails = 0;
 
-async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+async function open(twist, np = 2) {
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY/.test(m.text())) errors.push(`[${twist}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push(`[${twist}] [pageerror] ` + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=cakefight&quality=${process.env.Q || 'low'}&twist=${twist}`);
+  await page.goto(`http://localhost:${port}/?game=cakefight&quality=${process.env.Q || 'low'}&twist=${twist}&players=${np}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 90000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
   });
   await page.evaluate(() => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 777; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    const B = [{ stuck: 0, lx: 0, lz: 0, wander: 0, wx: 0, wz: 0 }, { stuck: 0, lx: 0, lz: 0, wander: 0, wx: 0, wz: 0 }];
-    window.__skill = [{ aim: 0.5, tray: 0.5, dodge: 0.5 }, { aim: 0.5, tray: 0.5, dodge: 0.5 }];
+    const NP = m.ids.length;
+    const B = m.ids.map(() => ({ stuck: 0, lx: 0, lz: 0, wander: 0, wx: 0, wz: 0 }));
+    window.__skill = m.ids.map(() => ({ aim: 0.5, tray: 0.5, dodge: 0.5 }));
     window.__mode = 'bots';
     const norm = (x, z) => { const l = Math.hypot(x, z) || 1; return [x / l, z / l]; };
     function bot(i, st, dt) {
-      const me = st.p[i], op = st.p[1 - i], v = inp.virtual[i], b = B[i], sk = window.__skill[i];
+      const me = st.p[i], v = inp.virtual[m.ids[i]], b = B[i], sk = window.__skill[i];
+      let op = null, od = 1e9; st.p.forEach((q, k) => { if (k === i) return; const dd = Math.hypot(q.x - me.x, q.z - me.z); if (dd < od) { od = dd; op = q; } });
       v.a = false; v.b = false; v.x = 0; v.y = 0;
       if (window.__mode === 'idle' || st.over || me.stun > 0 || me.air) return;
       // Bram-baan ontwijken
@@ -79,7 +84,7 @@ async function open(twist) {
       const dt = 1 / 30;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) return true;
-        bot(0, st, dt); bot(1, st, dt);
+        for (let q = 0; q < NP; q++) bot(q, st, dt);
         inp.update(); m.update(dt);
       }
       return false;
@@ -116,6 +121,58 @@ for (const name of scen) {
       await browser.close();
     }
     console.log(`winnaars: Wes ${tally[0]}, Jor ${tally[1]}, gelijk ${tally[2]}`);
+  } else if (name === 'four' || name === 'three') {
+    // vrij voor allen met 4 (of 3) spelers: bots voor iedereen, ook de gouden-taart-beslissing en alle twists
+    const np = name === 'four' ? 4 : 3;
+    const tws = process.env.TW ? process.env.TW.split(',') : ['none', 'bodyswap', 'giant', 'deurman'];
+    for (const tw of tws) {
+      const { browser, page } = await open(tw, np);
+      const res = await playOut(page, `[${name} ${tw}]`);
+      const r = res.result;
+      const ok = res.finished && r && r.ids.length === np && r.place.length === np && r.scoreArr.length === np && (r.winner != null || r.winnerIds.length === 0);
+      console.log(ok ? 'OK  ' : 'FOUT', `${name} ${tw}: ids=${r && r.ids} place=${r && r.place} winnerIds=${r && r.winnerIds}`); if (!ok) fails++;
+      await browser.close();
+    }
+  } else if (name === 'four-logic') {
+    const { browser, page } = await open('none', 4);
+    const res = await page.evaluate(() => {
+      const out = []; const ok = (n, c, i = '') => out.push(`${c ? 'PASS' : 'FAIL'} ${n} ${i}`);
+      const m = window.__app.mode, inst = m.instance, d = inst.dbg, inp = window.__app.input, v = inp.virtual;
+      const step = (n, dt = 1 / 60) => { for (let k = 0; k < n; k++) { inp.update(); m.update(dt); } };
+      const clear = () => { for (const i of [0, 1, 2, 3]) { v[i].a = false; v[i].b = false; v[i].x = 0; v[i].y = 0; } };
+      const press = (i) => { v[i].a = true; step(2); v[i].a = false; };
+      const reset = () => { clear(); window.__mode = 'idle'; d.pl.forEach((p, k) => { if (p.cake) { p.cake.obj.busy = false; p.cake.obj.group.visible = false; p.cake = null; } p.x = [-12, 12, -12, 12][k]; p.z = [-3, 3, 3, -3][k]; p.vx = p.vz = 0; p.stun = 0; p.inv = 0; p.sh = false; p.shT = 0; p.shCd = 0; p.trayBroken = 0; p.air = false; p.y = 0; p.score = 0; p.splats.clear(); p.throwCd = 0; p.out = false; }); for (const s of d.stations) s.cd = 0; step(1); };
+      ok('4 spelers in het spel', d.pl.length === 4 && m.ids.length === 4);
+      // gooien naar degene in de kijkrichting (niet per se de eerste andere speler)
+      reset(); d.pl[0].x = -4; d.pl[0].z = 0; d.pl[0].face = Math.PI / 2; d.pl[1].x = 4; d.pl[1].z = 8; d.pl[2].x = 4; d.pl[2].z = 0; d.pl[3].x = 14; d.pl[3].z = 9; d.give(0, 'cream'); step(2); press(0); step(60); let st = d.state();
+      ok('taart gaat naar speler in kijkrichting (slot 2), +1', st.score[0] === 1 && st.p[2].stun > 0 && st.p[1].stun === 0, JSON.stringify([st.score, st.p.map((p) => p.stun.toFixed(1))]));
+      // eigen taart: -1 (minimaal 0) bij >2 spelers
+      reset(); d.pl[0].score = 2; d.hit(0, 'cream', 0); st = d.state(); ok('eigen taart: -1 voor jezelf', st.score[0] === 1 && st.score[1] === 0, JSON.stringify(st.score));
+      // bruidstaart-comeback: achter op de koploper van 3
+      reset(); d.pl[1].score = 4; d.pl[2].score = 1; const cart = d.stations.find((s) => s.kind === 'cart'); let br = 0, got = 0;
+      for (let k = 0; k < 10; k++) { for (const p of d.pl) { if (p.cake) { p.cake.obj.busy = false; p.cake = null; } p.stun = 0; p.inv = 0; } cart.cd = 0; d.pl[0].x = 0; d.pl[0].z = 2.2; d.pl[0].face = 0; v[0].a = true; step(2); v[0].a = false; step(1); if (d.pl[0].cake) { got++; if (d.pl[0].cake.type === 'bride') br++; } }
+      ok('achterstaander (t.o.v. de beste van de rest) krijgt altijd bruidstaart', got >= 8 && br === got, `br=${br}/${got}`);
+      // Bram: slachtoffer verliest een punt
+      reset(); d.pl[2].score = 3; d.bramNow(); for (let k = 0; k < 60 * 9; k++) { d.pl[2].x = 0; d.pl[2].z = 1.9; d.pl[0].z = -9; d.pl[1].z = 9; d.pl[3].z = 9; d.pl[3].x = -14; step(1); if (d.state().stat.bram > 0) break; }
+      st = d.state(); ok('Bram rent speler omver: -1', st.stat.bram > 0 && st.score[2] === 2, JSON.stringify([st.stat.bram, st.score]));
+      // tijd op, drie gelijk aan kop -> gouden taart voor die drie; de vierde (lager) is uit
+      reset(); d.pl[0].score = 3; d.pl[1].score = 3; d.pl[2].score = 3; d.pl[3].score = 1; d.setT(59.95); step(30); st = d.state();
+      ok('gouden taart bij gelijkspel boven aan', st.sdMode && st.p[0].cake === 'gold' && st.p[1].cake === 'gold' && st.p[2].cake === 'gold' && st.p[3].cake === null && d.pl[3].out === true, JSON.stringify([st.sdMode, st.p.map((p) => p.cake)]));
+      step(120); const t = d.pl; t[0].x = -3; t[0].z = 0; t[1].x = 3; t[1].z = 0; t[2].x = 12; t[2].z = 9; t[3].x = 0; t[3].z = 0; t[0].face = Math.PI / 2; step(2); press(0); step(60);
+      ok('gouden taart: eerste treffer (op gelijkstaander) wint, uitgeschakelde telt niet', m.finished && m.result.winner === 0 && m.result.place.length === 4, JSON.stringify(m.result && [m.result.winner, m.result.place]));
+      return out;
+    });
+    console.log(res.join('\n')); await browser.close();
+  } else if (name === 'four-shots') {
+    const { browser, page } = await open('none', 4);
+    const step = (n) => page.evaluate((n) => { for (let k = 0; k < n; k++) { window.__app.input.update(); window.__app.mode.update(1 / 30); } }, n);
+    const shot = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(1000); await page.screenshot({ path: `/tmp/cf4_${tag}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
+    await shot('start');
+    await page.evaluate(() => window.__bot(30 * 14)); await shot('play1');
+    await page.evaluate(() => window.__bot(30 * 8)); await shot('play2');
+    await page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.bramNow(); }); await step(30 * 3.4); await shot('bram');
+    await page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.setT(59.9); d.pl.forEach((p, k) => { p.score = k < 3 ? 2 : 0; }); }); await step(30 * 4); await shot('golden');
+    await browser.close();
   } else if (name === 'twists') {
     for (const tw of (process.env.TW ? process.env.TW.split(',') : ALL_TWISTS)) {
       const { browser, page } = await open(tw);
@@ -222,4 +279,4 @@ for (const name of scen) {
   }
 }
 console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 10).join('\n') : 'NO ERRORS');
-server.close();
+server.close(); process.exit(fails || errors.length ? 1 : 0);

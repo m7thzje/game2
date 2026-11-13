@@ -23,16 +23,25 @@ export default {
   giver: 'Kermis-Kees',
   icon: '💎',
   mode: 'pvp',
+  players: [2, 4],   // 2 = duel; 4 = 2 tegen 2: elk team één kant van het bord, samen één cursor (wie het eerst op A drukt zaait)
+  teams: true,
   time: 100,
   twists: ['invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'lowgrav', 'bodyswap', 'deurman'],
   music: 'game',
-  blurb: 'Echte <b>Kalaha</b> met glimmende edelstenen! <b>Zaai</b> je stenen rond. Laatste steen in je <b>schatkamer</b> = nog een beurt, in een <b>leeg eigen kuiltje</b> = vangst van de overkant! Pas op voor de <b>kip</b> en de <b>draak</b>.',
+  blurb: 'Echte <b>Kalaha</b> met glimmende edelstenen! Met <b>4 spelers</b> speel je <b>2 tegen 2</b>: jullie team heeft één kant en jullie sturen <b>samen één cursor</b> — wie het eerst op A drukt, zaait. <b>Zaai</b> je stenen rond. Laatste steen in je <b>schatkamer</b> = nog een beurt, in een <b>leeg eigen kuiltje</b> = vangst van de overkant! Pas op voor de <b>kip</b> en de <b>draak</b>.',
   controls: ['{move} kuiltje kiezen', '{a} zaaien!', '{b} DIEF (1x): steel 1 steen'],
   tip: 'Het ringetje laat zien waar je laatste steen landt. Maar een paar seconden per beurt!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp; const names = players.map((p) => p.name); const tw = ctx.twist.id;
+    const N = players.length;
+    const teamOf = ctx.teams ? ctx.teamOf.slice() : players.map((_, i) => i);   // team = kant van het bord (0 = onder/links, 1 = boven/rechts)
+    const members = [0, 1].map((t) => players.map((_, i) => i).filter((i) => teamOf[i] === t));
+    const sideName = (t) => members[t].map((i) => names[i]).join(' & ');
+    // gezamenlijke invoer van een team: de cursor-sturing van beide teamleden telt op, A/B van een van beiden telt
+    const inpOf = (p) => { if (members[p].length === 1) return pv.input(members[p][0]); const a = members[p].map((q) => pv.input(q)); return { x: clamp(a.reduce((sum, q) => sum + q.x, 0), -1, 1), aP: a.some((q) => q.aP), bP: a.some((q) => q.bP) }; };
+    const forTeam = (p, f) => { for (const q of members[p]) f(chars[q], q); };
     const GRAV = pv.gravity || 1;
     const L = ctx.lights('night', { shadow: 22, center: [0, 0, 0], fogNear: 55, fogFar: 120 });
     L.hemi.intensity = 1.5; L.hemi.color.set(0xd8d0ff); L.hemi.groundColor.set(0x5a4060);
@@ -106,15 +115,16 @@ export default {
     }
 
     // ---------------- poppetjes ----------------
-    const chars = [0, 1].map((i) => {
+    const chars = players.map((_, i) => {
       const c = makeBrother(i); const kS = 4.5 / 1.84; const holder = new THREE.Group(); holder.add(c.group);
-      const dir = i ? 1 : -1; holder.position.set(dir * 11.7, -1.0, 1.0); holder.scale.setScalar(kS * pv.size(i));
+      const t = teamOf[i], mi = members[t].indexOf(i), dir = t ? 1 : -1; holder.position.set(dir * (mi ? 12.6 : 11.7), -1.0, mi ? -2.6 : 1.0); holder.scale.setScalar(kS * pv.size(i));
+      if (mi) { const stool = W.stools[t].clone(); stool.position.set(dir * 12.6, -1.15, -2.6); scene.add(stool); }
       c.faceDir(-dir, -0.25); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw; scene.add(holder);
       // suikerspin in de linkerhand
       const cf = new THREE.Group(); cf.add(mesh(new THREE.CylinderGeometry(0.02, 0.025, 0.4, 5), mat(0xe8d8b0), { cast: false, pos: [0, 0.1, 0] }));
-      cf.add(mesh(new THREE.IcosahedronGeometry(0.2, 1), new THREE.MeshStandardMaterial({ color: i ? 0x9ad4ff : 0xff9ad0, roughness: 1 }), { cast: false, pos: [0, 0.4, 0], scale: [1, 1.1, 1] }));
+      cf.add(mesh(new THREE.IcosahedronGeometry(0.2, 1), new THREE.MeshStandardMaterial({ color: t ? 0x9ad4ff : 0xff9ad0, roughness: 1 }), { cast: false, pos: [0, 0.4, 0], scale: [1, 1.1, 1] }));
       c.hold(cf, 'l'); cf.position.set(0, -0.2, 0.1);
-      return { c, holder, i, dir, y0: -1.0, kS, cheerT: 0, sadT: 0, scareT: 0 };
+      return { c, holder, i, t, dir, y0: -1.0, kS, cheerT: 0, sadT: 0, scareT: 0 };
     });
     chars.forEach((o) => { o.holder.userData.k = o.kS; });
     const goblin = makeNPC('goblin'); const gHolder = new THREE.Group(); gHolder.add(goblin.group); gHolder.scale.setScalar(2.4); gHolder.visible = false; scene.add(gHolder);
@@ -126,7 +136,7 @@ export default {
     const visCount = (i) => cont[i].length;
     const totalsVis = () => [visCount(6), visCount(13)];
     function leadOf() { const a = R.finalTotals(st.pits); return a[0] === a[1] ? -1 : a[0] > a[1] ? 0 : 1; }
-    const hopSpeed = (p) => (pv.speed(p) || 1);
+    const hopSpeed = (p) => (pv.speed(members[p][0]) || 1);
     const sfxNote = (k, vol = 0.2, base = 523) => { if (audio.tone) { const n = PENT[k % 5] + 12 * Math.floor(k / 5); audio.tone(base * Math.pow(2, Math.min(n, 30) / 12), 0.3, { type: 'sine', vol, send: 0.3 }); } };
     function text(t, x, y, z, col, s = 1) { fx.texts.add(t, x, y, z, col, s); }
     function sparkleAt(x, y, z, col, n = 6) { fx.particles.burst(x, y, z, { count: n, speed: 2.2, up: 1.4, life: 0.5, size: 0.22, colors: [col, 0xffffff], gravity: 5 }); }
@@ -139,8 +149,8 @@ export default {
     function fixSel(p) { if (st.pits[sel[p]] > 0 && R.isOwnPit(p, sel[p])) return; const ord = ORDER[p]; let best = -1, bd = 99; const idx0 = ord.indexOf(sel[p]); for (let k = 0; k < 6; k++) if (st.pits[ord[k]] > 0 && Math.abs(k - idx0) < bd) { bd = Math.abs(k - idx0); best = ord[k]; } if (best >= 0) sel[p] = best; }
     const refreshHud = () => {
       const tv = totalsVis();
-      hud.setScore(`${names[0]} ${tv[0]} – ${tv[1]} ${names[1]}`);
-      for (let i = 0; i < 2; i++) { const mine = phase === 'choose' && st.turn === i; hud.setPlayerInfo(i, `Schat: ${tv[i]} · Dief: ${thiefUsed[i] ? 'gebruikt' : 'klaar!'}${mine ? ' · JIJ BENT!' : ''}`); }
+      hud.setScore(N === 2 ? `${names[0]} ${tv[0]} – ${tv[1]} ${names[1]}` : `${tv[0]} – ${tv[1]}`);
+      for (let i = 0; i < N; i++) { const t = teamOf[i], mine = phase === 'choose' && st.turn === t; hud.setPlayerInfo(i, `Schat: ${tv[t]} · Dief: ${thiefUsed[t] ? 'gebruikt' : 'klaar!'}${mine ? (N > 2 ? ' · JULLIE!' : ' · JIJ BENT!') : ''}`); }
     };
     let hintTxt = '';
     function setHint(t) { if (t !== hintTxt) { hintTxt = t; hud.setHint(t); } }
@@ -161,7 +171,7 @@ export default {
       st.pits = res.pits.slice();      // logische eindstand (incl. vangst); de animatie loopt daarna
       phase = 'sow'; pulse[from] = 1;
       audio.sfx('whoosh', { vol: 0.5, rate: 1.4 }); setHint('');
-      chars[p].c.swing();
+      forTeam(p, (o) => o.c.swing());
     }
     function updateSow(dt) {
       sow.t += dt; const S = sow;
@@ -188,13 +198,13 @@ export default {
         text('VANGST! +' + cp.n, pp.x, 3.0, pp.z, '#ffe14a', 1.5); hud.showBig('VANGST!', 900, '#ffe14a'); ctx.shake(0.35); audio.sfx('good', { vol: 0.8 }); audio.sfx('powerup', { vol: 0.5 });
         fx.particles.burst(pp.x, TOP_Y + 0.6, pp.z, { count: 24, speed: 4, up: 2, life: 0.8, size: 0.35, colors: [0xffe14a, 0xffffff, 0xff8ad0], gravity: 6 });
         src.forEach((g, k) => { flyTo(g, store, reserve(store), 0.55, 2.2, k * 0.1, (gm) => { landIn(gm); post.landed++; sfxNote(k + 1, 0.2, 660); sparkleAt(gm.x, gm.y + 0.2, gm.z, GOLD, 5); }); });
-        chars[p].cheerT = 1.6; chars[1 - p].sadT = 1.6;
+        forTeam(p, (o) => { o.cheerT = 1.6; }); forTeam(1 - p, (o) => { o.sadT = 1.6; });
       } else settle(p, res);
     }
     function settle(p, res) {
       post = null;
       if (R.sideEmpty(st.pits, 0) || R.sideEmpty(st.pits, 1)) { startSweep('leeg'); return; }
-      if (res.extra) { stats.extra[p]++; hud.showBig('EXTRA BEURT!', 1000, '#8dff9a'); text('+ BEURT', pitPos(storeOf(p)).x, 3.2, 0, '#8dff9a', 1.3); audio.sfx('bell', { vol: 0.7 }); audio.sfx('powerup', { vol: 0.5 }); chars[p].cheerT = 1.2; beginTurn(p); }
+      if (res.extra) { stats.extra[p]++; hud.showBig('EXTRA BEURT!', 1000, '#8dff9a'); text('+ BEURT', pitPos(storeOf(p)).x, 3.2, 0, '#8dff9a', 1.3); audio.sfx('bell', { vol: 0.7 }); audio.sfx('powerup', { vol: 0.5 }); forTeam(p, (o) => { o.cheerT = 1.2; }); beginTurn(p); }
       else beginTurn(1 - p);
     }
 
@@ -205,7 +215,7 @@ export default {
       if (st.pits[opp] <= 0) { audio.sfx('buzz', { vol: 0.5 }); text('Niks te stelen!', pitPos(opp).x, 3.0, pitPos(opp).z, '#ff9a9a', 1.1); return; }
       thiefUsed[p] = true; stats.thief[p]++; phase = 'thief'; ph = { t: 0, p, opp, sent: false };
       const op = pitPos(opp); gHolder.visible = true; gHolder.position.set(op.x, GROUND_Y + 0.5, op.z); goblin.faceDir(0, p ? -1 : 1); goblin.pose = 'wave';
-      audio.sfx('whoosh', { vol: 0.6, rate: 1.6 }); chars[p].cheerT = 1.6; chars[1 - p].scareT = 1.6;
+      audio.sfx('whoosh', { vol: 0.6, rate: 1.6 }); forTeam(p, (o) => { o.cheerT = 1.6; }); forTeam(1 - p, (o) => { o.scareT = 1.6; });
       st.pits[opp]--; st.pits[storeOf(p)]++;
       setHint('');
     }
@@ -331,7 +341,7 @@ export default {
         const w = decideWinner();
         if (E.tie) startChicken(w);        // de kip beslist: een gouden ei in de schatkamer van de winnaar
         phase = 'end'; ph = { t: 0 };
-        hud.showBig(`${names[w]} WINT!`, 1800, w ? '#7fb2ff' : '#7dffa8'); audio.sfx('win', { vol: 0.8 }); ctx.shake(0.3);
+        hud.showBig(N > 2 ? `Team ${sideName(w)} WINT!` : `${names[w]} WINT!`, 1800, w ? '#7fb2ff' : '#7dffa8'); audio.sfx('win', { vol: 0.8 }); ctx.shake(0.3);
         refreshHud();
       } }
     }
@@ -341,20 +351,23 @@ export default {
     }
     function finishMatch() {
       finished = true; const E = endInfo; const w = E.winner; const a = st.pits[6], b = st.pits[13];
-      const lines = [`${names[w]} heeft de meeste edelstenen!`, `${names[w]} is de Kalaha-koning van de kermis!`, `Wat een schatten! ${names[w]} wint met ${[a, b][w]} stenen.`];
+      const WN = N > 2 ? `Team ${sideName(w)}` : names[w], many = members[w].length > 1;
+      const lines = [`${WN} ${many ? 'hebben' : 'heeft'} de meeste edelstenen!`, `${WN} ${many ? 'zijn' : 'is'} de Kalaha-${many ? 'koningen' : 'koning'} van de kermis!`, `Wat een schatten! ${WN} ${many ? 'winnen' : 'wint'} met ${[a, b][w]} stenen.`];
       const extra = [];
       if (E.reason === 'time') extra.push('De tijd was om, de rest van de stenen is geteld.');
-      if (stats.captures[0] + stats.captures[1]) extra.push(`Vangsten: ${names[0]} ${stats.captures[0]}, ${names[1]} ${stats.captures[1]}.`);
+      if (stats.captures[0] + stats.captures[1]) extra.push(`Vangsten: ${sideName(0)} ${stats.captures[0]}, ${sideName(1)} ${stats.captures[1]}.`);
       if (stats.eggs) extra.push(`De kip legde ${stats.eggs} gouden ${stats.eggs > 1 ? 'eieren' : 'ei'}.`);
       if (stats.dragons) extra.push(`De draak roofde ${stats.dragons} ${stats.dragons > 1 ? 'stenen' : 'steen'}.`);
       if (E.tie) extra.push('Precies gelijk, dus de kip besliste met een gouden ei.');
-      ctx.finishPvp({ winner: w, score: [a, b], delay: 300, summary: `${pick(lines)} ${extra.join(' ')}` });
+      const summary = `${pick(lines)} ${extra.join(' ')}`;
+      if (N === 2) ctx.finishPvp({ winner: w, score: [a, b], delay: 300, summary });
+      else ctx.finishPvp({ winners: members[w].slice(), score: players.map((_, i) => [a, b][teamOf[i]]), place: players.map((_, i) => i).sort((x, y) => (teamOf[y] === w) - (teamOf[x] === w)), delay: 300, summary });
       hud.setTimer(null);
     }
 
     // ---------------- invoer (choose) ----------------
     function updateChoose(dt) {
-      const p = st.turn; const inp = pv.input(p);
+      const p = st.turn; const inp = inpOf(p);
       // gimmicks: kip en draak (alleen tijdens het kiezen)
       if (!ev) { evT -= dt; if (evT <= 0 && timeLeft > 12) { evT = rand(11, 15); evKind ^= 1; if (evKind === 0) startChicken(); else if (!startDragon()) startChicken(); } }
       if (phase !== 'choose') return;
@@ -370,7 +383,7 @@ export default {
       // timer
       turnT -= dt;
       const tl = Math.ceil(turnT); if (turnT < 3 && tl !== tickN && tl > 0) { tickN = tl; audio.sfx('tick', { vol: 1, rate: 1.0 + (3 - tl) * 0.15 }); }
-      if (turnT <= 0) { stats.timeouts++; const mv = legalFor(p); const pit = pick(mv); sel[p] = pit; auto = { t: 0.55, pit }; audio.sfx('buzz', { vol: 0.6 }); text('TE LAAT!', pitPos(pit).x, 3.2, pitPos(pit).z, '#ff9a6a', 1.3); chars[p].sadT = 1.4; }
+      if (turnT <= 0) { stats.timeouts++; const mv = legalFor(p); const pit = pick(mv); sel[p] = pit; auto = { t: 0.55, pit }; audio.sfx('buzz', { vol: 0.6 }); text('TE LAAT!', pitPos(pit).x, 3.2, pitPos(pit).z, '#ff9a6a', 1.3); forTeam(p, (o) => { o.sadT = 1.4; }); }
     }
 
     // ---------------- hoofdlus ----------------
@@ -434,11 +447,11 @@ export default {
         W.landRing.material.color.setHex(preview.extra ? 0x58ff8a : preview.capture ? 0xffe14a : 0xffffff); W.landRing.material.opacity = preview.extra || preview.capture ? 0.95 : 0.55; W.landRing.scale.setScalar(preview.last === 6 || preview.last === 13 ? 1.9 : 1.2 + Math.sin(tt * 6) * 0.08);
         if (!thiefUsed[p] && st.pits[R.opposite(sel[p])] > 0) { const op = pitPos(R.opposite(sel[p])); W.thiefRing.visible = true; W.thiefRing.position.set(op.x, TOP_Y + 0.06, op.z); W.thiefRing.material.opacity = 0.35 + Math.sin(tt * 5) * 0.15; }
         const txt = preview.extra ? 'landt in je schatkamer: NOG EEN BEURT!' : preview.capture ? `vangt ${preview.capture.n} stenen!` : `${preview.path.length} stenen`;
-        setHint(`<b>${names[p]}</b> kiest · ${txt}${thiefUsed[p] ? '' : ' · B = dief!'}`);
+        setHint(`<b>${N > 2 ? 'Team ' + sideName(p) : names[p]}</b> ${N > 2 ? 'kiezen' : 'kiest'} · ${txt}${thiefUsed[p] ? '' : ' · B = dief!'}`);
       }
       // poppetjes
       for (const o of chars) {
-        const i = o.i; const c = o.c; const myTurn = phase === 'choose' && st.turn === i; const sowing = (phase === 'sow' && sow && sow.p === i) || (phase === 'thief' && ph.p === i);
+        const i = o.t; const c = o.c; const myTurn = phase === 'choose' && st.turn === i; const sowing = (phase === 'sow' && sow && sow.p === i) || (phase === 'thief' && ph.p === i);
         o.cheerT = Math.max(0, o.cheerT - dt); o.sadT = Math.max(0, o.sadT - dt); o.scareT = Math.max(0, o.scareT - dt);
         let pose = 'sit', stand = false;
         if (o.cheerT > 0) { pose = 'cheer'; stand = true; } else if (o.scareT > 0) pose = 'scared'; else if (o.sadT > 0) pose = 'sad';
@@ -451,7 +464,7 @@ export default {
         // na de update: armen en hoofd aanpassen (zitpose met wijzen of wachten met suikerspin)
         if (pose === 'sit') {
           if (myTurn || sowing) { c.armR.rotation.x = -1.6 + Math.sin(tt * 3) * 0.1; c.armR.rotation.z = -0.15; c.head.rotation.x = 0.15; c.head.rotation.z = Math.sin(tt * 1.3) * 0.08; c.armL.rotation.x = -0.4; }
-          else { const sw = Math.max(0, Math.sin(tt * 1.1 + i * 2)); c.armL.rotation.x = -0.5 - sw * 1.7; c.head.rotation.z = Math.sin(tt * 0.9 + i) * 0.14; c.head.rotation.x = 0.1; c.legL.rotation.x = -1.4 + Math.sin(tt * 4 + i) * 0.12; }
+          else { const sw = Math.max(0, Math.sin(tt * 1.1 + o.i * 2)); c.armL.rotation.x = -0.5 - sw * 1.7; c.head.rotation.z = Math.sin(tt * 0.9 + o.i) * 0.14; c.head.rotation.x = 0.1; c.legL.rotation.x = -1.4 + Math.sin(tt * 4 + o.i) * 0.12; }
         }
       }
       refreshHud();
@@ -465,8 +478,8 @@ export default {
       update: (dt) => { if (finished) { resultUpdate(dt); return; } update(dt); },
       resultUpdate, introUpdate,
       onSwap() { for (const o of chars) fx.particles.burst(o.holder.position.x, 1, o.holder.position.z, { count: 16, speed: 4, up: 1, life: 0.6, size: 0.35, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
-      onDeurman(movers) { movers.forEach((m, i) => { if (m) { pend[i]++; stats.deurman++; chars[i].sadT = 1.4; } }); },
-      celebrate(w) { chars[w].cheerT = 99; chars[1 - w].sadT = 99; },
+      onDeurman(movers) { movers.forEach((m, i) => { if (m) { pend[teamOf[i]]++; stats.deurman++; chars[i].sadT = 1.4; } }); },
+      celebrate(w, winners = [w]) { chars.forEach((o, i) => { if (winners.includes(i)) o.cheerT = 99; else o.sadT = 99; }); },
       dispose() {},
       dbg: {
         state: () => ({ T, turnSeq, phase, turn: st.turn, pits: st.pits.slice(), vis: cont.map((a) => a.length), sel: sel.slice(), timeLeft, turnT, thiefUsed: thiefUsed.slice(), finished, stats, ev: ev ? ev.kind : null, auto: !!auto, endInfo: endInfo ? { winner: endInfo.winner, reason: endInfo.reason, tie: endInfo.tie } : null, gemsRest: gems.filter((g) => g.mode === 'rest').length, gemsHidden: gems.filter((g) => g.mode === 'hidden').length }),

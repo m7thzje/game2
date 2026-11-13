@@ -19,30 +19,38 @@ export default {
   giver: 'Dracula de Draak',
   icon: '📌',
   mode: 'pvp',
+  players: [2, 4],   // 2 = Wes links / Jor rechts; 4 = 2 tegen 2: per team een onderste + een bovenste flipper
+  teams: true,
   time: 90,
   music: 'game_fast',
-  blurb: 'Flipperkast in het <b>Drakenkasteel</b>! Wes: <b>linker</b>, Jor: <b>rechter</b> flippers. De bal is van wie hem <b>als laatste raakte</b> (kleurgloed) en alle punten gaan naar de eigenaar. <b>Steel de bal!</b> 3 ballen of 84 s.',
+  blurb: 'Flipperkast in het <b>Drakenkasteel</b>! Wes: <b>linker</b>, Jor: <b>rechter</b> flippers (met 4 spelers: <b>2 tegen 2</b> — per team bedient de één de onderste en de ander de bovenste flipper). De bal is van wie hem <b>als laatste raakte</b> (kleurgloed) en alle punten gaan naar de eigenaar. <b>Steel de bal!</b> 3 ballen of 84 s.',
   controls: ['{a} flippers omhoog', '{b} stoot (+ ← →), niet te veel: TILT!'],
   tip: 'Schilden rechts = jackpot, links = multiball. Laatste 15 s dubbel!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp, names = players.map((p) => p.name), tw = ctx.twist.id;
+    const N = players.length;
+    const teamOf = ctx.teams ? ctx.teamOf.slice() : players.map((_, i) => i);   // team = kant van de kast (0 links, 1 rechts)
+    const members = [0, 1].map((t) => players.map((_, i) => i).filter((i) => teamOf[i] === t));
+    const teamName = (t) => members[t].map((i) => names[i]).join(' & ');
+    const pscore = new Array(N).fill(0);   // eigen punten (wie raakte de bal als laatste)
     const SLIP = pv.slip || 0, GRAV = TB.G * (pv.gravity || 1);
     const TEMPO = tw === 'turbo' ? 1.3 : tw === 'slowmo' ? 0.75 : 1;
     const L = ctx.lights('indoor', { shadow: 22, center: [0, 0, 0], fogNear: 70, fogFar: 170 });
     camera.fov = 46; camera.updateProjectionMatrix();
     const T = buildTable();
     if (SLIP > 0.3) for (const w of T.walls) if (w.kind === 'wall') w.e = Math.min(0.78, w.e + 0.2);
+    for (const f of T.flippers) f.slot = members[f.side][f.upper ? 1 : 0] ?? members[f.side][0];   // wie bedient deze flipper
     const W = buildWorld(ctx, T, L);
     const balls = W.balls.map((_, i) => { const b = makeBall(); b.id = i; return b; });
-    const flipBase = [0, 1].map((i) => lerp(1, pv.size(i), 0.5));
+    const flipBase = players.map((_, i) => lerp(1, pv.size(i), 0.5));
 
     // ---------------- toestand ----------------
     const score = [0, 0]; const flipHits = [0, 0];
     let Tm = 0, introT = 0, started = false, finished = false;
     const G = { state: 'intro', t: 0, ballNo: 0, timeLeft: MATCH_TIME, saveT: 0, sudden: false, sdLeft: SD_TIME, winner: null, finale: false, coin: false, stallT: 0, lastBoard: '' };
-    const heat = [0, 0], tilt = [0, 0], nudgeCd = [0, 0], x2T = [0, 0], bigT = [0, 0], padPress = [false, false];
+    const heat = new Array(N).fill(0), tilt = new Array(N).fill(0), nudgeCd = new Array(N).fill(0), padPress = new Array(N).fill(false), x2T = [0, 0], bigT = [0, 0];
     const S = { dragonHits: 0, chickenHits: 0, jackpotLit: 0, bankL: [false, false, false], bankR: [false, false, false], items: 0, jackpots: 0, multis: 0, tilts: 0, steals: 0, drained: 0, sneezes: 0, saves: 0, nudges: [0, 0], ramps: 0 };
     let item = null, itemT = 11, rampSide = 0, popT = 0, sneezeT = 0, camPunch = 0, kickX = 0, kickZ = 0, camK = 0, lastAspect = 0, sfxT = 0;
     const comboT = [0, 0];
@@ -50,30 +58,35 @@ export default {
     const trailing = () => (score[0] === score[1] ? -1 : score[0] < score[1] ? 0 : 1);
     const behind = (i) => score[1 - i] - score[i] >= Math.max(150, 0.3 * score[1 - i]);
     const mult = (i) => (x2T[i] > 0 ? 2 : 1) * (G.finale ? 2 : 1) * (behind(i) ? 1.5 : 1);
-    const col = ['#7dffb0', '#9fc4ff'];
+    const col = ctx.teams ? [ctx.teamInfo[0].css, ctx.teamInfo[1].css] : ['#7dffb0', '#9fc4ff'];
 
     function refreshHud() {
-      hud.setScore(`${G.sudden ? 'GOUDEN BAL' : 'Bal ' + Math.min(G.ballNo, BALLS) + '/' + BALLS} · ${names[0]} ${score[0]} – ${score[1]} ${names[1]}`);
-      for (let i = 0; i < 2; i++) hud.setPlayerInfo(i, `${score[i]} pnt${mult(i) > 1.01 ? ' · x' + mult(i) : ''} · ${tilt[i] > 0 ? 'TILT!' : 'tilt-meter ' + Math.round(heat[i] * 100) + '%'}`);
+      if (N === 2) {
+        hud.setScore(`${G.sudden ? 'GOUDEN BAL' : 'Bal ' + Math.min(G.ballNo, BALLS) + '/' + BALLS} · ${names[0]} ${score[0]} – ${score[1]} ${names[1]}`);
+        for (let i = 0; i < 2; i++) hud.setPlayerInfo(i, `${score[i]} pnt${mult(i) > 1.01 ? ' · x' + mult(i) : ''} · ${tilt[i] > 0 ? 'TILT!' : 'tilt-meter ' + Math.round(heat[i] * 100) + '%'}`);
+      } else {
+        hud.setScore(`${G.sudden ? 'GOUDEN BAL' : 'Bal ' + Math.min(G.ballNo, BALLS) + '/' + BALLS} · ${score[0]} – ${score[1]}`);
+        for (let i = 0; i < N; i++) { const t = teamOf[i]; hud.setPlayerInfo(i, `team ${score[t]}${mult(t) > 1.01 ? ' x' + mult(t) : ''} · ${tilt[i] > 0 ? 'TILT!' : 'tilt ' + Math.round(heat[i] * 100) + '%'}`); }
+      }
     }
     function pop(text, x, z, color, sc = 1) { if (popT > 0 && sc < 1.3) return; popT = 0.07; fx.texts.add(text, x, 2.6, z, color, sc); }
 
     // ---------------- punten ----------------
-    function addScore(i, base, x, z, label, sc = 1) {
+    function addScore(i, base, x, z, label, sc = 1, who = -1) {
       if (i < 0 && G.state === 'play' && !G.toldNeutral) { G.toldNeutral = true; hud.toast('Raak de bal met een flipper: dan is hij van jou!', 2200); }
       if (i < 0 || finished || G.state === 'end') return 0;
-      const pts = Math.round(base * mult(i)); score[i] += pts; comboT[i] = 1.5;
+      const pts = Math.round(base * mult(i)); score[i] += pts; comboT[i] = 1.5; if (who >= 0 && teamOf[who] === i) pscore[who] += pts;
       pop((label ? label + ' ' : '') + '+' + pts, x, z, col[i], sc);
       if (G.sudden && score[0] !== score[1]) endMatch(score[0] > score[1] ? 0 : 1);
       return pts;
     }
-    const scoreBall = (b, base, x, z, label, sc) => addScore(b.owner, base, x ?? b.x, z ?? b.z, label, sc);
+    const scoreBall = (b, base, x, z, label, sc) => addScore(b.owner, base, x ?? b.x, z ?? b.z, label, sc, b.who ?? -1);
 
     // ---------------- ballen ----------------
     const active = () => balls.filter((b) => b.on);
     function spawnBall(x, z, vx, vz, owner) {
       const b = balls.find((q) => !q.on); if (!b) return null;
-      Object.assign(b, { on: true, x, z, vx, vz, owner, ramp: null, age: 0, last: -1, still: 0 }); b.y = 0; return b;
+      Object.assign(b, { on: true, x, z, vx, vz, owner, who: -1, ramp: null, age: 0, last: -1, still: 0 }); b.y = 0; return b;
     }
     function serve(first) {
       G.state = 'serve'; G.t = 0; G.stallT = 0; G.saveT = G.saveUsed === G.ballNo && !G.sudden ? 0 : SAVE_T;
@@ -89,7 +102,7 @@ export default {
     }
     function multiball(owner, n = 2, x = 0, z = -8.1) {
       let k = 0; for (let i = 0; i < n; i++) { if (active().length >= 5) break; const b = spawnBall(x + rand(-0.6, 0.6), z, rand(-6, 6), rand(3, 6), owner); if (b) k++; }
-      if (k) { S.multis++; hud.toast(`🎱 MULTIBALL! ${owner >= 0 ? names[owner] : 'Iemand'} krijgt extra ballen`, 2200); fx.texts.add('MULTIBALL!', 0, 3.4, -6, '#ffd23f', 1.8); audio.sfx('powerup', { vol: 0.9 }); audio.sfx('sparkle', { vol: 0.6 }); ctx.shake(0.5); W.dragon.open = 1; fx.particles.burst(x, 1.4, z, { count: 40, speed: 7, up: 1.2, life: 1.0, size: 0.45, colors: [0xffd23f, 0xffffff, 0xff7a1a], gravity: 4 }); }
+      if (k) { S.multis++; hud.toast(`🎱 MULTIBALL! ${owner >= 0 ? teamName(owner) : 'Iemand'} ${owner >= 0 && members[owner].length > 1 ? 'krijgen' : 'krijgt'} extra ballen`, 2200); fx.texts.add('MULTIBALL!', 0, 3.4, -6, '#ffd23f', 1.8); audio.sfx('powerup', { vol: 0.9 }); audio.sfx('sparkle', { vol: 0.6 }); ctx.shake(0.5); W.dragon.open = 1; fx.particles.burst(x, 1.4, z, { count: 40, speed: 7, up: 1.2, life: 1.0, size: 0.45, colors: [0xffd23f, 0xffffff, 0xff7a1a], gravity: 4 }); }
     }
     function sneeze(why) {
       S.sneezes++; sneezeT = 1.1; W.dragon.open = 1.6;
@@ -132,10 +145,10 @@ export default {
       } else if (kind === 'flipper') {
         const side = o.side;
         if (!(o.press || Math.abs(o.vel) > 0.5)) { if (sp > 5) audio.sfx('click2', { vol: 0.2 }); return; }      // een slapende flipper claimt de bal niet
-        flipHits[side]++;
+        flipHits[side]++; b.who = o.slot;
         if (b.owner !== side) {
           if (b.owner >= 0) { S.steals++; pop('GESTOLEN!', b.x, b.z - 1, col[side], 1.5); audio.sfx('good', { vol: 0.5, rate: 1.3 }); fx.particles.burst(b.x, 0.8, b.z, { count: 16, speed: 5, up: 1, life: 0.6, size: 0.35, colors: [side ? 0x4a9cff : 0x35e07a, 0xffffff], gravity: 4 }); }
-          else pop(names[side] + '!', b.x, b.z - 1, col[side], 1.1);
+          else pop((N > 2 ? names[o.slot] : names[side]) + '!', b.x, b.z - 1, col[side], 1.1);
           b.owner = side;
         }
         b.last = side; if (sp > 6) { audio.sfx('hit', { vol: clamp(sp / 40, 0.15, 0.6), rate: 0.8 + sp / 60 }); if (sp > 14) ctx.shake(0.08); }
@@ -165,7 +178,7 @@ export default {
         }
       }
     }
-    function ctrlCheer(i) { W.pups[i].c.pose = 'cheer'; W.pups[i].cheer = 1.6; W.pups[1 - i].c.pose = 'sad'; W.pups[1 - i].sad = 1.6; for (const o of W.crowd) o.cheer = 2; }
+    function ctrlCheer(t) { for (const o of W.pups) { const mine = teamOf[o.i] === t; o.c.pose = mine ? 'cheer' : 'sad'; if (mine) o.cheer = 1.6; else o.sad = 1.6; } for (const o of W.crowd) o.cheer = 2; }
 
     // ---------------- power-ups ----------------
     function spawnItem(x, z) {
@@ -188,11 +201,11 @@ export default {
     function takeItem(i) {
       const it = item; item = null; W.item.visible = false; W.itemRing.visible = false; itemT = rand(13, 19);
       const p = { x: it.x, z: it.z };
-      fx.particles.burst(p.x, 1.2, p.z, { count: 36, speed: 6, up: 1.4, life: 0.9, size: 0.45, colors: [0xffffff, 0xffe14a, i ? 0x4a9cff : 0x35e07a], gravity: 4 });
+      fx.particles.burst(p.x, 1.2, p.z, { count: 36, speed: 6, up: 1.4, life: 0.9, size: 0.45, colors: [0xffffff, 0xffe14a, W.ownerCol[i]], gravity: 4 });
       audio.sfx('powerup', { vol: 0.8 }); ctx.shake(0.25);
       if (it.type === 'multi') multiball(i, 2, p.x, p.z);
-      else if (it.type === 'x2') { x2T[i] = 12; pop(names[i] + ': x2!', p.x, p.z, col[i], 1.6); hud.toast(`✨ ${names[i]}: 12 seconden dubbele punten!`, 1800); }
-      else { bigT[i] = 12; pop('REUZENFLIPPERS!', p.x, p.z, col[i], 1.6); hud.toast(`↔ ${names[i]} krijgt reuzenflippers!`, 1800); }
+      else if (it.type === 'x2') { x2T[i] = 12; pop(teamName(i) + ': x2!', p.x, p.z, col[i], 1.6); hud.toast(`✨ ${teamName(i)}: 12 seconden dubbele punten!`, 1800); }
+      else { bigT[i] = 12; pop('REUZENFLIPPERS!', p.x, p.z, col[i], 1.6); hud.toast(`↔ ${teamName(i)} ${members[i].length > 1 ? 'krijgen' : 'krijgt'} reuzenflippers!`, 1800); }
     }
 
     // ---------------- einde / flow ----------------
@@ -200,7 +213,7 @@ export default {
       if (G.state === 'end') return; G.state = 'end'; G.t = 0; G.winner = winner; G.tiebreak = tiebreak || '';
       for (const b of balls) if (b.on) { b.on = false; fx.particles.burst(b.x, 0.8, b.z, { count: 14, speed: 4, up: 1, life: 0.6, size: 0.35, colors: [0xffffff, 0xffe070], gravity: 4 }); }
       hud.setTimer(null); audio.sfx('bell', { vol: 0.9 });
-      if (winner != null) { hud.showBig(`${names[winner]} WINT!`, 1600, col[winner]); W.pups[winner].c.pose = 'cheer'; W.pups[1 - winner].c.pose = 'sad'; for (const o of W.crowd) o.cheer = 4; audio.sfx('win', { vol: 0.6 }); }
+      if (winner != null) { hud.showBig(N > 2 ? `Team ${teamName(winner)} WINT!` : `${names[winner]} WINT!`, 1600, col[winner]); for (const o of W.pups) o.c.pose = teamOf[o.i] === winner ? 'cheer' : 'sad'; for (const o of W.crowd) o.cheer = 4; audio.sfx('win', { vol: 0.6 }); }
       refreshHud();
     }
     function resolveEnd() {         // tijd om of ballen op: winnaar, of gelijkspel -> gouden bal
@@ -221,10 +234,15 @@ export default {
       if (finished) return; finished = true;
       let w = G.winner; if (w == null) w = score[0] === score[1] ? (Math.random() < 0.5 ? 0 : 1) : score[0] > score[1] ? 0 : 1;
       const l = 1 - w; const diff = Math.abs(score[0] - score[1]);
-      const jokes = [`${names[w]} is de flipper-koning van het Drakenkasteel! De draak klapt (met zijn staart).`, `${names[w]} beheerst de ballen. ${names[l]} schudde te hard en de kast werd boos.`, `Wat een bal-gevecht! ${names[w]} pakte de laatste kans. De kip kakelt tevreden.`, `${names[l]} zegt dat de kast vals speelt. De kast zegt niets, maar de draak lacht.`];
+      const WN = teamName(w), LN = teamName(l), many = members[w].length > 1;
+      const jokes = [`${WN} ${many ? 'zijn' : 'is'} de flipper-${many ? 'koningen' : 'koning'} van het Drakenkasteel! De draak klapt (met zijn staart).`, `${WN} ${many ? 'beheersen' : 'beheerst'} de ballen. ${LN} schudde te hard en de kast werd boos.`, `Wat een bal-gevecht! ${WN} ${many ? 'pakten' : 'pakte'} de laatste kans. De kip kakelt tevreden.`, `${LN} ${members[l].length > 1 ? 'zeggen' : 'zegt'} dat de kast vals speelt. De kast zegt niets, maar de draak lacht.`];
       const extra = G.tiebreak === 'coin' ? ' De kip kon niet kiezen en gooide een muntje.' : G.tiebreak === 'flip' ? ' Gelijk op punten: de meeste flipper-treffers beslisten.' : diff < 40 ? ' Dat was op het randje!' : '';
       const stats = ` (${S.steals} keer de bal gestolen${S.jackpots ? ', ' + S.jackpots + 'x jackpot' : ''}${S.tilts ? ', ' + S.tilts + 'x tilt' : ''}).`;
-      ctx.finishPvp({ winner: w, score: [score[0], score[1]], delay: 600, summary: pick(jokes) + extra + stats });
+      if (N === 2) ctx.finishPvp({ winner: w, score: [score[0], score[1]], delay: 600, summary: pick(jokes) + extra + stats });
+      else {
+        const order = players.map((_, i) => i).sort((a, b) => (teamOf[b] === w) - (teamOf[a] === w) || pscore[b] - pscore[a]);
+        ctx.finishPvp({ winners: members[w].slice(), score: players.map((_, i) => score[teamOf[i]]), place: order, delay: 600, summary: pick(jokes) + extra + stats + ` Eigen punten: ${names.map((n, i) => `${n} ${pscore[i]}`).join(', ')}.` });
+      }
     }
 
     // ---------------- invoer ----------------
@@ -233,30 +251,30 @@ export default {
       const dx = Math.abs(inp.x) > 0.3 ? Math.sign(inp.x) * 5.5 : 0, dz = -4.8;
       for (const b of balls) if (b.on && !b.ramp) { b.vx += dx + rand(-0.8, 0.8); b.vz += dz; }
       kickX = dx * 0.05; kickZ = dz * 0.05; ctx.shake(0.18); audio.sfx('thud', { vol: 0.6, rate: 0.8 }); audio.sfx('wood', { vol: 0.4 });
-      fx.particles.dust(i ? 14 : -14, 0.2, 12, 5, 0xe0d0b0);
+      fx.particles.dust(teamOf[i] ? 14 : -14, 0.2, 12, 5, 0xe0d0b0);
       if (heat[i] > 1.0) {
-        heat[i] = 0; tilt[i] = 3.2; S.tilts++; pop('TILT!', i ? 6 : -6, 9, '#ff5a3a', 2.0); hud.showBig(`TILT! ${names[i]}`, 1000, '#ff5a3a'); audio.sfx('buzz', { vol: 0.7 }); audio.sfx('bad', { vol: 0.5 }); ctx.shake(0.5);
+        heat[i] = 0; tilt[i] = 3.2; S.tilts++; pop('TILT!', teamOf[i] ? 6 : -6, 9, '#ff5a3a', 2.0); hud.showBig(`TILT! ${names[i]}`, 1000, '#ff5a3a'); audio.sfx('buzz', { vol: 0.7 }); audio.sfx('bad', { vol: 0.5 }); ctx.shake(0.5);
         W.pups[i].c.pose = 'scared'; W.pups[i].scare = 3.2; padPress[i] = false;
       }
     }
     function readInput(dt) {
-      for (let i = 0; i < 2; i++) {
+      for (let t = 0; t < 2; t++) { x2T[t] = Math.max(0, x2T[t] - dt); bigT[t] = Math.max(0, bigT[t] - dt); }
+      for (let i = 0; i < N; i++) {
         const inp = pv.input(i);
         nudgeCd[i] = Math.max(0, nudgeCd[i] - dt); heat[i] = Math.max(0, heat[i] - dt * 0.28); tilt[i] = Math.max(0, tilt[i] - dt);
-        x2T[i] = Math.max(0, x2T[i] - dt); bigT[i] = Math.max(0, bigT[i] - dt);
         const can = tilt[i] <= 0 && G.state !== 'end';
         const pr = can && inp.a;
         if (pr && !padPress[i]) { audio.sfx('click', { vol: 0.25, rate: 1.3 }); W.pups[i].c.swing(); }
         padPress[i] = pr;
         if (can && inp.bP && nudgeCd[i] <= 0 && (G.state === 'play')) nudge(i, inp);
       }
-      for (const f of T.flippers) { f.press = padPress[f.side]; f.lenMul = flipBase[f.side] * (bigT[f.side] > 0 ? 1.35 : 1); }
+      for (const f of T.flippers) { f.press = padPress[f.slot]; f.lenMul = flipBase[f.slot] * (bigT[f.side] > 0 ? 1.35 : 1); }
     }
 
     // ---------------- hoofdlus ----------------
     function update(dt) {
       dt = Math.min(dt, 0.05); Tm += dt;
-      if (!started) { started = true; G.ballNo = 1; serve(true); refreshHud(); hud.setHint('Wes: linker flippers · Jor: rechter flippers · <b>B</b> = stoot (let op TILT)'); }
+      if (!started) { started = true; G.ballNo = 1; serve(true); refreshHud(); hud.setHint(N === 2 ? 'Wes: linker flippers · Jor: rechter flippers · <b>B</b> = stoot (let op TILT)' : `Links: ${names[members[0][0]]} = onderste, ${names[members[0][1]]} = bovenste flipper · Rechts: ${names[members[1][0]]} = onderste, ${names[members[1][1]]} = bovenste · <b>B</b> = stoot (TILT!)`); }
       if (Tm > 260 && !finished && G.state !== 'end') endMatch(score[0] === score[1] ? null : score[0] > score[1] ? 0 : 1);
       popT -= dt; sfxT -= dt; G.t += dt;
       readInput(dt);
@@ -348,9 +366,9 @@ export default {
       for (const o of W.flippers) {
         const f = o.f; o.g.rotation.y = f.dirX > 0 ? -f.ang : Math.PI + f.ang; const Lm = f.len * f.lenMul;
         o.body.scale.set(Lm, 1, 1); o.cap.position.x = Lm; o.stripe.scale.x = f.lenMul; o.stripe.position.x = f.len * f.lenMul * 0.45;
-        o.bodyM.emissiveIntensity = damp(o.bodyM.emissiveIntensity, tilt[f.side] > 0 ? 0.0 : f.press ? 0.45 : 0, 18, dt);
-        o.bodyM.emissive.setHex(tilt[f.side] > 0 ? 0xff3a1a : f.side ? 0x66aaff : 0x66ff99);
-        if (tilt[f.side] > 0) o.bodyM.emissiveIntensity = 0.3 + Math.sin(tt * 30) * 0.3;
+        o.bodyM.emissiveIntensity = damp(o.bodyM.emissiveIntensity, tilt[f.slot] > 0 ? 0.0 : f.press ? 0.45 : 0, 18, dt);
+        o.bodyM.emissive.setHex(tilt[f.slot] > 0 ? 0xff3a1a : N > 2 ? players[f.slot].color : f.side ? 0x66aaff : 0x66ff99);
+        if (tilt[f.slot] > 0) o.bodyM.emissiveIntensity = 0.3 + Math.sin(tt * 30) * 0.3;
       }
       // ballen
       W.balls.forEach((o, i) => {
@@ -422,15 +440,15 @@ export default {
       onResize() { lastAspect = 0; },
       onSwap() { for (const o of W.pups) fx.particles.burst(o.holder.position.x, 3, o.holder.position.z, { count: 20, speed: 4, up: 1, life: 0.6, size: 0.35, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) {
-        movers.forEach((m, i) => { if (m) { score[i] = Math.max(0, score[i] - 40); pop('-40 DEURMAN!', i ? 8 : -8, 9, '#ff6a6a', 1.6); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
+        movers.forEach((m, i) => { if (m) { const t = teamOf[i]; score[t] = Math.max(0, score[t] - 40); pscore[i] = Math.max(0, pscore[i] - 40); pop('-40 DEURMAN!', t ? 8 : -8, 9, '#ff6a6a', 1.6); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
         refreshHud();
       },
-      celebrate(w) { W.pups[w].c.pose = 'cheer'; W.pups[1 - w].c.pose = 'sad'; W.pups[w].cheer = 99; for (const o of W.crowd) o.cheer = 99; },
+      celebrate(w, winners = [w]) { for (const o of W.pups) { const win = winners.includes(o.i); o.c.pose = win ? 'cheer' : 'sad'; if (win) o.cheer = 99; } for (const o of W.crowd) o.cheer = 99; },
       dispose() {},
       dbg: {
-        state: () => ({ T: Tm, g: G.state, ballNo: G.ballNo, timeLeft: G.timeLeft, sudden: G.sudden, sdLeft: G.sdLeft, score: [...score], flipHits: [...flipHits], finished, tilt: [...tilt], heat: [...heat], x2T: [...x2T], bigT: [...bigT], saveT: G.saveT, mult: [mult(0), mult(1)], jackpotLit: S.jackpotLit, S: { ...S, bankL: [...S.bankL], bankR: [...S.bankR] }, item: item ? { type: item.type, x: item.x, z: item.z } : null, winner: G.winner, tiebreak: G.tiebreak || '',
+        state: () => ({ T: Tm, pscore: [...pscore], g: G.state, ballNo: G.ballNo, timeLeft: G.timeLeft, sudden: G.sudden, sdLeft: G.sdLeft, score: [...score], flipHits: [...flipHits], finished, tilt: [...tilt], heat: [...heat], x2T: [...x2T], bigT: [...bigT], saveT: G.saveT, mult: [mult(0), mult(1)], jackpotLit: S.jackpotLit, S: { ...S, bankL: [...S.bankL], bankR: [...S.bankR] }, item: item ? { type: item.type, x: item.x, z: item.z } : null, winner: G.winner, tiebreak: G.tiebreak || '',
           balls: balls.filter((b) => b.on).map((b) => ({ x: +b.x.toFixed(2), z: +b.z.toFixed(2), vx: +b.vx.toFixed(1), vz: +b.vz.toFixed(1), owner: b.owner, ramp: !!b.ramp })),
-          flippers: T.flippers.map((f) => ({ id: f.id, ang: +f.ang.toFixed(2), px: f.px, pz: f.pz, len: f.len * f.lenMul, side: f.side, press: f.press })) }),
+          flippers: T.flippers.map((f) => ({ slot: f.slot, id: f.id, ang: +f.ang.toFixed(2), px: f.px, pz: f.pz, len: f.len * f.lenMul, side: f.side, press: f.press })) }),
         setScore: (a, b) => { score[0] = a; score[1] = b; refreshHud(); },
         setTime: (t) => { G.timeLeft = t; },
         spawnItem: (type) => { item = null; spawnItem(0, 7.5); if (type) { item.type = type; W.item.material.map = W.itemTex[type]; } },

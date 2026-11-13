@@ -200,7 +200,7 @@ export function buildWorld(ctx, T, L) {
 
   // ---------- flippers ----------
   ws.flippers = T.flippers.map((f) => {
-    const g = new THREE.Group(); const base = f.side ? 0x3a78e0 : 0x2f9e5b;
+    const g = new THREE.Group(); const base = ctx.players.length > 2 ? ctx.players[f.slot].color : f.side ? 0x3a78e0 : 0x2f9e5b;   // bij 4 spelers: elke flipper in de kleur van zijn speler
     const bodyM = new THREE.MeshStandardMaterial({ color: base, roughness: 0.35, metalness: 0.2, emissive: 0xffffff, emissiveIntensity: 0 });
     const geo = new THREE.CylinderGeometry(f.r1, f.r0, 1, 12); geo.rotateZ(Math.PI / 2); geo.translate(0.5, 0, 0);   // lengte 1 langs +x, dik bij de pivot
     const body = new THREE.Mesh(geo, bodyM); body.castShadow = true; body.scale.set(f.len, 1.0, 1.0); body.position.y = 0.5; g.add(body);
@@ -211,10 +211,11 @@ export function buildWorld(ctx, T, L) {
 
   // ---------- ballen ----------
   const ballGeo = new THREE.SphereGeometry(TB.BR, 18, 14), haloTex = canvasTex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 4, 32, 32, 30); gr.addColorStop(0, 'rgba(255,255,255,.9)'); gr.addColorStop(0.5, 'rgba(255,255,255,.35)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
-  const mkTag = (txt, colr) => canvasTex(160, 64, (g, w, h) => { g.font = 'bold 40px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 9; g.strokeStyle = 'rgba(10,10,30,.95)'; g.lineJoin = 'round'; g.strokeText(txt, w / 2, h / 2); g.fillStyle = colr; g.fillText(txt, w / 2, h / 2); });
+  const mkTag = (txt, colr) => canvasTex(160, 64, (g, w, h) => { g.font = 'bold 40px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 9; g.strokeStyle = 'rgba(10,10,30,.95)'; g.lineJoin = 'round'; g.strokeText(txt, w / 2, h / 2, w - 8); g.fillStyle = colr; g.fillText(txt, w / 2, h / 2, w - 8); });
   const names = ctx.players.map((p) => p.name);
-  ws.tagTex = [mkTag(names[0], '#7dffb0'), mkTag(names[1], '#9fc4ff'), mkTag('Wie pakt mij?', '#ffe98a')];
-  ws.ownerCol = [0x35e07a, 0x4a9cff, 0xffe070];
+  const TI = ctx.teams ? ctx.teamInfo : null;   // 2 tegen 2: de bal heeft de naam en kleur van het team
+  ws.tagTex = [mkTag(TI ? TI[0].name : names[0], TI ? TI[0].css : '#7dffb0'), mkTag(TI ? TI[1].name : names[1], TI ? TI[1].css : '#9fc4ff'), mkTag('Wie pakt mij?', '#ffe98a')];
+  ws.ownerCol = TI ? [TI[0].color, TI[1].color, 0xffe070] : [0x35e07a, 0x4a9cff, 0xffe070];
   ws.balls = Array.from({ length: 6 }, () => {
     const mt = new THREE.MeshStandardMaterial({ color: 0xe8ecf4, metalness: 0.85, roughness: 0.18, emissive: 0xffe070, emissiveIntensity: 0.55 });
     const g = new THREE.Mesh(ballGeo, mt); g.castShadow = true; g.visible = false; scene.add(g);
@@ -237,13 +238,15 @@ export function buildWorld(ctx, T, L) {
   ws.drawBoard = () => {};
 
   // ---------- toeschouwers en poppetjes naast de kast ----------
-  ws.pups = [-1, 1].map((m, i) => {
-    const c = makeBrother(i); const holder = new THREE.Group(); const k = 3.4 / c.height; holder.add(c.group); holder.scale.setScalar(k); holder.position.set(m * 16.6, 0.2, 12.2); holder.rotation.y = 0; root.add(holder);
+  const NP = ctx.players.length, tOf = ctx.teams ? ctx.teamOf : ctx.players.map((_, i) => i);
+  ws.pups = ctx.players.map((pl, i) => {
+    const m = tOf[i] ? 1 : -1, second = NP > 2 && ctx.teams[tOf[i]].indexOf(i) === 1, pz = second ? 4.6 : 12.2;   // bij 4 spelers: de tweede van elk team staat bij de bovenste flipper
+    const c = makeBrother(i); const holder = new THREE.Group(); const k = 3.4 / c.height; holder.add(c.group); holder.scale.setScalar(k); holder.position.set(m * 16.6, 0.2, pz); holder.rotation.y = 0; root.add(holder);
     c.faceDir(-m, 0); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
-    root.add(mesh(new THREE.CylinderGeometry(2.0, 2.3, 1.4, 14), mat(i ? 0x3a5aa8 : 0x2a7a4a), { cast: false, pos: [m * 16.6, -0.5, 12.2] }));
+    root.add(mesh(new THREE.CylinderGeometry(2.0, 2.3, 1.4, 14), mat(NP > 2 ? pl.color : i ? 0x3a5aa8 : 0x2a7a4a), { cast: false, pos: [m * 16.6, -0.5, pz] }));
     // grote arcade-knop
-    const btn = mesh(new THREE.CylinderGeometry(0.7, 0.8, 0.35, 14), new THREE.MeshStandardMaterial({ color: i ? 0x4a8cff : 0x35c46f, emissive: 0x000000, roughness: 0.3 }), { pos: [m * 14.0, 0.45, 12.2] }); root.add(btn);
-    root.add(mesh(new THREE.CylinderGeometry(1.0, 1.1, 0.4, 14), mat(0x333344), { cast: false, pos: [m * 14.0, 0.2, 12.2] }));
+    const btn = mesh(new THREE.CylinderGeometry(0.7, 0.8, 0.35, 14), new THREE.MeshStandardMaterial({ color: NP > 2 ? pl.color : i ? 0x4a8cff : 0x35c46f, emissive: 0x000000, roughness: 0.3 }), { pos: [m * 14.0, 0.45, pz] }); root.add(btn);
+    root.add(mesh(new THREE.CylinderGeometry(1.0, 1.1, 0.4, 14), mat(0x333344), { cast: false, pos: [m * 14.0, 0.2, pz] }));
     return { c, holder, btn, m, i };
   });
   ws.crowd = [];

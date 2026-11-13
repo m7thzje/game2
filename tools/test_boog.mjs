@@ -2,6 +2,7 @@
 //   TW=<twist-id> kiest een twist (anders: "none" / per scenario).
 // Bots spelen versneld (zonder renderen) hele potjes; controleert dat finishPvp PRECIES één keer komt, beide spelers kunnen winnen, geen console-errors.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -14,44 +15,46 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
+const NP = process.env.PLAYERS === '4' ? 4 : process.env.PLAYERS === '3' ? 3 : 2;   // PLAYERS=3|4: alle spelers doen mee
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 let fails = 0; const check = (ok, msg) => { console.log(`${ok ? 'OK  ' : 'FAIL'} ${msg}`); if (!ok) fails++; };
 
 async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=boog&quality=low&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=boog&players=${NP}&quality=low&twist=${twist || 'none'}&scare=0`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
-  await page.evaluate(async () => {
+  await page.evaluate(async (NP) => {
     const app = window.__app, mode = app.mode, inp = app.input;
     window.__fin = 0; const orig = mode.finishPvp.bind(mode); mode.finishPvp = (r) => { window.__fin++; return orig(r); };
     mode.paused = false;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (let q = 0; q < NP; q++) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (let q = 0; q < NP; q++) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
-  });
+  }, NP);
   return { browser, page, errors };
 }
 
 // cfg[i] = { skill: 0..1, style: 'aim'|'idle'|'wild', special: kans om een speciale pijl te laden }
-async function installBots(page, cfg) {
+async function installBots(page, cfg0) {
+  const cfg = Array.from({ length: NP }, (_, i) => cfg0[i % cfg0.length]);   // bij meer spelers dan opgegeven: herhaal
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 4242; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    const B = [0, 1].map(() => ({ rel: 0.9, cd: 0 }));
+    const B = cfg.map(() => ({ rel: 0.9, cd: 0 }));
     window.__cfg = cfg;
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
-        for (const i of [0, 1]) {
+        for (const i of cfg.keys()) {
           const v = inp.virtual[i], c = window.__cfg[i], me = st.a[i], b = B[i]; v.a = false; v.b = false; v.x = 0; v.y = 0;
           if (c.style === 'idle' || st.st === 'init' || st.st === 'end') continue;
           const tg = st.tg[i];
@@ -84,7 +87,7 @@ for (const name of scen) {
       : name === 'idle' ? [['none', [{ style: 'idle' }, { style: 'idle' }]]]
         : name === 'timeout' ? [['none', [{ skill: 0.6, style: 'aim', special: 0 }, { skill: 0.6, style: 'wild', special: 0 }]]]
           : [[process.env.TW || 'none', [hi, lo]], [process.env.TW || 'none', [lo, hi]], [process.env.TW || 'none', [hi, hi]], [process.env.TW || 'none', [lo, lo]]];
-    const wins = [0, 0, 0];
+    const wins = [0, 0, 0, 0, 0];
     for (const [tw, cfg] of list) {
       const { browser, page, errors } = await open(tw);
       await installBots(page, cfg);
@@ -108,10 +111,11 @@ for (const name of scen) {
       if (r) console.log(`RESULT winner=${r.winner} score=${r.scoreArr} :: ${r.summary.replace(/<[^>]+>/g, ' ')}`);
       check(res.finished && res.fin === 1, `finishPvp precies 1x (fin=${res.fin})`);
       check(errors.length === 0, 'geen console-errors'); if (errors.length) console.log(errors.slice(0, 6).join('\n'));
-      if (r) wins[r.winner == null ? 2 : r.winner]++;
+      if (r) wins[r.winner == null ? 4 : r.winner]++;
+      if (NP > 2 && r && r.winner != null) check(r.place && r.place.length === NP, `volledige plaatsen voor ${NP} spelers`);
       await browser.close();
     }
-    if (name === 'bots') { check(wins[0] > 0 && wins[1] > 0, `beide spelers kunnen winnen (${wins})`); }
+    if (name === 'bots') { check(wins.slice(0, 4).filter((w) => w > 0).length >= 2, `minstens twee verschillende spelers kunnen winnen (${wins})`); }
     continue;
   }
   if (name === 'physics') {

@@ -61,6 +61,7 @@ export default {
   giver: 'Lavameester Lars',
   icon: '🪢',
   mode: 'pvp',
+  players: [2, 4], teams: true,   // 1 tegen 1, of met 4 spelers 2 tegen 2 (twee trekkers per kant, jullie vallen samen in de lava)
   time: 70,
   music: 'game_fast',
   twists: ['swapab', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'],
@@ -72,6 +73,14 @@ export default {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
+    const NP = players.length, TM = NP === 4 && ctx.teams ? ctx.teams : null;          // TM = 2 tegen 2 (slots per team), anders 1 tegen 1
+    const teamOf = (i) => (TM ? ctx.teamOf[i] : i);
+    const tNames = [0, 1].map((t) => (TM ? ctx.teamInfo[t].name : names[t]));
+    const tHex = [0, 1].map((t) => (TM ? ctx.teamInfo[t].color : PLAYER_COLORS[t]));
+    const tCss = [0, 1].map((t) => (TM ? ctx.teamInfo[t].css : players[t].css));
+    const ROW = 2.4;                                       // afstand tussen twee trekkers van één team (langs het touw)
+    const TEAMMUL = TM ? 0.62 : 1;                         // twee trekkers samen zijn sterker dan één, maar niet dubbel
+    const memberIdx = [0, 0];
     const tw = ctx.twist.id;
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const TEMPO = tw === 'turbo' ? 1.4 : tw === 'slowmo' ? 0.85 : 1;
@@ -86,10 +95,11 @@ export default {
     // ---------------- spelers ----------------
     const sizeOf = (i) => pv.size(i);
     const pl = players.map((pp, i) => {
+      const t = teamOf(i), kIn = memberIdx[t]++, dir = t ? -1 : 1;
       const c = makeBrother(i);
       const kS = 3.1 / c.height * sizeOf(i);
       const holder = new THREE.Group(); holder.add(c.group); holder.scale.setScalar(kS); scene.add(holder);
-      c.faceDir(i ? -1 : 1, 0); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
+      c.faceDir(dir, 0); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
       const aura = new THREE.Mesh(new THREE.SphereGeometry(1.0, 14, 10), new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.2, depthWrite: false, blending: THREE.AdditiveBlending })); aura.position.y = c.height * 0.5; aura.scale.set(0.9, 1.35, 0.9); aura.visible = false; holder.add(aura);
       // vlammen op het achterwerk
       const flames = new THREE.Group(); flames.visible = false; c.torso.add(flames); flames.position.set(0, 0.08 * c.s, -0.36 * c.s); flames.scale.setScalar(1.9);
@@ -102,13 +112,19 @@ export default {
       const burnList = [];
       c.group.traverse((o) => { if (o.isMesh && o.material && !o.material.isMeshBasicMaterial && !Array.isArray(o.material)) { const b = o.material.clone(); b.color.multiplyScalar(0.3); burnList.push({ o, orig: o.material, burnt: b }); } });
       return {
-        i, c, holder, kS, aura, flames, fl, blob, tag, burnList, burned: false,
-        x: i ? S0 : -S0, y: 0, vy: 0, vx: 0, st: 'stand', hidden: false, wins: 0,
+        i, t, kIn, dir, c, holder, kS, aura, flames, fl, blob, tag, burnList, burned: false, fs: 'none', ft: 0, bt: 0, tx: 0, hitX: 0,
+        x: (t ? S0 : -S0) - dir * kIn * ROW, y: 0, vy: 0, vx: 0, st: 'stand', hidden: false,
         pw: 0, rm: 0, lastBtn: null, lastT: -9, lastIv: 0, boostT: 0, jerk: 0, eff: 0, dragged: 0, spin: 0, fallT: 0,
         powMul: 1 + (sizeOf(i) - 1) * 0.2, rmGain: sizeOf(i) < 1 ? 1.4 : 1, frozen: 0, presses: 0, surges: 0, bestRm: 0,
         keyOff: 0,
       };
     });
+    const memb = [0, 1].map((t) => pl.filter((p) => p.t === t));      // spelers per team (voorste eerst)
+    const ropeEnd = memb.map((m) => m[m.length - 1].i);                // de achterste trekker houdt het touwuiteinde vast
+    const TW = [0, 0];                                                  // gewonnen rondes per team
+    const teamEff = (t) => memb[t].reduce((a, p) => a + p.eff, 0) * TEAMMUL;
+    const teamPresses = (t) => memb[t].reduce((a, p) => a + p.presses, 0);
+    const physSlot = (i) => { if (!pv.swapped) return i; if (NP === 2) return 1 - i; for (const [x, y] of (pv.swapPairs || [])) { if (i === x) return y; if (i === y) return x; } return i; };
     const setBurned = (p, on) => { if (p.burned === on) return; p.burned = on; for (const b of p.burnList) b.o.material = on ? b.burnt : b.orig; };
 
     // ---------------- touw + vlag ----------------
@@ -152,18 +168,18 @@ export default {
     const gTex = glowTex();
     const orbTexCache = {};
     function orbTexFor(i, btn) {
-      const physical = pv.swapped ? 1 - i : i; const swapAB = tw === 'swapab';
+      const physical = physSlot(i); const swapAB = tw === 'swapab';
       const lbl = KEY_LABELS[physical][(btn === 'a') !== swapAB ? 'a' : 'b'];
       const key = lbl + btn; if (!orbTexCache[key]) orbTexCache[key] = keyTex(lbl, btn === 'a' ? 'rgba(255,200,40,.9)' : 'rgba(80,220,255,.9)');
       return orbTexCache[key];
     }
-    const orbs = [0, 1].map((i) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: gTex, transparent: true, depthTest: false, blending: THREE.NormalBlending })); s.renderOrder = 18; s.visible = false; scene.add(s); return s; });
-    const orbRings = [0, 1].map(() => { const m = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.0, 24), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.8, depthTest: false, side: THREE.DoubleSide })); m.renderOrder = 17; m.visible = false; scene.add(m); return m; });
+    const orbs = pl.map((_, i) => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: gTex, transparent: true, depthTest: false, blending: THREE.NormalBlending })); s.renderOrder = 18; s.visible = false; scene.add(s); return s; });
+    const orbRings = pl.map(() => { const m = new THREE.Mesh(new THREE.RingGeometry(0.8, 1.0, 24), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.8, depthTest: false, side: THREE.DoubleSide })); m.renderOrder = 17; m.visible = false; scene.add(m); return m; });
 
     // ---------------- toestand ----------------
     const R = { n: 0, state: 'ready', t: 0, tugT: 0, left: ROUND_TIME, sd: 0, nextSurge: 4, nextBoost: 6, loser: -1, winner: -1, plan: null, snapT: 0, snaps: 0, ropeVis: 1, timeUp: 0, matchOver: false, burnT: 0, hitX: 0, lastWinner: -1 };
     let lead = 0, leadV = 0, tension = 0, T = 0, introT = 0, started = false, finished = false, camX = 0, camLy = 0, hintT = 0;
-    let surge = [null, null]; let snapSfxT = 0, creakT = 0;
+    let surge = pl.map(() => null); let snapSfxT = 0, creakT = 0;
     let stats = { chickenHelped: -1, snaps: 0 };
     const hist = [];
 
@@ -175,23 +191,25 @@ export default {
       const hudEl = document.getElementById('hud'); if (!hudEl) return;
       const root = mk('div', { position: 'absolute', inset: '0', pointerEvents: 'none', fontFamily: 'Fredoka, Arial Black, sans-serif', color: '#fff', textShadow: '0 2px 0 #000' });
       // tug-meter
-      const wrap = mk('div', { position: 'absolute', left: '50%', bottom: '74px', transform: 'translateX(-50%)', width: 'min(560px, 54vw)', height: '24px', borderRadius: '14px', border: '3px solid #ffd24a', background: 'linear-gradient(90deg,#2f9e5b 0 50%,#3a78e0 50% 100%)', boxShadow: '0 4px 0 rgba(0,0,0,.5)', overflow: 'visible' });
+      const wrap = mk('div', { position: 'absolute', left: '50%', bottom: '74px', transform: 'translateX(-50%)', width: TM ? 'min(300px, 26vw)' : 'min(560px, 54vw)', height: '24px', borderRadius: '14px', border: '3px solid #ffd24a', background: `linear-gradient(90deg,${tCss[0]} 0 50%,${tCss[1]} 50% 100%)`, boxShadow: '0 4px 0 rgba(0,0,0,.5)', overflow: 'visible' });
       const dangerL = mk('div', { position: 'absolute', left: 0, top: 0, bottom: 0, width: '10%', borderRadius: '11px 0 0 11px', background: 'repeating-linear-gradient(45deg,#7a0d0d 0 6px,#d8372c 6px 12px)', opacity: 0.8 });
       const dangerR = mk('div', { position: 'absolute', right: 0, top: 0, bottom: 0, width: '10%', borderRadius: '0 11px 11px 0', background: 'repeating-linear-gradient(-45deg,#7a0d0d 0 6px,#d8372c 6px 12px)', opacity: 0.8 });
       const mid = mk('div', { position: 'absolute', left: '50%', top: '-4px', bottom: '-4px', width: '2px', background: 'rgba(255,255,255,.7)' });
       const marker = mk('div', { position: 'absolute', top: '-12px', width: '14px', height: '44px', marginLeft: '-7px', background: '#fff', borderRadius: '6px', border: '3px solid #c81e2e', boxShadow: '0 0 12px rgba(255,255,255,.9)', left: '50%' });
-      const nL = mk('div', { position: 'absolute', left: '8px', top: '-24px', fontSize: '16px', color: '#7dffb0' }, names[0]);
-      const nR = mk('div', { position: 'absolute', right: '8px', top: '-24px', fontSize: '16px', color: '#8fb8ff' }, names[1]);
+      const nL = mk('div', { position: 'absolute', left: '8px', top: '-24px', fontSize: '16px', color: '#ffffff' }, tNames[0]);
+      const nR = mk('div', { position: 'absolute', right: '8px', top: '-24px', fontSize: '16px', color: '#ffffff' }, tNames[1]);
       wrap.append(dangerL, dangerR, mid, marker, nL, nR);
       // spanning-meter
-      const tWrap = mk('div', { position: 'absolute', left: '50%', bottom: '50px', transform: 'translateX(-50%)', width: 'min(300px, 30vw)', height: '14px', borderRadius: '9px', border: '2px solid #000', background: '#2a1a1a', overflow: 'hidden' });
+      const tWrap = mk('div', { position: 'absolute', left: '50%', bottom: '50px', transform: 'translateX(-50%)', width: TM ? 'min(220px, 22vw)' : 'min(300px, 30vw)', height: '14px', borderRadius: '9px', border: '2px solid #000', background: '#2a1a1a', overflow: 'hidden' });
       const tFill = mk('div', { height: '100%', width: '0%', background: 'linear-gradient(90deg,#ffd24a,#ff8a1c,#ff2a1a)' });
       const tLab = mk('div', { position: 'absolute', inset: 0, textAlign: 'center', fontSize: '11px', lineHeight: '14px', letterSpacing: '1px' }, 'SPANNING');
       tWrap.append(tFill, tLab);
-      const panels = [0, 1].map((i) => {
-        const side = i ? { right: '14px' } : { left: '14px' };
-        const p = mk('div', { position: 'absolute', bottom: '14px', width: 'min(250px, 28vw)', padding: '8px 10px 9px', borderRadius: '14px', background: 'rgba(20,12,30,.72)', border: `3px solid ${players[i].css}`, ...side });
-        const title = mk('div', { display: 'flex', justifyContent: 'space-between', fontSize: '17px' });
+      const panelW = TM ? 'min(158px, 17vw)' : 'min(250px, 28vw)';
+      const panels = pl.map((pp0, i) => {
+        const tI = pp0.t, offs = TM ? `calc(14px + ${pp0.kIn} * (${panelW} + 10px))` : '14px';
+        const side = tI ? { right: offs } : { left: offs };
+        const p = mk('div', { position: 'absolute', bottom: '14px', width: panelW, padding: '8px 10px 9px', borderRadius: '14px', background: 'rgba(20,12,30,.72)', border: `3px solid ${players[i].css}`, ...side });
+        const title = mk('div', { display: 'flex', justifyContent: 'space-between', fontSize: TM ? '14px' : '17px' });
         const nm = mk('span', { color: players[i].css }, names[i]); const rl = mk('span', { fontSize: '13px', opacity: 0.9 }, 'RITME x1.0');
         title.append(nm, rl);
         const bar = mk('div', { height: '12px', marginTop: '4px', borderRadius: '8px', background: '#1d1428', border: '2px solid #000', overflow: 'hidden' });
@@ -201,7 +219,7 @@ export default {
         p.append(title, bar, info, sg);
         return { p, rl, fill, info, sg, last: {} };
       });
-      root.append(wrap, tWrap, panels[0].p, panels[1].p);
+      root.append(wrap, tWrap, ...panels.map((q) => q.p));
       hudEl.append(root);
       dom.root = root; dom.marker = marker; dom.tFill = tFill; dom.tWrap = tWrap; dom.panels = panels;
     }
@@ -213,12 +231,12 @@ export default {
       dom.marker.style.left = `${(clamp(lead, -1, 1) + 1) * 50}%`;
       dom.tFill.style.width = `${Math.round(tension * 100)}%`;
       dom.tWrap.style.borderColor = tension > 0.75 ? '#ff2a1a' : '#000';
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < NP; i++) {
         const q = dom.panels[i], p = pl[i];
         const mult = 1 + 0.7 * p.rm;
         setT(q, 'rl', `RITME x${mult.toFixed(1)}`, (v) => { q.rl.textContent = v; });
         setT(q, 'fill', Math.round(p.rm * 50), (v) => { q.fill.style.width = `${v * 2}%`; });
-        const phys = pv.swapped ? 1 - i : i;
+        const phys = physSlot(i);
         const hint = hintT > 0 ? `Druk ${KEY_LABELS[phys].a} en ${KEY_LABELS[phys].b} om en om!` : '';
         const txt = p.boostT > 0 ? '🔥 BOOST! Trek!' : p.frozen > 0 ? '😵 Suf van de klap...' : hint;
         setT(q, 'info', txt, (v) => { q.info.textContent = v; });
@@ -232,16 +250,16 @@ export default {
     // ---------------- ronde-flow ----------------
     const pips = (w) => '●'.repeat(w) + '○'.repeat(WIN_ROUNDS - w);
     function refreshHud() {
-      hud.setScore(`Ronde ${Math.min(R.n, 3)}   ${names[0]} ${pips(pl[0].wins)}  –  ${pips(pl[1].wins)} ${names[1]}`);
-      hud.setPlayerInfo(0, `Rondes: ${pl[0].wins}`); hud.setPlayerInfo(1, `Rondes: ${pl[1].wins}`);
+      hud.setScore(`Ronde ${Math.min(R.n, 3)}   ${tNames[0]} ${pips(TW[0])}  –  ${pips(TW[1])} ${tNames[1]}`);
+      for (const p of pl) hud.setPlayerInfo(p.i, `${TM ? 'Team: ' : ''}Rondes: ${TW[p.t]}`);
     }
     function resetPlayer(p) {
-      p.st = 'stand'; p.y = 0; p.vy = 0; p.hidden = false; p.pw = 0; p.rm = 0; p.lastBtn = null; p.boostT = 0; p.frozen = 0; p.spin = 0; p.jerk = 0; p.eff = 0;
+      p.st = 'stand'; p.fs = 'none'; p.y = 0; p.vy = 0; p.hidden = false; p.pw = 0; p.rm = 0; p.lastBtn = null; p.boostT = 0; p.frozen = 0; p.spin = 0; p.jerk = 0; p.eff = 0;
       setBurned(p, false); p.flames.visible = false; p.holder.rotation.set(0, 0, 0); p.c.pose = 'idle'; p.c.air = false; p.c.speed = 0; p.holder.visible = true;
     }
     function startRound() {
       R.n++; R.snaps = 0; R._cheered = false; R.state = 'ready'; R.t = 0; R.tugT = 0; R.left = ROUND_TIME / (tw === 'turbo' ? 1.1 : 1); R.sd = 0; R.snapT = 0; R.ropeVis = 1; R.timeUp = 0; R.loser = R.winner = -1;
-      lead = 0; leadV = 0; tension = 0; surge = [null, null]; orbs.forEach((o) => (o.visible = false)); orbRings.forEach((o) => (o.visible = false));
+      lead = 0; leadV = 0; tension = 0; surge = pl.map(() => null); orbs.forEach((o) => (o.visible = false)); orbRings.forEach((o) => (o.visible = false));
       R.nextSurge = 3.8 / TEMPO; R.nextBoost = 5.5 + Math.random() * 2;
       pl.forEach(resetPlayer);
       // kip-plan voor deze ronde
@@ -283,17 +301,19 @@ export default {
         audio.sfx('powerup', { vol: 0.6 }); audio.sfx('sparkle', { vol: 0.5 }); ctx.shake(perfect ? 0.45 : 0.25);
       }
     }
-    function giveBoost(i) {
-      const p = pl[i]; p.boostT = 3.2;
-      const hp = handMid(i);
-      fx.texts.add('BOOST!', hp.x, hp.y + 2, 1, '#ff8a2a', 1.4);
-      fx.particles.burst(p.x, 1.4, 0, { count: 40, speed: 6, up: 1.4, life: 0.8, size: 0.4, colors: [0xff5a0a, 0xffb020, 0xffe680], gravity: -2 });
+    function giveBoost(t) {      // boost voor een heel team (de achterblijver)
+      for (const p of memb[t]) {
+        p.boostT = 3.2;
+        const hp = handMid(p.i);
+        fx.texts.add('BOOST!', hp.x, hp.y + 2, 1, '#ff8a2a', 1.4);
+        fx.particles.burst(p.x, 1.4, 0, { count: 40, speed: 6, up: 1.4, life: 0.8, size: 0.4, colors: [0xff5a0a, 0xffb020, 0xffe680], gravity: -2 });
+      }
       audio.sfx('powerup', { vol: 0.7 }); audio.sfx('whoosh', { vol: 0.5 });
-      hud.toast(`🔥 BOOST voor ${names[i]}!`, 1500);
+      hud.toast(`🔥 BOOST voor ${tNames[t]}!`, 1500);
     }
 
     // ---------------- hulpfuncties voor posities ----------------
-    const hv = [new THREE.Vector3(), new THREE.Vector3()], hmid = [new THREE.Vector3(), new THREE.Vector3()];
+    const hv = [new THREE.Vector3(), new THREE.Vector3()], hmid = pl.map(() => new THREE.Vector3());
     function handMid(i) {
       const p = pl[i]; p.holder.updateMatrixWorld(true);
       p.c.handL.getWorldPosition(hv[0]); p.c.handR.getWorldPosition(hv[1]);
@@ -306,7 +326,7 @@ export default {
     // ---------------- stappen ----------------
     function triggerSnap() {
       R.snapT = 2.0; R.snaps++; stats.snaps++;
-      tension = 0; surge = [null, null]; orbs.forEach((o) => (o.visible = false)); orbRings.forEach((o) => (o.visible = false));
+      tension = 0; surge = pl.map(() => null); orbs.forEach((o) => (o.visible = false)); orbRings.forEach((o) => (o.visible = false));
       pl.forEach((p) => { p.pw *= 0.15; p.frozen = 0; });
       F.fall = true; F.vy = 1.5; F.x = flag.position.x; F.y = flag.position.y; F.rot = 0;
       hud.showBig('KRAAK!', 1100, '#ff5a3a'); hud.toast('Het touw is geknapt! De vlag valt weg...', 1800);
@@ -314,62 +334,67 @@ export default {
       fx.particles.burst(flag.position.x, flag.position.y, 0, { count: 40, speed: 5, up: 0.8, life: 0.9, size: 0.3, colors: [0xcaa25e, 0x8a6a38, 0xffffff], gravity: 10 });
       if (chick && chick.st !== 'leave') chick.st = 'leave', chick.t = 0;
     }
-    function startDrop(l) {
+    function startDrop(l) {      // l = team dat over de streep wordt getrokken
       const w = 1 - l; R.state = 'drop'; R.loser = l; R.winner = w; R.t = 0; R.lastWinner = w;
-      pl[w].wins++; hist.push([pl[0].wins, pl[1].wins]);
-      const p = pl[l]; p.st = 'fly'; p.vx = (l === 0 ? 1 : -1) * 6.2; p.vy = 8.5; p.c.pose = 'scared'; p.c.air = true; p.spin = (l === 0 ? 1 : -1) * 5;
-      pl[w].c.pose = 'cheer';
-      R.matchOver = pl[w].wins >= WIN_ROUNDS;
+      TW[w]++; hist.push([TW[0], TW[1]]);
+      for (const p of memb[l]) { p.st = 'fly'; p.fs = 'drop'; p.ft = 0; p.vx = (l === 0 ? 1 : -1) * (6.2 - p.kIn * 0.9); p.vy = 8.5 + p.kIn * 0.7; p.c.pose = 'scared'; p.c.air = true; p.spin = (l === 0 ? 1 : -1) * (5 + p.kIn); }
+      for (const p of memb[w]) p.c.pose = 'cheer';
+      R.matchOver = TW[w] >= WIN_ROUNDS;
       pl.forEach((q) => { q.boostT = 0; });
       refreshHud(); hud.setTimer(null);
-      hud.showBig(`${names[l]} valt!`, 900, '#ff7a3a');
+      hud.showBig(TM ? `${tNames[l]} vallen!` : `${tNames[l]} valt!`, 900, '#ff7a3a');
       audio.sfx('miss', { vol: 0.8 }); audio.sfx('whoosh', { vol: 0.6 }); ctx.shake(0.4); W.gasp();
       if (chick && chick.st !== 'leave') { chick.st = 'leave'; chick.t = 0; }
-      surge = [null, null]; orbs.forEach((o) => (o.visible = false)); orbRings.forEach((o) => (o.visible = false));
+      surge = pl.map(() => null); orbs.forEach((o) => (o.visible = false)); orbRings.forEach((o) => (o.visible = false));
     }
     function lavaImpact(p) {
-      R.state = 'lava'; R.t = 0; p.hidden = true; p.holder.visible = false; R.hitX = p.x;
+      p.fs = 'lava'; p.ft = 0; p.hidden = true; p.holder.visible = false; p.hitX = p.x;
       W.splash(p.x, 0, 1.2); W.column(p.x, 0, 1.2);
       audio.sfx('splash', { vol: 1 }); audio.sfx('sizzle', { vol: 0.9 }); audio.sfx('explode', { vol: 0.35 }); audio.sfx('splash', { vol: 0.6, rate: 0.6 });
       ctx.shake(0.95);
       fx.texts.add('PLONS!', p.x, LAVA_Y + 3.5, 1, '#ffb030', 1.7);
-      hud.showBig('PLONS!', 900, '#ff8a2a');
+      if (!p.kIn) hud.showBig('PLONS!', 900, '#ff8a2a');
     }
     function popOut(p) {
-      const tx = (p.i === 0 ? -1 : 1) * (CLIFF_E + 2.2);
+      const tx = (p.t === 0 ? -1 : 1) * (CLIFF_E + 2.2 + p.kIn * ROW);
       const g = 26, vy = 18, y0 = p.y;
       const tFl = (vy + Math.sqrt(Math.max(1, vy * vy + 2 * g * y0))) / g;
       p.vx = (tx - p.x) / tFl; p.vy = vy; p.st = 'fly2'; p.hidden = false; p.holder.visible = true;
-      setBurned(p, true); p.flames.visible = true; p.spin = (p.i === 0 ? -1 : 1) * 7; p.c.pose = 'scared'; p.c.air = true;
-      R.state = 'pop'; R.t = 0; R.tx = tx;
+      setBurned(p, true); p.flames.visible = true; p.spin = (p.t === 0 ? -1 : 1) * 7; p.c.pose = 'scared'; p.c.air = true;
+      p.fs = 'pop'; p.ft = 0; p.tx = tx;
       W.splash(p.x, 0, 0.7);
       audio.sfx('boing', { vol: 0.8 }); audio.sfx('hurt', { vol: 0.7 });
       fx.texts.add('AUWWW!', p.x, 3, 1, '#ff5a3a', 1.5);
       W.gasp();
     }
     function landBurn(p) {
-      R.state = 'burn'; R.burnT = 0; p.st = 'run'; p.y = 0; p.vy = 0; p.holder.rotation.set(0, 0, 0);
+      p.fs = 'burn'; p.bt = 0; p.st = 'run'; p.y = 0; p.vy = 0; p.holder.rotation.set(0, 0, 0);
       fx.particles.dust(p.x, 0, 0, 8, 0xb0a090); audio.sfx('thud', { vol: 0.8 }); ctx.shake(0.4);
     }
     function forceFinish() {
       if (finished) return;
-      let w = pl[0].wins !== pl[1].wins ? (pl[0].wins > pl[1].wins ? 0 : 1) : (Math.abs(lead) > 0.02 ? (lead > 0 ? 1 : 0) : (pl[0].presses >= pl[1].presses ? 0 : 1));
+      let w = TW[0] !== TW[1] ? (TW[0] > TW[1] ? 0 : 1) : (Math.abs(lead) > 0.02 ? (lead > 0 ? 1 : 0) : (teamPresses(0) >= teamPresses(1) ? 0 : 1));
       endMatch(w, true);
     }
     function endMatch(w, forced) {
       if (finished) return; finished = true;
       hud.setTimer(null);
-      const l = 1 - w;
-      const jokes = [
-        `${names[w]} sleurde ${names[l]} met een gigantische plons de lava in!`,
-        `${names[l]} ruikt nu naar verbrande toast. ${names[w]} is de touwkampioen!`,
-        `${names[w]} trok als een stier. ${names[l]} is nu een knapperig lavakoekje.`,
-        `Het publiek joelt voor ${names[w]}. ${names[l]} moet even afkoelen.`,
+      const l = 1 - w, nw = tNames[w], nl = tNames[l];
+      const jokes = TM ? [
+        `${nw} sleurden ${nl} met een gigantische plons de lava in!`,
+        `${nl} ruiken nu naar verbrande toast. ${nw} zijn de touwkampioenen!`,
+        `${nw} trokken als stieren. ${nl} zijn nu knapperige lavakoekjes.`,
+        `Het publiek joelt voor ${nw}. ${nl} moeten even afkoelen.`,
+      ] : [
+        `${nw} sleurde ${nl} met een gigantische plons de lava in!`,
+        `${nl} ruikt nu naar verbrande toast. ${nw} is de touwkampioen!`,
+        `${nw} trok als een stier. ${nl} is nu een knapperig lavakoekje.`,
+        `Het publiek joelt voor ${nw}. ${nl} moet even afkoelen.`,
       ];
       let extra = '';
-      if (stats.chickenHelped >= 0) extra += ` De kip koos voor ${names[stats.chickenHelped]}.`;
+      if (stats.chickenHelped >= 0) extra += ` De kip koos voor ${tNames[stats.chickenHelped]}.`;
       if (stats.snaps) extra += ` Het touw knapte ${stats.snaps}x.`;
-      ctx.finishPvp({ winner: w, score: [pl[0].wins, pl[1].wins], delay: forced ? 300 : 1500, summary: `${pick(jokes)}${extra}` });
+      ctx.finishPvp({ winners: TM ? TM[w].slice() : [w], score: pl.map((p) => TW[p.t]), delay: forced ? 300 : 1500, summary: `${pick(jokes)}${extra}` });
     }
 
     // ---------------- hoofd-update ----------------
@@ -377,7 +402,7 @@ export default {
       R.tugT += dt; hintT = Math.max(0, hintT - dt);
       const snapping = R.snapT > 0;
       // invoer
-      if (!snapping && !R.timeUp) for (let i = 0; i < 2; i++) {
+      if (!snapping && !R.timeUp) for (let i = 0; i < NP; i++) {
         const p = pl[i]; if (p.frozen > 0) { p.frozen -= dt; continue; }
         if (inp[i].aP) press(i, 'a'); if (inp[i].bP) press(i, 'b');
       }
@@ -400,13 +425,13 @@ export default {
           F.fall = false; F.vis = true; flag.visible = true; fx.particles.burst(0, 2, 0, { count: 24, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 3 });
         }
       } else {
-        let vT = (pl[1].eff - pl[0].eff + bias) * GAIN * gainMul + lead * 0.05;   // wie voorligt krijgt een beetje hefboom
+        let vT = (teamEff(1) - teamEff(0) + bias) * GAIN * gainMul + lead * 0.05;   // wie voorligt krijgt een beetje hefboom
         if (R.timeUp) { vT = R.timeUp * 0.5; }
         const lam = lerp(4.5, 1.0, SLIP) * (GRAV < 1 ? 0.65 : 1);
         leadV = clamp(damp(leadV, vT, R.timeUp ? 8 : lam, dt), -VMAX * (R.timeUp ? 3 : 1), VMAX * (R.timeUp ? 3 : 1));
         lead = clamp(lead + leadV * dt, -1, 1);
         // spanning
-        const mn = Math.min(pl[0].eff, pl[1].eff);
+        const mn = Math.min(teamEff(0), teamEff(1));
         const thr = 9 + R.snaps * 3;   // na een knap wordt het touw sterker
         if (mn > thr && !R.timeUp && R.snaps < 3) tension = Math.min(1.05, tension + (mn - thr) * 0.04 * dt); else tension = Math.max(0, tension - 0.25 * dt);
         if (tension > 0.72) { creakT -= dt; if (creakT <= 0) { creakT = 0.55; audio.sfx('creak', { vol: 0.35 + tension * 0.3, rate: 1 + tension * 0.5 }); const rp = ropeAt(0.5, _v1); fx.particles.burst(rp.x, rp.y, 0, { count: 6, speed: 2, up: 1, life: 0.5, size: 0.18, colors: [0xcaa25e, 0xffd24a], gravity: 6 }); } }
@@ -416,7 +441,7 @@ export default {
         if (R.left <= 0 && !R.timeUp) {
           if (Math.abs(lead) > 0.05) { R.timeUp = Math.sign(lead); hud.showBig('TIJD!', 900, '#ffd24a'); hud.toast('De lava trekt de verliezer erin!', 1800); audio.sfx('bell', { vol: 0.8 }); }
           else if (R.sd < 1) { R.sd++; R.left = 5; hud.showBig('GOUDEN TREK!', 1000, '#ffd24a'); hud.toast('Gelijkspel! Nog even doortrekken...', 1600); }
-          else R.timeUp = (pl[1].presses >= pl[0].presses) ? 1 : -1;
+          else R.timeUp = (teamPresses(1) >= teamPresses(0)) ? 1 : -1;
         }
         if (lead >= 0.999) startDrop(0); else if (lead <= -0.999) startDrop(1);
       }
@@ -426,11 +451,11 @@ export default {
         R.nextSurge -= dt;
         if (R.nextSurge <= 0 && R.left > 4) {
           R.nextSurge = rand(5.5, 7.5) / TEMPO;
-          for (let i = 0; i < 2; i++) { const btn = Math.random() < 0.5 ? 'a' : 'b'; surge[i] = { btn, t: 0, travel: 1.5 / TEMPO, state: 'travel', fade: 0 }; orbs[i].material.map = orbTexFor(i, btn); orbs[i].material.needsUpdate = true; orbs[i].visible = true; }
+          for (let i = 0; i < NP; i++) { const btn = Math.random() < 0.5 ? 'a' : 'b'; surge[i] = { btn, t: 0, travel: 1.5 / TEMPO, state: 'travel', fade: 0 }; orbs[i].material.map = orbTexFor(i, btn); orbs[i].material.needsUpdate = true; orbs[i].visible = true; }
           audio.sfx('sparkle', { vol: 0.4 });
         }
       }
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < NP; i++) {
         const o = surge[i]; if (!o) continue;
         o.t += dt;
         if (o.state === 'done') { o.fade -= dt; if (o.fade <= 0) { surge[i] = null; orbs[i].visible = false; orbRings[i].visible = false; } continue; }
@@ -443,8 +468,8 @@ export default {
       R.nextBoost -= dt;
       if (R.nextBoost <= 0 && !snapping && !R.timeUp) {
         let tr = lead > 0.2 ? 0 : lead < -0.2 ? 1 : -1;
-        if (tr < 0 && pl[0].wins !== pl[1].wins && Math.random() < 0.4) tr = pl[0].wins < pl[1].wins ? 0 : 1;
-        if (tr >= 0 && pl[tr].boostT <= 0) giveBoost(tr);
+        if (tr < 0 && TW[0] !== TW[1] && Math.random() < 0.4) tr = TW[0] < TW[1] ? 0 : 1;
+        if (tr >= 0 && memb[tr].some((q) => q.boostT <= 0)) giveBoost(tr);
         R.nextBoost = rand(6.5, 9.5);
       }
       // kip
@@ -472,7 +497,7 @@ export default {
         if (c.t > 1.3) { c.st = 'walk'; c.t = 0; c.targetU = c.side === 0 ? 0.3 : 0.7; }
       } else if (c.st === 'walk') {
         const dir = Math.sign(c.targetU - c.u); c.u += dir * 0.2 * dt;
-        if ((c.targetU - c.u) * dir <= 0) { c.u = c.targetU; c.st = 'pull'; c.t = 0; stats.chickenHelped = c.side; hud.toast(`🐔 De kip helpt ${names[c.side]}!`, 2000); fx.texts.add('KIP-KRACHT!', _v1.x, _v1.y + 3, 1, '#ffd24a', 1.3); audio.sfx('powerup', { vol: 0.5 }); }
+        if ((c.targetU - c.u) * dir <= 0) { c.u = c.targetU; c.st = 'pull'; c.t = 0; stats.chickenHelped = c.side; hud.toast(`🐔 De kip helpt ${tNames[c.side]}!`, 2000); fx.texts.add('KIP-KRACHT!', _v1.x, _v1.y + 3, 1, '#ffd24a', 1.3); audio.sfx('powerup', { vol: 0.5 }); }
       } else if (c.st === 'pull') {
         chickDip = damp(chickDip, 0.4, 3, dt);
         c.fx = (c.fx || 0) - dt; if (c.fx <= 0) { c.fx = 0.35; const rp = ropeAt(c.u, _v1); fx.particles.burst(rp.x, rp.y + 1.5, 0, { count: 4, speed: 2.5, up: 1.2, life: 0.9, size: 0.22, colors: [0xffffff, 0xfff0c0], gravity: 3 }); if (Math.random() < 0.4) audio.tone(480 + Math.random() * 200, 0.1, { type: 'square', vol: 0.06, slide: -120 }); }
@@ -484,31 +509,38 @@ export default {
     }
 
     function fallStep(dt) {
-      const p = pl[R.loser]; R.t += dt;
+      R.t += dt;
       const g = 26;
-      if (R.state === 'drop') {
-        p.vy -= g * dt; p.x += p.vx * dt; p.y += p.vy * dt;
-        if (p.y <= LAVA_Y + 0.4) { p.y = LAVA_Y + 0.4; lavaImpact(p); }
-      } else if (R.state === 'lava') {
-        if (R.t < 0.7 && Math.random() < dt * 30) fx.particles.emit(R.hitX + (Math.random() - 0.5) * 2, LAVA_Y + 0.2, (Math.random() - 0.5) * 1.5, 0, 3, 0, { life: 0.8, size: 0.3, color: Math.random() < 0.5 ? 0xff9a2a : 0xffe07a, gravity: 8 });
-        if (R.t > 0.9) popOut(p);
-      } else if (R.state === 'pop') {
-        p.vy -= g * dt; p.x += p.vx * dt; p.y += p.vy * dt;
-        if (p.vy < 0 && p.y <= 0) { p.y = 0; landBurn(p); }
-      } else if (R.state === 'burn') {
-        R.burnT += dt;
-        const bt = R.burnT;
-        if (bt < 2.5) { p.x = R.tx + Math.sin(bt * 4.2) * 2.0; p.c.faceDir(Math.cos(bt * 4.2), 0.15); p.c.pose = 'scared'; p.c.speed = 1; }
-        else if (p.flames.visible) {
-          p.flames.visible = false; p.c.speed = 0; p.c.pose = 'sad';
-          fx.particles.burst(p.x, 1.2, 0, { count: 22, speed: 2, up: 1.4, life: 1.4, size: 0.5, colors: [0x333333, 0x555555, 0x888888], gravity: -1.5 });
-          fx.texts.add('tsssss...', p.x, 4.2, 1, '#cfcfcf', 1.1); audio.sfx('sizzle', { vol: 0.8 }); p.c.faceDir(p.i === 0 ? 1 : -1, 0);
+      for (const p of memb[R.loser]) {
+        if (p.fs === 'drop') {
+          p.vy -= g * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+          if (p.y <= LAVA_Y + 0.4) { p.y = LAVA_Y + 0.4; lavaImpact(p); }
+        } else if (p.fs === 'lava') {
+          p.ft += dt;
+          if (p.ft < 0.7 && Math.random() < dt * 30) fx.particles.emit(p.hitX + (Math.random() - 0.5) * 2, LAVA_Y + 0.2, (Math.random() - 0.5) * 1.5, 0, 3, 0, { life: 0.8, size: 0.3, color: Math.random() < 0.5 ? 0xff9a2a : 0xffe07a, gravity: 8 });
+          if (p.ft > 0.9) popOut(p);
+        } else if (p.fs === 'pop') {
+          p.vy -= g * dt; p.x += p.vx * dt; p.y += p.vy * dt;
+          if (p.vy < 0 && p.y <= 0) { p.y = 0; landBurn(p); }
+        } else if (p.fs === 'burn') {
+          p.bt += dt;
+          const bt = p.bt;
+          if (bt < 2.5) { p.x = p.tx + Math.sin(bt * 4.2 + p.kIn * 1.7) * 2.0; p.c.faceDir(Math.cos(bt * 4.2 + p.kIn * 1.7), 0.15); p.c.pose = 'scared'; p.c.speed = 1; }
+          else if (p.flames.visible) {
+            p.flames.visible = false; p.c.speed = 0; p.c.pose = 'sad';
+            fx.particles.burst(p.x, 1.2, 0, { count: 22, speed: 2, up: 1.4, life: 1.4, size: 0.5, colors: [0x333333, 0x555555, 0x888888], gravity: -1.5 });
+            fx.texts.add('tsssss...', p.x, 4.2, 1, '#cfcfcf', 1.1); audio.sfx('sizzle', { vol: 0.8 }); p.c.faceDir(p.dir, 0);
+          }
+          if (bt < 2.5 && Math.random() < dt * 40) { // vlammen
+            fx.particles.emit(p.x + (Math.random() - 0.5) * 0.4, 1.2 + Math.random() * 0.4, -0.5, (Math.random() - 0.5) * 1.2, 2 + Math.random() * 2, 0.3, { life: 0.5, size: 0.4, color: [0xff6a10, 0xffb020, 0xffe680][(Math.random() * 3) | 0], gravity: -4 });
+          }
+          if (bt > 3.4) p.fs = 'done';
         }
-        if (bt < 2.5 && Math.random() < dt * 40) { // vlammen
-          fx.particles.emit(p.x + (Math.random() - 0.5) * 0.4, 1.2 + Math.random() * 0.4, -0.5, (Math.random() - 0.5) * 1.2, 2 + Math.random() * 2, 0.3, { life: 0.5, size: 0.4, color: [0xff6a10, 0xffb020, 0xffe680][(Math.random() * 3) | 0], gravity: -4 });
-        }
-        if (bt > 3.4) { R.state = 'end'; R.t = 0; }
       }
+      // R.state volgt de langzaamste val-fase (camera, touw intrekken)
+      const ph = (f) => memb[R.loser].some((q) => q.fs === f);
+      R.state = ph('drop') ? 'drop' : ph('lava') ? 'lava' : ph('pop') ? 'pop' : ph('burn') ? 'burn' : 'end';
+      if (R.state === 'end') R.t = 0;
       // touw intrekken zodra het slachtoffer eruit knalt
       if (R.state === 'pop' || R.state === 'burn' || R.state === 'end') R.ropeVis = Math.max(0, R.ropeVis - dt * 1.4);
       if (R.state === 'lava') R.ropeVis = Math.max(0.6, R.ropeVis - dt * 0.2);
@@ -516,7 +548,7 @@ export default {
     function endStep(dt) {
       R.t += dt; R.ropeVis = Math.max(0, R.ropeVis - dt * 1.4);
       if (R.matchOver) {
-        if (R.t > 0.01 && !R._cheered) { R._cheered = true; W.cheer(true); audio.sfx('win', { vol: 0.6 }); for (let k = 0; k < 5; k++) fx.particles.burst(pl[R.winner].x + rand(-3, 3), 3 + rand(0, 3), rand(-1, 1), { count: 30, speed: 7, up: 1.2, life: 1.4, size: 0.45, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 }); }
+        if (R.t > 0.01 && !R._cheered) { R._cheered = true; W.cheer(true); audio.sfx('win', { vol: 0.6 }); for (let k = 0; k < 5; k++) fx.particles.burst(memb[R.winner][0].x + rand(-3, 3), 3 + rand(0, 3), rand(-1, 1), { count: 30, speed: 7, up: 1.2, life: 1.4, size: 0.45, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 }); }
         if (R.t > 1.5) endMatch(R.winner, false);
       } else {
         if (R.t > 1.2) startRound();
@@ -529,7 +561,7 @@ export default {
       domOn = true;
       if (finished) { resultUpdate(dt); return; }
       if (T > 170) forceFinish();
-      const inp = [pv.input(0), pv.input(1)];
+      const inp = pl.map((_, i) => pv.input(i));
       if (R.state === 'ready') {
         R.t += dt;
         if (R.t > R.readyLen) { R.state = 'tug'; audio.sfx('go', { vol: 0.5 }); }
@@ -545,8 +577,8 @@ export default {
       const asp = camera.aspect || 1.7, tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
       const dist = clamp(14.6 / (tanH * asp), 16, 36);
       let lx = 0, ly = 0.5, lk = 0.35;
-      if (R.state === 'drop' || R.state === 'lava') { const p = pl[R.loser]; lx = p.x * 0.08; ly = -0.4; }
-      else if (R.state === 'pop' || R.state === 'burn') { const p = pl[R.loser]; lx = p.x * 0.1; ly = 0.5; }
+      if (R.state === 'drop' || R.state === 'lava') { const p = memb[R.loser][0]; lx = p.x * 0.08; ly = -0.4; }
+      else if (R.state === 'pop' || R.state === 'burn') { const p = memb[R.loser][0]; lx = p.x * 0.1; ly = 0.5; }
       camX = damp(camX, lx, 3, dt); camLy = damp(camLy, ly, 2.5, dt);
       const sway = Math.sin((T + introT) * 0.3) * 0.5;
       const zoom = 1;
@@ -560,11 +592,11 @@ export default {
       const tugging = R.state === 'tug';
       const leadNow = lead;
       for (const p of pl) {
-        const i = p.i, dir = i ? -1 : 1;
+        const i = p.i, tI = p.t, dir = p.dir;
         // hop-fysica
         if (p.st === 'stand') {
           p.vy -= 22 * GRAV * dt; p.y = Math.max(0, p.y + p.vy * dt); if (p.y === 0 && p.vy < 0) p.vy = 0;
-          { const toward = i === 0 ? leadNow : -leadNow; p.x = (i ? S0 : -S0) + dir * (toward > 0 ? toward * DD : toward * BACK); }
+          { const toward = tI === 0 ? leadNow : -leadNow; p.x = (tI ? S0 : -S0) - dir * p.kIn * ROW + dir * (toward > 0 ? toward * DD : toward * BACK); }
           if (R.state === 'end' || R.state === 'drop' || R.state === 'lava' || R.state === 'pop' || R.state === 'burn') { /* winnaar blijft staan */ }
         }
         const holder = p.holder, c = p.c;
@@ -573,10 +605,10 @@ export default {
         const eff = (tugging || R.state === 'ready') ? clamp(p.eff / 11, 0, 1.3) : 0;
         if (p.st === 'stand') {
           let lean = 0.08 + 0.22 * eff + p.jerk * 0.06;
-          const dragged = tugging || R.state === 'ready' ? clamp((i === 0 ? leadV : -leadV) / VMAX, -1, 1) : 0;   // >0 = wordt naar de rand gesleept
+          const dragged = tugging || R.state === 'ready' ? clamp((tI === 0 ? leadV : -leadV) / VMAX, -1, 1) : 0;   // >0 = wordt naar de rand gesleept
           p.dragged = damp(p.dragged, dragged, 6, dt);
           lean += clamp(-p.dragged * 0.18, -0.2, 0.1);
-          const danger = clamp(((i === 0 ? leadNow : -leadNow) - 0.55) / 0.4, 0, 1);   // dicht bij de rand
+          const danger = clamp(((tI === 0 ? leadNow : -leadNow) - 0.55) / 0.4, 0, 1);   // dicht bij de rand
           let rz = dir * lean; let rx = 0;
           if (R.snapT > 0 && tugging) { rz = dir * lerp(0.2, 1.25, smoothstep(0, 0.35, 2 - R.snapT)); }
           if (danger > 0) { rz += Math.sin(T * 14 + i) * 0.12 * danger; rx = Math.sin(T * 9) * 0.05 * danger; if (Math.random() < dt * 8 * danger) fx.particles.emit(p.x + dir * 1.2, 0.1, (Math.random() - 0.5) * 3, dir * 1.5, 1.2, 0, { life: 0.7, size: 0.2, color: 0x8a7a72, gravity: 9 }); }
@@ -585,11 +617,11 @@ export default {
             c.pose = R.snapT > 0 ? 'sad' : danger > 0.25 ? 'scared' : R.state === 'ready' ? 'idle' : 'carry';
             c.speed = tugging && R.snapT <= 0 ? clamp(eff * 0.9 + Math.abs(p.dragged) * 0.5, 0, 1) : 0;
             c.faceDir(dir, 0);
-          } else if (R.state === 'end' && R.matchOver && R.winner === i) { c.pose = 'cheer'; c.speed = 0; }
-          else if (R.winner === i) { c.pose = 'cheer'; c.speed = 0; }
+          } else if (R.state === 'end' && R.matchOver && R.winner === tI) { c.pose = 'cheer'; c.speed = 0; }
+          else if (R.winner === tI) { c.pose = 'cheer'; c.speed = 0; }
           // stof bij sleepvoeten
           if (tugging && p.dragged > 0.3 && Math.random() < dt * 14) fx.particles.dust(p.x - dir * 0.2, 0.05, (Math.random() - 0.5) * 0.8, 1, 0xa89888);
-          if (tugging && p.rm > 0.7 && Math.random() < dt * 10) fx.particles.emit(p.x + dir * 0.9 + (Math.random() - 0.5) * 0.4, 1.6 + Math.random() * 0.4, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, 1.2, 0, { life: 0.5, size: 0.22, color: i ? 0x8fb8ff : 0x7dffb0, gravity: -1 });
+          if (tugging && p.rm > 0.7 && Math.random() < dt * 10) fx.particles.emit(p.x + dir * 0.9 + (Math.random() - 0.5) * 0.4, 1.6 + Math.random() * 0.4, (Math.random() - 0.5) * 0.5, (Math.random() - 0.5) * 0.5, 1.2, 0, { life: 0.5, size: 0.22, color: tHex[tI], gravity: -1 });
         } else if (p.st === 'fly' || p.st === 'fly2') {
           holder.rotation.z += p.spin * dt; holder.rotation.x += p.spin * 0.4 * dt;
           if (p.st === 'fly2' && Math.random() < dt * 40) fx.particles.emit(p.x, p.y + 0.8, 0, (Math.random() - 0.5) * 1.5, 1 + Math.random() * 2, 0, { life: 0.6, size: 0.45, color: Math.random() < 0.5 ? 0xff7a14 : 0xffd24a, gravity: -3 });
@@ -607,8 +639,8 @@ export default {
         p.tag.position.set(p.x, p.y + p.c.height * p.kS * 1.12 + 0.9, 0.5);
       }
       // touw berekenen
-      const a = handMid(0), b = handMid(1);
-      const taut = clamp((pl[0].eff + pl[1].eff) / 15, 0, 1);
+      const a = handMid(ropeEnd[0]), b = handMid(ropeEnd[1]);
+      const taut = clamp((teamEff(0) + teamEff(1)) / 15, 0, 1);
       const sagBase = R.snapT > 0 ? 1.2 : lerp(1.0, 0.16, taut) + (R.state === 'ready' ? 0.4 : 0);
       const wig = (1 - taut) * 0.12;
       const tens = tension;
@@ -671,7 +703,7 @@ export default {
         chickObj.legs.forEach((l, k) => { l.rotation.x = c.st === 'walk' ? Math.sin(T * 14 + k * Math.PI) * 0.7 : 0; });
       }
       // surge-orbs
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < NP; i++) {
         const o = surge[i]; if (!o) continue;
         const hp = handMid(i);
         const k = clamp(o.t / o.travel, 0, 1);
@@ -707,14 +739,14 @@ export default {
       onCountdown() { /* meters verschijnen zodra het spel begint */ },
       onSwap() { for (const p of pl) { fx.particles.burst(p.x, 2, 0, { count: 18, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); } },
       onDeurman(movers) {
-        movers.forEach((m, i) => { if (m) { lead = clamp(lead + (i === 0 ? 0.3 : -0.3), -0.95, 0.95); pl[i].pw = 0; pl[i].rm = 0; pl[i].frozen = 1.2; ctx.shake(0.4); fx.texts.add('-1', pl[i].x, 4.5, 1, '#ff5a5a', 1.4); } });
+        movers.forEach((m, i) => { if (m) { lead = clamp(lead + (pl[i].t === 0 ? 0.3 : -0.3), -0.95, 0.95); pl[i].pw = 0; pl[i].rm = 0; pl[i].frozen = 1.2; ctx.shake(0.4); fx.texts.add('-1', pl[i].x, 4.5, 1, '#ff5a5a', 1.4); } });
       },
-      celebrate(w) {
-        pl[w].c.pose = 'cheer'; pl[1 - w].c.pose = 'sad'; W.cheer(true);
+      celebrate(w, winners = [w]) {
+        for (const q of pl) q.c.pose = winners.includes(q.i) ? 'cheer' : 'sad'; W.cheer(true);
       },
       dispose() { if (dom.root) dom.root.remove(); },
       dbg: {
-        state: () => ({ T, round: R.n, rstate: R.state, lead, leadV, tension, left: R.left, snapT: R.snapT, wins: pl.map((p) => p.wins), eff: pl.map((p) => p.eff), rm: pl.map((p) => p.rm), boost: pl.map((p) => p.boostT), chick: chick ? chick.st : null, surge: surge.map((o) => (o ? { btn: o.btn, t: o.t, travel: o.travel, state: o.state } : null)), finished, hist, stats, pos: pl.map((p) => [p.x, p.y]), burned: pl.map((p) => p.burned), timeUp: R.timeUp }),
+        state: () => ({ T, round: R.n, rstate: R.state, lead, leadV, tension, left: R.left, snapT: R.snapT, wins: TW.slice(), eff: pl.map((p) => p.eff), rm: pl.map((p) => p.rm), boost: pl.map((p) => p.boostT), chick: chick ? chick.st : null, surge: surge.map((o) => (o ? { btn: o.btn, t: o.t, travel: o.travel, state: o.state } : null)), finished, hist, stats, pos: pl.map((p) => [p.x, p.y]), burned: pl.map((p) => p.burned), timeUp: R.timeUp }),
         setLead: (v) => { lead = v; },
         forceSnap: () => triggerSnap(),
         forceChick: (side = 0) => { R.plan = { at: 0, side }; },

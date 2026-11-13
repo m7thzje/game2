@@ -53,18 +53,20 @@ export default {
   giver: 'Kermis-Koos',
   icon: '🦆',
   mode: 'pvp',
+  players: [2, 3, 4],              // 2 = duel; 3-4 = vrij voor allen op dezelfde schietbaan
   time: TIME,
   pay: 1,
   music: 'game',
   twists: ['invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'bodyswap', 'deurman'],
-  blurb: 'Welkom in de <b>kermis-schiettent</b> van de Speelhal! Op lopende banden ploffen eenden, konijnen en draakjes voorbij. Wie het doelwit het eerst raakt, krijgt de punten! Pas op voor de <b>bommen</b> (-3) en de <b>kogel die terugkaatst</b> van de draaiende borden. Let op de <b>spook-eend</b> die maar even zichtbaar is, en in de laatste 10 seconden verschijnt de <b>Reuzeneend</b> van 10 punten!',
+  blurb: 'Welkom in de <b>kermis-schiettent</b> van de Speelhal! Op lopende banden ploffen eenden, konijnen en draakjes voorbij. Wie het doelwit het eerst raakt, krijgt de punten! Pas op voor de <b>bommen</b> (-3) en de <b>kogel die terugkaatst</b> van de draaiende borden. Let op de <b>spook-eend</b> die maar even zichtbaar is, en in de laatste 10 seconden verschijnt de <b>Reuzeneend</b> van 10 punten! Met 3 of 4 schutters schiet iedereen op dezelfde baan: wie het eerst raakt krijgt de punten en de meeste punten wint.',
   controls: ['{move} vizier bewegen', '{a} schieten (6 kogels, vult langzaam bij)', '{b} ingedrukt = zoom: snel herladen & snel schieten, maar trager vizier'],
   tip: 'Gouden eend = 5 punten. Konijntjes rennen weg als je dichtbij mikt. Raak je de Reuzeneend allebei tegelijk, dan delen jullie de 10 punten!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pvp = ctx.pvp;
-    const names = players.map((p) => p.name);
+    const names = players.map((p) => p.name), N = players.length, pcss = players.map((p) => p.css);
+    const sx0 = (i) => (N === 2 ? (i ? 4 : -4) : (i - (N - 1) / 2) * (N === 3 ? 6 : 5));   // startplek van het vizier / het poppetje
     const L = ctx.lights('indoor', { shadows: false, fogNear: 80, fogFar: 200 });
     L.hemi.intensity = 1.5; L.hemi.color.set(0xfff0e0); L.hemi.groundColor.set(0x9a7a5a);
     L.sun.intensity = 1.6; L.sun.color.set(0xfff0d0); L.sun.position.set(-6, 14, 26); L.sun.target.position.set(0, 5, 0);
@@ -74,20 +76,21 @@ export default {
     camera.position.copy(camBase); camera.lookAt(camLook);
 
     let T = 0, introT = 0, done = false, over = false, overT = 0, winnerIdx = -1, resultT = 0, finishAt = -1, finishing = false;
-    const score = [0, 0];
-    const stats = { hits: [0, 0], shots: [0, 0], bombs: [0, 0], gold: [0, 0], ricochet: [0, 0], giant: [0, 0], ghost: [0, 0], clown: [0, 0] };
+    const zs = () => new Array(N).fill(0);
+    const score = zs();
+    const stats = { hits: zs(), shots: zs(), bombs: zs(), gold: zs(), ricochet: zs(), giant: zs(), ghost: zs(), clown: zs() };
     const targets = [];
     const rowState = ROWS.map((r) => ({ t: 0 }));
     const glow = glowTex();
 
     // ------------------------------------------------------------------ vizieren
-    const chTex = PLAYER_CSS.map((c) => [crossTex(c, false), crossTex(c, true)]);
+    const chTex = pcss.map((c) => [crossTex(c, false), crossTex(c, true)]);
     const ch = players.map((pp, i) => {
       const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: chTex[i][0], transparent: true, depthTest: false })); spr.renderOrder = 30; spr.position.z = 2; scene.add(spr);
       const ammoC = document.createElement('canvas'); ammoC.width = 256; ammoC.height = 64; const ammoT = new THREE.CanvasTexture(ammoC); ammoT.colorSpace = THREE.SRGBColorSpace;
       const ammoS = new THREE.Sprite(new THREE.SpriteMaterial({ map: ammoT, transparent: true, depthTest: false })); ammoS.scale.set(2.6, 0.65, 1); ammoS.renderOrder = 31; scene.add(ammoS);
       const flash = new THREE.Sprite(new THREE.SpriteMaterial({ map: glow, color: PLAYER_COLORS[i], transparent: true, depthTest: false, blending: THREE.AdditiveBlending, opacity: 0 })); flash.renderOrder = 29; flash.scale.set(3, 3, 1); scene.add(flash);
-      return { i, css: PLAYER_CSS[i], spr, ammoC, ammoT, ammoS, flash, x: i ? 4 : -4, y: 5.2, vx: 0, vy: 0, ammo: AMMO_MAX, cd: 0, stun: 0, soot: 0, zoomK: 0, size: 1, regen: 0, clickT: 0, recoil: 0, ammoKey: '', frozenFx: 0 };
+      return { i, css: pcss[i], spr, ammoC, ammoT, ammoS, flash, x: sx0(i), y: 5.2, vx: 0, vy: 0, ammo: AMMO_MAX, cd: 0, stun: 0, soot: 0, zoomK: 0, size: 1, regen: 0, clickT: 0, recoil: 0, ammoKey: '', frozenFx: 0 };
     });
     function drawAmmo(c) {
       const key = Math.floor(c.ammo) + '|' + c.stun.toFixed(0); if (key === c.ammoKey) return; c.ammoKey = key;
@@ -107,7 +110,7 @@ export default {
       gun.add(mesh(new THREE.BoxGeometry(0.1, 0.4, 0.14), mat(0x9b6a2e), { cast: false, pos: [0, 0.1, -0.02] }));
       gun.add(mesh(new THREE.BoxGeometry(0.12, 0.08, 0.16), mat(PLAYER_COLORS[i]), { cast: false, pos: [0, -0.18, 0.0] }));
       c.hold(gun, 'r'); c.pose = 'point';
-      return { c, holder, x: i ? 4 : -4, gun };
+      return { c, holder, x: sx0(i), gun };
     });
 
     // ------------------------------------------------------------------ doelwitten
@@ -119,10 +122,11 @@ export default {
       if (opts.hop) { t.vy = opts.hop; t.yOff = 0.01; }
       return t;
     }
+    const TRAF = N === 2 ? 1 : N === 3 ? 1.25 : 1.5;   // meer doelwitten bij meer schutters
     function populate() {
       ROWS.forEach((R, ri) => {
         let x = -X_MAX + 1 + Math.random() * 2;
-        while (x < X_MAX - 1) { spawnBelt(weighted(ROW_MIX[ri]), ri, x); x += rand(2.9, 4.2); }
+        while (x < X_MAX - 1) { spawnBelt(weighted(ROW_MIX[ri]), ri, x); x += rand(2.9, 4.2) / TRAF; }
         rowState[ri].t = rand(0.3, 1.2);
       });
     }
@@ -131,7 +135,7 @@ export default {
         const rs = rowState[ri]; rs.t -= dt;
         if (rs.t <= 0) {
           const kind = weighted(ROW_MIX[ri]); spawnBelt(kind, ri, R.dir > 0 ? -X_MAX : X_MAX);
-          rs.t = rand(2.9, 4.2) / R.speed * (kind === 'fat' ? 1.3 : 1);
+          rs.t = rand(2.9, 4.2) / R.speed * (kind === 'fat' ? 1.3 : 1) / TRAF;
         }
       });
     }
@@ -165,7 +169,7 @@ export default {
     function award(pi, pts, x, y, label, col) {
       const before = score[pi]; score[pi] = Math.max(0, score[pi] + pts);
       const txt = label || (pts > 0 ? `+${pts}` : String(pts));
-      fx.texts.add(txt, x, y + 1.3, 3, col || (pts > 0 ? (pi ? '#8fb8ff' : '#7dffa8') : '#ff6a6a'), clamp(0.9 + Math.abs(pts) * 0.07, 0.9, 1.6));
+      fx.texts.add(txt, x, y + 1.3, 3, col || (pts > 0 ? pcss[pi] : '#ff6a6a'), clamp(0.9 + Math.abs(pts) * 0.07, 0.9, 1.6));
       if (pts > 0) stats.hits[pi]++;
       sync();
       if (over) checkOvertimeEnd();
@@ -192,7 +196,7 @@ export default {
       }
     }
     function hitTarget(t, pi, hx, hy) {
-      const col = pi ? 0x8fb8ff : 0x7dffa8;
+      const col = PLAYER_COLORS[pi];
       switch (t.kind) {
         case 'duck': case 'baby':
           award(pi, 1, t.x, t.y); feathers(t.x, t.y, [0xffd83a, 0xffffff, 0xfff07a]); audio.sfx('pop', { vol: 0.5, rate: t.kind === 'baby' ? 1.5 : 1 }); audio.tone(t.kind === 'baby' ? 900 : 620, 0.12, { type: 'square', vol: 0.12, slide: 300 }); killTarget(t); break;
@@ -264,15 +268,15 @@ export default {
     function spawnGiant() {
       if (giant || giantDone) return;
       const mdl = buildModel('king'); mdl.group.position.set(-12.5, 5.2, 0.4); scene.add(mdl.group);
-      giant = { kind: 'king', mdl, group: mdl.group, x: -12.5, y: 5.2, r: 1.95, pts: 10, state: 'alive', dir: 1, win: -1, by: [false, false], alive: true, t: 0, wob: 0, def: { name: 'reuzeneend' } };
+      giant = { kind: 'king', mdl, group: mdl.group, x: -12.5, y: 5.2, r: 1.95, pts: 10, state: 'alive', dir: 1, win: -1, by: zs().map(() => false), alive: true, t: 0, wob: 0, def: { name: 'reuzeneend' } };
       targets.push(giant);
       hud.showBig('REUZENEEND!', 900, '#ffe14a'); audio.sfx('powerup', { vol: 0.9 }); audio.sfx('bell', { vol: 0.6 }); ctx.shake(0.5);
       hud.setHint('Reuzeneend = 10 punten! Raken jullie hem tegelijk? Dan delen jullie!');
     }
     function kingHit(t, pi) {
-      if (t.win < 0) { t.win = 0.45; t.by = [false, false]; t.first = pi; audio.sfx('hit', { vol: 0.8 }); audio.sfx('boing', { vol: 0.6, rate: 0.7 }); ctx.shake(0.4); }
+      if (t.win < 0) { t.win = 0.45; t.by = zs().map(() => false); t.first = pi; audio.sfx('hit', { vol: 0.8 }); audio.sfx('boing', { vol: 0.6, rate: 0.7 }); ctx.shake(0.4); }
       t.by[pi] = true; t.wob = 1;
-      fx.particles.burst(t.x + rand(-1, 1), t.y + rand(-1, 1), 1.5, { count: 14, speed: 5, up: 1, life: 0.8, size: 0.45, colors: [0xffd83a, 0xffffff, pi ? 0x8fb8ff : 0x7dffa8], gravity: 5 });
+      fx.particles.burst(t.x + rand(-1, 1), t.y + rand(-1, 1), 1.5, { count: 14, speed: 5, up: 1, life: 0.8, size: 0.45, colors: [0xffd83a, 0xffffff, PLAYER_COLORS[pi]], gravity: 5 });
     }
     function updateGiant(t, dt) {
       t.t += dt; t.wob = Math.max(0, t.wob - dt * 2.5);
@@ -280,9 +284,13 @@ export default {
         t.win -= dt;
         if (t.win < 0 && t.state === 'alive') {
           t.state = 'dying'; t.dead = 0; t.alive = false; giantDone = true;
-          const both = t.by[0] && t.by[1];
-          if (both) { score[0] += 5; score[1] += 5; stats.giant[0]++; stats.giant[1]++; fx.texts.add('+5', t.x - 1, t.y + 2.5, 3, '#7dffa8', 1.6); fx.texts.add('+5', t.x + 1, t.y + 2.8, 3, '#8fb8ff', 1.6); fx.texts.add('DELEN!', t.x, t.y + 4.0, 3, '#ffe14a', 1.5); hud.showBig('SAMEN GERAAKT: 5 - 5!', 1200, '#ffe14a'); sync(); }
-          else { const w = t.by[0] ? 0 : 1; stats.giant[w]++; award(w, 10, t.x, t.y + 1.5, '+10 REUZEN!', '#ffe14a'); hud.showBig(`${names[w]} +10!`, 1000, w ? '#8fb8ff' : '#7dffa8'); }
+          const hs = t.by.map((v, k) => (v ? k : -1)).filter((k) => k >= 0);
+          if (hs.length > 1) {
+            const sh = Math.floor(10 / hs.length);
+            hs.forEach((k, n) => { score[k] += sh; stats.giant[k]++; fx.texts.add(`+${sh}`, t.x + (n - (hs.length - 1) / 2) * 2, t.y + 2.5 + (n % 2) * 0.3, 3, pcss[k], 1.6); });
+            fx.texts.add('DELEN!', t.x, t.y + 4.0, 3, '#ffe14a', 1.5); hud.showBig(`SAMEN GERAAKT: ${hs.map(() => sh).join(' - ')}!`, 1200, '#ffe14a'); sync();
+          }
+          else { const w = hs[0]; stats.giant[w]++; award(w, 10, t.x, t.y + 1.5, '+10 REUZEN!', '#ffe14a'); hud.showBig(`${names[w]} +10!`, 1000, pcss[w]); }
           fx.particles.burst(t.x, t.y, 1.5, { count: 120, speed: 11, up: 1.4, life: 1.6, size: 0.6, colors: [0xffd83a, 0xffffff, 0xff6fa5, 0x8fb8ff, 0x7dffa8, 0xffb02a], gravity: 8 });
           audio.sfx('explode', { vol: 0.6 }); audio.sfx('win', { vol: 0.7 }); ctx.shake(0.9);
           hud.setHint(null);
@@ -333,7 +341,7 @@ export default {
       c.x = clamp(c.x + c.vx * dt, -BOUNDS.x, BOUNDS.x); c.y = clamp(c.y + c.vy * dt, BOUNDS.y0, BOUNDS.y1);
       if (c.x <= -BOUNDS.x || c.x >= BOUNDS.x) c.vx *= 0.3; if (c.y <= BOUNDS.y0 || c.y >= BOUNDS.y1) c.vy *= 0.3;
       // herladen
-      const behind = score[1 - i] - score[i] >= 6 ? 1.6 : 1;
+      const behind = Math.max(...score.filter((_, k) => k !== i)) - score[i] >= 6 ? 1.6 : 1;
       c.regen += dt * behind / lerp(1.5, 0.5, c.zoomK);
       if (c.regen >= 1) { c.regen = 0; if (c.ammo < AMMO_MAX) { c.ammo = Math.min(AMMO_MAX, Math.floor(c.ammo) + 1); audio.sfx('tick', { vol: 0.2, rate: 1.6 + c.ammo * 0.08 }); } }
       if (c.ammo >= AMMO_MAX) c.regen = 0;
@@ -467,30 +475,34 @@ export default {
     // ------------------------------------------------------------------ HUD en einde
     function sync() {
       hud.setScore(null);
-      W.board.draw(names, score, PLAYER_CSS);
+      W.board.draw(names, score, pcss);
     }
-    function checkOvertimeEnd() { if (over && score[0] !== score[1] && !finishing) { finishing = true; finishAt = T + 0.9; } }
+    const topOf = () => { const m = Math.max(...score); return score.map((v, k) => (v === m ? k : -1)).filter((k) => k >= 0); };
+    function checkOvertimeEnd() { if (over && topOf().length === 1 && !finishing) { finishing = true; finishAt = T + 0.9; } }
     function finish() {
       if (done) return; done = true;
-      const a = score[0], b = score[1]; winnerIdx = a > b ? 0 : b > a ? 1 : -1;
-      const diff = Math.abs(a - b);
+      const tops = topOf(); winnerIdx = tops.length === 1 ? tops[0] : -1;
+      const a = score[0], b = score[1];
+      const sorted = score.slice().sort((x, y) => y - x), diff = N === 2 ? Math.abs(a - b) : sorted[0] - sorted[1];
       let line;
-      if (winnerIdx < 0) line = 'Gelijkspel! Allebei even scherp.';
+      if (winnerIdx < 0) line = tops.length === N ? (N === 2 ? 'Gelijkspel! Allebei even scherp.' : 'Gelijkspel! Allemaal even scherp.') : `Gelijkspel aan de top: ${tops.map((k) => names[k]).join(' & ')}!`;
       else {
-        const win = names[winnerIdx], lose = names[1 - winnerIdx];
+        const win = names[winnerIdx], lose = N === 2 ? names[1 - winnerIdx] : names[score.indexOf(Math.min(...score))];
         if (over) line = `Sudden death! ${win} schiet het beslissende punt.`;
         else if (diff <= 2) line = pick([`Op het nippertje! ${win} wint met maar ${diff} punt${diff === 1 ? '' : 'en'}.`, `Wat een spanning, ${lose} miste het net.`]);
         else if (diff >= 15) line = pick([`${win} is de schietkoning van de kermis!`, `${lose} schoot vooral gaten in de lucht.`]);
         else line = pick([`${win} heeft de scherpste ogen van het kasteel!`, `Goed gericht, ${win}! ${lose} wil een herkansing.`, `${lose} schoot een paar eenden te kort.`]);
       }
       const bits = [];
-      if (stats.bombs[0] + stats.bombs[1] > 0) bits.push(`Bommen: ${names[0]} ${stats.bombs[0]}, ${names[1]} ${stats.bombs[1]}.`);
-      if (stats.gold[0] + stats.gold[1] > 0) bits.push(`Gouden eenden: ${stats.gold[0]} - ${stats.gold[1]}.`);
+      if (stats.bombs.some((v) => v)) bits.push(`Bommen: ${names.map((n, k) => `${n} ${stats.bombs[k]}`).join(', ')}.`);
+      if (stats.gold.some((v) => v)) bits.push(`Gouden eenden: ${stats.gold.join(' - ')}.`);
       const acc = (i) => (stats.shots[i] ? Math.round(stats.hits[i] / stats.shots[i] * 100) : 0);
-      bits.push(`Trefzekerheid: ${names[0]} ${acc(0)}%, ${names[1]} ${acc(1)}%.`);
-      pl2.forEach((c, i) => { c.c.pose = winnerIdx < 0 ? 'point' : winnerIdx === i ? 'cheer' : 'sad'; });
+      bits.push(`Trefzekerheid: ${names.map((n, k) => `${n} ${acc(k)}%`).join(', ')}.`);
+      pl2.forEach((c, i) => { c.c.pose = winnerIdx < 0 && tops.length === N ? 'point' : tops.includes(i) ? 'cheer' : 'sad'; });
       hud.setTimer(0); hud.setHint(null);
-      ctx.finishPvp({ winner: winnerIdx < 0 ? null : winnerIdx, score: [a, b], delay: 1200, summary: `<b>${a} – ${b}</b><br>${line}<br><small>${bits.join(' ')}</small>` });
+      const args = { winner: winnerIdx < 0 ? null : winnerIdx, score: score.slice(), delay: 1200, summary: `<b>${score.join(' – ')}</b><br>${line}<br><small>${bits.join(' ')}</small>` };
+      if (N > 2) { args.place = score.map((v, k) => k).sort((x, y) => (score[y] - score[x]) || (stats.hits[y] - stats.hits[x]) || (x - y)); if (tops.length > 1 && tops.length < N) { args.winners = tops; delete args.winner; } }
+      ctx.finishPvp(args);
     }
     const pl2 = chars;
 
@@ -499,7 +511,7 @@ export default {
       chars.forEach((o, i) => {
         const c = ch[i]; const tx = clamp(c.x * 0.8, -9.5, 9.5);
         o.x = damp(o.x, tx, 6, dt);
-        const other = chars[1 - i]; if (Math.abs(o.x - other.x) < 2.6) o.x += (i ? 1 : -1) * (2.6 - Math.abs(o.x - other.x)) * 0.5;
+        for (let q = 0; q < N; q++) { if (q === i) continue; const other = chars[q]; const gap = N === 2 ? 2.6 : 2.2; if (Math.abs(o.x - other.x) < gap) o.x += (i < q ? -1 : 1) * (gap - Math.abs(o.x - other.x)) * 0.5; }
         const S = 1.6; o.holder.scale.setScalar(S); o.holder.position.set(o.x, 0.2, 5.2);
         const dx = c.x - o.x, dy = c.y - 2.4;
         o.c.faceDir(dx, -9); o.c.speed = 0;
@@ -518,14 +530,14 @@ export default {
         if (timeLeft <= FINAL && !giantDone && !giant) spawnGiant();
         if (timeLeft <= 0 && !finishing) {
           if (giant && giant.win >= 0 && giant.state === 'alive') { /* wacht tot de verdeling klaar is */ }
-          else if (score[0] === score[1]) { over = true; overT = OVERTIME; hud.showBig('SUDDEN DEATH!', 1000, '#ff7a5a'); hud.setHint('Gelijk! De eerste die scoort wint!'); audio.sfx('bell', { vol: 0.7 }); goldT = 0.5; }
+          else if (topOf().length > 1) { over = true; overT = OVERTIME; hud.showBig('SUDDEN DEATH!', 1000, '#ff7a5a'); hud.setHint('Gelijk! De eerste die scoort wint!'); audio.sfx('bell', { vol: 0.7 }); goldT = 0.5; }
           else { finishing = true; finishAt = T + 0.6; }
         }
       }
       if (over) { overT -= dt; hud.setTimer(Math.max(0, overT), 99); if (overT <= 0 && !finishing) { finishing = true; finishAt = T + 0.3; } }
       else hud.setTimer(Math.max(0, timeLeft), 10);
       if (finishing && T >= finishAt) { finish(); return; }
-      for (const c of (Math.random() < 0.5 ? ch : [ch[1], ch[0]])) updateCrosshair(c, dt);
+      for (const c of (Math.random() < 0.5 ? ch : ch.slice().reverse())) updateCrosshair(c, dt);
       spawnTraffic(dt);
       specials(dt, T + introT);
       updateTargets(dt, T + introT); updateBullets(dt);
@@ -543,7 +555,7 @@ export default {
     function introUpdate(dt) {
       introT += dt; chars.forEach((o) => { o.c.pose = 'point'; });
       spawnTraffic(dt); updateTargets(dt, introT); updateChars(dt); W.update(introT, dt);
-      ch.forEach((c, i) => { c.x = i ? 4 : -4; c.y = 5.2 + Math.sin(introT * 1.3 + i) * 1.2; c.spr.position.set(c.x, c.y, 2); c.ammoS.position.set(c.x, c.y - 1.05, 2); drawAmmo(c); const s = 1.55 * c.size; c.spr.scale.set(s, s, 1); });
+      ch.forEach((c, i) => { c.x = sx0(i); c.y = 5.2 + Math.sin(introT * 1.3 + i) * 1.2; c.spr.position.set(c.x, c.y, 2); c.ammoS.position.set(c.x, c.y - 1.05, 2); drawAmmo(c); const s = 1.55 * c.size; c.spr.scale.set(s, s, 1); });
       sway(introT);
     }
     function sway(t) { camera.position.set(camBase.x + Math.sin(t * 0.25) * 0.5, camBase.y + Math.sin(t * 0.33) * 0.12, camBase.z); camera.lookAt(camLook); }
@@ -558,7 +570,7 @@ export default {
       update, resultUpdate, introUpdate,
       onCountdown() { hud.setTimer(TIME); sync(); hud.setHint('Bommen -3 · Gouden eend +5 · Borden kaatsen je kogel terug!'); },
       onStart() { hud.setHint('Bommen -3 · Gouden eend +5 · Borden kaatsen je kogel terug!'); setTimeout(() => { if (!giant && !done) hud.setHint(null); }, 6000); },
-      celebrate(w) { winnerIdx = w; },
+      celebrate(w, ws = [w]) { winnerIdx = w; pl2.forEach((c, i) => { c.c.pose = ws.includes(i) ? 'cheer' : 'sad'; }); },
       onSwap() { ctx.shake(0.25); },
       onDeurman(movers) { movers.forEach((m, i) => { if (m) { score[i] = Math.max(0, score[i] - 2); fx.texts.add('-2 bewogen!', ch[i].x, ch[i].y + 1.3, 3, '#ff7a7a', 1.1); } }); sync(); },
       dispose() { bullets.length = 0; },

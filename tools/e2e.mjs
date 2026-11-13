@@ -1,15 +1,18 @@
 // Volledige flow-test v2: titelscherm -> Nieuw spel -> opening (overslaan, of OPENING_FULL=1 helemaal) -> Speelhal met uitleg ->
 // dichtgetimmerde deur + bouwanimatie -> rang-feestje -> Bouwplan -> pauzemenu. Screenshots in /tmp/e2e_*.png (Read ze om te kijken).
 // Gebruik: node tools/e2e.mjs   (OPENING_FULL=1 speelt de hele opening af met screenshots per scène)
+// GAMEHAL=1 PLAYERS=2|3|4 node tools/e2e.mjs: de Impactid Gamehal (gamehal.html): start in de lobby, namen/aantal bewaard, ?arcade, pauze -> instellingen, ?game -> lobby (tools/gh_e2e.mjs).
 // PLAYERS=3 node tools/e2e.mjs: dezelfde flow met Juul (?players=3) + extra: Juul-instelling, 3 poppetjes op het titelscherm, dorp met 3 spelers,
 // karweitje met 2 van de 3 ('Wie doen mee?'), winkel met 3 kolommen. Screenshots /tmp/e2e_p3_*.png.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath, BROWSER_ARGS } from './chrome_path.mjs';
+import { wantGamehal } from './gh_lib.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const mime = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png' };
 const server = http.createServer((req, res) => { let p = decodeURIComponent(req.url.split('?')[0]); if (p === '/') p = '/index.html'; const f = path.join(root, p); if (!f.startsWith(root) || !fs.existsSync(f)) { res.writeHead(404); res.end(); return; } res.writeHead(200, { 'content-type': mime[path.extname(f)] || 'application/octet-stream' }); fs.createReadStream(f).pipe(res); });
 await new Promise((r) => server.listen(0, r)); const port = server.address().port;
-const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+const browser = await chromium.launch({ executablePath: chromePath(), args: BROWSER_ARGS });
 const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
 const P3 = process.env.PLAYERS === '3';
 const errors = [];
@@ -31,6 +34,12 @@ const quiet = () => page.evaluate(() => { const m = window.__app.mode; m.players
 const isIdle = () => page.evaluate(() => { const m = window.__app.mode; return !!(m && m.interact && !m.busy && !m.menu); });
 const idle = async () => { const r = await clickUntil(isIdle, 60); await quiet(); return r; };
 
+if (wantGamehal()) {   // Impactid Gamehal: eigen flow
+  const { ghE2E } = await import('./gh_e2e.mjs');
+  try { await ghE2E({ page, port, check, shot }); } catch (e) { fails++; log('FOUT (uitzondering)', e.message.split('\n')[0]); await shot('gh_crash').catch(() => {}); }
+  console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 12).join('\n') : 'NO ERRORS', '| fouten:', fails);
+  await browser.close(); server.close(); process.exit(fails || errors.length ? 1 : 0);
+}
 await page.goto(`http://localhost:${port}/?quality=low${P3 ? '&players=3' : ''}`);
 await page.waitForFunction(() => window.__app && window.__app.mode && window.__app.mode.menu, null, { timeout: 120000 });
 await page.waitForTimeout(2000); await shot('1_titel');
@@ -59,7 +68,7 @@ if (process.env.OPENING_FULL) {
 } else {
   await page.waitForTimeout(2500); await shot('3_opening_a');
   // overslaan: A vasthouden (1 s)
-  await page.evaluate(() => { window.__app.input.virtual[1].a = true; }); await page.waitForTimeout(1600); await page.evaluate(() => { window.__app.input.virtual[1].a = false; });
+  await page.evaluate(() => { window.__app.input.virtual[1].a = true; }); await page.waitForFunction(() => window.__app.mode.constructor.name !== 'OpeningMode', null, { timeout: 30000 }).catch(() => {}); await page.evaluate(() => { window.__app.input.virtual[1].a = false; });   // vasthouden tot de opening voorbij is (trage frames op een drukke machine)
 }
 await page.waitForFunction(() => window.__app.mode && window.__app.mode.constructor.name === 'ArcadeMode' && window.__app.mode.busy, null, { timeout: 60000 });
 check(true, 'opening afgerond/overgeslagen -> Speelhal (intro)');

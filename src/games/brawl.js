@@ -9,7 +9,7 @@ import { FT, FT_IDS, ITEMS, STAGES, STAGE_IDS, buildAT, buildFighterChar, mkItem
 import { createSupers } from './brawl_super.js';
 import { SelectUI, MeterUI } from './brawl_ui.js';
 
-// Smash-Arena — duel: platform-vechter (2.5D). Geen levensbalk maar een SCHADE-PERCENTAGE: hoe hoger, hoe verder je wegvliegt.
+// Smash-Arena — platform-vechter (2.5D) voor 2 (duel), 3 of 4 spelers (vrij voor allen: iedereen tegen iedereen, de laatste die nog levens heeft wint). Geen levensbalk maar een SCHADE-PERCENTAGE: hoe hoger, hoe verder je wegvliegt.
 // Wie van het scherm vliegt verliest een leven (3 levens).
 //  * Eerst kiezen jullie een VECHTER (zwaardvechter, magier, reus, ninja) met links/rechts + A; het PODIUM (eiland / drakenrug / vulkaantoren) staat al vast.
 //  * lopen, omhoog = sprong (dubbel), A = slaan (richting bepaalt de slag; 3 tikjes = combo), B = schild (vasthouden), B + richting = speciale zet van je vechter,
@@ -18,11 +18,12 @@ import { SelectUI, MeterUI } from './brawl_ui.js';
 //  * vallende ballonnen met items: hamer, bom, ijsbal, trampoline, zwaard, stok, bananenschil, mijn, hartje, ster. De draak spuugt vuur, de Gouden Draak brengt een Gouden Bal,
 //    de zwaartekracht krijgt grillen.
 //  * comeback: wie op zijn laatste leven achterstaat krijgt WOEDE (meer klappen, minder terugslag); items vallen vaker bij de achterblijver; KO geeft super-meter
-//  * na 90 s: meeste levens, dan laagste schade; bij gelijkspel SUDDEN DEATH (1 leven, 250% schade, bommenregen)
+//  * na 90 s (3-4 spelers: 120 s): meeste levens, dan laagste schade; bij gelijkspel SUDDEN DEATH (1 leven, 250% schade, bommenregen; bij 3-4 spelers alleen voor wie gelijk staat)
+//  * 3-4 spelers: raken kan iedereen, een slag/grijp/zet pakt wie het dichtstbij staat; wie al zijn levens kwijt is kijkt toe; plaatsen 1e-4e op levens, dan schade / volgorde van uitvallen
 
 const G0 = 46, JUMP1 = 19.5, JUMP2 = 17, RUN = 9.5, AIRMAX = 8.5, FALLMAX = 26, FASTFALL = 38;
 const FH = 2.5, FHW = 0.52;                 // hoogte en halve breedte van een vechter (bij size 1)
-const STOCKS = 3, MATCH = 90, SD_MAX = 45, SELECT_T = 8;
+const STOCKS = 3, SD_MAX = 45, SELECT_T = 8;
 const KDRAG = 0.55;                        // luchtweerstand tijdens terugslag
 const STAGE_BUILD = { island: buildIsland, dragon: buildDragon, volcano: buildVolcano };
 
@@ -35,15 +36,16 @@ export default {
   icon: '🥊',
   mode: 'pvp',
   time: 100,
+  players: [2, 3, 4],                    // 2 = duel, 3-4 = vrij voor allen
   music: 'game_fast',
-  blurb: 'Kies een <b>vechter</b> en meppen maar, op een van <b>drie podia</b>! Hoe hoger je <b>schade-%</b>, hoe verder je wegvliegt. Van het scherm = een <b>leven</b> kwijt (3 elk).',
+  blurb: 'Kies een <b>vechter</b> en meppen maar (met 2, 3 of 4 spelers), op een van <b>drie podia</b>! Hoe hoger je <b>schade-%</b>, hoe verder je wegvliegt. Van het scherm = een <b>leven</b> kwijt (3 elk). Wie als laatste overblijft wint!',
   controls: ['{move} lopen, omhoog = springen', '{a} slaan (+ richting = smash)', '{b} schild (+ richting = speciaal)', '{a}+{b} = SUPER (meter vol)'],
-  tip: 'Schild + A = grijpen. Bevroren? Beuk op alle knoppen!',
+  tip: 'Schild + A = grijpen. Bevroren? Beuk op alle knoppen! Met 4 spelers: pas op voor wie van achteren komt, en laat de anderen elkaar maar meppen.',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
-    const names = players.map((p) => p.name);
+    const N = players.length, names = players.map((p) => p.name);
     const tw = ctx.twist.id;
     const SLIP = pv.slip || 0;
     const GRAV = pv.gravity || 1;
@@ -89,7 +91,7 @@ export default {
       disc.add(mesh(new THREE.CylinderGeometry(1.7, 1.9, 0.3, 20), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.55, roughness: 0.3, metalness: 0.4 }), { cast: false, pos: [0, -0.15, 0] }));
       disc.add(mesh(new THREE.TorusGeometry(1.7, 0.1, 6, 24), new THREE.MeshBasicMaterial({ color: 0xffffff }), { cast: false, rot: [Math.PI / 2, 0, 0] }));
       disc.visible = false; scene.add(disc);
-      const dir = i ? -1 : 1, st = S.start(i);
+      const st = S.start(i, N), dir = st.x < 0 ? 1 : -1;
       const f = {
         i, c: null, chars: {}, type: null, ft: null, AT: null, holder, inner, bubble, aura, ice, blob, tag, disc, discPlat: { x: 0, y: 0, w: 3.4, tmp: true, on: false, moving: true, dx: 0, dy: 0 }, col,
         size: 1, hh: FH, hw: FHW, weight: 1, pow: 1, spd: pv.speed(i), maxJumps: 2, glide: 0, glideMax: 0,
@@ -102,14 +104,22 @@ export default {
       };
       return f;
     });
-    const opp = (f) => fs[1 - f.i];
+    // tegenstanders: bij 2 spelers altijd de ander; bij 3-4 spelers de dichtstbijzijnde die nog meedoet
+    const foesOf = (f) => fs.filter((q) => q !== f && q.st !== 'dead' && q.stocks > 0);
+    const opp = (f) => {
+      if (N === 2) return fs[1 - f.i];
+      let b = null, bd = 1e9; for (const q of fs) { if (q === f || q.stocks <= 0) continue; const d = Math.abs(q.x - f.x) + Math.abs(q.y - f.y) * 0.8 + (q.st === 'dead' ? 100 : 0); if (d < bd) { bd = d; b = q; } }
+      return b || fs[(f.i + 1) % N];
+    };
+    let outCount = 0;      // volgorde van uitvallen (voor de plaatsen)
 
     // ---------------- toestand ----------------
+    const MATCH = N > 2 ? 120 : 90;
     let T = 0, clock = MATCH, started = false, finished = false, over = false, endT = 0, winner = -1, sd = false, sdT = 0, introT = 0;
     let phase = 'wait', selT = SELECT_T, readyT = 0, sel = null, selUI = null, meterUI = null;
     let stop = 0, slowK = 1, slowHold = 0, camPunch = 0, gEv = 1, gEvT = 0, gEvKind = '', tagUpd = 0, cine = null;
     let itemT = 5, eventT = 15, lastEvent = '', dragonT = 0, eventN = 0, sdRain = 3, sdDr = 14, goldenN = 0, meterTipShown = false;
-    const stat = { items: [0, 0], explosions: 0, freezes: 0, dragons: 0, trampolines: 0, perfect: 0, supers: [0, 0], grabs: 0, throws: 0, golden: 0, traps: 0, pickups: {}, special: 0 };
+    const stat = { items: players.map(() => 0), explosions: 0, freezes: 0, dragons: 0, trampolines: 0, perfect: 0, supers: players.map(() => 0), grabs: 0, throws: 0, golden: 0, traps: 0, pickups: {}, special: 0 };
 
     // ---------------- visuals: slashes ----------------
     const slashGeo = new THREE.RingGeometry(0.45, 1, 14, 1, -1.15, 2.3);
@@ -149,7 +159,7 @@ export default {
       return it;
     }
     function pickItem() {
-      const behind = behindIdx(), maxPct = Math.max(fs[0].pct, fs[1].pct);
+      const behind = behindIdx(), maxPct = Math.max(...fs.map((q) => q.pct));
       const w = Object.entries(ITEMS).map(([k, v]) => {
         let x = v.w;
         if (behind >= 0 && k === 'hammer') x += 14;
@@ -162,7 +172,13 @@ export default {
       for (const [k, x] of w) { r -= x; if (r <= 0) return k; }
       return 'bomb';
     }
-    function behindIdx() { const a = fs[0], b = fs[1]; if (a.stocks !== b.stocks) return a.stocks < b.stocks ? 0 : 1; if (Math.abs(a.pct - b.pct) > 25) return a.pct > b.pct ? 0 : 1; return -1; }
+    function behindIdx() {   // wie staat achter? (minste levens; anders wie veel meer schade heeft) -1 = niemand
+      const live = fs.filter((q) => q.stocks > 0); if (live.length < 2) return -1;
+      const lo = Math.min(...live.map((q) => q.stocks)), hi = Math.max(...live.map((q) => q.stocks));
+      if (lo !== hi) { return live.filter((q) => q.stocks === lo).reduce((b, q) => (q.pct > b.pct ? q : b)).i; }
+      const pcts = live.map((q) => q.pct); if (Math.max(...pcts) - Math.min(...pcts) > 25) return live.reduce((b, q) => (q.pct > b.pct ? q : b)).i;
+      return -1;
+    }
     function killItem(it) { scene.remove(it.g); it.g.traverse((o) => { if (o.geometry && !o.geometry.userData.shared) o.geometry.dispose(); }); it.dead = true; }
     function itemSpawnX(bi) { if (bi >= 0 && fs[bi].st !== 'dead' && fs[bi].grounded && Math.random() < 0.6) return clamp(fs[bi].x + rand(-3, 3), -9, 9); return S.itemX(); }
 
@@ -227,7 +243,7 @@ export default {
       hud.setPlayerInfo(f.i, f.type ? `${FT[f.type].icon} ${'♥'.repeat(Math.max(0, f.stocks))}${'♡'.repeat(Math.max(0, STOCKS - f.stocks))}  ${pct}%` : '');
     }
     function refreshHud() {
-      hud.setScore(sd ? 'SUDDEN DEATH!' : phase === 'select' ? 'Kies je vechter!' : `${names[0]} ${fs[0].stocks} – ${fs[1].stocks} ${names[1]}`);
+      hud.setScore(sd ? 'SUDDEN DEATH!' : phase === 'select' ? 'Kies je vechter!' : N === 2 ? `${names[0]} ${fs[0].stocks} – ${fs[1].stocks} ${names[1]}` : `${fs.filter((q) => q.stocks > 0).length} van ${N} spelers over`);
       for (const f of fs) { f.tagKey = ''; drawTag(f); }
     }
 
@@ -260,7 +276,7 @@ export default {
       f.size = size; f.hh = FH * size; f.hw = FHW * size;
       f.weight = Math.pow(base, 0.5) * st.weight; f.pow = Math.pow(base, 0.3) * st.pow; f.spd = pv.speed(f.i);
       f.maxJumps = st.jumps; f.jumps = st.jumps; f.glideMax = st.glide || 0; f.glide = f.glideMax;
-      const c = f.chars[type] || (f.chars[type] = buildFighterChar(type, f.i));
+      const c = f.chars[type] || (f.chars[type] = buildFighterChar(type, f.i, ctx.players[f.i].id));
       c.group.scale.setScalar(f.hh / c.height); f.inner.position.y = -f.hh / 2; f.inner.add(c.group); f.c = c;
       c.faceDir(f.face, 0); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw; c.pose = 'idle';
       f.ice.scale.set(f.hw * 2.8, f.hh * 1.1, f.hw * 2.8);
@@ -352,7 +368,7 @@ export default {
 
     function checkRage() {
       for (const f of fs) {
-        const want = f.stocks === 1 && opp(f).stocks > 1 && !sd;
+        const want = f.stocks === 1 && Math.max(...fs.filter((q) => q !== f).map((q) => q.stocks)) > 1 && !sd;
         if (want !== f.rage) {
           f.rage = want; f.dmgMul = want ? 1.25 : 1; f.tagKey = ''; drawTag(f);
           if (want) { say('WOEDE!', f.x, f.y + f.hh + 1.4, '#ff6b4a', 1.6); hud.toast(`🔥 ${names[f.i]} is woedend! Meer klappen, minder terugslag!`, 2200); audio.sfx('powerup', { vol: 0.8 }); fx.particles.burst(f.x, f.y + 1, 0, { count: 24, speed: 6, up: 1.4, life: 0.8, size: 0.45, colors: [0xff7a1a, 0xffd070, 0xff4a4a], gravity: -1 }); }
@@ -424,13 +440,15 @@ export default {
         if (A.through) f.vy = 0;
         if (A.spin) f.holder.rotation.y += dt * 34;
         if (!f.hitDone && A.box && A.box[2] > 0) {
-          const r = hitRect(f, A), d = opp(f);
+          const r = hitRect(f, A);
+          for (const d of (N === 2 ? [opp(f)] : foesOf(f))) {
           if (d.st !== 'dead' && r.x1 > d.x - d.hw && r.x0 < d.x + d.hw && r.y1 > d.y && r.y0 < d.y + d.hh) {
             const away = A.away || (A.sym && A.ang > 60 && A.ang < 120);
             const dirx = away ? (sgn(d.x - f.x) || f.face) : (A.back ? -f.face : f.face);
             const cx = clamp(d.x, r.x0, r.x1), cy = clamp(d.y + d.hh / 2, r.y0, r.y1), cm = f.chargeMul || 1;
             const ok = hurt(d, { dmg: A.dmg * cm, bkb: A.bkb * f.pow * (1 + (cm - 1) * 0.5), kbg: A.kbg * cm, ang: A.ang, dirx, att: f, x: cx, y: cy, big: A.big || cm > 1.3, hs: A.hs, snd: A.snd });
             if (ok) { f.hitDone = true; if (f.atkKey && f.atkKey.startsWith('jab')) f.comboT = 0.5; if (A.spin || A.through || A.drive) stat.special++; }
+          }
           }
         }
         if (t >= A.wind + A.act) f.atkPhase = 2;
@@ -449,9 +467,11 @@ export default {
     }
     function stepGrab(f, dt) {
       f.stT += dt; f.vx = damp(f.vx, 0, 14, dt);
-      const o = opp(f);
+      let o = opp(f);
       if (!f.hitDone && f.stT >= 0.07) {
         f.hitDone = true;
+        const canG = (q) => q.st !== 'dead' && q.inv <= 0 && q.starT <= 0 && q.st !== 'grabbed' && q.st !== 'hold' && q.st !== 'super' && Math.abs(q.x - f.x) < 2.0 * f.size + q.hw && Math.abs(q.y - f.y) < 1.4 * f.size + 0.4 && (q.x - f.x) * f.face > -0.3;
+        if (N > 2) { const c = foesOf(f).filter(canG).sort((a, b) => Math.abs(a.x - f.x) - Math.abs(b.x - f.x))[0]; if (c) o = c; }   // 3-4 spelers: grijp wie binnen bereik staat
         const ok = o.st !== 'dead' && o.inv <= 0 && o.starT <= 0 && o.st !== 'grabbed' && o.st !== 'hold' && o.st !== 'super' && Math.abs(o.x - f.x) < 2.0 * f.size + o.hw && Math.abs(o.y - f.y) < 1.4 * f.size + 0.4 && (o.x - f.x) * f.face > -0.3;
         if (ok) {
           if (o.st === 'frozen') thaw(o, false);
@@ -577,7 +597,7 @@ export default {
 
     // ---------------- super ----------------
     const supers = createSupers({
-      scene, fx, audio, fs, opp, hurt, say, explode, slash, surfaceBelow, S: () => S, shake: (a) => ctx.shake(a), camPunch: camPunchFn, setPose,
+      scene, fx, audio, fs, opp, foes: (f) => (N === 2 ? [opp(f)] : foesOf(f)), hurt, say, explode, slash, surfaceBelow, S: () => S, shake: (a) => ctx.shake(a), camPunch: camPunchFn, setPose,
     });
     function startSuper(f) {
       const ft = f.ft;
@@ -623,10 +643,16 @@ export default {
       if (over) { refreshHud(); return; }
       f.stocks--; f.meter = Math.min(100, f.meter + 20);
       refreshHud(); checkRage();
-      if (f.stocks <= 0) endMatch(1 - f.i, `${names[f.i]} is al zijn levens kwijt!`);
+      if (f.stocks <= 0) {
+        f.outOrder = ++outCount;
+        const left = fs.filter((q) => q.stocks > 0);
+        if (N === 2) endMatch(1 - f.i, `${names[f.i]} is al zijn levens kwijt!`);
+        else if (left.length <= 1) endMatch(left.length ? left[0].i : null, `${names[f.i]} was de laatste die uitviel.`);
+        else { hud.toast(`${names[f.i]} is uitgeschakeld!`, 1800); fx.texts.add('UIT!', ex, ey - 1.5, 1.5, '#ff6b6b', 1.6); }
+      }
     }
     function respawn(f) {
-      const r = S.resp(f.i);
+      const r = S.resp(f.i, N);
       f.st = 'free'; f.x = r.x; f.y = r.y; f.vx = f.vy = 0; f.pct = 0; f.inv = 2.4; f.grounded = false; f.jumps = f.maxJumps; f.glide = f.glideMax; f.boostUsed = false; f.wallJ = 1; f.cd = 0; f.spCd = 0; f.lag = 0; f.hitstun = 0; f.tumble = 0; f.frozenT = 0; f.rollT = 0; f.starT = 0;
       f.holder.visible = true; f.tag.visible = true; f.blob.visible = true; f.holder.rotation.set(0, 0, 0); setPose(f, 'idle');
       f.discPlat.x = f.x; f.discPlat.y = f.y - 0.4; f.discPlat.on = true; f.discPlat.t = 3.2; f.disc.visible = true; f.disc.position.set(f.x, f.discPlat.y, 0);
@@ -638,33 +664,54 @@ export default {
     function endMatch(w, why) {
       if (over) return; over = true; winner = w; endT = 2.2; slowK = 0.35; slowHold = 2;
       hud.setTimer(null); hud.showBig(w == null ? 'GELIJK!' : `${names[w]} WINT!`, 2000, '#ffe14a'); audio.sfx('win', { vol: 0.8 });
-      if (w != null) { setPose(fs[w], 'cheer'); setPose(fs[1 - w], 'sad'); }
+      if (w != null) for (const q of fs) setPose(q, q.i === w ? 'cheer' : 'sad');
       refreshHud();
       endWhy = why || '';
     }
     function finishMatch() {
       if (finished) return; finished = true; if (meterUI) { meterUI.dispose(); meterUI = null; }
-      const w = winner, l = 1 - w, a = fs[w], b = fs[l];
-      const jokes = [`${names[w]} meppert ${names[l]} de wolken in!`, `${names[l]} vliegt nog steeds. Hoi, vogeltjes!`, `${names[w]} is de koning van het ${S.kind === 'volcano' ? 'vulkaanpodium' : S.kind === 'dragon' ? 'drakenrug-podium' : 'zwevende eiland'}.`, `De draak is zwaar onder de indruk van ${names[w]}.`, `${names[l]} had geen kans, maar wel veel stijl.`];
+      const order = placeOrder(winner), w = winner ?? order[0], l = N === 2 ? 1 - w : order[order.length - 1], a = fs[w], b = fs[l];   // (bij een gelijkspel zonder winnaar: winner blijft null voor de uitslag)
+      const jokes = [`${names[w]} meppert ${N === 2 ? names[l] : 'de anderen'} de wolken in!`, `${names[l]} vliegt nog steeds. Hoi, vogeltjes!`, `${names[w]} is de koning van het ${S.kind === 'volcano' ? 'vulkaanpodium' : S.kind === 'dragon' ? 'drakenrug-podium' : 'zwevende eiland'}.`, `De draak is zwaar onder de indruk van ${names[w]}.`, `${names[l]} had geen kans, maar wel veel stijl.`];
       const bits = [];
-      bits.push(`${FT[a.type].name} ${names[w]} tegen ${FT[b.type].name} ${names[l]} op de ${STAGES[S.kind].name}`);
-      if (a.kos + b.kos > 0) bits.push(`${a.kos + b.kos} keer KO`);
-      if (stat.supers[0] + stat.supers[1]) bits.push(`${stat.supers[0] + stat.supers[1]}x super`);
+      if (N === 2) bits.push(`${FT[a.type].name} ${names[w]} tegen ${FT[b.type].name} ${names[l]} op de ${STAGES[S.kind].name}`);
+      else bits.push(`${fs.map((q) => `${FT[q.type].icon} ${names[q.i]}`).join(' · ')} op de ${STAGES[S.kind].name}`);
+      const kosT = fs.reduce((t, q) => t + q.kos, 0), supT = stat.supers.reduce((t, v) => t + v, 0);
+      if (kosT > 0) bits.push(`${kosT} keer KO`);
+      if (supT) bits.push(`${supT}x super`);
       if (stat.explosions) bits.push(`${stat.explosions} ontploffing${stat.explosions > 1 ? 'en' : ''}`);
       if (stat.freezes) bits.push(`${stat.freezes}x bevroren`);
       if (stat.grabs) bits.push(`${stat.grabs}x gegrepen`);
       if (stat.dragons) bits.push(`${stat.dragons}x draak op bezoek`);
-      ctx.finishPvp({ winner: w, score: [fs[0].stocks, fs[1].stocks], delay: 700, summary: `${pick(jokes)} ${endWhy ? endWhy + ' ' : ''}<br><small>Schade: ${names[0]} ${Math.round(fs[0].pct)}% · ${names[1]} ${Math.round(fs[1].pct)}%${bits.length ? ' · ' + bits.join(' · ') : ''}</small>` });
+      ctx.finishPvp({ winner: winner, score: fs.map((q) => q.stocks), place: N > 2 ? order : undefined, delay: 700, summary: `${pick(jokes)} ${endWhy ? endWhy + ' ' : ''}<br><small>Schade: ${fs.map((q) => `${names[q.i]} ${Math.round(q.pct)}%`).join(' · ')}${bits.length ? ' · ' + bits.join(' · ') : ''}</small>` });
+    }
+    // plaatsen (slots, 1e eerst): de winnaar, dan op levens, dan wie nog meedoet op minste schade, anders wie het laatst uitviel
+    function placeOrder(w) {
+      return fs.map((q) => q.i).sort((x, y) => { if (x === w) return -1; if (y === w) return 1; const a = fs[x], b = fs[y]; return (b.stocks - a.stocks) || (a.stocks > 0 ? a.pct - b.pct : (b.outOrder || 0) - (a.outOrder || 0)) || (x - y); });
     }
     function timeUp() {
-      const a = fs[0], b = fs[1];
-      if (a.stocks !== b.stocks) { endMatch(a.stocks > b.stocks ? 0 : 1, `Meeste levens na ${MATCH} seconden.`); return; }
-      if (Math.abs(a.pct - b.pct) >= 20) { endMatch(a.pct < b.pct ? 0 : 1, 'Evenveel levens, maar minder schade.'); return; }
-      startSD();
+      if (N === 2) {
+        const a = fs[0], b = fs[1];
+        if (a.stocks !== b.stocks) { endMatch(a.stocks > b.stocks ? 0 : 1, `Meeste levens na ${MATCH} seconden.`); return; }
+        if (Math.abs(a.pct - b.pct) >= 20) { endMatch(a.pct < b.pct ? 0 : 1, 'Evenveel levens, maar minder schade.'); return; }
+        startSD(); return;
+      }
+      const hi = Math.max(...fs.map((q) => q.stocks)), top = fs.filter((q) => q.stocks === hi).sort((a, b) => a.pct - b.pct);
+      if (top.length === 1) { endMatch(top[0].i, `Meeste levens na ${MATCH} seconden.`); return; }
+      if (top[1].pct - top[0].pct >= 20) { endMatch(top[0].i, 'Evenveel levens, maar minder schade.'); return; }
+      startSD(top.filter((q) => q.pct - top[0].pct < 20).map((q) => q.i));   // alleen wie gelijk staat doet mee
     }
-    function startSD() {
-      sd = true; sdT = SD_MAX; hud.showBig('SUDDEN DEATH!', 1600, '#ff4a4a'); hud.toast('Eén leven, 250% schade: één klap en je vliegt!', 2800); audio.sfx('buzz', { vol: 0.9 }); ctx.shake(0.6);
-      for (const f of fs) { if (f.st === 'dead') { f.deadT = 0; } f.stocks = 1; f.pct = 250; f.rage = false; f.dmgMul = 1; f.inv = 1.8; f.tagKey = ''; }
+    function startSD(part) {
+      sd = true; sdT = SD_MAX;
+      if (N > 2) {   // alleen wie gelijk staat doet mee; de rest wordt uit het beeld gehaald
+        part = part || fs.map((q) => q.i);
+        for (const f of fs) {
+          f.sdOut = !part.includes(f.i); if (!f.sdOut) continue;
+          if (f.stocks > 0) f.outOrder = ++outCount - 100;
+          f.stocks = 0; releaseGrab(f); dropItem(f, false); endShield(f, false);
+          f.st = 'dead'; f.holder.visible = false; f.tag.visible = false; f.blob.visible = false; f.bubble.visible = false; f.aura.visible = false; f.ice.visible = false; f.discPlat.on = false; f.disc.visible = false; f.atk = null; f.sup = null; f.charging = false;
+        }
+      } hud.showBig('SUDDEN DEATH!', 1600, '#ff4a4a'); hud.toast('Eén leven, 250% schade: één klap en je vliegt!', 2800); audio.sfx('buzz', { vol: 0.9 }); ctx.shake(0.6);
+      for (const f of fs) { if (f.sdOut) continue; if (f.st === 'dead') { f.deadT = 0; } f.stocks = 1; f.pct = 250; f.rage = false; f.dmgMul = 1; f.inv = 1.8; f.tagKey = ''; }
       hud.setTimer(null); refreshHud();
       startDragon(); sdRain = 2; sdDr = 14;
     }
@@ -693,7 +740,7 @@ export default {
     function updateCamera(dt, snap) {
       const b = S.camBase(); let x0 = b.x0, x1 = b.x1, y0 = b.y0, y1 = b.y1, minD = 28;
       if (cine) { const f = cine.f; x0 = f.x - 6; x1 = f.x + 6; y0 = f.y - 2.5; y1 = f.y + f.hh + 3; minD = 15; }
-      else if (phase === 'select' || phase === 'ready') { const a = fs[0], c = fs[1]; x0 = Math.min(a.x, c.x) - 4.5; x1 = Math.max(a.x, c.x) + 4.5; y0 = Math.min(a.y, c.y) - 1.8; y1 = Math.max(a.y, c.y) + 6.4; minD = 17; }
+      else if (phase === 'select' || phase === 'ready') { x0 = Math.min(...fs.map((q) => q.x)) - 4.5; x1 = Math.max(...fs.map((q) => q.x)) + 4.5; y0 = Math.min(...fs.map((q) => q.y)) - 1.8; y1 = Math.max(...fs.map((q) => q.y)) + 6.4; minD = N > 2 ? 22 : 17; }
       else if (phase === 'play') for (const f of fs) if (f.st !== 'dead') { x0 = Math.min(x0, f.x - 3.5); x1 = Math.max(x1, f.x + 3.5); y0 = Math.min(y0, f.y - 2.5); y1 = Math.max(y1, f.y + f.hh + 3); }
       if (!cine && phase !== 'select' && phase !== 'ready') { x0 = Math.max(x0, -30); x1 = Math.min(x1, 30); y0 = Math.max(y0, -11); y1 = Math.min(y1, 17); }
       const hw = (x1 - x0) / 2, hh = (y1 - y0) / 2, tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), asp = camera.aspect || 1.7;
@@ -735,7 +782,7 @@ export default {
       }
       // zachte platforms
       if (!f.grounded && f.vy <= 0 && f.drop <= 0) {
-        for (let k = 0; k < plats.length + 2; k++) {
+        for (let k = 0; k < plats.length + N; k++) {
           const p = k < plats.length ? plats[k] : fs[k - plats.length].discPlat; if (p.on === false) continue;
           if (py >= p.y - 0.02 && f.y <= p.y && Math.abs(f.x - p.x) < p.w / 2 + hw * 0.4) { f.y = p.y; land(f, p); break; }
         }
@@ -882,7 +929,7 @@ export default {
         f.rollT -= dt; f.vx = f.bx * f.bsp; f.vy = f.by * f.bsp;
         if (!f.blink) for (let k = 0; k < 2; k++) fx.particles.emit(f.x - f.bx * 0.6 + rand(-0.3, 0.3), f.y + 0.6 - f.by * 0.6, 0, rand(-1, 1), rand(-2, 0), 0, { life: 0.4, size: 0.55, color: f.type === 'ninja' ? pick([0x555566, 0x333344, 0xffffff]) : pick([0xff7a1a, 0xffd070, 0xffffff]), gravity: 0 });
         // raakt je broer onderweg
-        if (!f.hitDone) { const d = o, hw2 = f.hw + 0.7; if (d.st !== 'dead' && Math.abs(d.x - f.x) < hw2 + d.hw && d.y < f.y + f.hh && d.y + d.hh > f.y) { const okk = hurt(d, { dmg: f.bdmg, bkb: 9 * f.pow, kbg: 0.05, ang: 65, dirx: sgn(d.x - f.x) || f.face, att: f, x: d.x, y: d.y + d.hh / 2 }); if (okk) f.hitDone = true; } }
+        if (!f.hitDone) for (const d of (N === 2 ? [o] : foesOf(f))) { const hw2 = f.hw + 0.7; if (d.st !== 'dead' && Math.abs(d.x - f.x) < hw2 + d.hw && d.y < f.y + f.hh && d.y + d.hh > f.y) { const okk = hurt(d, { dmg: f.bdmg, bkb: 9 * f.pow, kbg: 0.05, ang: 65, dirx: sgn(d.x - f.x) || f.face, att: f, x: d.x, y: d.y + d.hh / 2 }); if (okk) { f.hitDone = true; break; } } }
         if (f.rollT <= 0) {
           f.st = 'free'; f.vy *= 0.5; f.vx *= 0.5;
           if (f.blink) { f.blink = false; f.vx *= 0.3; f.vy = Math.max(f.vy, 3); fx.particles.burst(f.x, f.y + f.hh / 2, 0, { count: 18, speed: 5, up: 0, life: 0.5, size: 0.6, colors: [0xffffff, f.col, 0xd9a8ff], gravity: -1 }); }
@@ -1101,7 +1148,7 @@ export default {
           sdT -= dt; sdRain -= dt;
           if (sdRain <= 0) { sdRain = 3.5; spawnItem(Math.random() < 0.5 ? 'bomb' : 'hammer', itemSpawnX(-1)); }
           if (!dragonPhase) { sdDr -= dt; if (sdDr <= 0) { sdDr = 14; startDragon(); } }
-          if (sdT <= 0) { const a = fs[0], b = fs[1]; endMatch(a.pct === b.pct ? (Math.random() < 0.5 ? 0 : 1) : (a.pct < b.pct ? 0 : 1), 'Sudden death duurde te lang: de minste schade wint.'); }
+          if (sdT <= 0) { const part = fs.filter((q) => q.stocks > 0).sort((a, b) => a.pct - b.pct); const bestP = part.filter((q) => q.pct === part[0].pct); endMatch((bestP.length > 1 ? pick(bestP) : part[0]).i, 'Sudden death duurde te lang: de minste schade wint.'); }
         }
         // items & evenementen
         itemT -= dt; if (itemT <= 0) { itemT = sd ? 9 : rand(6.5, 9.5); const bi = behindIdx(); spawnItem(null, itemSpawnX(bi)); }
@@ -1110,12 +1157,12 @@ export default {
         for (const f of fs) if (f.st !== 'dead' && f.st !== 'super') addMeter(f, dt * 0.3);
       }
       if (gEvT > 0) { gEvT -= dt; if (gEvT <= 0) { gEv = 1; L.hemi.color.copy(hemiBase); hud.toast('De zwaartekracht is weer normaal.', 1400); } }
-      const order = Math.floor(T * 10) % 2 ? [0, 1] : [1, 0];
+      const shift = Math.floor(T * 10), order = fs.map((_, k) => (k + shift + 1) % N);   // wisselende volgorde (eerlijk)
       const steps = Math.ceil(dt / 0.017), sdt = dt / steps;
       for (let s = 0; s < steps; s++) {
         S.step(sdt);
         for (const f of fs) { const p = f.discPlat; if (p.on) { p.x += S.fdx; p.y += S.fdy; p.dx = S.fdx; p.dy = S.fdy; } }
-        for (const k of order) { const f = fs[k]; if (f.st === 'dead') { if (s === 0) { f.deadT -= dt; if (f.deadT <= 0 && !over) respawn(f); } continue; } stepFighter(f, sdt, s === 0); }
+        for (const k of order) { const f = fs[k]; if (f.st === 'dead') { if (s === 0) { f.deadT -= dt; if (f.deadT <= 0 && !over && f.stocks > 0) respawn(f); } continue; } stepFighter(f, sdt, s === 0); }
       }
       supers.tick(dt);
       updateItems(dt); updateProjs(dt); updateTraps(dt); updateDragon(dt);
@@ -1134,25 +1181,25 @@ export default {
     // ---------------- vechter kiezen ----------------
     function idleVisuals(dt) {
       for (const f of fs) {
-        if (phase === 'select') f.c.faceDir(f.i ? -0.45 : 0.45, 1); else f.c.faceDir(f.face, 0);
+        if (phase === 'select') f.c.faceDir(f.x < 0 ? 0.45 : -0.45, 1); else f.c.faceDir(f.face, 0);
         f.c.speed = 0; f.c.air = false; f.holder.position.set(f.x, f.y + f.hh / 2, 0); f.c.update(dt); f.holder.visible = true;
         f.blob.visible = true; f.blob.position.set(f.x, f.y + 0.05, 0.2); f.blob.scale.set(1.3 * f.size, 1, 1.3 * f.size); f.tag.visible = phase !== 'select'; f.tag.position.set(f.x, f.y + f.hh + 1.15 * f.size, 0.5); drawTag(f);
         const orb = f.c.weapon && f.c.weapon.userData.orb; if (orb) orb.scale.setScalar(1 + Math.sin(T * 6 + f.i) * 0.15);
       }
     }
-    function previewPlace(f) { const st = S.start(f.i); f.x = st.x * 0.46; f.y = st.y; f.vx = f.vy = 0; f.grounded = true; }
+    function previewPlace(f) { const st = S.start(f.i, N); f.x = st.x * 0.46; f.y = st.y; f.vx = f.vy = 0; f.grounded = true; }
     function startSelect() {
       phase = 'select'; selT = SELECT_T;
       sel = fs.map((f) => ({ idx: 0, ok: false, okT: 0 }));
       for (const f of fs) { setType(f, FT_IDS[0]); previewPlace(f); }
-      selUI = new SelectUI(names, STAGES[S.kind], KEY_LABELS); selUI.update(sel);
+      selUI = new SelectUI(names, STAGES[S.kind], KEY_LABELS, players.map((p) => p.css)); selUI.update(sel);
       hud.setTimer(selT, 3); refreshHud();
       audio.sfx('select', { vol: 0.5 });
     }
     function choose(i, idx) { sel[i].idx = (idx + FT_IDS.length) % FT_IDS.length; const f = fs[i]; setType(f, FT_IDS[sel[i].idx]); previewPlace(f); f.c.swing(); audio.sfx('click', { vol: 0.6 }); fx.particles.burst(f.x, f.y + 1, 0.5, { count: 8, speed: 3, up: 1, life: 0.4, size: 0.35, colors: [0xffffff, f.col], gravity: 2 }); }
     function selectUpdate(dt) {
       selT -= dt;
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < N; i++) {
         const inp = pv.input(i), s = sel[i], f = fs[i];
         if (!s.ok) {
           if (inp.leftP) choose(i, s.idx - 1); else if (inp.rightP) choose(i, s.idx + 1);
@@ -1162,21 +1209,21 @@ export default {
       hud.setTimer(Math.max(0, selT), 3);
       selUI.update(sel);
       idleVisuals(dt); S.update(T, dt); updateCamera(dt, introT < 0.2);
-      const both = sel[0].ok && sel[1].ok && Math.min(sel[0].okT, sel[1].okT) > 0.55;
+      const both = sel.every((q) => q.ok) && Math.min(...sel.map((q) => q.okT)) > 0.55;
       if (both || selT <= 0) finishSelect();
     }
     function pickType(i, type, ok = true) { if (phase === 'wait') startSelect(); const idx = FT_IDS.indexOf(type); if (idx < 0) return; if (phase === 'select') { sel[i].idx = idx; sel[i].ok = ok; sel[i].okT = 1; setType(fs[i], type); previewPlace(fs[i]); } else { setType(fs[i], type); } }
     function finishSelect() {
-      for (let i = 0; i < 2; i++) {
+      for (let i = 0; i < N; i++) {
         if (!sel[i].ok) { sel[i].idx = Math.floor(Math.random() * FT_IDS.length); say('Willekeurig!', fs[i].x, fs[i].y + fs[i].hh + 1.2, '#ffe14a', 1.2); }
         const f = fs[i]; setType(f, FT_IDS[sel[i].idx]);
-        const st = S.start(i); f.x = st.x; f.y = st.y; f.vx = f.vy = 0; f.grounded = true; f.ground = S.mainP || null; f.inv = 1.2; f.pct = 0; f.meter = 0; f.jumps = f.maxJumps; f.glide = f.glideMax; setPose(f, 'idle');
+        const st = S.start(i, N); f.x = st.x; f.y = st.y; f.vx = f.vy = 0; f.grounded = true; f.ground = S.mainP || null; f.inv = 1.2; f.pct = 0; f.meter = 0; f.jumps = f.maxJumps; f.glide = f.glideMax; setPose(f, 'idle');
         f.holder.rotation.set(0, 0, 0);
       }
       if (selUI) { selUI.dispose(); selUI = null; }
       phase = 'ready'; readyT = 1.2;
       hud.showBig('VECHT!', 1000, '#ffe14a'); audio.sfx('go', { vol: 0.8 });
-      hud.toast(`${FT[fs[0].type].icon} ${names[0]}  tegen  ${names[1]} ${FT[fs[1].type].icon}`, 1800);
+      hud.toast(N === 2 ? `${FT[fs[0].type].icon} ${names[0]}  tegen  ${names[1]} ${FT[fs[1].type].icon}` : fs.map((q) => `${FT[q.type].icon} ${names[q.i]}`).join('  ·  '), 1800);
       hud.setTimer(MATCH, 15); refreshHud();
       meterUI = new MeterUI(names); meterUI.update(fs);
     }
@@ -1203,7 +1250,7 @@ export default {
       idleVisuals(dt); S.update(T, dt); updateCamera(dt, introT < 0.2);
     }
     // beginstand: vechters op hun plek (voor de intro)
-    for (const f of fs) { const st = S.start(f.i); f.x = st.x; f.y = st.y; }
+    for (const f of fs) { const st = S.start(f.i, N); f.x = st.x; f.y = st.y; }
     updateCamera(0.016, true);
     for (const f of fs) { f.tag.position.set(f.x, f.y + f.hh + 1.2, 0.5); drawTag(f); }
     refreshHud();
@@ -1213,7 +1260,7 @@ export default {
       onResize() { updateCamera(0.016, true); },
       onSwap(sw) { for (const f of fs) { fx.particles.burst(f.x, f.y + 1, 0, { count: 20, speed: 5, up: 1, life: 0.6, size: 0.4, colors: [0xffe14a, 0xffffff], gravity: 2 }); } },
       onDeurman(movers) { if (phase !== 'play') return; movers.forEach((m, i) => { if (m && fs[i].st !== 'dead') { fs[i].pct += 25; fs[i].tagKey = ''; drawTag(fs[i]); say('BEWOOG! +25%', fs[i].x, fs[i].y + fs[i].hh + 1.6, '#ff6b6b', 1.5); fs[i].c.pose = 'scared'; } }); },
-      celebrate(w) { fs[w].c.pose = 'cheer'; fs[1 - w].c.pose = 'sad'; },
+      celebrate(w) { for (const q of fs) q.c.pose = q.i === w ? 'cheer' : 'sad'; },
       dispose() { if (selUI) selUI.dispose(); if (meterUI) meterUI.dispose(); try { camera.remove(flashQ); } catch (e) { /* ok */ } },
       dbg: {
         fs, projs, items, flames, tramps, traps, supers, S,

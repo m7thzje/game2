@@ -5,14 +5,16 @@ import { audio } from '../engine/audio.js';
 import { ui } from '../engine/ui.js';
 import { PLAYER_CSS } from '../engine/chars.js';
 import { S } from '../save.js';
-import { ITEMS, CFG, trophyPrice } from './board_data.js';
+import { nameOf } from '../engine/party.js';
+import { ITEMS, CFG, trophyPrice, playerCount } from './board_data.js';
 
-// spelers-id's die meedoen en hun invoerstaten (input.all = altijd 3; terugval op input.p)
-export const pids = () => (S.settings.players === 3 ? [0, 1, 2] : [0, 1]);
+// spelers-id's die meedoen en hun invoerstaten (input.all = altijd 4; terugval op input.p)
+export const pids = () => Array.from({ length: playerCount() }, (_, i) => i);
 export const PI = () => input.all || input.p;
 // CSS-variabele --c zetten (h() met style-object kan geen eigen variabelen zetten)
 export const cvar = (el, c) => { el.style.setProperty('--c', c); return el; };
-export const PNAMES = ['Wes', 'Jor', 'Juul'];
+export const PNAMES = new Proxy([], { get: (t, k) => (typeof k === 'string' && /^\d+$/.test(k) ? nameOf(+k) : t[k]) });   // namen volgen S.names (aanpasbaar in de Gamehal)
+export const DARK = ['#1d9a52', '#2f6fe0', '#d9622a', '#a52fc4'];   // leesbare tekstkleuren op de lichte kaarten
 export const pcss = (i) => PLAYER_CSS[i] || '#ff9a4a';
 export const klabel = (i) => KEY_LABELS[i] || { move: 'IJKL', a: 'U', b: 'O' };
 
@@ -66,6 +68,15 @@ const CSS = `
 .bd-hud.n3 .bd-p .n{font-size:18px}.bd-hud.n3 .bd-p .n i{display:none}
 .bd-hud.n3 .bd-p .st{font-size:19px;gap:10px}
 .bd-hud.n3 .bd-p .it{font-size:18px;min-height:24px}
+.bd-hud.n4 .bd-top{flex-wrap:wrap;justify-content:space-between;gap:8px;left:10px;right:10px}
+.bd-hud.n4 .bd-p{min-width:0;width:calc(25% - 6px);padding:4px 9px 5px;border-radius:13px;border-width:3px;box-sizing:border-box}
+.bd-hud.n4 .bd-p .n{font-size:17px}.bd-hud.n4 .bd-p .n i{display:none}
+.bd-hud.n4 .bd-p .st{font-size:17px;gap:8px;white-space:nowrap}
+.bd-hud.n4 .bd-p .pr{font-size:11px}
+.bd-hud.n4 .bd-p .it{font-size:16px;min-height:21px;letter-spacing:1px}
+.bd-hud.n4 .bd-p .it b{margin-right:2px;padding:0 3px}
+.bd-hud.n4 .bd-mid{position:absolute;left:50%;top:100px;transform:translateX(-50%);flex-direction:row;gap:8px;align-items:center;margin:0;white-space:nowrap}
+.bd-hud.n4 .bd-round{font-size:22px;padding:2px 14px}.bd-hud.n4 .bd-turn{font-size:16px}.bd-hud.n4 .bd-bar{width:110px}
 .bd-hud.n3 .bd-mid{position:absolute;left:50%;top:106px;transform:translateX(-50%);flex-direction:row;gap:8px;align-items:center;margin:0;white-space:nowrap}
 .bd-hud.n3 .bd-round{font-size:22px;padding:2px 14px}.bd-hud.n3 .bd-turn{font-size:16px}.bd-hud.n3 .bd-bar{width:110px}
 .bd-p .crown{margin-left:6px}
@@ -82,6 +93,9 @@ const CSS = `
 .bd-score3 .l{font-size:17px;font-weight:600;opacity:.8;text-align:right}
 .bd-score3 .nm{font-size:20px}
 .bd-keys.k3{grid-template-columns:1fr 1fr 1fr;font-size:13.5px}
+.bd-keys.k4{font-size:13.5px;gap:6px 10px}
+.bd-pred .bdp-who{display:flex;gap:4px;justify-content:center;min-height:20px;margin-top:3px}
+.bd-pred .bdp-who i{font-style:normal;font-size:12px;font-weight:700;color:#fff;background:var(--c);border-radius:9px;padding:0 7px}
 .bd-big{font-size:48px;text-align:center;line-height:1.1}
 .bd-win{display:flex;gap:12px;align-items:center;justify-content:center;font-family:'MedievalSharp',serif;font-size:30px;margin:2px 0}
 .bd-win span{font-size:42px}
@@ -91,12 +105,12 @@ export function injectCss() { if (document.getElementById('board-css')) return; 
 // ---------------------------------------------------------------- HUD
 export class BoardHud {
   constructor(n = 2) {
-    this.n = n; this.root = h('div', { class: 'bd-hud' + (n === 3 ? ' n3' : '') }); this.sig = '';
+    this.n = n; this.root = h('div', { class: 'bd-hud' + (n === 3 ? ' n3' : n >= 4 ? ' n4' : '') }); this.sig = '';
     this.pEl = Array.from({ length: n }, (_, i) => cvar(h('div', { class: 'bd-p' }), pcss(i)));
     this.round = h('div', { class: 'bd-round' }); this.turn = h('div', { class: 'bd-turn' }); this.bar = h('div', { class: 'bd-bar' }, h('i'));
     this.hint = h('div', { class: 'bd-hint' }); this.capEl = null;
     const mid = h('div', { class: 'bd-mid' }, this.round, this.turn, this.bar);
-    this.root.append(n === 3 ? h('div', { class: 'bd-top' }, ...this.pEl, mid) : h('div', { class: 'bd-top' }, this.pEl[0], mid, this.pEl[1]), this.hint);
+    this.root.append(n >= 3 ? h('div', { class: 'bd-top' }, ...this.pEl, mid) : h('div', { class: 'bd-top' }, this.pEl[0], mid, this.pEl[1]), this.hint);
     this.root.style.visibility = 'hidden'; ui.hudEl.innerHTML = ''; ui.hudEl.append(this.root);
   }
   show() { this.root.style.visibility = ''; }

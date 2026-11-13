@@ -4,6 +4,7 @@
 // er geen console-errors zijn en dat elke twist uit `twists` werkt. Exitcode 1 bij een mislukte controle.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
+import { chromePath, BROWSER_ARGS } from './chrome_path.mjs';
 
 const GAME = 'handtekening';
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -20,20 +21,20 @@ const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];   // alle 11 (twists weggelaten in de game)
 let failures = 0; const check = (ok, msg) => { console.log(`${ok ? 'OK  ' : 'FAIL'} ${msg}`); if (!ok) failures++; };
 
-async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+async function open(twist, N = 2) {
+  const browser = await chromium.launch({ executablePath: chromePath(), args: BROWSER_ARGS });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=${GAME}&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=${GAME}&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${N === 4 ? '&players=4' : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -48,15 +49,15 @@ async function installBots(page, cfg) {
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 4242; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    const B = [0, 1].map(() => ({ look: -1, freeze: false, hold: 0 }));
+    const B = cfg.map(() => ({ look: -1, freeze: false, hold: 0 }));
     window.__cfg = cfg; window.__hook = null;
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
         if (window.__hook) window.__hook(st);
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i], b = B[i], c = window.__cfg[i], me = st.pl[i], op = st.pl[1 - i];
+        for (let i = 0; i < cfg.length; i++) {
+          const v = inp.virtual[m.ids[i]], b = B[i], c = window.__cfg[i], me = st.pl[i], op = st.pl.filter((_, j) => j !== i).sort((a, b2) => Math.hypot(a.x - me.x, a.z - me.z) - Math.hypot(b2.x - me.x, b2.z - me.z))[0];
           v.a = false; v.x = 0; v.y = 0; if (b.hold > 0) { b.hold--; v.b = b.hold > 0; } else v.b = false;
           if (c.style === 'idle' || st.gstate !== 'play') continue;
           // de Deurman: nieuwe waarschuwing -> bepaal of we hem opmerken
@@ -92,18 +93,18 @@ const strong = { skill: 0.95, forget: 0.03, react: 0.35, throw: 0.02, style: 'pl
 const weak = { skill: 0.55, forget: 0.4, react: 0.7, throw: 0.005, style: 'play' };
 const mid = { skill: 0.8, forget: 0.15, react: 0.5, throw: 0.015, style: 'play' };
 
-async function runMatch(name, tw, cfg, pre, hook) {
-  const { browser, page, errors } = await open(tw);
+async function runMatch(name, tw, cfg, pre, hook, NP = 2) {
+  const { browser, page, errors } = await open(tw, NP);
   await installBots(page, cfg);
   if (pre) await page.evaluate(pre);
   if (hook) await page.evaluate(hook);
-  if (name === 'twists') await page.evaluate(() => { window.__bot(600); const i = window.__app.mode.instance; i.onDeurman([true, false]); i.onSwap(true); i.onDeurman([false, true]); i.onSwap(false); });   // twist-hooks ook echt aanroepen
+  if (name === 'twists') await page.evaluate(() => { window.__bot(600); const i = window.__app.mode.instance; i.onDeurman(window.__app.mode.ids.map((_, k) => k === 0)); i.onSwap(true); i.onDeurman(window.__app.mode.ids.map((_, k) => k === 1)); i.onSwap(false); });   // twist-hooks ook echt aanroepen
   const res = await page.evaluate(() => {
     const m = window.__app.mode, inst = m.instance; const log = []; let last = ''; let g = 0;
     while (!m.finished && g++ < 60 * 220) {
       window.__bot(1);
-      const st = inst.dbg.state(); const key = st.pl[0].pts + ':' + st.pl[1].pts + ':' + st.sd + ':' + Math.floor(st.T / 10);
-      if (key !== last) { log.push(`T=${st.T.toFixed(1)} clock=${st.clock.toFixed(0)} pts=${st.pl[0].pts}-${st.pl[1].pts} look=${st.look} papers=${st.papers.length} sd=${st.sd}`); last = key; }
+      const st = inst.dbg.state(); const key = st.pl.map((p) => p.pts).join(':') + ':' + st.sd + ':' + Math.floor(st.T / 10);
+      if (key !== last) { log.push(`T=${st.T.toFixed(1)} clock=${st.clock.toFixed(0)} pts=${st.pl.map((p) => p.pts).join('-')} look=${st.look} papers=${st.papers.length} sd=${st.sd}`); last = key; }
     }
     for (let k = 0; k < 120; k++) { window.__app.input.update(); m.update(1 / 60); }
     return { log, st: inst.dbg.state(), finished: m.finished, result: m.result, twist: m.twist.id, fin: window.__fin };
@@ -117,11 +118,30 @@ async function runMatch(name, tw, cfg, pre, hook) {
   await browser.close();
   check(res.finished && res.fin === 1, `${name}/${res.twist}: finishPvp precies 1x (calls=${res.fin})`);
   check(errors.length === 0, `${name}/${res.twist}: geen console-errors`);
+  if (NP === 4) {
+    const r = res.result;
+    check(r && r.scoreArr.length === 4 && r.place.length === 4 && [...r.place].sort().join() === '0,1,2,3' && r.place[0] === r.winnerId, `${name}/${res.twist}: vier plaatsen, winnaar eerst (${r && r.place}, winnaar ${r && r.winnerId}, score ${r && r.scoreArr})`);
+  }
   return { res, errors };
 }
 
 const winners = new Set();
 for (const name of scen) {
+  if (name === 'bots4') {   // vier spelers (iedereen tegen iedereen): elke hoek kan winnen
+    for (const cfg of [[strong, weak, weak, weak], [weak, strong, weak, weak], [weak, weak, strong, weak], [weak, weak, weak, strong]]) {
+      const { res } = await runMatch('bots4', process.env.TW || 'none', cfg, null, null, 4);
+      if (res.result && res.result.winner != null) winners.add(res.result.winner);
+      check(res.st.pl.every((p) => p.pts >= 0), `bots4: geen negatieve scores (${res.st.pl.map((p) => p.pts)})`);
+    }
+    check(winners.size >= 2, `bots4: meerdere slots kunnen winnen (winnaars: ${[...winners]})`);
+    continue;
+  }
+  if (name === 'idle4') { const { res } = await runMatch('idle4', 'none', [0, 1, 2, 3].map(() => ({ style: 'idle' })), null, null, 4); check(res.result.winner != null, 'idle4: toch een winnaar (' + res.st.why + ')'); continue; }
+  if (name === 'twists4') { for (const tw of TWISTS) { const { res } = await runMatch('twists4', tw, [mid, mid, mid, mid], null, null, 4); check(res.result && res.result.winner != null, `twist4 ${tw}: er is een winnaar`); } continue; }
+  if (name === 'sd4') {   // drie gelijk op tijd 0, de vierde achter: sudden death met het gouden blaadje, de achterblijver mag niet winnen
+    const { res } = await runMatch('sd4', 'none', [strong, strong, strong, strong], () => { const d = window.__app.mode.instance.dbg; d.setTime(3); window.__hook = (st) => { if (!st.sd && st.clock < 0.3) d.setPts(10, 10, 10, 2); }; }, null, 4);
+    check(res.result.winner != null && res.result.winner !== 3 && res.st.why === 'sd', 'sd4: gouden blaadje besliste tussen de gelijken (' + res.st.why + ', winnaar ' + res.result.winner + ')'); continue;
+  }
   if (name === 'bots') {
     for (const cfg of [[strong, weak], [weak, strong], [mid, mid]]) {
       const { res } = await runMatch('bots', process.env.TW || 'none', cfg);

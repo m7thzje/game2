@@ -25,9 +25,10 @@ export default {
   giver: 'Meester Gymnastiek',
   icon: '🏓',
   mode: 'pvp',
+  players: [2, 4], teams: true,   // 1 tegen 1, of met 4 spelers dubbelspel (2 tegen 2: twee batjes per helft, jullie delen de punten)
   time: 90,
   music: 'game_fast',
-  blurb: 'Tafeltennis in de <b>Sporthal</b>! Eerst <b>11 punten</b> (of de meeste na 90 s). Naar voren leunen = <b>SMASH</b>, een lange rally = <b>vuurbal</b>. Pas op voor wind, een kantelende tafel en de <b>Deurman</b>. Gouden bal = 2 punten!',
+  blurb: 'Tafeltennis in de <b>Sporthal</b>! Eerst <b>11 punten</b> (of de meeste na 90 s); met vier spelers speel je <b>dubbelspel</b> (2 tegen 2). Naar voren leunen = <b>SMASH</b>, een lange rally = <b>vuurbal</b>. Pas op voor wind, een kantelende tafel en de <b>Deurman</b>. Gouden bal = 2 punten!',
   controls: ['{move} batje bewegen', '{a} slag (+ vooruit = SMASH)', '{b} effectslag (zijwaarts = curve)'],
   tip: 'Druk A net VOOR de bal bij je batje is. Achterstand = groter batje!',
 
@@ -35,6 +36,11 @@ export default {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
+    const NP = players.length, TM = NP === 4 && ctx.teams ? ctx.teams : null;          // TM = 2 tegen 2 (slots per team), anders 1 tegen 1
+    const teamOf = (i) => (TM ? ctx.teamOf[i] : i);
+    const tNames = [0, 1].map((t) => (TM ? ctx.teamInfo[t].name : names[t]));
+    const tCss = [0, 1].map((t) => (TM ? ctx.teamInfo[t].css : players[t].css));
+    const memberIdx = [0, 0];
     const tw = ctx.twist.id;
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const TEMPO = tw === 'turbo' || tw === 'slowmo' ? ctx.twist.speed || 1 : 1;
@@ -58,9 +64,9 @@ export default {
 
     // ---------------- spelers ----------------
     const P = players.map((pp, i) => {
-      const dir = i ? -1 : 1;
+      const t = teamOf(i), kIn = memberIdx[t]++, dir = t ? -1 : 1, zBase = TM ? (kIn ? 1.9 : -1.9) : 0;
       const c = makeBrother(i); const holder = new THREE.Group(); holder.add(c.group); const k = 2.2 * lerp(1, pv.size(i), 0.35); holder.scale.setScalar(k);
-      holder.position.set(-dir * (L + 2.1), 0, 0); scene.add(holder); c.faceDir(dir, 0); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw; c.armR.visible = false;
+      holder.position.set(-dir * (L + 2.1), 0, zBase); scene.add(holder); c.faceDir(dir, 0); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw; c.armR.visible = false;
       // batje
       const bat = new THREE.Group(); scene.add(bat);
       const rub = new THREE.MeshStandardMaterial({ color: pp.color, roughness: 0.5 }), back = new THREE.MeshStandardMaterial({ color: 0x1c1c24, roughness: 0.6 });
@@ -73,38 +79,42 @@ export default {
       const arm = mesh(new THREE.CylinderGeometry(0.11, 0.09, 1, 7), new THREE.MeshStandardMaterial({ color: pp.color, roughness: 0.7 }), { cast: false }); scene.add(arm);
       const tagTex = canvasTex(256, 96, (g, w, h) => { g.font = 'bold 58px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(10,10,30,.9)'; g.lineJoin = 'round'; g.strokeText(pp.name, w / 2, h / 2); g.fillStyle = pp.css; g.fillText(pp.name, w / 2, h / 2); });
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false })); tag.scale.set(2.4, 0.9, 1); tag.renderOrder = 15; scene.add(tag);
-      return { i, dir, name: pp.name, col: pp.color, c, holder, k, bat, sweet, fire, shd, arm, rub, tag,
-        u: HOME_U, z: 0, vu: 0, vz: 0, y: TOP + 1.3, scale: lerp(1, pv.size(i), 0.5), scaleT: 1, sizeK: lerp(1, pv.size(i), 0.5), big: false, swing: { t: -1, kind: 'A', used: false }, swCd: 0, bCd: 0, score: 0, frozen: 0, flash: 0, cheerT: 0,
+      return { i, t, kIn, zBase, dir, name: pp.name, col: pp.color, c, holder, k, bat, sweet, fire, shd, arm, rub, tag,
+        u: HOME_U, z: zBase, vu: 0, vz: 0, y: TOP + 1.3, scale: lerp(1, pv.size(i), 0.5), scaleT: 1, sizeK: lerp(1, pv.size(i), 0.5), big: false, swing: { t: -1, kind: 'A', used: false }, swCd: 0, bCd: 0, frozen: 0, flash: 0, cheerT: 0,
         st: { smash: 0, fire: 0, curve: 0, lob: 0, loop: 0, edge: 0, net: 0, gold: 0, best: 0, aces: 0 } };
     });
     const batX = (p) => -p.dir * p.u;
+    const memb = [0, 1].map((t) => P.filter((p) => p.t === t));
+    const TS = [0, 0];                       // score per team (bij 1 tegen 1 per speler)
+    const srvCount = [0, 0];
+    const teamAssist = [false, false];
 
     // ---------------- toestand ----------------
     let T = 0, introT = 0, finished = false, slow = 1, slowHold = 0, hitStop = 0, camPunch = 0, camX = 0;
-    const G = { phase: 'serve', timeLeft: MATCH_TIME, timeUp: false, golden: false, server: Math.random() < 0.5 ? 0 : 1, firstServer: 0, points: 0, serveT: 0, pointT: 0, stare: 0, stareDid: false, endT: 0, winner: -1,
+    const G = { phase: 'serve', timeLeft: MATCH_TIME, timeUp: false, golden: false, server: Math.random() < 0.5 ? 0 : 1, sp: null, firstServer: 0, points: 0, serveT: 0, pointT: 0, stare: 0, stareDid: false, endT: 0, winner: -1,
       rally: 0, maxRally: 0, goldBall: false, gameOver: false };
-    G.firstServer = G.server;
-    const Rl = { lastHitter: -1, contacts: [], stage: 'serve1', net: false, heat: 0, fire: false, stall: 0 };
+    G.firstServer = G.server; G.sp = memb[G.server][0];
+    const Rl = { lastHitter: -1, lastP: -1, contacts: [], stage: 'serve1', net: false, heat: 0, fire: false, stall: 0 };
     const stats = { events: [], rallies: 0, why: {} };
     const v3 = new THREE.Vector3(), v3b = new THREE.Vector3(), qq = new THREE.Quaternion(), YAX = new THREE.Vector3(0, 1, 0);
-    const lead = (i) => P[1 - i].score - P[i].score;     // >0: i staat achter
+    const lead = (t) => TS[1 - t] - TS[t];     // >0: team t staat achter
     const serverOf = () => (G.firstServer + Math.floor(G.points / 2)) % 2;
 
     const timeTxt = () => { const s = Math.ceil(Math.max(0, G.timeLeft)); return G.golden ? 'GOUDEN PUNT' : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
     let sbNote = '';
     function refreshHud() {
-      hud.setScore(`${names[0]} ${P[0].score} – ${P[1].score} ${names[1]}${G.golden ? '  (GOUDEN PUNT)' : ''}`);
-      for (const p of P) hud.setPlayerInfo(p.i, `${p.score} pt${G.server === p.i && G.phase !== 'end' ? ' · serveert' : ''}${p.big ? ' · GROOT BATJE' : ''}${p.bCd > 0 ? ` · B ${Math.ceil(p.bCd)}s` : ' · B ✓'}`);
-      A.drawScore(names, [P[0].score, P[1].score], G.server, sbNote, timeTxt());
+      hud.setScore(`${tNames[0]} ${TS[0]} – ${TS[1]} ${tNames[1]}${G.golden ? '  (GOUDEN PUNT)' : ''}`);
+      for (const p of P) hud.setPlayerInfo(p.i, `${TM ? 'Team: ' : ''}${TS[p.t]} pt${G.sp === p && G.phase !== 'end' ? ' · serveert' : ''}${p.big ? ' · GROOT BATJE' : ''}${p.bCd > 0 ? ` · B ${Math.ceil(p.bCd)}s` : ' · B ✓'}`);
+      A.drawScore(tNames, [TS[0], TS[1]], G.server, sbNote, timeTxt());
     }
     let hudT = 0;
 
     // ---------------- serve ----------------
     function startServe() {
       G.phase = 'serve'; G.serveT = 0; G.server = serverOf(); G.goldBall = false; G.stareDid = false;
-      Rl.lastHitter = -1; Rl.contacts.length = 0; Rl.stage = 'serve1'; Rl.net = false; Rl.heat = 0; Rl.fire = false; Rl.stall = 0; G.rally = 0;
+      Rl.lastHitter = -1; Rl.lastP = -1; Rl.contacts.length = 0; Rl.stage = 'serve1'; Rl.net = false; Rl.heat = 0; Rl.fire = false; Rl.stall = 0; G.rally = 0;
       ball.vx = ball.vy = ball.vz = ball.wx = ball.wy = ball.wz = 0;
-      const sp = P[G.server]; sp.u = HOME_U;
+      G.sp = memb[G.server][srvCount[G.server]++ % memb[G.server].length]; const sp = G.sp; sp.u = HOME_U;   // bij dubbelspel serveren de teamgenoten om de beurt
       // gouden bal? (vaker voor wie achterstaat)
       const k = lead(G.server) >= 2 ? 0.42 : lead(1 - G.server) >= 2 ? 0.1 : 0.2;
       G.goldBall = G.golden || Math.random() < k;
@@ -119,7 +129,7 @@ export default {
       const vx = (12.2 + 1.0 * clamp(fwd, 0, 1) - (auto ? 0.2 : 0)) * p.dir * (TEMPO > 1 ? 1.0 : 1);
       ball.vx = vx; ball.vy = 0; ball.vz = lat * 3.4 + (tw === 'drunk' ? (Math.random() - 0.5) * 2 : 0);
       ball.wx = 0; ball.wy = 0; ball.wz = -p.dir * 10; if (GRAV < 1) { ball.vx *= Math.sqrt(GRAV) * 1.05; }
-      Rl.lastHitter = p.i; Rl.stage = 'serve1'; Rl.contacts.length = 0; G.phase = 'rally'; G.rally = 0;
+      Rl.lastHitter = p.t; Rl.lastP = p.i; Rl.stage = 'serve1'; Rl.contacts.length = 0; G.phase = 'rally'; G.rally = 0;
       p.swing.t = 0; p.swing.used = true; p.swing.kind = 'A';
       audio.sfx('swing', { vol: 0.4, rate: 1.3 }); audio.sfx('tick', { vol: 0.6, rate: 1.4 });
     }
@@ -127,7 +137,7 @@ export default {
     // ---------------- slag ----------------
     const gauss = () => (Math.random() + Math.random() + Math.random() - 1.5) / 0.75;
     function tryHit(p, px) {
-      if (G.phase !== 'rally' || Rl.lastHitter === p.i) return;
+      if (G.phase !== 'rally' || Rl.lastHitter === p.t) return;
       const xb = batX(p);
       if (!((px - xb) * (ball.x - xb) <= 0) || ball.vx * p.dir >= 0) return;
       const RZ = 1.2 * p.scale, dz = ball.z - p.z;
@@ -175,7 +185,7 @@ export default {
       if (!isFinite(vx + vy + vz)) { vx = dir * 9; vy = 9; vz = 0; }
       const sp = Math.hypot(vx, vz); const MAXH = 36; if (sp > MAXH) { vx *= MAXH / sp; vz *= MAXH / sp; }
       ball.x = batX(p) + dir * 0.12; ball.vx = vx; ball.vy = vy; ball.vz = vz; ball.wx = 0; ball.wy = spinY; ball.wz = -dir * spinT;
-      Rl.lastHitter = p.i; Rl.contacts.length = 0; Rl.stage = 'rally'; Rl.net = false; Rl.stall = 0;
+      Rl.lastHitter = p.t; Rl.lastP = p.i; Rl.contacts.length = 0; Rl.stage = 'rally'; Rl.net = false; Rl.stall = 0;
       G.rally++; G.maxRally = Math.max(G.maxRally, G.rally); Rl.heat++;
       if (fire) { Rl.fire = true; Rl.heat = 0; }
       else if (Rl.fire) { Rl.fire = false; }
@@ -202,15 +212,16 @@ export default {
     function awardPoint(w, why) {
       if (G.phase !== 'rally') return; G.phase = 'point'; G.pointT = 0;
       stats.why[why] = (stats.why[why] || 0) + 1;
-      const pts = G.goldBall ? 2 : 1; P[w].score += pts; G.points++; stats.rallies++;
+      const pts = G.goldBall ? 2 : 1; TS[w] += pts; G.points++; stats.rallies++;
       slow = 0.35; slowHold = 0.35; ctx.shake(0.35);
-      const l = 1 - w; P[w].c.pose = 'cheer'; P[l].c.pose = 'sad'; P[w].cheerT = 1.4; if (G.goldBall) P[w].st.gold += 2;
-      P[w].st.best = Math.max(P[w].st.best, G.rally);
-      const col = w ? '#8fb8ff' : '#7dffb0';
-      hud.showBig(`${G.goldBall ? '+2 ' : ''}${names[w]}!`, 900, col);
+      for (const q of P) { if (q.t === w) { q.c.pose = 'cheer'; q.cheerT = 1.4; } else q.c.pose = 'sad'; }
+      const wp = P[Rl.lastP >= 0 && P[Rl.lastP].t === w ? Rl.lastP : memb[w][0].i]; if (G.goldBall) wp.st.gold += 2;
+      wp.st.best = Math.max(wp.st.best, G.rally);
+      const col = tCss[w];
+      hud.showBig(`${G.goldBall ? '+2 ' : ''}${tNames[w]}!`, 900, col);
       fx.texts.add(why, ball.x, TOP + 2.2, clamp(ball.z, -4, 4), col, 1.3);
       audio.sfx(w === G.server ? 'ding' : 'good', { vol: 0.8 }); audio.sfx('win', { vol: 0.3 }); A.cheer(1.8);
-      fx.particles.burst(clamp(ball.x, -L, L), TOP + 0.5, clamp(ball.z, -W, W), { count: 30, speed: 5, up: 1, life: 0.9, size: 0.4, colors: G.goldBall ? [0xffd23f, 0xfff0a0] : [0xffffff, w ? 0x6aa0ff : 0x6aff9a], gravity: 6 });
+      fx.particles.burst(clamp(ball.x, -L, L), TOP + 0.5, clamp(ball.z, -W, W), { count: 30, speed: 5, up: 1, life: 0.9, size: 0.4, colors: G.goldBall ? [0xffd23f, 0xfff0a0] : [0xffffff, memb[w][0].col], gravity: 6 });
       sbNote = `${why}${G.rally > 3 ? ` · rally ${G.rally}` : ''}`; refreshHud();
     }
     function lose(i, why) { awardPoint(1 - i, why); }
@@ -218,7 +229,7 @@ export default {
       const s = e.side, hitter = Rl.lastHitter;
       audio.sfx('tick', { vol: clamp(e.vn / 18, 0.15, 0.55), rate: 0.8 + Math.random() * 0.15 });
       fx.particles.burst(e.x, TOP + 0.1, e.z, { count: 3, speed: 1.2, up: 0.5, life: 0.25, size: 0.16, colors: [0xffffff], gravity: 5 });
-      if (e.edge) { P[hitter < 0 ? 0 : hitter].st.edge++; fx.texts.add('KANT!', e.x, TOP + 1.0, e.z, '#fff', 1.0); audio.sfx('ding', { vol: 0.5, rate: 1.5 }); }
+      if (e.edge) { P[Rl.lastP < 0 ? 0 : Rl.lastP].st.edge++; fx.texts.add('KANT!', e.x, TOP + 1.0, e.z, '#fff', 1.0); audio.sfx('ding', { vol: 0.5, rate: 1.5 }); }
       if (Rl.stage === 'serve1') { if (s !== hitter) return lose(hitter, 'SERVICE TE LANG'); Rl.stage = 'serve2'; Rl.contacts.push(s); return; }
       if (Rl.stage === 'serve2') { if (s === hitter) return lose(hitter, 'SERVICE FOUT'); Rl.stage = 'rally'; Rl.contacts.push(s); return; }
       Rl.contacts.push(s);
@@ -230,7 +241,7 @@ export default {
       const hitter = Rl.lastHitter;
       if (hitter < 0) return lose(G.server, 'MIS');
       if (Rl.stage !== 'rally') return lose(hitter, Rl.net ? 'SERVICE IN HET NET' : 'SERVICE FOUT');
-      if (Rl.contacts.length === 0) { P[hitter].st.net += Rl.net ? 1 : 0; return lose(hitter, Rl.net ? 'IN HET NET' : 'BUITEN DE TAFEL'); }
+      if (Rl.contacts.length === 0) { P[Rl.lastP].st.net += Rl.net ? 1 : 0; return lose(hitter, Rl.net ? 'IN HET NET' : 'BUITEN DE TAFEL'); }
       awardPoint(hitter, 'NIET TERUGGESLAGEN');
     }
 
@@ -267,15 +278,15 @@ export default {
       const lam = lerp(16, 2.2, SLIP);
       if (p.frozen > 0) p.frozen -= dt;
       const fwd = p.frozen > 0 ? 0 : inp.x * p.dir, lat = p.frozen > 0 ? 0 : inp.y;
-      const serving = G.phase === 'serve' && G.server === p.i;
+      const serving = G.phase === 'serve' && G.sp === p;
       p.vu = damp(p.vu, -fwd * sp * (serving ? 0 : 1), lam, dt); p.vz = damp(p.vz, lat * sp, lam, dt);
       p.u = clamp(p.u + p.vu * dt, U_MIN, U_MAX); p.z = clamp(p.z + p.vz * dt, -Z_MAX, Z_MAX);
       // groot batje voor wie 3+ achterstaat
-      p.big = lead(p.i) >= 3; p.scaleT = (p.big ? 1.35 : 1) * p.sizeK; p.scale = damp(p.scale, p.scaleT, 4, dt);
+      p.big = lead(p.t) >= 3; p.scaleT = (p.big ? 1.35 : 1) * p.sizeK; p.scale = damp(p.scale, p.scaleT, 4, dt);
       if (p.big && !p.toldBig) { p.toldBig = true; fx.texts.add('GROTER BATJE!', batX(p), TOP + 3.2, p.z, '#ffd23f', 1.4); hud.toast(`${p.name} krijgt een groter batje!`, 1700); audio.sfx('powerup', { vol: 0.5 }); }
       if (!p.big) p.toldBig = false;
       // slag starten
-      p.swCd = Math.max(0, p.swCd - dt); p.bCd = Math.max(0, p.bCd - dt * (1 + 0.5 * clamp(lead(p.i) / 4, 0, 1)));
+      p.swCd = Math.max(0, p.swCd - dt); p.bCd = Math.max(0, p.bCd - dt * (1 + 0.5 * clamp(lead(p.t) / 4, 0, 1)));
       const sw = p.swing;
       if (sw.t >= 0) { sw.t += dt; if (sw.t > SWING_T + 0.05) { sw.t = -1; p.swCd = 0.1; } }
       const canSwing = sw.t < 0 && p.swCd <= 0 && p.frozen <= 0 && G.phase !== 'end' && G.phase !== 'point';
@@ -284,14 +295,14 @@ export default {
       if (serving && p.frozen <= 0) {
         if (inp.aP || (G.serveT > 6.5 + (G.stare > 0 ? 2.5 : 0))) {
           if (G.stare > 0 && inp.aP) { // gestraft door de Deurman
-            hud.showBig('FOUT!', 1000, '#ff8a8a'); audio.sfx('static', { vol: 0.5 }); G.phase = 'rally'; Rl.lastHitter = p.i; ball.x = batX(p); ball.y = TOP + 1.5; ball.z = p.z; ball.vx = ball.vy = ball.vz = 0; lose(p.i, 'DE DEURMAN KEEK!'); return;
+            hud.showBig('FOUT!', 1000, '#ff8a8a'); audio.sfx('static', { vol: 0.5 }); G.phase = 'rally'; Rl.lastHitter = p.t; Rl.lastP = p.i; ball.x = batX(p); ball.y = TOP + 1.5; ball.z = p.z; ball.vx = ball.vy = ball.vz = 0; lose(p.t, 'DE DEURMAN KEEK!'); return;
           }
           if (G.stare <= 0 || !inp.aP) doServe(p, !inp.aP);
         }
       }
       // batje-hoogte: volgt de bal (magneet) als die eraan komt
       let ty = TOP + 1.3;
-      if (G.phase === 'rally' && Rl.lastHitter !== p.i && ball.vx * p.dir < 0 && Math.abs(ball.x - batX(p)) < 5) ty = clamp(ball.y, TOP + 0.35, TOP + 2.6);
+      if (G.phase === 'rally' && Rl.lastHitter !== p.t && ball.vx * p.dir < 0 && Math.abs(ball.x - batX(p)) < 5) ty = clamp(ball.y, TOP + 0.35, TOP + 2.6);
       p.y = damp(p.y, ty, 14, dt);
     }
 
@@ -301,7 +312,7 @@ export default {
       for (let s = 0; s < steps; s++) {
         const px = ball.x; evs.length = 0;
         stepBall(ball, h, env, evs);
-        if (G.phase === 'rally') for (const p of P) tryHit(p, px);
+        if (G.phase === 'rally') { const act = (p) => p.swing.t >= 0 && !p.swing.used; for (const p of P) if (act(p)) tryHit(p, px); for (const p of P) if (!act(p)) tryHit(p, px); }   // wie echt zwaait gaat voor (dubbelspel)
         for (const e of evs) {
           if (G.phase !== 'rally') break;
           if (e.t === 'bounce') onBounce(e);
@@ -345,7 +356,7 @@ export default {
         p.shd.position.set(bx, 0.03, bz); p.shd.scale.setScalar(sc);
         // poppetje staat achter de tafel en schuift mee
         const hx = -p.dir * (L + 2.1);
-        p.holder.position.x = hx; p.holder.position.z = damp(p.holder.position.z, p.z, 10, dt);
+        p.holder.position.x = hx; p.holder.position.z = damp(p.holder.position.z, TM ? p.zBase + clamp(p.z * 0.45, -2.2, 2.2) : p.z, 10, dt);
         p.c.faceDir(p.dir, 0); p.c.pose = p.c.pose === 'cheer' || p.c.pose === 'sad' ? p.c.pose : 'idle'; p.c.speed = Math.min(1, Math.abs(p.vz) / 8); p.c.update(dt);
         // rubberen arm
         p.c.armR.getWorldPosition(v3); v3b.set(bx, by - 1.0 * sc, bz);
@@ -363,24 +374,25 @@ export default {
 
     function finishMatch(winner) {
       if (finished) return; finished = true;
-      const W_ = P[winner], L_ = P[1 - winner];
-      const jokes = [`${W_.name} tornado't over de tafel! ${L_.name} zoekt nog naar de bal.`, `Het publiek in de Sporthal gaat los voor ${W_.name}. ${L_.name} is duizelig van het rennen.`, `${W_.name} wint de Tafeltennis-Tornado! De Deurman klapte stiekem mee.`, `${L_.name} sloeg de bal naar de Deurman. Dat telt niet als punt, ${W_.name} wel.`];
+      const Wn = tNames[winner], Ln = tNames[1 - winner];
+      const jokes = TM ? [`${Wn} tornado'en over de tafel! ${Ln} zoeken nog naar de bal.`, `Het publiek in de Sporthal gaat los voor ${Wn}. ${Ln} zijn duizelig van het rennen.`, `${Wn} winnen de Tafeltennis-Tornado! De Deurman klapte stiekem mee.`, `${Ln} sloegen de bal naar de Deurman. Dat telt niet als punt, ${Wn} wel.`]
+        : [`${Wn} tornado't over de tafel! ${Ln} zoekt nog naar de bal.`, `Het publiek in de Sporthal gaat los voor ${Wn}. ${Ln} is duizelig van het rennen.`, `${Wn} wint de Tafeltennis-Tornado! De Deurman klapte stiekem mee.`, `${Ln} sloeg de bal naar de Deurman. Dat telt niet als punt, ${Wn} wel.`];
       const bits = [];
       if (G.maxRally >= 6) bits.push(`langste rally: ${G.maxRally}`); const sm = P[0].st.smash + P[1].st.smash; if (sm) bits.push(`${sm} smashes`); const fr = P[0].st.fire + P[1].st.fire; if (fr) bits.push(`${fr}x vuursmash`);
-      ctx.finishPvp({ winner, score: [P[0].score, P[1].score], delay: 900, summary: `${pick(jokes)}${G.golden ? ' Beslist met een gouden punt!' : ''}${bits.length ? ` (${bits.join(', ')})` : ''}` });
+      ctx.finishPvp({ winners: [winner].flatMap((w) => (TM ? TM[w].slice() : [w])), score: P.map((p) => TS[p.t]), delay: 900, summary: `${pick(jokes)}${G.golden ? ' Beslist met een gouden punt!' : ''}${bits.length ? ` (${bits.join(', ')})` : ''}` });
     }
     function endMatch(w) {
       G.phase = 'end'; G.winner = w; G.endT = 0; hud.setTimer(null); slow = Math.min(slow, 0.5); slowHold = 0.6;
-      hud.showBig(`${names[w]} WINT!`, 1700, w ? '#8fb8ff' : '#7dffb0'); audio.sfx('bell', { vol: 1 }); ctx.shake(0.5); A.cheer(8);
-      P[w].c.pose = 'cheer'; P[1 - w].c.pose = 'sad';
+      hud.showBig(`${tNames[w].toUpperCase()} ${TM ? 'WINNEN' : 'WINT'}!`, 1700, tCss[w]); audio.sfx('bell', { vol: 1 }); ctx.shake(0.5); A.cheer(8);
+      for (const q of P) q.c.pose = q.t === w ? 'cheer' : 'sad';
       fx.particles.burst(0, TOP + 3, 0, { count: 90, speed: 9, up: 1.2, life: 1.6, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 });
     }
     function afterPoint() {
       for (const p of P) { p.c.pose = 'idle'; p.swing.t = -1; }
-      if (P[0].score >= WIN || P[1].score >= WIN) return endMatch(P[0].score > P[1].score ? 0 : 1);
-      if (G.golden) return endMatch(P[0].score > P[1].score ? 0 : 1);
+      if (TS[0] >= WIN || TS[1] >= WIN) return endMatch(TS[0] > TS[1] ? 0 : 1);
+      if (G.golden) return endMatch(TS[0] > TS[1] ? 0 : 1);
       if (G.timeUp) {
-        if (P[0].score !== P[1].score) { hud.showBig('TIJD!', 900, '#ffd23f'); audio.sfx('bell', { vol: 0.9 }); return endMatch(P[0].score > P[1].score ? 0 : 1); }
+        if (TS[0] !== TS[1]) { hud.showBig('TIJD!', 900, '#ffd23f'); audio.sfx('bell', { vol: 0.9 }); return endMatch(TS[0] > TS[1] ? 0 : 1); }
         G.timeUp = false; G.golden = true; hud.setTimer(null); hud.showBig('GELIJK!', 1300, '#ffd23f'); hud.toast('Het volgende punt wint de wedstrijd', 2200); audio.sfx('bell', { vol: 0.9 });
       }
       startServe();
@@ -400,7 +412,7 @@ export default {
       for (const p of P) control(p, sdt);
       updateEvent(sdt);
       if (G.phase === 'serve') {
-        G.serveT += sdt; const sp = P[G.server];
+        G.serveT += sdt; const sp = G.sp;
         if (G.timeUp) { /* tijd om, geen lopende rally: direct beslissen */ afterPoint(); }
         ball.x = batX(sp) + sp.dir * 0.2; ball.y = TOP + 1.45 + Math.sin(T * 5) * 0.06; ball.z = sp.z; ball.vx = ball.vy = ball.vz = 0;
       } else if (G.phase === 'rally') updateBall(sdt);
@@ -413,8 +425,8 @@ export default {
     }
     function resultUpdate(dt) { T += dt; slow = 1; for (const p of P) p.c.update(dt); A.update(T + introT, dt, 0, 0); A.judge.update(T + introT, dt, ball); updateCamera(dt); }
     function introUpdate(dt) {
-      introT += dt; const sp = P[G.server]; ball.x = batX(sp) + sp.dir * 0.2; ball.y = TOP + 1.45 + Math.sin(introT * 5) * 0.06; ball.z = sp.z;
-      for (const p of P) p.z = Math.sin(introT * 1.3 + p.i * 2) * 1.2;
+      introT += dt; const sp = G.sp || P[0]; ball.x = batX(sp) + sp.dir * 0.2; ball.y = TOP + 1.45 + Math.sin(introT * 5) * 0.06; ball.z = sp.z;
+      for (const p of P) p.z = p.zBase + Math.sin(introT * 1.3 + p.i * 2) * 1.2;
       visuals(dt, introT); A.update(introT, dt, 0, 0); A.judge.update(introT, dt, ball); updateCamera(dt);
     }
     refreshHud(); visuals(0.016, 0); updateCamera(0.016);
@@ -424,19 +436,19 @@ export default {
       onStart() { startServe(); },
       onSwap() { for (const p of P) fx.particles.burst(batX(p), TOP + 1.5, p.z, { count: 20, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) {
-        movers.forEach((m, i) => { if (m) { const p = P[i]; p.frozen = 1.6; if (p.score > 0) p.score--; fx.texts.add('DEURMAN: -1', batX(p), TOP + 3.4, p.z, '#ff8a8a', 1.4); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
+        movers.forEach((m, i) => { if (m) { const p = P[i]; p.frozen = 1.6; if (TS[p.t] > 0) TS[p.t]--; fx.texts.add('DEURMAN: -1', batX(p), TOP + 3.4, p.z, '#ff8a8a', 1.4); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
         refreshHud();
       },
-      celebrate(w) { P[w].c.pose = 'cheer'; P[1 - w].c.pose = 'sad'; A.cheer(6); },
+      celebrate(w, winners = [w]) { for (const q of P) q.c.pose = winners.includes(q.i) ? 'cheer' : 'sad'; A.cheer(6); },
       dispose() {},
       dbg: {
-        state: () => ({ T, phase: G.phase, timeLeft: G.timeLeft, timeUp: G.timeUp, golden: G.golden, server: G.server, score: P.map((p) => p.score), finished, goldBall: G.goldBall, stare: G.stare, rally: G.rally, maxRally: G.maxRally,
-          ball: { x: ball.x, y: ball.y, z: ball.z, vx: ball.vx, vy: ball.vy, vz: ball.vz }, lastHitter: Rl.lastHitter, stage: Rl.stage, heat: Rl.heat, fire: Rl.fire, tilt: tiltCur, wind: [env.windX, env.windZ], ev: ev ? ev.id : null, evs: stats.events.slice(), bumpers: bumpers.filter((b) => b.on).length,
-          p: P.map((p) => ({ u: p.u, z: p.z, y: p.y, swing: p.swing.t, bCd: p.bCd, scale: p.scale, dir: p.dir, st: { ...p.st }, frozen: p.frozen })), points: G.points, why: { ...stats.why } }),
+        state: () => ({ T, phase: G.phase, timeLeft: G.timeLeft, timeUp: G.timeUp, golden: G.golden, server: G.server, sp: G.sp ? G.sp.i : -1, score: TS.slice(), finished, goldBall: G.goldBall, stare: G.stare, rally: G.rally, maxRally: G.maxRally,
+          ball: { x: ball.x, y: ball.y, z: ball.z, vx: ball.vx, vy: ball.vy, vz: ball.vz }, lastHitter: Rl.lastHitter, lastP: Rl.lastP, stage: Rl.stage, heat: Rl.heat, fire: Rl.fire, tilt: tiltCur, wind: [env.windX, env.windZ], ev: ev ? ev.id : null, evs: stats.events.slice(), bumpers: bumpers.filter((b) => b.on).length,
+          p: P.map((p) => ({ t: p.t, u: p.u, z: p.z, y: p.y, swing: p.swing.t, bCd: p.bCd, scale: p.scale, dir: p.dir, st: { ...p.st }, frozen: p.frozen })), points: G.points, why: { ...stats.why } }),
         // voorspelling voor bots: waar/wanneer kruist de bal het vlak van mijn batje?
         predict: (i) => { const p = P[i]; const b = { ...ball }; const e2 = { ...env, bumpers: [] }; const xb = batX(p); const ev2 = []; let t = 0;
           for (; t < 3; t += SUB) { const px = b.x; ev2.length = 0; stepBall(b, SUB, e2, ev2); if ((px - xb) * (b.x - xb) <= 0 && b.vx * p.dir < 0) return { t, z: b.z, y: b.y, vx: b.vx }; if (ev2.some((q) => q.t === 'floor' || q.t === 'out' || q.t === 'net')) break; } return null; },
-        setScore: (a, b) => { P[0].score = a; P[1].score = b; refreshHud(); },
+        setScore: (a, b) => { TS[0] = a; TS[1] = b; refreshHud(); },
         setTime: (t) => { G.timeLeft = t; },
         startEvent: (id) => startEvent(id), startServe, G, P, ball, env, Rl,
         setGoldBall: (v) => { G.goldBall = v; },
