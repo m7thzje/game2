@@ -33,15 +33,24 @@ export function extraParams() {   // geef eigen signaalserver-parameters door in
   return keep.toString();
 }
 
-// Spelers: host = Wes (0), gast 1 = Jor (1), gast 2 = Juul (2)
-export const NAMES = ['Wes', 'Jor', 'Juul'];
-export const SLUG = ['wes', 'jor', 'juul'];
-export const CSS = ['#35c46f', '#4a8cff', '#ff8a3c'];
-// 'jor' | 'juul' | 1 | 2 -> spelers-id (1 of 2), anders 0
+// Spelers: host = Wes (0), gast 1 = Jor (1), gast 2 = Juul (2), gast 3 = Sam (3, alleen in de Gamehal)
+export const NAMES = ['Wes', 'Jor', 'Juul', 'Sam'];
+export const SLUG = ['wes', 'jor', 'juul', 'sam'];
+export const CSS = ['#35c46f', '#4a8cff', '#ff8a3c', '#b455f0'];
+// Gamehal-versie (gamehal.html zet window.GAMEHAL = true)? Zo lezen we het defensief, zonder src/variant.js te importeren.
+export const isGamehal = () => typeof window !== 'undefined' && window.GAMEHAL === true;
+// Meer dan 2 gasten (Sam) kan alleen in de Gamehal
+export const maxGuestsAllowed = () => (isGamehal() ? 3 : 2);
+// 'jor' | 'juul' | 'sam' | 1 | 2 | 3 -> spelers-id (1, 2 of 3), anders 0
 export function slotOf(v) {
-  if (v === 1 || v === 2) return v;
+  if (v === 1 || v === 2 || v === 3) return v;
   const s = String(v || '').toLowerCase();
-  return s === 'jor' ? 1 : s === 'juul' ? 2 : 0;
+  return s === 'jor' ? 1 : s === 'juul' ? 2 : s === 'sam' ? 3 : 0;
+}
+// "Jor", "Jor en Juul", "Jor, Juul en Sam"
+export function nameList(ids) {
+  const n = ids.map((id) => NAMES[id]);
+  return n.length < 2 ? n.join('') : n.slice(0, -1).join(', ') + ' en ' + n[n.length - 1];
 }
 // Vast per tabblad (blijft bij herladen): zo herkent de host dezelfde gast en vervangt hij zijn oude verbinding
 export function guestToken() {
