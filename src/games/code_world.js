@@ -12,7 +12,17 @@ export const CRYS = [
 ];
 export const ROWS = 8, COLS = 4;
 const FONT = 'Fredoka, Arial Black, Arial, sans-serif';
-export const BOARD_X = [-8.2, 8.2], BOARD_Y = 0.5;
+// Indeling: bij 2 spelers zoals altijd (twee borden, kist in het midden); bij 3-4 spelers staan de borden naast elkaar, iets hoger (de kist en
+// de poppetjes staan in de strook eronder) en de lont + code-paneel boven de borden. setLayout(n) wordt door buildVault aangeroepen.
+export const BOARD_X = [-8.2, 8.2];
+export let BOARD_Y = 0.5;
+export let LAYOUT = { n: 2, wide: false, fuseY: 7.0, fuseLen: 6.4 };
+export function setLayout(n) {
+  BOARD_X.length = 0;
+  if (n <= 2) { BOARD_X.push(-8.2, 8.2); BOARD_Y = 0.5; LAYOUT = { n: 2, wide: false, fuseY: 7.0, fuseLen: 6.4 }; return; }
+  const sp = 7.6; for (let i = 0; i < n; i++) BOARD_X.push((i - (n - 1) / 2) * sp);
+  BOARD_Y = 3.0; LAYOUT = { n, wide: true, fuseY: BOARD_Y - 4.2, fuseLen: Math.max(6.4, n * sp - 1.2) };
+}
 export const slotPos = (b, r, c) => ({ x: BOARD_X[b] + (-2.2 + c * 1.1), y: BOARD_Y + 4.2 - r * 1.05 });
 export const pegPos = (b, r, k) => ({ x: BOARD_X[b] + 2.05 + (k % 2) * 0.5, y: BOARD_Y + 4.2 - r * 1.05 + (k < 2 ? 0.22 : -0.22) });
 export const hintPos = (b, c) => ({ x: BOARD_X[b] + (-2.2 + c * 1.1), y: BOARD_Y + 5.75 });
@@ -27,8 +37,9 @@ function geoms() {
   return [oct, new THREE.CylinderGeometry(0.34, 0.34, 0.85, 6), new THREE.ConeGeometry(0.5, 1.0, 4), box, new THREE.IcosahedronGeometry(0.48, 0), tet];
 }
 
-export function buildVault(ctx, L) {
-  const { scene, fx } = ctx;
+export function buildVault(ctx, L, n = 2) {
+  const { scene, fx } = ctx; setLayout(n); const NB = n, WIDE = LAYOUT.wide;
+  const IDX = Array.from({ length: NB }, (_, i) => i);
   const rng = mulberry32(99);
   const V = { t: 0 };
   scene.background = new THREE.Color(0x1a1040); scene.fog = new THREE.Fog(0x1a1040, 45, 110);
@@ -65,12 +76,12 @@ export function buildVault(ctx, L) {
   // ---------------- borden ----------------
   const plateG = new THREE.BoxGeometry(5.7, 0.92, 0.12), sockG = new THREE.CylinderGeometry(0.4, 0.4, 0.05, 14); sockG.rotateX(Math.PI / 2);
   const pegG = new THREE.SphereGeometry(0.13, 8, 6);
-  const plates = new THREE.InstancedMesh(plateG, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0.2 }), ROWS * 2);
-  const socks = new THREE.InstancedMesh(sockG, new THREE.MeshBasicMaterial({ color: 0xffffff }), (ROWS + 1) * COLS * 2);
-  const pegs = new THREE.InstancedMesh(pegG, new THREE.MeshBasicMaterial({ color: 0xffffff }), ROWS * 4 * 2);
+  const plates = new THREE.InstancedMesh(plateG, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.6, metalness: 0.2 }), ROWS * NB);
+  const socks = new THREE.InstancedMesh(sockG, new THREE.MeshBasicMaterial({ color: 0xffffff }), (ROWS + 1) * COLS * NB);
+  const pegs = new THREE.InstancedMesh(pegG, new THREE.MeshBasicMaterial({ color: 0xffffff }), ROWS * 4 * NB);
   scene.add(plates, socks, pegs);
   const sockCol = new THREE.Color(0x3a2a78);
-  for (let b = 0; b < 2; b++) {
+  for (let b = 0; b < NB; b++) {
     for (let r = 0; r < ROWS; r++) {
       dum.rotation.set(0, 0, 0); dum.scale.setScalar(1);
       dum.position.set(BOARD_X[b] + 0.15, slotPos(b, r, 0).y, -0.1); dum.updateMatrix(); plates.setMatrixAt(b * ROWS + r, dum.matrix); plates.setColorAt(b * ROWS + r, new THREE.Color(0x3a2a80));
@@ -91,9 +102,9 @@ export function buildVault(ctx, L) {
 
   // cursor + hint-sleuteltje per speler
   const curT = canvasTex(128, 128, (g) => { g.strokeStyle = '#fff'; g.lineWidth = 14; rr(g, 10, 10, 108, 108, 22); g.stroke(); g.fillStyle = 'rgba(255,255,255,.18)'; rr(g, 10, 10, 108, 108, 22); g.fill(); });
-  V.cursor = [0, 1].map((b) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.12, 1.12), new THREE.MeshBasicMaterial({ map: curT, color: PLAYER_COLORS[b], transparent: true, depthWrite: false })); m.visible = false; scene.add(m); return m; });
+  V.cursor = IDX.map((b) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1.12, 1.12), new THREE.MeshBasicMaterial({ map: curT, color: PLAYER_COLORS[b], transparent: true, depthWrite: false })); m.visible = false; scene.add(m); return m; });
   // header-canvas per bord
-  V.hdr = [0, 1].map((b) => {
+  V.hdr = IDX.map((b) => {
     const c = document.createElement('canvas'); c.width = 640; c.height = 170; const g = c.getContext('2d'); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
     const m = new THREE.Mesh(new THREE.PlaneGeometry(6.6, 1.75), new THREE.MeshBasicMaterial({ map: t, transparent: true, toneMapped: false })); m.position.set(BOARD_X[b] + 0.1, BOARD_Y + 7.15, 0.0); scene.add(m);
     return { c, g, t, key: '' };
@@ -108,10 +119,10 @@ export function buildVault(ctx, L) {
     H.t.needsUpdate = true;
   };
   // midden-banner
-  V.bn = (() => { const c = document.createElement('canvas'); c.width = 1024; c.height = 300; const g = c.getContext('2d'); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; const m = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 2.17), new THREE.MeshBasicMaterial({ map: t, transparent: true, toneMapped: false })); m.position.set(0, 4.6, 0.6); scene.add(m); return { c, g, t, key: '', m }; })();
+  V.bn = (() => { const c = document.createElement('canvas'); c.width = 1024; c.height = 300; const g = c.getContext('2d'); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; const m = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 2.17), new THREE.MeshBasicMaterial({ map: t, transparent: true, toneMapped: false })); m.position.set(0, 4.6, 0.6); if (WIDE) { m.visible = false; } scene.add(m); return { c, g, t, key: '', m }; })();
   V.drawBanner = (st) => {
     const B = V.bn; const key = JSON.stringify(st); if (B.key === key) return; B.key = key; const g = B.g;
-    g.clearRect(0, 0, 1024, 300); g.fillStyle = st.warn ? 'rgba(90,10,20,.92)' : 'rgba(18,10,48,.9)'; rr(g, 6, 6, 1012, 288, 40); g.fill(); g.lineWidth = 10; g.strokeStyle = st.warn ? '#ff5a4a' : '#ffd23f'; g.stroke();
+    g.clearRect(0, 0, 1024, 300); if (WIDE) { g.fillStyle = 'rgba(18,10,48,.9)'; rr(g, 6, 190, 1012, 104, 36); g.fill(); g.lineWidth = 8; g.strokeStyle = st.warn ? '#ff5a4a' : '#ffd23f'; g.stroke(); g.font = `bold 44px ${FONT}`; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillStyle = '#ffd23f'; g.beginPath(); g.arc(60, 242, 20, 0, TAU); g.fill(); g.fillStyle = '#e8e0ff'; g.fillText('goede plek', 92, 244); g.fillStyle = '#f4f8ff'; g.beginPath(); g.arc(440, 242, 20, 0, TAU); g.fill(); g.fillStyle = '#e8e0ff'; g.fillText('goede kleur, andere plek', 472, 244, 530); B.t.needsUpdate = true; return; } g.fillStyle = st.warn ? 'rgba(90,10,20,.92)' : 'rgba(18,10,48,.9)'; rr(g, 6, 6, 1012, 288, 40); g.fill(); g.lineWidth = 10; g.strokeStyle = st.warn ? '#ff5a4a' : '#ffd23f'; g.stroke();
     g.textAlign = 'center'; g.textBaseline = 'middle'; g.font = `bold 84px ${FONT}`; g.fillStyle = st.warn ? '#ffb0a0' : '#ffd23f'; g.fillText(st.title, 512, 90, 960);
     g.font = `bold 46px ${FONT}`; g.fillStyle = '#ffffff'; g.fillText(st.sub || '', 512, 175, 960);
     // legenda
@@ -122,9 +133,9 @@ export function buildVault(ctx, L) {
 
   // ---------------- nevel + zandloper + spook-kristallen ----------------
   const fogT = canvasTex(256, 256, (g, w, h) => { g.fillStyle = '#2a1060'; g.fillRect(0, 0, w, h); for (let i = 0; i < 70; i++) { const gr = g.createRadialGradient(0, 0, 2, 0, 0, 50 + rng() * 40); gr.addColorStop(0, `rgba(${150 + rng() * 80},${110 + rng() * 60},255,.55)`); gr.addColorStop(1, 'rgba(120,80,255,0)'); g.save(); g.translate(rng() * w, rng() * h); g.fillStyle = gr; g.fillRect(-100, -100, 200, 200); g.restore(); } });
-  V.fog = [0, 1].map((b) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 10.6), new THREE.MeshBasicMaterial({ map: fogT, transparent: true, opacity: 0, depthWrite: false })); m.position.set(BOARD_X[b] + 0.1, BOARD_Y + 1.6, 0.7); m.visible = false; scene.add(m); return m; });
-  const ghostI = new THREE.InstancedMesh(geos[0], new THREE.MeshBasicMaterial({ color: 0xd8b8ff, transparent: true, opacity: 0.55, depthWrite: false }), 16); ghostI.frustumCulled = false; scene.add(ghostI); V.ghost = { m: ghostI, on: [0, 0] };
-  V.hg = [0, 1].map((b) => {
+  V.fog = IDX.map((b) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(6.4, 10.6), new THREE.MeshBasicMaterial({ map: fogT, transparent: true, opacity: 0, depthWrite: false })); m.position.set(BOARD_X[b] + 0.1, BOARD_Y + 1.6, 0.7); m.visible = false; scene.add(m); return m; });
+  const ghostI = new THREE.InstancedMesh(geos[0], new THREE.MeshBasicMaterial({ color: 0xd8b8ff, transparent: true, opacity: 0.55, depthWrite: false }), 7 * NB + 2); ghostI.frustumCulled = false; scene.add(ghostI); V.ghost = { m: ghostI, on: IDX.map(() => 0) };
+  V.hg = IDX.map((b) => {
     const g = new THREE.Group(); g.position.set(BOARD_X[b] + 0.1, BOARD_Y + 1.6, 1.4); g.visible = false; scene.add(g);
     const glass = new THREE.MeshStandardMaterial({ color: 0xbfe8ff, transparent: true, opacity: 0.55, roughness: 0.1 }); const gold = mat(0xe8c24a, { metalness: 0.7 });
     g.add(mesh(new THREE.ConeGeometry(1.0, 1.6, 10), glass, { cast: false, pos: [0, 0.85, 0], rot: [Math.PI, 0, 0] }), mesh(new THREE.ConeGeometry(1.0, 1.6, 10), glass, { cast: false, pos: [0, -0.85, 0] }), mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.2, 10), gold, { cast: false, pos: [0, 1.75, 0] }), mesh(new THREE.CylinderGeometry(1.2, 1.2, 0.2, 10), gold, { cast: false, pos: [0, -1.75, 0] }));
@@ -135,16 +146,16 @@ export function buildVault(ctx, L) {
   V.proj = new THREE.Mesh(new THREE.OctahedronGeometry(0.6), new THREE.MeshBasicMaterial({ color: 0xd8b8ff, transparent: true, opacity: 0.8 })); V.proj.visible = false; scene.add(V.proj);
 
   // ---------------- kist + code-paneel ----------------
-  const chest = P.chest(false, 0x7a4a24); chest.scale.setScalar(4.2); chest.position.set(0, -4.4, 1.6); scene.add(chest); V.chest = chest;
+  const chest = P.chest(false, 0x7a4a24); const chestX = WIDE ? (NB % 2 ? 3.8 : 0) : 0; chest.scale.setScalar(WIDE ? 2.7 : 4.2); chest.position.set(chestX, -4.4, WIDE ? 0.4 : 1.6); scene.add(chest); V.chest = chest;
   const lid = chest.userData.lid; V.chestU = 0;
   const cpC = document.createElement('canvas'); cpC.width = 512; cpC.height = 160; const cpG = cpC.getContext('2d'); const cpT = new THREE.CanvasTexture(cpC); cpT.colorSpace = THREE.SRGBColorSpace;
-  V.codePanel = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 1.75), new THREE.MeshBasicMaterial({ map: cpT, transparent: true, toneMapped: false })); V.codePanel.position.set(0, -0.55, 2.0); scene.add(V.codePanel);
-  V.codeX = (c) => -2.1 + c * 1.4; V.codeY = -0.55;
-  V.drawCodePanel = (txt, open) => { const g = cpG; g.clearRect(0, 0, 512, 160); g.fillStyle = 'rgba(18,10,48,.9)'; rr(g, 4, 4, 504, 152, 28); g.fill(); g.lineWidth = 8; g.strokeStyle = '#ffd23f'; g.stroke(); if (!open) { g.font = `bold 84px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#6a58b8'; for (let c = 0; c < 4; c++) g.fillText('?', 74 + c * 121, 84); } else { g.fillStyle = 'rgba(255,210,60,.15)'; g.fillRect(8, 8, 496, 144); } cpT.needsUpdate = true; };
+  V.codePanel = new THREE.Mesh(new THREE.PlaneGeometry(5.6, 1.75), new THREE.MeshBasicMaterial({ map: cpT, transparent: true, toneMapped: false })); V.codePanel.position.set(0, WIDE ? BOARD_Y + 2.1 : -0.55, 2.0); scene.add(V.codePanel);
+  V.codeX = (c) => -2.1 + c * 1.4; V.codeY = WIDE ? BOARD_Y + 2.1 : -0.55; V.wide = WIDE;
+  V.drawCodePanel = (txt, open) => { if (WIDE) V.codePanel.visible = !!open; const g = cpG; g.clearRect(0, 0, 512, 160); g.fillStyle = 'rgba(18,10,48,.9)'; rr(g, 4, 4, 504, 152, 28); g.fill(); g.lineWidth = 8; g.strokeStyle = '#ffd23f'; g.stroke(); if (!open) { g.font = `bold 84px ${FONT}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#6a58b8'; for (let c = 0; c < 4; c++) g.fillText('?', 74 + c * 121, 84); } else { g.fillStyle = 'rgba(255,210,60,.15)'; g.fillRect(8, 8, 496, 144); } cpT.needsUpdate = true; };
   V.drawCodePanel('', false);
   // fakkel-schijn en gloed rond de kist
   const glowT = canvasTex(64, 64, (g) => { const gr = g.createRadialGradient(32, 32, 1, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); });
-  V.chestGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowT, color: 0xffd23f, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending, depthWrite: false })); V.chestGlow.scale.set(9, 5, 1); V.chestGlow.position.set(0, -2.6, 2.2); scene.add(V.chestGlow);
+  V.chestGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowT, color: 0xffd23f, transparent: true, opacity: 0.0, blending: THREE.AdditiveBlending, depthWrite: false })); V.chestGlow.scale.set(9, 5, 1); V.chestGlow.position.set(chestX, -2.6, 2.2); scene.add(V.chestGlow);
   V.setChest = (u) => { V.chestU = u; lid.rotation.x = -1.9 * u; V.chestGlow.material.opacity = u * 0.7; };
 
   // ---------------- slot-golem ----------------
@@ -163,15 +174,15 @@ export function buildVault(ctx, L) {
   V.golemMode = 'idle';
 
   // ---------------- lont ----------------
-  const fuseG = new THREE.Group(); fuseG.position.set(0, BOARD_Y + 7.0, 0.2); scene.add(fuseG);
-  const rope = mesh(new THREE.BoxGeometry(6.4, 0.16, 0.16), mat(0x5a4028), { cast: false }); fuseG.add(rope);
-  const glowLine = new THREE.Mesh(new THREE.BoxGeometry(6.4, 0.07, 0.2), new THREE.MeshBasicMaterial({ color: 0xffa030 })); fuseG.add(glowLine);
-  const bomb = mesh(new THREE.SphereGeometry(0.7, 12, 10), mat(0x14141c, { metalness: 0.5, roughness: 0.3 }), { cast: false, pos: [-3.95, -0.2, 0] }); fuseG.add(bomb); V.bomb = bomb;
-  fuseG.add(mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.3, 8), mat(0x888899, { metalness: 0.7 }), { cast: false, pos: [-3.65, 0.45, 0] }));
+  const fuseG = new THREE.Group(); fuseG.position.set(0, LAYOUT.fuseY, 0.2); scene.add(fuseG);
+  const FLEN = LAYOUT.fuseLen; const rope = mesh(new THREE.BoxGeometry(FLEN, 0.16, 0.16), mat(0x5a4028), { cast: false }); fuseG.add(rope);
+  const glowLine = new THREE.Mesh(new THREE.BoxGeometry(FLEN, 0.07, 0.2), new THREE.MeshBasicMaterial({ color: 0xffa030 })); fuseG.add(glowLine);
+  const bomb = mesh(new THREE.SphereGeometry(0.7, 12, 10), mat(0x14141c, { metalness: 0.5, roughness: 0.3 }), { cast: false, pos: [-FLEN / 2 - 0.75, -0.2, 0] }); fuseG.add(bomb); V.bomb = bomb;
+  fuseG.add(mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.3, 8), mat(0x888899, { metalness: 0.7 }), { cast: false, pos: [-FLEN / 2 - 0.45, 0.45, 0] }));
   const flame = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowT, color: 0xffb040, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false })); flame.scale.set(1.5, 1.5, 1); fuseG.add(flame);
   // de lont brandt van rechts naar links: het resterende touw loopt van de bom (links) tot de vlam
   V.setFuse = (u) => {
-    u = clamp(u, 0, 1); const len = 6.4, left = -len / 2;
+    u = clamp(u, 0, 1); const len = FLEN, left = -len / 2;
     rope.scale.x = glowLine.scale.x = Math.max(0.001, u); rope.position.x = glowLine.position.x = left + len * u / 2;
     flame.position.x = left + len * u; flame.visible = u > 0.001; V.fuseTip = flame.position.x; V.fuseU = u;
     flame.material.opacity = 0.7 + Math.random() * 0.3; flame.scale.setScalar(1.2 + Math.random() * 0.5);
@@ -179,12 +190,13 @@ export function buildVault(ctx, L) {
   V.setFuse(1);
 
   // ---------------- poppetjes ----------------
-  V.chars = [0, 1].map((i) => {
-    const c = makeBrother(i); const k = 3.6 / c.height; const hold = new THREE.Group(); hold.add(c.group); hold.scale.setScalar(k);
-    const x = i ? 12.6 : -12.6; hold.position.set(x, -4.4, 1.0); scene.add(hold); c.faceDir(i ? -0.5 : 0.5, 1); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw; return c;
+  V.chars = IDX.map((i) => {
+    const c = makeBrother(i); const k = (WIDE ? 2.6 : 3.6) / c.height; const hold = new THREE.Group(); hold.add(c.group); hold.scale.setScalar(k);
+    const x = WIDE ? BOARD_X[i] : i ? 12.6 : -12.6; hold.position.set(x, -4.4, WIDE ? 2.0 : 1.0); scene.add(hold); V.charX = V.charX || []; V.charX[i] = x;
+    c.faceDir(WIDE ? 0 : i ? -0.5 : 0.5, 1); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw; return c;
   });
   // sfeerlicht
-  const l1 = new THREE.PointLight(0x4aff9a, 0.8, 30, 1.4); l1.position.set(-8, 4, 6); const l2 = new THREE.PointLight(0x4a8cff, 0.8, 30, 1.4); l2.position.set(8, 4, 6); const l3 = new THREE.PointLight(0xffd23f, 0.6, 20, 1.5); l3.position.set(0, -1, 6); scene.add(l1, l2, l3); V.l3 = l3;
+  const lx = WIDE ? BOARD_X[NB - 1] * 0.7 : 8; const l1 = new THREE.PointLight(0x4aff9a, 0.8, 30, 1.4); l1.position.set(-lx, 4, 6); const l2 = new THREE.PointLight(0x4a8cff, 0.8, 30, 1.4); l2.position.set(lx, 4, 6); const l3 = new THREE.PointLight(0xffd23f, 0.6, 20, 1.5); l3.position.set(0, -1, 6); scene.add(l1, l2, l3); V.l3 = l3;
 
   // ---------------- update ----------------
   V.update = (dt, st = {}) => {
@@ -207,6 +219,10 @@ export function buildVault(ctx, L) {
   // camera passend op beeldverhouding
   V.fitCamera = (camera) => {
     const asp = camera.aspect || 1.7, th = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
+    if (WIDE) {   // 3-4 borden naast elkaar: breed in beeld, iets lager gericht zodat de lont onder de HUD uitkomt
+      const hw = BOARD_X[NB - 1] + 4.3, dV = 10.8 / th, dH = hw / (th * asp), d = Math.max(dV, dH, 16);
+      camera.position.set(0, 5.6, d); camera.lookAt(0, 5.6, 0); camera.updateProjectionMatrix(); return;
+    }
     const dV = 8.6 / th * 0.5 * 1.18, dH = 14.2 / (th * asp);
     const d = Math.max(dV, dH, 14);
     camera.position.set(0, 2.5, d); camera.lookAt(0, 2.4, 0); camera.updateProjectionMatrix();

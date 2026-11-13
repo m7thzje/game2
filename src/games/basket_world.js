@@ -137,8 +137,9 @@ export function buildCourt(ctx, L, colorsCss) {
   const sbC = document.createElement('canvas'); sbC.width = 768; sbC.height = 256; const sbG = sbC.getContext('2d'); const sbT = new THREE.CanvasTexture(sbC); sbT.colorSpace = THREE.SRGBColorSpace;
   const sb = new THREE.Group(); sb.position.set(0, 10.7, -6.7); scene.add(sb);
   sb.add(mesh(new THREE.BoxGeometry(9.6, 3.2, 0.5), mat(0x1a1634, { metalness: 0.6 }), { cast: false })); sb.add(mesh(new THREE.PlaneGeometry(9.1, 2.8), new THREE.MeshBasicMaterial({ map: sbT, toneMapped: false }), { cast: false, receive: false, pos: [0, 0, 0.27] }));
-  const CSS = ['#7dffb0', '#8fb8ff'];
-  C.scoreboard = (names, score, secs, note) => {
+  const CSS0 = ['#7dffb0', '#8fb8ff'];
+  C.scoreboard = (names, score, secs, note, colors) => {
+    const CSS = colors || CSS0;   // colors: optioneel (css per team) bij 2 tegen 2
     const g = sbG, w = 768, h = 256; g.fillStyle = '#0b0724'; g.fillRect(0, 0, w, h); g.strokeStyle = '#ffd23f'; g.lineWidth = 8; g.strokeRect(6, 6, w - 12, h - 12); g.textAlign = 'center'; g.textBaseline = 'middle';
     g.font = 'bold 40px Fredoka, Arial Black, sans-serif'; g.fillStyle = CSS[0]; g.fillText(names[0].toUpperCase(), 160, 46); g.fillStyle = CSS[1]; g.fillText(names[1].toUpperCase(), w - 160, 46);
     g.font = 'bold 130px Fredoka, Arial Black, sans-serif'; g.fillStyle = CSS[0]; g.fillText(String(score[0]), 160, 150); g.fillStyle = CSS[1]; g.fillText(String(score[1]), w - 160, 150);

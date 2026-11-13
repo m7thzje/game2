@@ -7,10 +7,13 @@ const css = (el, s) => { el.style.cssText = s; return el; };
 
 function overlay(html, extra = '') {
   const o = document.createElement('div');
-  css(o, 'position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:radial-gradient(ellipse at center,#2a1c4a,#0c0814);color:#fff;font-family:Fredoka,system-ui,sans-serif;text-align:center;padding:20px;' + extra);
+  const gh = isGamehal();   // impactID Gamehal: huisstijl (ripple-verloop, Plus Jakarta Sans)
+  css(o, 'position:fixed;inset:0;z-index:200;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#fff;text-align:center;padding:20px;' + (gh ? 'background:radial-gradient(circle at 50% 0%,#007fd8 0%,#003872 60%,#03152e 100%);font-family:"Plus Jakarta Sans",system-ui,"Segoe UI",sans-serif;' : 'background:radial-gradient(ellipse at center,#2a1c4a,#0c0814);font-family:Fredoka,system-ui,sans-serif;') + extra);
   o.innerHTML = html; document.body.append(o); return o;
 }
-const btnCss = "font:700 26px MedievalSharp,Fredoka,serif;padding:14px 34px;border-radius:16px;border:4px solid #3a2412;background:linear-gradient(180deg,#ffd45a,#e0a020);color:#3a2412;cursor:pointer;box-shadow:0 5px 0 #3a2412";
+const FF = isGamehal() ? "'Plus Jakarta Sans',system-ui,sans-serif" : 'Fredoka,sans-serif';   // lettertype van de invoervelden
+const btnCss = isGamehal() ? "font:700 22px 'Plus Jakarta Sans',system-ui,sans-serif;padding:14px 38px;border-radius:999px;border:0;background:#fff;color:#003872;cursor:pointer;box-shadow:0 8px 24px rgba(0,56,114,.35)"
+  : "font:700 26px MedievalSharp,Fredoka,serif;padding:14px 34px;border-radius:16px;border:4px solid #3a2412;background:linear-gradient(180deg,#ffd45a,#e0a020);color:#3a2412;cursor:pointer;box-shadow:0 5px 0 #3a2412";
 
 // Eigen toetsenbord: WASD, pijltjes én IJKL werken allemaal; F/Spatie/Enter/U = A, G/E/Shift/O = B
 const KEYS = {
@@ -31,10 +34,10 @@ export async function runGuest() {
   const ask = want ? `Je doet mee als ${tag(want)} (speler ${want + 1})` : `Je doet mee als ${pick.slice(0, -1).map(tag).join(', ')} of ${tag(pick[pick.length - 1])}`;
   // 1. code + klik (nodig voor geluid)
   await new Promise((resolve) => {
-    const o = overlay(`<div style="font:min(10vw,64px) MedievalSharp,serif;color:#ffcf3a;text-shadow:0 5px 0 #5b3a1e">${gh ? 'Impactid Gamehal' : 'Wes &amp; Jor: De Speelhal'}</div>
+    const o = overlay(`${gh ? '<div style="font:800 min(10vw,60px)/1.08 \'Plus Jakarta Sans\',system-ui,sans-serif;letter-spacing:-.01em;color:#fff"><span>impact</span><span style="color:#99ccef">ID</span> Gamehal</div>' : '<div style="font:min(10vw,64px) MedievalSharp,serif;color:#ffcf3a;text-shadow:0 5px 0 #5b3a1e">Wes &amp; Jor: De Speelhal</div>'}
       <div style="font-size:24px">${ask}</div>
-      ${want ? '' : `<select id="gas" style="font:700 22px Fredoka,sans-serif;padding:8px 14px;border-radius:12px;border:3px solid #ffcf3a"><option value="0">De host wijst mijn plek toe</option><option value="1">Ik ben Jor</option><option value="2">Ik ben Juul</option>${gh ? '<option value="3">Ik ben Sam</option>' : ''}</select>`}
-      ${code ? `<div style="font-size:22px">Code: <b>${code}</b></div>` : `<input id="gcode" inputmode="numeric" maxlength="6" placeholder="code van de host" style="font:700 30px Fredoka,sans-serif;padding:10px 16px;border-radius:12px;border:4px solid #4a8cff;text-align:center;width:min(320px,80vw)">`}
+      ${want ? '' : `<select id="gas" style="font:700 22px ${FF};padding:8px 14px;border-radius:12px;border:3px solid #ffcf3a"><option value="0">De host wijst mijn plek toe</option><option value="1">Ik ben Jor</option><option value="2">Ik ben Juul</option>${gh ? '<option value="3">Ik ben Sam</option>' : ''}</select>`}
+      ${code ? `<div style="font-size:22px">Code: <b>${code}</b></div>` : `<input id="gcode" inputmode="numeric" maxlength="6" placeholder="code van de host" style="font:700 30px ${FF};padding:10px 16px;border-radius:12px;border:4px solid #4a8cff;text-align:center;width:min(320px,80vw)">`}
       <button id="gjoin" style="${btnCss}">Meedoen!</button>
       <div style="opacity:.75;max-width:520px;font-size:16px">Lopen met <b>WASD</b>, de <b>pijltjes</b> of <b>IJKL</b>. Actieknoppen: <b>F / Enter / U</b> en <b>G / Shift / O</b>. Het beeld komt van de computer van de host.</div>`);
     const go = () => {

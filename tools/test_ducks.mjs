@@ -1,4 +1,4 @@
-// Gebruik: node tools/test_ducks.mjs [scenario...]   scenario: bots | twists | shots | timeout | idle | events
+// Gebruik: node tools/test_ducks.mjs [scenario...]   scenario: bots | twists | shots | shots3 | shots4 | timeout | idle | events
 //   bots3 / bots4 = drie / vier spelers (vrij voor allen, ?players=N): alle spelers krijgen input, uitslag volgt, place klopt.
 //   TW=<twist-id> kiest een twist (anders: "none"). Q=low|high kwaliteit.
 // Bots spelen versneld (zonder renderen) hele potjes; controleert dat finishPvp precies één keer komt, wie wint, geen console-fouten.
@@ -65,7 +65,7 @@ async function installBots(page, cfg) {
             // obstakel vooruit? duw mezelf opzij (richtkruis aan de andere kant van het obstakel)
             let push = 0, ob = null;
             for (const o of d.course.obs) { if (o.x < me.x - 1) continue; if (o.x > me.x + 10) break; if (Math.abs(o.z - me.z) < o.r + 1.6) { ob = o; break; } }
-            if (ob) push = (me.z >= ob.z ? 1 : -1);
+            if (ob) { if (b.ob !== ob) { b.ob = ob; const Wd = d.rad().W, roomUp = (Wd - 0.85) - (ob.z + ob.r + 0.85), roomDn = (ob.z - ob.r - 0.85) + (Wd - 0.85); b.dir = roomUp < 0 && roomDn >= 0 ? -1 : roomDn < 0 && roomUp >= 0 ? 1 : (me.z >= ob.z ? 1 : -1); } push = b.dir; }   // kies één kant per obstakel (waar langs de oever ruimte is) en blijf daarbij: bij 3-4 banen liggen de rotsen in de baan
             // draaikolk? ook opzij
             for (const w of d.course.whirls) if (Math.abs(w.x - me.x) < 6 && Math.abs(w.z - me.z) < 3.8 && !ob) { push = me.z >= w.z ? 1 : -1; }
             const wantZ = ob || push ? 0 : d.lanes[i] - me.z;     // terug naar het midden van mijn baan
@@ -73,7 +73,9 @@ async function installBots(page, cfg) {
           }
           const ex = tx - (me.x + me.ox), ez = tz - (me.z + me.oz); const q = 0.4 + 0.6 * c.skill;
           v.x = clamp(ex / 1.2, -1, 1) * q; v.y = clamp(ez / 1.2, -1, 1) * q;
-          if (me.tank > 8 || me.boost > 0) v.a = rnd() < 0.5 + 0.5 * c.skill || me.tank > 60;
+          // spuiten tot de tank leeg is, dan wachten tot hij weer flink gevuld is (zoals een speler): met een tank die op 8 blijft hangen kom je bij 3-4 banen niet langs een rots tegen de stroming in
+          if (me.tank < 1) b.wait = true; else if (me.tank > 55) b.wait = false;
+          if (me.boost > 0 || !b.wait) v.a = rnd() < 0.5 + 0.5 * c.skill || me.tank > 60;
           if (me.bubCd <= 0 && ahead > 3 && ahead < 12 && rnd() < c.sab * 0.01) { v.b = true; }
         }
         inp.update(); m.update(dt);
@@ -160,6 +162,29 @@ for (const name of scen) {
       return out;
     });
     console.log(JSON.stringify(r)); console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS'); if (errors.length) fail('events: fouten');
+    await browser.close(); continue;
+  }
+  if (name === 'trace4') {   // debug: positie (x, z, vx, vz) van elke eend per halve seconde, 4 spelers
+    const { browser, page, errors } = await open('none', 4);
+    await installBots(page, [0, 1, 2, 3].map(() => ({ skill: 0.8, sab: 0, style: 'race' })));
+    const T0 = +process.env.T0 || 0; await page.evaluate((t) => window.__bot(60 * t), T0);
+    for (let k = 0; k < 16; k++) { const row = await page.evaluate(() => { window.__bot(30); const st = window.__app.mode.instance.dbg.state(); return st.d.map((q) => `${q.x.toFixed(1)},${q.z.toFixed(1)} t${Math.round(q.tank)}`).join(' | '); }); console.log((T0 + k * 0.5).toFixed(1), row); }
+    console.log('dichtstbijzijnde obstakel per eend:', JSON.stringify(await page.evaluate(() => { const d = window.__app.mode.instance.dbg; return d.D.map((me) => { let best = null; for (const o of d.course.obs) { const g = Math.hypot(o.x - me.x, o.z - me.z) - o.r - 0.85; if (!best || g < best.g) best = { k: o.kind, x: +o.x.toFixed(1), z: +o.z.toFixed(1), r: o.r, g: +g.toFixed(2) }; } return best; }); })));
+    await browser.close(); continue;
+  }
+  if (name === 'shots3' || name === 'shots4') {
+    const NS = +name.slice(5);
+    const { browser, page, errors } = await open(process.env.TW || 'none', NS);
+    await installBots(page, [{ skill: 0.85, sab: 0.3, style: 'race' }, { skill: 0.8, sab: 0.3, style: 'race' }, { skill: 0.75, sab: 0.3, style: 'race' }, { skill: 0.7, sab: 0.3, style: 'race' }].slice(0, NS));
+    const snap = async (tag) => { await page.waitForTimeout(700); await page.screenshot({ path: `/tmp/du${NS}_${tag}.png` }); const s = await page.evaluate(() => window.__app.mode.instance.dbg.state()); console.log('shot', tag, JSON.stringify(s.d ? s.d.map((q) => Math.round(q.x)) : '')); };
+    const tele = (x) => page.evaluate((x) => { const d = window.__app.mode.instance.dbg; d.D.forEach((q, k) => d.tele(k, x - k * 1.5, d.lanes[k])); window.__bot(40); }, x);
+    await page.evaluate(() => window.__bot(60 * 4)); await snap('play');
+    await tele(70); await snap('bridge');
+    await page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.croc(); window.__bot(60 * 3); }); await snap('croc');
+    await page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.gold(); window.__bot(40); }); await snap('gold');
+    await tele(100); await page.evaluate(() => window.__bot(60 * 2)); await snap('casc1');
+    await tele(150); await snap('mid');
+    console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS'); if (errors.length) fail('shots: fouten');
     await browser.close(); continue;
   }
   if (name === 'shots') {

@@ -1,4 +1,4 @@
-// Gebruik: node tools/test_flappy.mjs [scenario...]   scenario: bots | twists | shots | timeout | idle | balance
+// Gebruik: node tools/test_flappy.mjs [scenario...]   scenario: bots | twists | shots | shots3 | shots4 | timeout | idle | balance
 //   TW=<twist-id> kiest een twist (anders: "none"). Q=low|high kwaliteit.
 //   bots3 / bots4 = drie / vier spelers (vrij voor allen, ?players=N): alle spelers krijgen input, uitslag volgt, place klopt.
 // Bots spelen versneld (zonder renderen) hele potjes; controleert dat finishPvp precies één keer komt, wie wint, geen console-fouten.
@@ -133,10 +133,11 @@ for (const name of scen) {
   if (name === 'twists') { for (const t of TWISTS) await runMatch(t, [{ ...R, skill: 0.85 }, { ...R, skill: 0.7 }], 'twist'); continue; }
   if (name === 'idle') { await runMatch('none', [{ style: 'idle' }, { style: 'idle' }], 'idle'); continue; }
   if (name === 'timeout') { await runMatch('none', [{ ...R }, { ...R }], 'timeout', () => window.__app.mode.instance.dbg.setTime(6)); continue; }
-  if (name === 'shots') {
-    const { browser, page, errors } = await open(process.env.TW || 'none');
-    await installBots(page, [{ ...R, skill: 0.85 }, { ...R, skill: 0.75 }]);
-    const snap = async (tag) => { await page.waitForTimeout(700); await page.screenshot({ path: `/tmp/fl_${tag}.png` }); const s = await page.evaluate(() => window.__app.mode.instance.dbg.state()); console.log('shot', tag, `T=${s.T.toFixed(1)} prog=${s.d.map((q) => q.progress)} pts=${s.d.map((q) => q.pts)}`); };
+  if (name === 'shots' || name === 'shots3' || name === 'shots4') {
+    const NS = +name.slice(5) || 2;
+    const { browser, page, errors } = await open(process.env.TW || 'none', NS);
+    await installBots(page, [{ ...R, skill: 0.85 }, { ...R, skill: 0.75 }, { ...R, skill: 0.8 }, { ...R, skill: 0.7 }].slice(0, NS));
+    const snap = async (tag) => { await page.waitForTimeout(700); await page.screenshot({ path: `/tmp/fl${NS > 2 ? NS : ''}_${tag}.png` }); const s = await page.evaluate(() => window.__app.mode.instance.dbg.state()); console.log('shot', tag, `T=${s.T.toFixed(1)} prog=${s.d.map((q) => q.progress)} pts=${s.d.map((q) => q.pts)}`); };
     await page.evaluate(() => window.__bot(60 * 6)); await snap('play');
     await page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.give(0, 'shield'); d.give(1, 'magnet'); window.__bot(40); }); await snap('shield_magnet');
     await page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.give(0, 'giant'); d.give(1, 'zap'); window.__bot(60); }); await snap('giant_zap');

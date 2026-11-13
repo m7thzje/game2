@@ -1,7 +1,8 @@
 // Gebruik: node tools/test_connect4.mjs [scenario...]   scenario: bots | twists | idle | timeout | draw | sudden | powers | events | shots
-//   TW=<twist-id> kiest een twist (anders "none"). Q=low|high kwaliteit.
+//   TW=<twist-id> kiest een twist (anders "none"). Q=low|high kwaliteit. PLAYERS=4: 2 tegen 2 (teams [[0,1],[2,3]]), teamgenoten wisselen om de beurt; bots sturen de actieve teamgenoot.
 // Bots spelen versneld (zonder renderen) hele potjes; controleert dat finishPvp precies 1x komt, beide spelers kunnen winnen en er geen fouten zijn.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
+import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
@@ -14,18 +15,19 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
+const N = +process.env.PLAYERS === 4 ? 4 : 2;
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 let fails = 0;
 const check = (ok, msg) => { if (!ok) { fails++; console.log('  FAIL: ' + msg); } else console.log('  ok: ' + msg); };
 
 async function open(twist) {
-  const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
+  const browser = await chromium.launch({ executablePath: chromePath(), args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--no-sandbox'] });
   const page = await browser.newPage({ viewport: { width: 1100, height: 650 } });
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=connect4&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=connect4&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${N === 4 ? '&players=4' : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
@@ -33,8 +35,8 @@ async function open(twist) {
     mode.paused = false;
     // tel de aanroepen van finishPvp
     window.__fin = 0; const orig = mode.finishPvp.bind(mode); mode.finishPvp = (r) => { window.__fin++; return orig(r); };
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -52,8 +54,9 @@ async function installBots(page, cfg) {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = d.state(); if (stop && stop(st)) { m.paused = true; return true; }
+        for (const q of m.ids) { const v0 = inp.virtual[q]; v0.left = v0.right = v0.up = v0.down = v0.a = v0.b = false; }
         for (const i of [0, 1]) {
-          const v = inp.virtual[i], c = window.__cfg[i]; v.left = v.right = v.up = v.down = v.a = v.b = false;
+          const v = inp.virtual[m.ids[st.teams ? st.active : i]], c = window.__cfg[i];
           if (c.style === 'idle') continue;
           if (st.state !== 'turn' || st.turn !== i) { plan[i] = null; continue; }
           if (!plan[i] || plan[i].no !== st.turnNo) {
@@ -112,6 +115,7 @@ function report(name, { res, errors }, extra = '') {
   if (res.result) console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, ' ')}`);
   check(res.fin === 1, 'finishPvp precies 1x');
   check(res.result && res.result.winner !== null, 'er is een winnaar');
+  if (N === 4 && res.result) { const w = res.result.winnerIds.slice().sort().join(); check(res.result.scoreArr.length === 4 && (w === '0,1' || w === '2,3') && res.result.place.slice(0, 2).slice().sort().join() === w, `teamwinst: winnaars ${w}, scores ${res.result.scoreArr}, place ${res.result.place}`); }
   check(res.st.T < 200, `potje blijft binnen redelijke tijd (${res.st.T.toFixed(0)} s speeltijd)`);
   check(errors.length === 0, errors.length ? 'console-errors:\n' + errors.slice(0, 6).join('\n') : 'geen console-errors');
 }
@@ -124,10 +128,24 @@ for (const name of scen) {
     // beide spelers moeten kunnen winnen: slimme Wes tegen domme Jor en andersom + gelijk
     const wins = [0, 0];
     for (const [a, b] of [[SMART, { skill: 0.2, power: 0.2 }], [{ skill: 0.2, power: 0.2 }, SMART], [SMART, SMART], [OKAY, OKAY]]) {
-      const r = await runMatch(process.env.TW || 'none', [a, b]); report('bots', r); if (r.res.result) wins[r.res.result.winner]++;
+      const r = await runMatch(process.env.TW || 'none', [a, b]); report('bots', r); if (r.res.result) wins[N === 4 ? (r.res.result.winner < 2 ? 0 : 1) : r.res.result.winner]++;
     }
-    console.log('winsverdeling [Wes,Jor]:', wins); check(wins[0] > 0 && wins[1] > 0, 'beide spelers kunnen winnen');
+    console.log('winsverdeling [Wes,Jor]:', wins); check(wins[0] > 0 && wins[1] > 0, N === 4 ? 'beide teams kunnen winnen' : 'beide spelers kunnen winnen');
     continue;
+  }
+  if (name === 'alternate') {   // PLAYERS=4: teamgenoten wisselen om de beurt, een extra zet blijft bij dezelfde speler
+    if (N !== 4) { console.log('alternate: alleen met PLAYERS=4'); continue; }
+    const { browser, page, errors } = await open('none'); await installBots(page, [SMART, SMART]);
+    const seq = await page.evaluate(() => {
+      const m = window.__app.mode, inst = m.instance, out = []; let last = -1, g = 0;
+      while (!m.finished && g++ < 60 * 300 && out.length < 40) { window.__bot(1); const st = inst.dbg.state(); if (st.state === 'turn' && st.turnNo !== last) { last = st.turnNo; out.push({ turn: st.turn, active: st.active, r: st.round, x: st.extra, st: st.score.join('') }); } }
+      return out;
+    });
+    console.log(seq.map((e) => `${e.turn}:${e.active}`).join(' '));
+    let bad = 0; const lastOf = {}; for (let i = 0; i < seq.length; i++) { const e = seq[i], prev = seq[i - 1]; if (prev && prev.turn === e.turn) { if (prev.active !== e.active) { bad++; console.log('extra-zet met andere speler op', i); } } else if (lastOf[e.turn] !== undefined && lastOf[e.turn] === e.active) { bad++; console.log('zelfde speler twee beurten achter elkaar op', i, JSON.stringify(seq.slice(Math.max(0, i - 4), i + 2))); } lastOf[e.turn] = e.active; }
+    check(seq.length >= 10 && bad === 0 && new Set(seq.filter((e) => e.turn === 0).map((e) => e.active)).size === 2 && new Set(seq.filter((e) => e.turn === 1).map((e) => e.active)).size === 2, `teamgenoten wisselen (${seq.length} beurten, fouten ${bad})`);
+    check(seq.every((e) => (e.turn === 0 ? [0, 1] : [2, 3]).includes(e.active)), 'actieve speler hoort bij het team aan zet');
+    check(errors.length === 0, 'geen console-errors'); await browser.close(); continue;
   }
   if (name === 'twists') {
     for (const tw of TWISTS) { const r = await runMatch(tw, [OKAY, OKAY]); report('twist', r); }

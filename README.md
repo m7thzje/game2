@@ -25,9 +25,9 @@ Een moderne browser met WebGL is genoeg (Chrome, Edge, Firefox). Het spel werkt 
 
 Gamepads werken ook (pad 1 = Wes, pad 2 = Jor). Online mag de gast zowel WASD als de pijltjes gebruiken. `Esc` = pauze/menu, `Tab` = dagboek, `M` = geluid uit/aan.
 
-## Impactid Gamehal (aparte versie voor 2 tot 4 spelers, zonder dorp)
+## impactID Gamehal (aparte versie voor 2 tot 4 spelers, zonder dorp)
 
-Naast het gewone spel staat `gamehal.html` ("Impactid Gamehal", bijv. `http://localhost:8080/gamehal.html`): dezelfde Speelhal, maar **zonder dorp, opening en karweitjes**. Je start in een lobby, kiest 2, 3 of 4 spelers
+Naast het gewone spel staat `gamehal.html` ("impactID Gamehal", bijv. `http://localhost:8080/gamehal.html`): dezelfde Speelhal, maar **zonder dorp, opening en karweitjes**. Je start in een lobby, kiest 2, 3 of 4 spelers
 (Wes, Jor, Juul en **Sam**; klik op een naam om die aan te passen) en loopt direct de Speelhal in. Alle vijf hallen zijn open. Eigen opslag, dus het gewone spel blijft ongemoeid.
 
 * **Spellen voor 4**: de meeste spellen kennen een 4-spelersvorm: vrij voor allen (bijv. Boem-Man, Lichtspoor, Smash-Arena, Kartrace, Koning van de Berg, Driehoek-Hockey, Vier-Buzzer, Sneeuwballen-Slag), **2 tegen 2** (volley, voetbal, airhockey, touwtrekken, dodgeball, dubbelspel pingpong, penalty's, kanonnen, de heist...) of gelijktijdig/om-de-beurt (golf, darts, bowling, curling, boogschieten, quiz, memory, dansen...). Een badge boven elke kast laat zien wat er kan: `👥 2-4`, `👥 4`, `🏆 knock-out`.

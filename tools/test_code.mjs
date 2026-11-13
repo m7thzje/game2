@@ -1,5 +1,5 @@
 // Gebruik: node tools/test_code.mjs [scenario...]   scenario: logic | bots | twists | idle | fail | power | shots
-//   TW=<twist-id> kiest een twist (anders "none"). Q=low|high kwaliteit.
+//   TW=<twist-id> kiest een twist (anders "none"). Q=low|high kwaliteit. PLAYERS=3|4: alle spelers naast elkaar (bots voor elk bord).
 // logic = pure test van de Mastermind-feedback (zonder browser); de rest laat bots (met een Mastermind-oplosser) hele potjes spelen.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import { chromePath } from './chrome_path.mjs';
@@ -15,6 +15,7 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
+const N = +process.env.PLAYERS || 2;   // PLAYERS=3|4: 3-4 borden naast elkaar
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['logic', 'bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'bodyswap', 'deurman'];   // = twists van code + none
 let fails = 0; const check = (ok, msg) => { if (!ok) { fails++; console.log('FAIL:', msg); } };
@@ -25,14 +26,14 @@ async function open(twist) {
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=code&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=code&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${N >= 3 ? '&players=' + N : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -42,21 +43,22 @@ async function open(twist) {
 }
 
 // cfg[i] = { gap: frames tussen toetsaanslagen, acc: kans dat hij een consistente gok kiest, power: kans om B vast te houden, style: 'play'|'idle' }
-async function installBots(page, cfg) {
+async function installBots(page, cfg0) {
+  const cfg = Array.from({ length: N }, (_, i) => cfg0[i % cfg0.length]);   // bij meer spelers dan opgegeven: herhaal
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 31337; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
     const fb = (code, guess) => { const cc = Array(6).fill(0), gc = Array(6).fill(0); let e = 0; for (let i = 0; i < 4; i++) { if (guess[i] === code[i]) e++; else { cc[code[i]]++; gc[guess[i]]++; } } let c = 0; for (let k = 0; k < 6; k++) c += Math.min(cc[k], gc[k]); return [e, c]; };
     const ALL = []; for (let n = 0; n < 1296; n++) { const c = []; let x = n; for (let i = 0; i < 4; i++) { c.push(x % 6); x = Math.floor(x / 6); } ALL.push(c); }
-    const B = [0, 1].map(() => ({ cand: ALL, seen: 0, round: -1, target: null, f: 0, bHold: 0, staleDone: false, hintDone: false }));
+    const B = cfg.map(() => ({ cand: ALL, seen: 0, round: -1, target: null, f: 0, bHold: 0, staleDone: false, hintDone: false }));
     window.__cfg = cfg;
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
         const PS = inst.dbg.PS, R = inst.dbg.R;
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i], b = B[i], c = window.__cfg[i], p = PS[i];
+        for (let i = 0; i < cfg.length; i++) {
+          const v = inp.virtual[m.ids[i]], b = B[i], c = window.__cfg[i], p = PS[i];
           v.left = v.right = v.up = v.down = v.a = v.b = false; v.x = v.y = 0;
           if (c.style === 'idle' || R.phase !== 'play' || p.status !== 'play') { if (R.n !== b.round) { b.round = R.n; b.cand = ALL; b.seen = 0; b.target = null; b.staleDone = false; b.hintDone = false; } continue; }
           if (R.n !== b.round) { b.round = R.n; b.cand = ALL; b.seen = 0; b.target = null; b.staleDone = false; b.hintDone = false; }
@@ -74,7 +76,7 @@ async function installBots(page, cfg) {
           const cv = p.cur[mis]; const up = cv < 0 ? T[mis] : (T[mis] - cv + 6) % 6; if (up <= 3) v.up = true; else v.down = true;
         }
         // twist-bewuste bots: compenseer omgekeerde besturing / verwisselde knoppen
-        for (const i of [0, 1]) { const v = inp.virtual[i], tw = m.twist.id; if (tw === 'invert') { [v.left, v.right] = [v.right, v.left]; [v.up, v.down] = [v.down, v.up]; v.x = -v.x; v.y = -v.y; } else if (tw === 'swapab') { [v.a, v.b] = [v.b, v.a]; } }
+        for (let i = 0; i < cfg.length; i++) { const v = inp.virtual[m.ids[i]], tw = m.twist.id; if (tw === 'invert') { [v.left, v.right] = [v.right, v.left]; [v.up, v.down] = [v.down, v.up]; v.x = -v.x; v.y = -v.y; } else if (tw === 'swapab') { [v.a, v.b] = [v.b, v.a]; } }
         inp.update(); m.update(dt);
       }
       m.paused = true; return false;
@@ -103,7 +105,7 @@ for (const name of scen) {
         : name === 'fail' ? [['none', [{ gap: 6, acc: 0, power: 0 }, { style: 'idle' }]], ['none', [{ gap: 6, acc: 0, power: 0 }, { gap: 6, acc: 0, power: 0 }]]]
           : name === 'power' ? [['none', [{ gap: 26, acc: 1, power: 8 }, { gap: 26, acc: 1, power: 8 }]]]
             : [[process.env.TW || 'none', [{ ...F }, { ...S }]], [process.env.TW || 'none', [{ ...S }, { ...F }]], [process.env.TW || 'none', [{ gap: 7, acc: 1, power: 1 }, { gap: 7, acc: 1, power: 1 }]], [process.env.TW || 'none', [{ gap: 7, acc: 1, power: 1 }, { gap: 7, acc: 1, power: 1 }]]];
-    const wins = [0, 0];
+    const wins = Array(N).fill(0);
     for (const [tw, cfg] of list) {
       const { browser, page, errors } = await open(tw);
       await installBots(page, cfg);
@@ -122,20 +124,21 @@ for (const name of scen) {
       console.log(res.log.filter((l) => /end|final/.test(l)).join('\n'));
       console.log(`end T=${res.st.T.toFixed(1)} wins=${res.st.wins} finished=${res.finished} finishPvp-aanroepen=${res.fin} speeltijd=${res.st.elapsed.toFixed(0)}s coin=${res.st.coin} golem-frames=${res.ev.golem} spook-frames=${res.ev.ghost} zand-frames=${res.ev.sand}`);
       if (res.result) { console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, '')}`); if (res.result.winner != null) wins[res.result.winner]++; }
+      if (N > 2 && res.result) { check(res.result.scoreArr.length === N && res.result.place.length === N && new Set(res.result.place).size === N, `resultaat heeft ${N} scores en plaatsen`); check(res.result.winnerIds.length === 1 && res.result.place[0] === res.result.winnerId, `één winnaar, eerste in place`); }
       check(res.finished && res.fin === 1, `finishPvp precies één keer (${res.fin}) [${name}/${tw}]`);
       check(res.result && res.result.winner != null, `er is een winnaar [${name}/${tw}]`);
       check(res.st.elapsed < 125, `speeltijd binnen de limiet (${res.st.elapsed.toFixed(0)}s)`);
-      if (name === 'power') { check(res.ev.ghost + res.ev.sand > 0, 'power-ups (spook/zandloper) werden gebruikt'); check(res.ev.golem > 0 && res.ev.stale > 0, 'de golem waarschuwt en verandert de code'); }
+      if (name === 'power') { check(res.ev.ghost + res.ev.sand > 0, 'power-ups (spook/zandloper) werden gebruikt'); check(res.ev.golem > 0 && (N > 2 || res.ev.stale > 0), 'de golem waarschuwt' + (N > 2 ? '' : ' en verandert de code')); }
       if (errors.length) { console.log('ERRORS:\n' + errors.slice(0, 8).join('\n')); fails++; } else console.log('NO ERRORS');
       await browser.close();
     }
-    if (name === 'bots') { console.log('winsten Wes/Jor:', wins.join('/')); check(wins[0] > 0 && wins[1] > 0, 'beide spelers kunnen winnen'); }
+    if (name === 'bots') { console.log('winsten per slot:', wins.join('/')); check(N > 2 ? wins.filter((w) => w > 0).length >= 2 : wins[0] > 0 && wins[1] > 0, 'verschillende spelers kunnen winnen'); }
     continue;
   }
   if (name === 'shots') {
     const { browser, page, errors } = await open(process.env.TW || 'none');
     await installBots(page, [{ gap: 14, acc: 1, power: 0 }, { gap: 20, acc: 1, power: 0 }]);
-    const snap = async (tag) => { await page.waitForTimeout(700); await page.screenshot({ path: `/tmp/cd_${tag}.png` }); console.log('shot', tag, JSON.stringify(await page.evaluate(() => { const s = window.__app.mode.instance.dbg.state(); return { ph: s.phase, n: s.n, wins: s.wins, rows: s.p.map((p) => p.rows.length) }; }))); };
+    const snap = async (tag) => { await page.waitForTimeout(700); await page.screenshot({ path: `/tmp/cd${N > 2 ? N : ''}_${tag}.png` }); console.log('shot', tag, JSON.stringify(await page.evaluate(() => { const s = window.__app.mode.instance.dbg.state(); return { ph: s.phase, n: s.n, wins: s.wins, rows: s.p.map((p) => p.rows.length) }; }))); };
     const go = (cond, max = 60 * 60) => page.evaluate(([c, mx]) => window.__bot(mx, new Function('s', 'return ' + c)), [cond, max]);
     const frames = (n) => page.evaluate((n) => window.__bot(n), n);
     await snap('intro0'); await go('s.phase==="play"'); await frames(90); await snap('play0');

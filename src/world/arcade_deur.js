@@ -12,6 +12,7 @@ import { giveSticker } from '../engine/cameo.js';
 import { S, persist } from '../save.js';
 import { h, mesh, mat, clamp, lerp, rand, pick, damp } from '../engine/util.js';
 import { floatLabel } from './build.js';
+import { coin } from '../gamehal/humor.js';
 
 let TAKEOVER = null;   // { hall } zolang hij een hal bezet houdt (blijft staan tot een duel gespeeld is)
 export const takeoverHall = () => (TAKEOVER ? TAKEOVER.hall : null);
@@ -187,7 +188,7 @@ export class ArcadeDeurman {
     if (!S.settings.flashFree) ui.flash('#ffd0ec', 300);
     audio.sfx('kiss'); audio.sfx('tada'); setTimeout(() => audio.sfx('kazoo'), 500);
     this.a.fx.burst(gp.x, gp.y + 2, gp.z, { count: 60, colors: CONFETTI, speed: 7, size: 0.4, life: 1.2 });
-    S.coins += 15; S.totalEarned += 15; S.banished = (S.banished || 0) + 1; giveSticker('selfie'); persist(); ui.hud.toast('Hihi! De Deurman bloost en danst weg. +15 heitjes uit zijn zakken gevallen!', 3200);
+    S.coins += 15; S.totalEarned += 15; S.banished = (S.banished || 0) + 1; giveSticker('selfie'); persist(); ui.hud.toast(`Hihi! De Deurman bloost en danst weg. +15 ${coin(15)} uit zijn zakken gevallen!`, 3200);
   }
   async doCaught() {
     this.endAtmos(); this.state = 'caught'; const lvl = this.level(); this.m.pose = 'highfive';
@@ -226,7 +227,7 @@ export class ArcadeDeurman {
     a.fx.burst(gp.x, gp.y + 2, gp.z, { count: 90, colors: CONFETTI, speed: 8, size: 0.45, life: 1.3 });
     this.state = 'banished'; this.stT = 0; this.kT = 0; this.m.pose = 'dance'; if (this.takeLabel) this.takeLabel.visible = false;
     S.coins += 40; S.totalEarned += 40; S.banished = (S.banished || 0) + 1; giveSticker('dansen'); persist();
-    ui.hud.toast('Hal teruggewonnen! +40 heitjes. De Deurman danst weg...', 3500); ui.setVignette(0); ui.hud.setHint(null);
+    ui.hud.toast(`Hal teruggewonnen! +40 ${coin(40)}. De Deurman danst weg...`, 3500); ui.setVignette(0); ui.hud.setHint(null);
     a.king.group.visible = true; audio.music('concert');
     this.timer = rand(300, 480);
   }

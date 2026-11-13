@@ -93,23 +93,24 @@ function signTex() {
 }
 
 // ---- het podium ----
-export function buildStage(ctx) {
-  const { scene } = ctx; const start = scene.children.length; const rng = mulberry32(31);
+// offsets = x-middens van de keukenparen (bij 2 spelers [0]; bij 4 spelers twee paren naast elkaar met de klant in het midden)
+export function buildStage(ctx, offsets = [0]) {
+  const { scene } = ctx; const WIDE = offsets.length > 1, HW = WIDE ? 31 : 20; const start = scene.children.length; const rng = mulberry32(31);
   const R = { ovens: [], plates: [], bulbs: null, bulbN: 0, jury: null, juryPos: [0, 0.55, 5.0], custPos: [0, 0.9, -3.9] };
   scene.background = new THREE.Color(0x3a1c2c); scene.fog = new THREE.Fog(0x3a1c2c, 50, 120);
   const wood = mat(0xa9774a, { flatShading: false }), dwood = mat(0x7a4a2a, { flatShading: false }), marble = mat(0xf4f0ea, { flatShading: false, roughness: 0.3 }), red = mat(0xd8372c, { flatShading: false }), gold = mat(0xe8c24a, { flatShading: false, metalness: 0.6, roughness: 0.35 }), cream = mat(0xfff0d4, { flatShading: false }), steel = mat(0xb8bcc8, { flatShading: false, metalness: 0.7, roughness: 0.3 });
   const add = (g, m, x, y, z, o = {}) => { const k = mesh(g, m, { cast: o.cast ?? false, receive: true, pos: [x, y, z], rot: o.rot }); scene.add(k); return k; };
   // vloer
   const ft = tex.checker(16, 8, '#fbe9d2', '#e9b9a8');
-  add(new THREE.PlaneGeometry(48, 26), new THREE.MeshStandardMaterial({ map: ft, roughness: 0.8 }), 0, 0, 0.5, { rot: [-Math.PI / 2, 0, 0] });
-  for (const sd of [-1, 1]) add(B(11.6, 0.03, 8), mat(sd < 0 ? 0xc8ecd4 : 0xc8d8f4, { flatShading: false }), sd * 6.5, 0.02, 0.0);
+  add(new THREE.PlaneGeometry(WIDE ? 84 : 48, 26), new THREE.MeshStandardMaterial({ map: ft, roughness: 0.8 }), 0, 0, 0.5, { rot: [-Math.PI / 2, 0, 0] });
+  for (const co of offsets) for (const sd of [-1, 1]) add(B(11.6, 0.03, 8), mat(sd < 0 ? 0xc8ecd4 : 0xc8d8f4, { flatShading: false }), co + sd * 6.5, 0.02, 0.0);
   // achterwand (gestreept) + zijwanden + tentdak-rand
   const wallM = new THREE.MeshStandardMaterial({ map: stripeTex(), roughness: 0.9 });
-  add(new THREE.PlaneGeometry(40, 7.4), wallM, 0, 3.7, ST.wallZ);
-  for (const sd of [-1, 1]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(14, 7.4), wallM); w.position.set(sd * 20, 3.7, -3); w.rotation.y = -sd * 1.2; scene.add(w); }
-  for (let k = 0; k < 20; k++) add(C(1.0, 1.0, 0.1, 10, 1), k % 2 ? red : cream, -19 + k * 2, 6.9, ST.wallZ + 0.5, { rot: [Math.PI / 2, 0, 0] });
-  add(B(40, 0.5, 1.0), red, 0, 7.3, ST.wallZ + 0.4);
-  add(B(40, 1.1, 0.4), dwood, 0, 0.55, ST.wallZ + 0.2);
+  add(new THREE.PlaneGeometry(2 * HW, 7.4), wallM, 0, 3.7, ST.wallZ);
+  for (const sd of [-1, 1]) { const w = new THREE.Mesh(new THREE.PlaneGeometry(14, 7.4), wallM); w.position.set(sd * HW, 3.7, -3); w.rotation.y = -sd * 1.2; scene.add(w); }
+  for (let k = 0; k < HW; k++) add(C(1.0, 1.0, 0.1, 10, 1), k % 2 ? red : cream, -HW + 1 + k * 2, 6.9, ST.wallZ + 0.5, { rot: [Math.PI / 2, 0, 0] });
+  add(B(2 * HW, 0.5, 1.0), red, 0, 7.3, ST.wallZ + 0.4);
+  add(B(2 * HW, 1.1, 0.4), dwood, 0, 0.55, ST.wallZ + 0.2);
   // uithangbord
   add(new THREE.PlaneGeometry(9.5, 1.85), new THREE.MeshBasicMaterial({ map: signTex() }), 0, 6.2, ST.wallZ + 0.12);
   // klantenraam in het midden (houten lijst + gordijnen)
@@ -118,31 +119,31 @@ export function buildStage(ctx) {
   for (const sd of [-1, 1]) add(B(1.2, 4.6, 0.3), red, sd * 3.5, 3.1, ST.wallZ + 0.3);
   add(B(5.4, 1.0, 1.5), wood, 0, 0.5, R.custPos[2] - 0.2); add(B(5.6, 0.14, 1.7), marble, 0, 1.05, R.custPos[2] - 0.2);
   // balies met kasten per station
-  for (const sd of [-1, 1]) {
-    const cx = sd * 6.6; add(B(9.6, 1.4, 1.6), wood, cx, 0.7, ST.crateZ - 0.1); add(B(9.8, 0.14, 1.8), marble, cx, 1.45, ST.crateZ - 0.1);
+  for (const co of offsets) for (const sd of [-1, 1]) {
+    const cx = co + sd * 6.6; add(B(9.6, 1.4, 1.6), wood, cx, 0.7, ST.crateZ - 0.1); add(B(9.8, 0.14, 1.8), marble, cx, 1.45, ST.crateZ - 0.1);
     for (let k = 0; k < 5; k++) add(B(1.7, 0.9, 0.04), dwood, cx - 3.8 + k * 1.9, 0.7, ST.crateZ + 0.72);
     // kratjes met voorraad (statisch)
     for (const kind of KINDS) {
-      const p = ST.crateP[kind], x = sd * p;
+      const p = ST.crateP[kind], x = co + sd * p;
       add(B(0.95, 0.45, 0.9), dwood, x, 1.68, ST.crateZ); add(B(1.0, 0.08, 0.98), wood, x, 1.9, ST.crateZ);
       const g = itemGeo(kind); for (let q = 0; q < 2; q++) { const m = new THREE.Mesh(g, matVC); m.position.set(x + (q - 0.5) * 0.4, 1.9 + q * 0.0, ST.crateZ + (q ? 0.1 : -0.1)); m.scale.setScalar(0.85); m.castShadow = true; scene.add(m); }
     }
     // taartentafel + bordje
-    const px = sd * ST.plateP, pz = ST.plateZ;
+    const px = co + sd * ST.plateP, pz = ST.plateZ;
     add(C(0.4, 0.55, 0.85, 12), dwood, px, 0.42, pz, { cast: true }); add(C(1.8, 1.8, 0.14, 24), wood, px, 0.9, pz, { cast: true }); add(C(1.5, 1.5, 0.08, 24), mat(0xcfe8f4, { flatShading: false }), px, 1.0, pz); add(new THREE.TorusGeometry(1.5, 0.05, 6, 24), gold, px, 1.04, pz, { rot: [Math.PI / 2, 0, 0] });
     // oven
-    const ox = sd * ST.ovenP, oz = ST.ovenZ;
+    const ox = co + sd * ST.ovenP, oz = ST.ovenZ;
     add(B(2.6, 3.0, 1.8), mat(0x5a5a68, { flatShading: false }), ox, 1.5, oz, { cast: true }); add(B(2.7, 0.3, 1.9), steel, ox, 3.05, oz); add(C(0.3, 0.3, 1.4, 8), steel, ox + sd * 0.7, 3.9, oz - 0.2);
     for (const dx of [-0.8, 0, 0.8]) add(C(0.12, 0.12, 0.15, 8), red, ox + dx, 2.7, oz + 0.95, { rot: [Math.PI / 2, 0, 0] });
     const win = new THREE.Mesh(new THREE.PlaneGeometry(1.5, 1.0), new THREE.MeshStandardMaterial({ color: 0x2a1408, emissive: 0xff6a1a, emissiveIntensity: 0.4 })); win.position.set(ox, 1.5, oz + 0.92); win.userData.dynamic = true; scene.add(win);
     add(B(1.7, 0.12, 0.1), steel, ox, 2.05, oz + 0.95); add(B(1.7, 0.12, 0.1), steel, ox, 0.95, oz + 0.95); add(B(0.12, 1.2, 0.1), steel, ox - 0.8, 1.5, oz + 0.95); add(B(0.12, 1.2, 0.1), steel, ox + 0.8, 1.5, oz + 0.95);
     R.ovens.push({ win, x: ox, z: oz }); R.plates.push({ x: px, z: pz });
     // bloemzakken op de scheidingsbank
-    for (let k = 0; k < 2; k++) add(S(0.42, 8, 6), mat(0xf4ecd8, { flatShading: false }), sd * 0.45, 1.65, -2.2 + k * 0.55, { cast: true });
+    for (let k = 0; k < 2; k++) add(S(0.42, 8, 6), mat(0xf4ecd8, { flatShading: false }), co + sd * 0.45, 1.65, -2.2 + k * 0.55, { cast: true });
   }
-  // scheidingsbank in het midden
-  add(B(1.6, 1.3, 7.8), wood, 0, 0.65, -0.5, { cast: true }); add(B(1.8, 0.14, 8.0), marble, 0, 1.35, -0.5);
-  add(B(1.8, 0.4, 0.4), gold, 0, 1.3, 3.5);
+  // scheidingsbank (per keukenpaar) in het midden
+  for (const co of offsets) { add(B(1.6, 1.3, 7.8), wood, co, 0.65, -0.5, { cast: true }); add(B(1.8, 0.14, 8.0), marble, co, 1.35, -0.5);
+  add(B(1.8, 0.4, 0.4), gold, co, 1.3, 3.5); }
   // jury-dais + troon
   const [jx, jy, jz] = R.juryPos;
   add(C(2.1, 2.3, 0.55, 20), red, jx, 0.27, jz, { cast: true }); add(new THREE.TorusGeometry(2.1, 0.08, 6, 24), gold, jx, 0.56, jz, { rot: [Math.PI / 2, 0, 0] });
@@ -150,10 +151,10 @@ export function buildStage(ctx) {
   for (const sd of [-1, 1]) { add(B(0.3, 0.9, 1.4), dwood, jx + sd * 1.05, jy + 0.9, jz - 0.2); add(S(0.2, 8, 6), gold, jx + sd * 1.05, jy + 1.5, jz - 0.9); }
   // slingers, vlaggetjes en lampjes
   const fl = []; const pal = [0xff3a8a, 0xffd23f, 0x58d6ff, 0x7aff7a, 0xff8a1c];
-  for (const [z, y0, n] of [[ST.wallZ + 0.6, 7.35, 30], [-1, 8.0, 30]]) for (let k = 0; k < n; k++) { const x = -17 + k * (34 / (n - 1)); fl.push({ g: new THREE.CircleGeometry(0.28, 3), c: pal[k % 5], p: [x, y0 - Math.sin(k / (n - 1) * Math.PI * 3) * 0.5 - 0.3, z], r: [0, 0, Math.PI] }); }
+  for (const [z, y0, n] of [[ST.wallZ + 0.6, 7.35, WIDE ? 50 : 30], [-1, 8.0, WIDE ? 50 : 30]]) for (let k = 0; k < n; k++) { const x = -(HW - 3) + k * (2 * (HW - 3) / (n - 1)); fl.push({ g: new THREE.CircleGeometry(0.28, 3), c: pal[k % 5], p: [x, y0 - Math.sin(k / (n - 1) * Math.PI * 3) * 0.5 - 0.3, z], r: [0, 0, Math.PI] }); }
   const flags = new THREE.Mesh(bakeGeo(fl), new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: 0.9 })); scene.add(flags);
-  const bp = []; for (let k = 0; k < 36; k++) bp.push([-17 + k * (34 / 35), 7.55 + Math.sin(k / 35 * Math.PI * 3) * -0.4, -3.9]);
-  for (let k = 0; k < 24; k++) bp.push([-17 + k * (34 / 23), 7.2 - Math.sin(k / 23 * Math.PI * 3) * 0.4, 5.5]);
+  const bp = []; for (let k = 0; k < 36; k++) bp.push([-(HW - 3) + k * (2 * (HW - 3) / 35), 7.55 + Math.sin(k / 35 * Math.PI * 3) * -0.4, -3.9]);
+  for (let k = 0; k < 24; k++) bp.push([-(HW - 3) + k * (2 * (HW - 3) / 23), 7.2 - Math.sin(k / 23 * Math.PI * 3) * 0.4, 5.5]);
   const bulbs = new THREE.InstancedMesh(new THREE.SphereGeometry(0.14, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), bp.length); const _m = new THREE.Matrix4();
   bp.forEach((p, i) => { _m.makeTranslation(...p); bulbs.setMatrixAt(i, _m); bulbs.setColorAt(i, new THREE.Color(pal[i % 5])); }); bulbs.userData.dynamic = true; bulbs.frustumCulled = false; scene.add(bulbs); R.bulbs = bulbs; R.bulbN = bp.length;
   mergeStatic(scene, start);

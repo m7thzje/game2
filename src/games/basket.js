@@ -4,10 +4,11 @@ import { PLAYER_COLORS, makeBrother, Animal } from '../engine/chars.js';
 import * as P from '../engine/props.js';
 import { BK, buildCourt, makeBallMesh, iconTex, makeTrampoline } from './basket_world.js';
 
-// Mand-Mania — duel: straatbasketbal 1-tegen-1 in zijaanzicht. 90 s of eerste tot 21; wie voorstaat wint (sudden death bij gelijk).
+// Mand-Mania — duel: straatbasketbal 1-tegen-1 (bij 4 spelers 2-tegen-2 met pass) in zijaanzicht. 90 s of eerste tot 21; wie voorstaat wint (sudden death bij gelijk).
 //  * lopen, omhoog = sprong · A = pakken; daarna A ingedrukt = kracht laden, loslaten = schot (loslaten op de top van je sprong in de groene zone = PERFECT)
 //  * B = dunk (met bal bij de mand), blokkeren (bal in de lucht), stelen (bal bij de ander); 3-puntslijn, 8 s schotklok
 //  * power-ups: reuzenbal (alleen dunken telt, 4 punten), raketschoenen, trampoline · gimmicks: bewegende manden, bal wordt een kip, Deurman kijkt (geen B-beuken!)
+//  * 2 tegen 2 (4 spelers, ctx.teams): een team heeft één mand; B met bal ver van de mand = PASS naar je teamgenoot (die vangt automatisch), de schotklok loopt door over een pass heen
 //  * comeback: in de laatste 15 s scoort de achterstaander dubbel; achterstaander krijgt vaker power-ups en iets meer steel-kans
 
 const { HX, BB, RR, RT, RIMY, BR, PLX, WALLX, ZP } = BK;
@@ -26,10 +27,12 @@ export default {
   giver: 'Coach Klepper',
   icon: '🏀',
   mode: 'pvp',
+  players: [2, 4],
+  teams: true,
   time: 90,
   music: 'game_fast',
   blurb: 'Straatbasketbal in het steegje! <b>90 s</b> of eerste tot <b>21</b>. Pak de bal, schiet in de <b>mand</b> en pas op voor de <b>Deurman</b>: als hij kijkt, mag je niet beuken!',
-  controls: ['{move} lopen, omhoog = sprong', '{a} pak; houd = laad, los = schot', '{b} dunk / blok / steel'],
+  controls: ['{move} lopen, omhoog = sprong', '{a} pak; houd = laad, los = schot', '{b} dunk / blok / steel (2 tegen 2: ver van de mand = pass)'],
   tip: 'Loslaten op de top van je sprong in het groen = PERFECT. Achterstaand in de laatste 15 s? Dubbele punten!',
 
   create(ctx) {
@@ -37,8 +40,13 @@ export default {
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
-    const CSS = ['#7dffb0', '#8fb8ff'];
-    const colorsCss = ['rgba(60,200,120,1)', 'rgba(70,140,255,1)'];
+    // teams: bij 4 spelers 2 tegen 2 (ctx.teams = [[0,1],[2,3]]); een team heeft één mand en één score; t = teamindex van een speler
+    const N = players.length, TEAMS = N === 4 && ctx.teams ? ctx.teams : null, tOf = (slot) => (TEAMS ? ctx.teamOf[slot] : slot);
+    const tname = (t) => (TEAMS ? ctx.teamInfo[t].name : names[t]), tcss = (t) => (TEAMS ? ctx.teamInfo[t].css : CSS[t]);
+    const CSS = TEAMS ? players.map((p) => p.css) : ['#7dffb0', '#8fb8ff'];
+    const hexRgba = (h) => `rgba(${(h >> 16) & 255},${(h >> 8) & 255},${h & 255},1)`;
+    const colorsCss = TEAMS ? [hexRgba(ctx.teamInfo[0].color), hexRgba(ctx.teamInfo[1].color)] : ['rgba(60,200,120,1)', 'rgba(70,140,255,1)'];
+    const ZPL = TEAMS ? [1.2, -0.4, 0.4, -1.2] : ZP;   // z-baan per speler zodat teamgenoten en tegenstanders elkaar niet doorkruisen
 
     const L = ctx.lights('dusk', { shadow: 20, center: [0, 3, 0], fog: false });
     L.hemi.intensity = 1.1; L.sun.intensity = 2.1; L.sun.position.set(-14, 24, 20);
@@ -49,13 +57,13 @@ export default {
     const nameTex = names.map((n, i) => labelTex(n.toUpperCase(), CSS[i], 50));
     const clockTex = [...Array(9).keys()].map((n) => labelTex(String(n), '#ff6a4a', 90));
     const pl = players.map((pp, i) => {
-      const dir = i ? -1 : 1, c = makeBrother(i); c.group.userData.dynamic = true; scene.add(c.group);
+      const t = tOf(i), dir = t ? -1 : 1, c = makeBrother(i); c.group.userData.dynamic = true; scene.add(c.group);
       const shadow = P.shadowBlob(1.0); scene.add(shadow);
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: nameTex[i], transparent: true, depthTest: false })); tag.scale.set(2.6, 0.97, 1); tag.renderOrder = 15; scene.add(tag);
       const clk = new THREE.Sprite(new THREE.SpriteMaterial({ map: clockTex[8], transparent: true, depthTest: false })); clk.scale.set(1.5, 1.4, 1); clk.renderOrder = 16; clk.visible = false; scene.add(clk);
       const s = 1.3 * pv.size(i); c.group.scale.setScalar(s);
       const bootG = [c.legL, c.legR].map((leg) => { const g = new THREE.Group(); g.add(mesh(new THREE.BoxGeometry(0.28, 0.22, 0.42), new THREE.MeshStandardMaterial({ color: 0xe8402a, emissive: 0x601008, roughness: 0.5 }), { cast: false, pos: [0, -0.62, 0.06] })); g.add(mesh(new THREE.ConeGeometry(0.12, 0.34, 6), new THREE.MeshBasicMaterial({ color: 0xffa020 }), { cast: false, pos: [0, -0.84, 0], rot: [Math.PI, 0, 0] })); g.visible = false; leg.add(g); return g; });
-      return { i, dir, c, bootG, shadow, tag, clk, s, x: -dir * 3.5, y: 0, vx: 0, vy: 0, z: ZP[i], face: dir, grounded: true, hold: false, aBuf: 0, grabAge: 9, charging: false, chargeT: 0, upPrev: false, stun: 0, swing: 0, swingCd: 0, stealChecked: false, boots: 0, dunk: null, mood: 'play', grabCd: 0, sc: SHOT_CLOCK, fake: 0, trampCd: 0, apex: false, lastTick: -1, bumpCd: 0 };
+      return { i, t, dir, c, bootG, shadow, tag, clk, s, x: -dir * 3.5, y: 0, vx: 0, vy: 0, z: ZPL[i], face: dir, grounded: true, hold: false, aBuf: 0, grabAge: 9, charging: false, chargeT: 0, upPrev: false, stun: 0, swing: 0, swingCd: 0, stealChecked: false, boots: 0, dunk: null, mood: 'play', grabCd: 0, sc: SHOT_CLOCK, fake: 0, trampCd: 0, apex: false, lastTick: -1, bumpCd: 0 };
     });
     // bal, kip-bal, orb, trampoline
     const ballM = makeBallMesh(); scene.add(ballM); const ballShadow = P.shadowBlob(0.6); scene.add(ballShadow);
@@ -70,50 +78,53 @@ export default {
     const ov = new THREE.Group(); camera.add(ov);
     const rmat = (c, o = 1) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: o, depthTest: false, depthWrite: false, fog: false });
     const oplane = (c, o = 1, ro = 60) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), rmat(c, o)); m.renderOrder = ro; ov.add(m); return m; };
-    const meters = [0, 1].map((i) => ({ frame: oplane(0x0a0a1e, 0.85, 60), fill: oplane(0x222a4a, 1, 61), good: oplane(0xe8c83a, 0.9, 62), perf: oplane(0x3ac86a, 1, 63), mark: oplane(0xffffff, 1, 65), apex: oplane(0x888899, 1, 64), lab: (() => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex(names[i].toUpperCase(), CSS[i], 44), transparent: true, depthTest: false })); s.renderOrder = 66; ov.add(s); return s; })() }));
+    const meters = players.map((_, i) => ({ frame: oplane(0x0a0a1e, 0.85, 60), fill: oplane(0x222a4a, 1, 61), good: oplane(0xe8c83a, 0.9, 62), perf: oplane(0x3ac86a, 1, 63), mark: oplane(0xffffff, 1, 65), apex: oplane(0x888899, 1, 64), lab: (() => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex(names[i].toUpperCase(), CSS[i], 44), transparent: true, depthTest: false })); s.renderOrder = 66; ov.add(s); return s; })() }));
 
     // ---------------- toestand ----------------
-    const score = [0, 0];
+    const score = [0, 0], teamSlots = (t) => pl.filter((q) => q.t === t), foesOf = (p) => pl.filter((q) => q.t !== p.t), mateOf = (p) => pl.find((q) => q.t === p.t && q !== p);
     let T = 0, introT = 0, started = false, finished = false, slow = 1, slowHold = 0, camX = 0, camD = 21, punch = 0, lastSb = -1, ended = false;
     const G = { state: 'tip', t: 0, timeLeft: MATCH_T, sd: false, sdT: 0, winner: -1, lastScorer: -1, timeUp: false, waitT: 0, comebackAnn: false, endT: 0, tipN: 4 };
     const b = { state: 'free', x: 0, y: 5, vx: 0, vy: 0, r: BR, holder: -1, shooter: -1, pts: 2, from: 0, t: 0, rimHit: false, boardHit: false, perfect: false, chick: 0, giant: 0, deadT: 0, heldT: 0, lastTouch: -1, hopT: 0, prevY: 5, spin: 0, k: -1 };
-    const stats = { shots: [0, 0], makes: [0, 0], threes: [0, 0], dunks: [0, 0], blocks: [0, 0], steals: [0, 0], fouls: [0, 0], perfect: [0, 0], items: 0, violations: 0, tipins: 0 };
+    const stats = { passes: 0, catches: 0, intercepts: 0, shots: [0, 0], makes: [0, 0], threes: [0, 0], dunks: [0, 0], blocks: [0, 0], steals: [0, 0], fouls: [0, 0], perfect: [0, 0], items: 0, violations: 0, tipins: 0 };
     let item = null, itemT = 6, trampo = null, evT = rand(14, 20);
     const EV = { hoops: 0, chick: 0 };
     const ref = { st: 'away', t: rand(5, 8), look: 0 };
     const tmpV = new THREE.Vector3(), hp = { x: 0, y: 0, z: 0 };
     const hs = (k) => (k === 0 ? 1 : -1), hoopX = (k) => hs(k) * HX, rimY = () => RIMY + C.hoopOff;
-    const idealOf = (p, x = p.x) => clamp(0.2 + 0.66 * Math.min(Math.abs(hoopX(p.i) - x), 10) / 10, 0.2, 0.9);
+    const idealOf = (p, x = p.x) => clamp(0.2 + 0.66 * Math.min(Math.abs(hoopX(p.t) - x), 10) / 10, 0.2, 0.9);
     const lead = (i) => score[i] - score[1 - i];
     const hoopOffAt = (dtA) => { const rem = EV.hoops - dtA; if (rem <= 0) return 0; return Math.sin((T + dtA) * 1.8) * clamp(Math.min(rem, 12 - rem) / 1.2, 0, 1) * 0.95; };
 
     function refreshHud() {
-      hud.setScore(`${names[0]} ${score[0]} – ${score[1]} ${names[1]}${G.sd ? '  (GOUDEN MAND)' : ''}`);
-      C.scoreboard(names, score, G.sd ? 0 : G.timeLeft, G.sd ? 'GOUDEN MAND' : null);
+      hud.setScore(`${TEAMS ? ctx.teamInfo[0].name.replace(' & ', '+') : names[0]} ${score[0]} – ${score[1]} ${TEAMS ? ctx.teamInfo[1].name.replace(' & ', '+') : names[1]}${G.sd ? '  (GOUDEN MAND)' : ''}`);
+      C.scoreboard(TEAMS ? ctx.teamInfo.map((t) => t.name.replace(' & ', '+')) : names, score, G.sd ? 0 : G.timeLeft, G.sd ? 'GOUDEN MAND' : null, TEAMS ? ctx.teamInfo.map((t) => t.css) : null);
     }
     function refreshInfo(p) {
       const t = `${p.hold ? '🏀 bal' : ''}${p.boots > 0 ? ` 🚀${Math.ceil(p.boots)}s` : ''}${p.stun > 0 ? ' 😵' : ''}${p.hold && p.sc < 4 ? ` ⏱${Math.ceil(p.sc)}` : ''}`.trim() || '–';
-      if (p.infoTxt !== t) { p.infoTxt = t; hud.setPlayerInfo(p.i, `${score[p.i]} pnt · ${t}`); }
+      if (p.infoTxt !== t) { p.infoTxt = t; hud.setPlayerInfo(p.i, `${score[p.t]} pnt · ${t}`); }
     }
 
     // ---------------- spelverloop ----------------
     function giveBall(p, how) {
       b.state = 'held'; b.holder = p.i; b.shooter = -1; b.heldT = 0; b.vx = b.vy = 0; b.rimHit = b.boardHit = false; b.perfect = false; b.lastTouch = p.i;
-      p.hold = true; p.grabAge = 0; p.sc = SHOT_CLOCK; p.lastTick = -1; p.aBuf = 0; p.charging = false; p.chargeT = 0; p.dunk = null;
+      p.hold = true; p.grabAge = 0; p.sc = (b.passTeam === p.t && b.passSc != null) ? b.passSc : SHOT_CLOCK; b.passTeam = -1; b.passTo = -1; p.lastTick = -1; p.aBuf = 0; p.charging = false; p.chargeT = 0; p.dunk = null;
       for (const o of pl) if (o !== p) { o.hold = false; o.charging = false; o.chargeT = 0; }
     }
-    function dropBall(vx, vy) { const p = pl[b.holder]; if (p) { p.hold = false; p.charging = false; p.chargeT = 0; p.grabCd = 0.45; } b.state = 'free'; b.holder = -1; b.vx = vx; b.vy = vy; }
+    function dropBall(vx, vy) { b.passTo = -1; const p = pl[b.holder]; if (p) { p.hold = false; p.charging = false; p.chargeT = 0; p.grabCd = 0.45; } b.state = 'free'; b.holder = -1; b.vx = vx; b.vy = vy; }
     function tipOff() {
       G.state = 'tip'; G.t = 0; G.tipN = 4; b.state = 'free'; b.holder = -1; b.x = 0; b.y = 5.2; b.vx = b.vy = 0; b.t = 0; b.shooter = -1;
-      for (const p of pl) { p.hold = false; p.charging = false; p.chargeT = 0; p.x = -p.dir * 3.2; p.y = 0; p.vx = p.vy = 0; p.dunk = null; p.stun = 0; p.mood = 'play'; p.face = p.dir; }
+      b.passTo = -1; for (const p of pl) { p.hold = false; p.charging = false; p.chargeT = 0; p.x = -p.dir * (3.2 + (mateOf(p) && pl.indexOf(p) > pl.indexOf(mateOf(p)) ? 3.4 : 0)); p.y = 0; p.vx = p.vy = 0; p.dunk = null; p.stun = 0; p.mood = 'play'; p.face = p.dir; }
     }
     function inbound(who) {
-      const p = pl[who], o = pl[1 - who]; G.state = 'play'; G.t = 0;
-      p.x = -p.dir * 5.0; p.y = 0; p.vx = p.vy = 0; o.x = p.x + p.dir * 3.2; o.y = 0; o.vx = o.vy = 0; p.dunk = o.dunk = null; p.stun = o.stun = 0; p.mood = o.mood = 'play'; p.face = p.dir; o.face = -p.dir;
+      // who = teamindex (bij 2 spelers = de speler); het team met de bal staat achter, de tegenstanders staan richting de mand
+      const mine = teamSlots(who), p = mine[0]; G.state = 'play'; G.t = 0; b.passTeam = -1;
+      p.x = -p.dir * 5.0; mine.slice(1).forEach((m, k) => { m.x = clamp(p.x - p.dir * (3.4 + k * 3), -PLX, PLX); });
+      foesOf(p).forEach((o, k) => { o.x = clamp(p.x + p.dir * (3.2 + k * 3.4), -PLX, PLX); });
+      for (const q of pl) { q.y = 0; q.vx = q.vy = 0; q.dunk = null; q.stun = 0; q.mood = 'play'; q.face = q.dir; }
       b.x = p.x; b.y = 1.2; giveBall(p); p.grabCd = 0;
       fx.particles.burst(p.x, 1, p.z, { count: 12, speed: 3, up: 1, life: 0.5, size: 0.4, colors: [0xffffff, 0xffe14a], gravity: 3 });
     }
-    function startPlay() { G.state = 'play'; G.t = 0; if (!G.hinted) { G.hinted = true; hud.setHint('<b>A</b> pak · <b>houd A</b> laden, <b>los</b> = schot · <b>B</b> dunk/blok/steel'); G.hintT = 11; } b.vy = 13.5; b.vx = rand(-1, 1); audio.sfx('go', { vol: 0.4 }); fx.texts.add('SPRONGBAL!', 0, 6.5, 0, '#ffe14a', 1.8); ctx.shake(0.2); hud.showBig('GA!', 700, '#ffe14a'); }
+    function startPlay() { G.state = 'play'; G.t = 0; if (!G.hinted) { G.hinted = true; hud.setHint(TEAMS ? '<b>A</b> pak · <b>houd A</b> laden, <b>los</b> = schot · <b>B</b> dunk/blok/steel · ver van de mand: <b>B</b> = pass' : '<b>A</b> pak · <b>houd A</b> laden, <b>los</b> = schot · <b>B</b> dunk/blok/steel'); G.hintT = 11; } b.vy = 13.5; b.vx = rand(-1, 1); audio.sfx('go', { vol: 0.4 }); fx.texts.add('SPRONGBAL!', 0, 6.5, 0, '#ffe14a', 1.8); ctx.shake(0.2); hud.showBig('GA!', 700, '#ffe14a'); }
 
     function scoreBasket(k, pts, how) {
       if (G.state === 'scored' || G.state === 'end') return;
@@ -123,7 +134,7 @@ export default {
       const tot = pts * mult; score[k] += tot; G.state = 'scored'; G.t = 0; G.lastScorer = k; b.state = 'dead'; b.deadT = 0; b.holder = -1;
       stats.makes[k]++; if (how === 'three') stats.threes[k]++;
       const hp0 = C.hoops[k]; C.swish(k, 1);
-      const col = CSS[k], big = tot >= 3 || how === 'dunk';
+      const col = tcss(k), big = tot >= 3 || how === 'dunk';
       hud.showBig(how === 'dunk' ? (pts >= 4 ? 'REUZEN-DUNK! +4' : 'DUNK!') : how === 'three' ? 'TRIPLE! +3' : `+${tot}`, 1100, col);
       const label = how === 'dunk' ? 'SLAM DUNK!' : b.perfect ? 'PERFECT!' : (!b.rimHit && !b.boardHit ? 'SWISH!' : b.boardHit && !b.rimHit ? 'BANK!' : 'RIM-IN!');
       fx.texts.add(label, hoopX(k) * 0.8, rimY() + 2.4, 0, how === 'dunk' ? '#ff9a3a' : col, 1.7); fx.texts.add(`+${tot}${mult > 1 ? ' (x2!)' : ''}${chick ? ' kip!' : ''}`, hoopX(k) * 0.85, rimY() + 1.3, 0, '#ffffff', 1.2);
@@ -131,7 +142,7 @@ export default {
       audio.sfx(how === 'dunk' ? 'explode' : 'ding', { vol: how === 'dunk' ? 0.5 : 0.8 }); audio.sfx(big ? 'win' : 'coin', { vol: big ? 0.45 : 0.6 }); audio.noise(1.0, { type: 'bandpass', freq: 800, freq2: 2000, q: 0.8, vol: 0.2, attack: 0.15 });
       fx.particles.burst(hoopX(k), rimY() - 0.3, 0, { count: big ? 60 : 36, speed: 7, up: 1.2, life: 1.2, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 6 });
       ctx.shake(how === 'dunk' ? 0.9 : 0.35); C.cheer(big ? 3 : 1.8);
-      pl[k].mood = 'cheer'; pl[1 - k].mood = 'sad';
+      for (const q of pl) q.mood = q.t === k ? 'cheer' : 'sad';
       if (b.perfect) stats.perfect[k]++;
       // schoon: hang de bal door het net
       b.vx *= 0.2; b.vy = Math.min(b.vy, -3);
@@ -140,14 +151,15 @@ export default {
     }
     function endMatch(w) {
       if (G.state === 'end') return; G.state = 'end'; G.t = 0; G.winner = w; slow = 1; hud.setTimer(null);
-      if (w != null) { pl[w].mood = 'cheer'; pl[1 - w].mood = 'sad'; C.cheer(6); }
+      if (w != null) { for (const q of pl) q.mood = q.t === w ? 'cheer' : 'sad'; C.cheer(6); }
       for (const p of pl) { p.charging = false; p.hold = false; }
     }
     function finishMatch(w) {
       if (finished) return; finished = true; const l = 1 - w;
-      const jokes = [`${names[w]} scoort alsof de mand een magneet heeft. ${names[l]} kijkt naar de kip.`, `${names[w]} is de Koning van het Steegje! ${names[l]} zoekt de bal onder een vuilnisbak.`, `Wat een show! ${names[w]} wint en de Deurman klapt (voorzichtig).`, `${names[w]} dunkt zich naar de zege. ${names[l]} dunkt alleen in de rimpels.`];
+      const wn = tname(w), ln = tname(l);
+      const jokes = TEAMS ? [`${wn} scoren alsof de mand een magneet heeft. ${ln} kijken naar de kip.`, `${wn} zijn de Koningen van het Steegje! ${ln} zoeken de bal onder een vuilnisbak.`, `Wat een teamwork! ${wn} winnen en de Deurman klapt (voorzichtig).`, `${wn} passen zich naar de zege. ${ln} passen alleen voor de kip.`] : [`${names[w]} scoort alsof de mand een magneet heeft. ${names[l]} kijkt naar de kip.`, `${names[w]} is de Koning van het Steegje! ${names[l]} zoekt de bal onder een vuilnisbak.`, `Wat een show! ${names[w]} wint en de Deurman klapt (voorzichtig).`, `${names[w]} dunkt zich naar de zege. ${names[l]} dunkt alleen in de rimpels.`];
       const ex = [stats.perfect[0] + stats.perfect[1] ? `${stats.perfect[0] + stats.perfect[1]}x perfect` : '', stats.dunks[0] + stats.dunks[1] ? `${stats.dunks[0] + stats.dunks[1]} dunks` : '', stats.blocks[0] + stats.blocks[1] ? `${stats.blocks[0] + stats.blocks[1]} blokken` : '', stats.fouls[0] + stats.fouls[1] ? `${stats.fouls[0] + stats.fouls[1]} fouten (Deurman!)` : '', G.coin ? 'de Deurman gooide een munt' : ''].filter(Boolean).join(' · ');
-      ctx.finishPvp({ winner: w, score: [score[0], score[1]], delay: 800, summary: `${pick(jokes)}${ex ? ` (${ex}.)` : ''}` });
+      ctx.finishPvp({ ...(TEAMS ? { winners: teamSlots(w).map((q) => q.i) } : { winner: w }), score: TEAMS ? players.map((_, i) => score[tOf(i)]) : [score[0], score[1]], delay: 800, summary: `${pick(jokes)}${ex ? ` (${ex}.)` : ''}` });
     }
 
     // ---------------- schieten ----------------
@@ -160,7 +172,7 @@ export default {
       out.x = x; out.y = Math.max(y, b.r); out.z = p.z; return out;
     }
     function shoot(p, power) {
-      holdPos(p, hp); const S = p.s, k = p.i, dir = p.dir, hx = hoopX(k), x0 = hp.x, y0 = hp.y; let ry = rimY();
+      holdPos(p, hp); const S = p.s, k = p.t, dir = p.dir, hx = hoopX(k), x0 = hp.x, y0 = hp.y; let ry = rimY(); b.passTeam = -1; b.passTo = -1;
       const airborne = p.y > 0.35, apex = airborne && Math.abs(p.vy) < 3.2;
       const dxa = Math.abs(hx - x0), g = GB * GRAV; let th = 1, v = 1;
       for (let it = 0; it < 2; it++) {          // mikt op de plek waar de (bewegende) mand aankomt
@@ -174,7 +186,7 @@ export default {
       }
       const ideal = idealOf(p, p.x), dp = power - ideal, perfect = Math.abs(dp) < 0.075 && apex, good = Math.abs(dp) < 0.2;
       const K = 0.36 * clamp(dxa / 6, 0.35, 1);
-      let f = perfect ? 1 : 1 + dp * K; const o = pl[1 - k]; const contested = Math.abs(o.x - p.x) < 2.0 && (o.y > 0.4 || o.swing > 0);
+      let f = perfect ? 1 : 1 + dp * K; const contested = foesOf(p).some((o) => Math.abs(o.x - p.x) < 2.0 && (o.y > 0.4 || o.swing > 0));
       const jit = perfect ? 0 : (apex ? 0.01 : airborne ? 0.03 : 0.06) * (contested ? 1.8 : 1) + (power > 0.99 ? 0.02 : 0);
       f *= 1 + (Math.random() - 0.5) * 2 * jit; v *= f;
       b.state = 'flight'; b.shooter = k; b.holder = -1; b.t = 0; b.x = x0; b.y = y0; b.vx = dir * v * Math.cos(th); b.vy = v * Math.sin(th); b.rimHit = b.boardHit = false; b.perfect = perfect; b.from = Math.abs(hx - p.x); b.pts = b.from > THREE_D ? 3 : 2; b.k = k;
@@ -185,30 +197,30 @@ export default {
       if (b.pts === 3) fx.texts.add('3!', p.x, p.y + 4.9 * S, 0, '#ffd23f', 1.1);
     }
     function startDunk(p) {
-      const hx = hoopX(p.i), S = p.s, dxa = Math.abs(hx - p.x);
+      const hx = hoopX(p.t), S = p.s, dxa = Math.abs(hx - p.x);
       p.dunk = { t: 0, T: 0.42 + 0.06 * dxa, x0: p.x, y0: p.y, tx: hx - p.dir * 0.85, ty: Math.max(1.6, rimY() - 2.55 * S), slam: false, hang: 0 };
-      p.charging = false; p.chargeT = 0; p.vx = p.vy = 0; b.state = 'held'; b.holder = p.i; p.face = p.dir; stats.shots[p.i]++;
+      p.charging = false; p.chargeT = 0; p.vx = p.vy = 0; b.state = 'held'; b.holder = p.i; p.face = p.dir; stats.shots[p.t]++;
       audio.sfx('whoosh', { vol: 0.7, rate: 0.7 }); audio.sfx('swing', { vol: 0.4, rate: 0.7 }); slow = 0.5; slowHold = 0.35;
       fx.texts.add('DUNK!', p.x, p.y + 4.5, 0, '#ff9a3a', 1.3); fx.particles.dust(p.x, 0.1, p.z, 8, 0xd8c8a8);
     }
     function blockBall(o, ball) {
-      stats.blocks[o.i]++; const spike = ball.y > o.y + 2.2 * o.s;
+      stats.blocks[o.t]++; const spike = ball.y > o.y + 2.2 * o.s;
       b.state = 'free'; b.vx = o.face * rand(5, 10); b.vy = spike ? -rand(4, 9) : rand(-1, 6); b.perfect = false; b.lastTouch = o.i; b.shooter = -1; b.t = 0;
-      fx.texts.add('GEBLOKT!', b.x, b.y + 1.4, 0, CSS[o.i], 1.7); audio.sfx('hit', { vol: 0.9 }); audio.sfx('good', { vol: 0.3 }); ctx.shake(0.45); slow = 0.4; slowHold = 0.3;
+      fx.texts.add('GEBLOKT!', b.x, b.y + 1.4, 0, CSS[o.i], 1.7); b.passTo = -1; audio.sfx('hit', { vol: 0.9 }); audio.sfx('good', { vol: 0.3 }); ctx.shake(0.45); slow = 0.4; slowHold = 0.3;
       fx.particles.burst(b.x, b.y, 0, { count: 24, speed: 6, up: 0.6, life: 0.5, size: 0.4, colors: [0xffffff, 0xff9a3a, 0xffe14a], gravity: 5 }); o.swing = 0;
     }
     function stealTry(p, v) {
-      p.stealChecked = true; stats.steals[p.i] += 0;
+      p.stealChecked = true;
       if (ref.st === 'look') {   // Deurman ziet het: FOUL
-        stats.fouls[p.i]++; p.stun = 1.0; p.swing = 0; p.mood = 'sad'; score[v.i] += 1; refreshHud();
-        fx.texts.add('FOUL!', p.x, p.y + 4.2 * p.s, 0, '#ff5a4a', 1.6); fx.texts.add('+1 voor ' + names[v.i], v.x, v.y + 5.0 * v.s, 0, CSS[v.i], 1.1); hud.toast(`👁 FOUL! ${names[v.i]} krijgt +1`, 1800);
+        stats.fouls[p.t]++; p.stun = 1.0; p.swing = 0; p.mood = 'sad'; score[v.t] += 1; refreshHud();
+        fx.texts.add('FOUL!', p.x, p.y + 4.2 * p.s, 0, '#ff5a4a', 1.6); fx.texts.add('+1 voor ' + tname(v.t), v.x, v.y + 5.0 * v.s, 0, CSS[v.i], 1.1); hud.toast(`👁 FOUL! ${tname(v.t)} krijg${TEAMS ? 'en' : 't'} +1`, 1800);
         audio.sfx('buzz', { vol: 0.6 }); audio.sfx('static', { vol: 0.3 }); ctx.shake(0.3); C.refAlert = 0.6;
-        if (score[v.i] >= WIN) { G.endDelay = 0.6; G.pendingWin = v.i; } return;
+        if (score[v.t] >= WIN) { G.endDelay = 0.6; G.pendingWin = v.t; } return;
       }
-      const chance = 0.4 + (ref.st === 'away' ? 0.12 : 0) + (lead(p.i) < 0 ? 0.1 : 0) - (v.charging ? 0.12 : 0) - (!v.grounded ? 0.2 : 0);
+      const chance = 0.4 + (ref.st === 'away' ? 0.12 : 0) + (lead(p.t) < 0 ? 0.1 : 0) - (v.charging ? 0.12 : 0) - (!v.grounded ? 0.2 : 0);
       if (v.grabAge < 0.9) { fx.texts.add('veilig!', v.x, v.y + 4.2 * v.s, 0, '#cfe0ff', 0.9); return; }
       if (Math.random() < chance) {
-        stats.steals[p.i]++; giveBall(p); p.grabAge = 0; v.grabCd = 0.5; v.stun = 0.25; p.face = p.dir;
+        stats.steals[p.t]++; giveBall(p); p.grabAge = 0; v.grabCd = 0.5; v.stun = 0.25; p.face = p.dir;
         fx.texts.add('STEAL!', p.x, p.y + 4.3 * p.s, 0, CSS[p.i], 1.5); audio.sfx('hit', { vol: 0.6 }); audio.sfx('good', { vol: 0.3 }); ctx.shake(0.25); fx.particles.burst(v.x, v.y + 1.5, 0, { count: 18, speed: 5, up: 0.8, life: 0.5, size: 0.35, colors: [0xffffff, 0xffe14a], gravity: 4 });
       } else {
         p.stun = 0.95; p.vx = p.face * 3; fx.texts.add('mis!', p.x, p.y + 4.2 * p.s, 0, '#ffb09a', 1.0); audio.sfx('boing', { vol: 0.5, rate: 1.4 }); audio.sfx('miss', { vol: 0.3 });
@@ -216,23 +228,24 @@ export default {
     }
     function violation(p) {
       stats.violations++; audio.sfx('buzz', { vol: 0.7 }); hud.showBig('SCHOTKLOK!', 900, '#ff7a6a'); fx.texts.add('SCHOTKLOK!', p.x, p.y + 4.5, 0, '#ff6a4a', 1.5);
-      p.hold = false; p.charging = false; p.chargeT = 0; inbound(1 - p.i);
+      p.hold = false; p.charging = false; p.chargeT = 0; inbound(1 - p.t);
     }
 
     // ---------------- spelers bewegen ----------------
     function stepPlayer(p, dt) {
-      const inp = pv.input(p.i), sp = pv.speed(p.i), S = p.s, o = pl[1 - p.i];
+      const inp = pv.input(p.i), sp = pv.speed(p.i), S = p.s, foes = foesOf(p);
       p.stun = Math.max(0, p.stun - dt); p.swing = Math.max(0, p.swing - dt); p.swingCd = Math.max(0, p.swingCd - dt); p.grabCd = Math.max(0, p.grabCd - dt); p.aBuf = Math.max(0, p.aBuf - dt); p.grabAge += dt; p.boots = Math.max(0, p.boots - dt); p.trampCd = Math.max(0, p.trampCd - dt); p.bumpCd = Math.max(0, p.bumpCd - dt);
       const play = G.state === 'play' || G.state === 'scored' || G.state === 'tip';
       if (p.dunk) {
         const d = p.dunk; d.t += dt;
         if (!d.slam) {
           const u = clamp(d.t / d.T, 0, 1), e = 1 - (1 - u) * (1 - u); p.x = lerp(d.x0, d.tx, e); p.y = lerp(d.y0, d.ty, u * u * (3 - 2 * u)) + Math.sin(Math.PI * u) * 1.1; p.vx = p.vy = 0;
-          if (o.swing > 0 && u > 0.2 && Math.abs(o.x - p.x) < 2.6 * o.s && o.y > 0.25) { p.dunk = null; p.vy = -3; p.stun = 0.8; p.hold = false; blockBall(o, b); b.x = p.x; b.y = p.y + 2.5; return; }
+          const blk = foes.find((o) => o.swing > 0 && u > 0.2 && Math.abs(o.x - p.x) < 2.6 * o.s && o.y > 0.25);
+          if (blk) { p.dunk = null; p.vy = -3; p.stun = 0.8; p.hold = false; blockBall(blk, b); b.x = p.x; b.y = p.y + 2.5; return; }
           if (u >= 1) {
-            d.slam = true; d.hang = 0; stats.dunks[p.i]++; b.x = hoopX(p.i); b.y = rimY() - 0.3; b.hold = false; p.hold = false; b.vx = 0; b.vy = -6; b.pts = 2; b.perfect = false;
-            const pts = b.giant > 0 ? 4 : 2; b.state = 'free'; scoreBasket(p.i, pts, 'dunk'); slow = 0.3; slowHold = 0.45; punch = 1; ctx.shake(1.0);
-            fx.particles.ring(hoopX(p.i), rimY(), 0, { count: 30, speed: 8, color: 0xffa040, size: 0.5, life: 0.7 }); audio.sfx('explode', { vol: 0.6 }); audio.sfx('thud', { vol: 0.8, rate: 0.6 });
+            d.slam = true; d.hang = 0; stats.dunks[p.t]++; b.x = hoopX(p.t); b.y = rimY() - 0.3; b.hold = false; p.hold = false; b.vx = 0; b.vy = -6; b.pts = 2; b.perfect = false;
+            const pts = b.giant > 0 ? 4 : 2; b.state = 'free'; scoreBasket(p.t, pts, 'dunk'); slow = 0.3; slowHold = 0.45; punch = 1; ctx.shake(1.0);
+            fx.particles.ring(hoopX(p.t), rimY(), 0, { count: 30, speed: 8, color: 0xffa040, size: 0.5, life: 0.7 }); audio.sfx('explode', { vol: 0.6 }); audio.sfx('thud', { vol: 0.8, rate: 0.6 });
           }
         } else { d.hang += dt; p.x = d.tx; p.y = d.ty; p.vx = p.vy = 0; if (d.hang > 0.4) { p.dunk = null; p.vy = -2; } }
         p.grounded = false; return;
@@ -253,16 +266,16 @@ export default {
       // B: dunk / slag
       if (play && G.state === 'play' && p.stun <= 0 && inp.bP && p.swingCd <= 0) {
         if (p.hold) {
-          const dxa = Math.abs(hoopX(p.i) - p.x);
-          if (dxa < 3.9) startDunk(p); else { p.fake = 0.3; p.swingCd = 0.5; audio.sfx('swing', { vol: 0.2, rate: 1.6 }); }
+          const dxa = Math.abs(hoopX(p.t) - p.x);
+          if (dxa < 3.9) startDunk(p); else if (TEAMS && mateOf(p) && mateOf(p).stun <= 0 && p.grabAge > 0.15) passBall(p); else { p.fake = 0.3; p.swingCd = 0.5; audio.sfx('swing', { vol: 0.2, rate: 1.6 }); }
         } else { p.swing = 0.3; p.swingCd = 0.8; p.stealChecked = false; audio.sfx('swing', { vol: 0.4 }); p.c.swing(); }
       }
       if (p.fake > 0) p.fake = Math.max(0, p.fake - dt);
       if (p.dunk) return;
       // slag: stelen / blokkeren
       if (p.swing > 0 && G.state === 'play') {
-        if (!p.stealChecked && o.hold && !o.dunk && Math.abs(o.x - p.x) < 2.1 * Math.max(p.s, o.s) && Math.abs(o.y - p.y) < 2.6) stealTry(p, o);
-        if (b.state === 'flight' && b.shooter !== p.i && b.t < 1.1 && !b.rimHit && !b.boardHit) { const hx = p.x + p.face * 0.4 * S, hy = p.y + 2.0 * S; if (Math.hypot(b.x - hx, b.y - hy) < 1.3 * S + b.r) blockBall(p, b); }
+        if (!p.stealChecked) { const v = foes.find((o) => o.hold && !o.dunk && Math.abs(o.x - p.x) < 2.1 * Math.max(p.s, o.s) && Math.abs(o.y - p.y) < 2.6); if (v) stealTry(p, v); }
+        if (b.state === 'flight' && b.shooter !== p.t && b.t < 1.1 && !b.rimHit && !b.boardHit) { const hx = p.x + p.face * 0.4 * S, hy = p.y + 2.0 * S; if (Math.hypot(b.x - hx, b.y - hy) < 1.3 * S + b.r) blockBall(p, b); }
       }
       // fysica
       if (mx > 0.3) p.face = 1; else if (mx < -0.3) p.face = -1; else if (p.hold) p.face = p.dir;
@@ -272,18 +285,35 @@ export default {
       if (p.y <= 0) { if (!p.grounded && p.vy < -6) { audio.sfx('land', { vol: clamp(-p.vy / 24, 0.1, 0.4) }); fx.particles.dust(p.x, 0.1, p.z, 3); p.c.squash = 0.15; } p.y = 0; p.vy = 0; p.grounded = true; }
       if (p.boots > 0 && Math.random() < dt * 40) fx.particles.emit(p.x + rand(-0.3, 0.3), p.y + 0.15, p.z, rand(-1, 1), -rand(2, 4), rand(-0.3, 0.3), { life: 0.35, size: 0.5, color: Math.random() < 0.5 ? 0xffa020 : 0xffe9a0, gravity: -1 });
     }
-    function bumpPlayers() {
-      const a = pl[0], c = pl[1]; if (a.dunk || c.dunk) return; const dx = c.x - a.x, mm = (a.s + c.s) * 0.5; if (Math.abs(dx) < 0.95 * mm && Math.abs(c.y - a.y) < 1.7 * mm) {
+    // pass naar je teamgenoot (alleen 2 tegen 2): de bal vliegt in een boog naar hem toe en hij vangt hem automatisch (een tegenstander kan hem onderscheppen met A)
+    function passBall(p) {
+      const m = mateOf(p); holdPos(p, hp); const x0 = hp.x, y0 = hp.y, g = GB * GRAV;
+      const tx = clamp(m.x + m.vx * 0.3, -PLX, PLX), ty = m.y + 1.9 * m.s, dist = Math.hypot(tx - x0, ty - y0), T = clamp(dist / 15, 0.3, 0.8);
+      stats.passes++; b.passSc = p.sc; b.passTeam = p.t; b.passTo = m.i; b.passT = T + 0.7; b.state = 'free'; b.holder = -1; b.shooter = -1; b.t = 0; b.x = x0; b.y = y0; b.lastTouch = p.i;
+      b.vx = (tx - x0) / T; b.vy = (ty - y0 + 0.5 * g * T * T) / T; b.rimHit = b.boardHit = false; b.perfect = false;
+      p.hold = false; p.charging = false; p.chargeT = 0; p.grabCd = 0.5; p.swingCd = 0.35; p.c.swing(); p.face = Math.sign(tx - p.x) || p.face;
+      audio.sfx('whoosh', { vol: 0.4, rate: 1.3 }); fx.texts.add('PAS!', p.x, p.y + 4.3 * p.s, 0, CSS[p.i], 1.0);
+    }
+    function catchPass(dt) {
+      if (b.passTo < 0 || b.state !== 'free') return; const m = pl[b.passTo]; b.passT -= dt;
+      const reach = (1.35 + b.r) * m.s + 0.4;
+      if (m.stun <= 0 && !m.dunk && Math.abs(b.x - m.x) < reach && b.y > m.y - 0.3 && b.y < m.y + 3.2 * m.s && b.t > 0.1) { stats.catches++; giveBall(m); m.grabAge = 0.3; m.grabCd = 0; fx.texts.add('GEVANGEN', m.x, m.y + 4.3 * m.s, 0, CSS[m.i], 0.9); fx.particles.burst(b.x, b.y, 0, { count: 8, speed: 3, up: 0.8, life: 0.4, size: 0.3, colors: [0xffffff, 0xffe14a], gravity: 3 }); audio.sfx('click', { vol: 0.5, rate: 1.1 }); return; }
+      if (b.passT <= 0 || (b.y <= b.r + 0.05 && b.t > 0.4)) b.passTo = -1;
+    }
+    function bumpPlayers() { for (let x = 0; x < pl.length; x++) for (let y = x + 1; y < pl.length; y++) bumpPair(pl[x], pl[y]); }
+    function bumpPair(a, c) {
+      if (a.dunk || c.dunk) return; const dx = c.x - a.x, mm = (a.s + c.s) * 0.5; if (Math.abs(dx) < 0.95 * mm && Math.abs(c.y - a.y) < 1.7 * mm) {
         const ov = (0.95 * mm - Math.abs(dx)) / 2, sg = Math.sign(dx) || (a.i ? 1 : -1); a.x -= sg * ov; c.x += sg * ov; a.x = clamp(a.x, -PLX, PLX); c.x = clamp(c.x, -PLX, PLX);
-        const rv = Math.abs(a.vx - c.vx); if (rv > 9 && a.bumpCd <= 0) { a.bumpCd = c.bumpCd = 0.4; audio.sfx('thud', { vol: 0.4, rate: 1.3 }); fx.particles.burst((a.x + c.x) / 2, 1.5, 0, { count: 8, speed: 3, up: 1, life: 0.4, size: 0.3, colors: [0xffffff, 0xffe14a], gravity: 4 }); for (const q of [a, c]) if (q.boots > 0 && q.stun <= 0) { const w = pl[1 - q.i]; if (w.boots <= 0) { w.stun = 0.5; w.vx += (w.x - q.x) * 3; } } }
+        const rv = Math.abs(a.vx - c.vx); if (rv > 9 && a.bumpCd <= 0) { a.bumpCd = c.bumpCd = 0.4; audio.sfx('thud', { vol: 0.4, rate: 1.3 }); fx.particles.burst((a.x + c.x) / 2, 1.5, 0, { count: 8, speed: 3, up: 1, life: 0.4, size: 0.3, colors: [0xffffff, 0xffe14a], gravity: 4 }); for (const q of [a, c]) if (q.boots > 0 && q.stun <= 0) { const w = q === a ? c : a; if (w.boots <= 0) { w.stun = 0.5; w.vx += (w.x - q.x) * 3; } } }
       }
     }
     function grabTry(p) {
       if (b.state !== 'free' && b.state !== 'flight') return; if (G.state !== 'play') return; if (p.grabCd > 0 || p.stun > 0 || p.aBuf <= 0 || p.dunk || p.hold) return;
-      if (b.state === 'flight' && (b.shooter === p.i ? b.t < 0.6 : (b.vy > 0 && !b.rimHit && !b.boardHit))) return;
+      if (b.state === 'flight' && (b.shooter === p.t ? b.t < 0.6 : (b.vy > 0 && !b.rimHit && !b.boardHit))) return;
       const S = p.s, reach = (1.25 + b.r) * S + 0.35; if (Math.abs(b.x - p.x) > reach) return; if (b.y < p.y - 0.3 || b.y > p.y + 3.0 * S) return;
-      if (b.state === 'flight' && Math.hypot(b.x - hoopX(p.i), b.y - rimY()) < 1.3 && b.vy < 0) return;     // niet uit de ring plukken
-      const was = b.state; giveBall(p); fx.particles.burst(b.x, b.y, 0, { count: 8, speed: 3, up: 0.8, life: 0.4, size: 0.3, colors: [0xffffff, 0xffe14a], gravity: 3 }); audio.sfx('click', { vol: 0.5, rate: 1.3 });
+      if (b.state === 'flight' && Math.hypot(b.x - hoopX(p.t), b.y - rimY()) < 1.3 && b.vy < 0) return;     // niet uit de ring plukken
+      const was = b.state, wasPass = b.passTo; giveBall(p); fx.particles.burst(b.x, b.y, 0, { count: 8, speed: 3, up: 0.8, life: 0.4, size: 0.3, colors: [0xffffff, 0xffe14a], gravity: 3 }); audio.sfx('click', { vol: 0.5, rate: 1.3 });
+      if (was === 'free' && wasPass >= 0) { if (p.t !== pl[wasPass].t) { stats.intercepts++; fx.texts.add('ONDERSCHEPT!', p.x, p.y + 4.3 * S, 0, CSS[p.i], 1.3); } else stats.catches++; }
       if (was === 'flight') fx.texts.add('REBOUND!', p.x, p.y + 4.3 * S, 0, CSS[p.i], 1.2);
     }
 
@@ -329,7 +359,7 @@ export default {
     // ---------------- items / events ----------------
     function spawnItem() {
       const t = pick(ITEMS); const trail = score[0] === score[1] ? -1 : (score[0] < score[1] ? 0 : 1);
-      let x = rand(-8, 8); if (trail >= 0 && Math.random() < 0.6) x = pl[trail].dir * rand(1, 8); const y = Math.random() < 0.5 ? 0.95 : 3.3;
+      let x = rand(-8, 8); if (trail >= 0 && Math.random() < 0.6) x = (trail ? -1 : 1) * rand(1, 8); const y = Math.random() < 0.5 ? 0.95 : 3.3;
       item = { type: t, x, y, t: 0, life: 11 }; itemG.visible = true; itemIcon.material.map = itemTex[t.id]; itemOrb.material.emissive.set(t.col);
       fx.particles.ring(x, y, 0, { count: 18, speed: 4, color: 0xffffff, size: 0.35, life: 0.6 }); audio.sfx('sparkle', { vol: 0.5 });
       if (!stats.itemTold) { stats.itemTold = true; hud.toast('✨ Een power-up! Raak hem aan', 1800); }
@@ -396,10 +426,10 @@ export default {
         b.r = damp(b.r, b.giant > 0 ? BR * 1.95 : BR, 8, dt);
         if (trampo) { trampo.life -= dt; trampo.sq = Math.max(0, trampo.sq - dt); if (trampo.life <= 0) { tramp.visible = false; trampo = null; } }
         // spelers
-        const order = Math.floor(T * 60) % 2 ? [0, 1] : [1, 0];
+        const order = pl.map((_, i) => i); if (Math.floor(T * 60) % 2) order.reverse();
         for (const i of order) stepPlayer(pl[i], Math.max(sdt, dt * 0.35));
         for (const p of pl) { if (trampo && p.grounded === true && p.trampCd <= 0 && Math.abs(p.x - trampo.x) < 1.15 && p.y <= 0.05 && !p.dunk) { p.vy = TRAMP_V; p.grounded = false; p.y = 0.1; p.trampCd = 0.6; trampo.sq = 0.35; audio.sfx('boing', { vol: 0.8, rate: 0.8 }); ctx.shake(0.2); fx.particles.ring(p.x, 0.5, p.z, { count: 16, speed: 5, color: 0xffe14a, size: 0.35, life: 0.5 }); fx.texts.add('BOING!', p.x, 2.5, 0, '#ffe14a', 1.2); } }
-        bumpPlayers();
+        bumpPlayers(); catchPass(dt);
         for (const i of order) grabTry(pl[i]);
         // vasthouden: bal volgt de speler
         if (b.state === 'held') { const p = pl[b.holder]; if (p) { holdPos(p, hp); b.x = hp.x; b.y = hp.y; b.vx = p.vx; b.vy = 0; p.heldT = 0; b.heldT += dt; p.sc -= dt * (G.state === 'play' ? 1 : 0); const sc = Math.ceil(p.sc); if (p.sc <= 3 && sc !== p.lastTick && sc >= 1) { p.lastTick = sc; audio.sfx('tick', { vol: 0.35, rate: 1.1 + (3 - sc) * 0.1 }); } if (p.sc <= 0 && G.state === 'play' && !p.dunk) violation(p);
@@ -416,10 +446,10 @@ export default {
 
     // ---------------- visuals ----------------
     function layoutOverlay() {
-      const asp = camera.aspect || 1.7, hh = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), ww = hh * asp, mw = ww * 0.2, mhh = hh * 0.04, z = -1;
+      const asp = camera.aspect || 1.7, hh = 2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), ww = hh * asp, mw = ww * (N > 2 ? 0.17 : 0.2), mhh = hh * 0.04, z = -1;
       for (const p of pl) {
         const m = meters[p.i], vis = G.state === 'play' && p.hold && !p.dunk; const all = [m.frame, m.fill, m.good, m.perf, m.mark, m.apex, m.lab]; for (const q of all) q.visible = vis; if (!vis) continue;
-        const cx = (p.i ? 1 : -1) * ww * 0.35, my = -hh * 0.42, id = idealOf(p), ch = clamp(p.chargeT / CHARGE_T, 0, 1.3);
+        const cx = (N > 2 ? (p.i - 1.5) * ww * 0.25 : (p.i ? 1 : -1) * ww * 0.35), my = -hh * 0.42, id = idealOf(p), ch = clamp(p.chargeT / CHARGE_T, 0, 1.3);
         m.frame.scale.set(mw + hh * 0.012, mhh + hh * 0.012, 1); m.frame.position.set(cx, my, z); m.fill.scale.set(mw, mhh, 1); m.fill.position.set(cx, my, z);
         m.good.scale.set(mw * 0.4, mhh * 0.7, 1); m.good.position.set(cx + (id - 0.5) * mw, my, z); m.perf.scale.set(mw * 0.15, mhh * 0.7, 1); m.perf.position.set(cx + (id - 0.5) * mw, my, z); m.perf.material.color.set(p.apex ? 0x7dff9a : 0x3ac86a);
         m.mark.scale.set(hh * 0.01, mhh * 1.4, 1); m.mark.position.set(cx + (Math.min(ch, 1.05) - 0.5) * mw, my, z); m.mark.material.color.set(ch > 1 ? 0xff6a4a : 0xffffff); m.mark.visible = vis && p.charging;
@@ -469,7 +499,7 @@ export default {
       chick.group.rotation.z = Math.sin(T * 20) * 0.25; chick.group.rotation.x = clamp(-b.vy * 0.02, -0.4, 0.4);
     }
     function resultUpdate(dt) { T += dt; slow = 1; for (const p of pl) { p.c.pose = p.mood === 'cheer' ? 'cheer' : 'sad'; p.c.speed = 0; p.c.update(dt); p.c.group.position.set(p.x, p.mood === 'cheer' ? Math.abs(Math.sin(T * 7)) * 0.5 : 0, p.z); } C.update(T + introT, dt); layoutOverlay(); updateCamera(dt); }
-    function introUpdate(dt) { introT += dt; for (const p of pl) { p.x = -p.dir * 3.2; p.c.pose = 'idle'; } visuals(dt); }
+    function introUpdate(dt) { introT += dt; for (const p of pl) { p.x = -p.dir * (3.2 + (mateOf(p) && pl.indexOf(p) > pl.indexOf(mateOf(p)) ? 3.4 : 0)); p.c.pose = 'idle'; } visuals(dt); }
     refreshHud(); visuals(0.016);
 
     return {
@@ -477,14 +507,14 @@ export default {
       resultUpdate, introUpdate,
       onSwap() { for (const p of pl) fx.particles.burst(p.x, p.y + 1.2, p.z, { count: 20, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) {
-        movers.forEach((m, i) => { if (m) { const p = pl[i]; if (score[i] > 0) { score[i]--; refreshHud(); } fx.texts.add('BEWOGEN!', p.x, p.y + 4.2, 0, '#9fe8ff', 1.4); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
+        movers.forEach((m, i) => { if (m) { const p = pl[i], ti = p.t; if (score[ti] > 0) { score[ti]--; refreshHud(); } fx.texts.add('BEWOGEN!', p.x, p.y + 4.2, 0, '#9fe8ff', 1.4); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); } });
       },
-      celebrate(w) { pl[w].mood = 'cheer'; pl[1 - w].mood = 'sad'; C.cheer(6); },
+      celebrate(w, winners = [w]) { for (const q of pl) q.mood = winners.includes(q.i) ? 'cheer' : 'sad'; C.cheer(6); },
       dispose() { hud.setHint(null); },
       dbg: {
         state: () => ({ T, gstate: G.state, timeLeft: G.timeLeft, sd: G.sd, sdT: G.sdT, score: [...score], finished, slow, ref: ref.st, ev: { hoops: EV.hoops, chick: EV.chick }, hoopOff: C.hoopOff, stats,
-          ball: { state: b.state, x: b.x, y: b.y, vx: b.vx, vy: b.vy, r: b.r, holder: b.holder, shooter: b.shooter, t: b.t, giant: b.giant, chick: b.chick, perfect: b.perfect, from: b.from },
-          players: pl.map((p) => ({ i: p.i, dir: p.dir, x: p.x, y: p.y, vx: p.vx, vy: p.vy, hold: p.hold, charging: p.charging, chargeT: p.chargeT, ideal: idealOf(p), sc: p.sc, stun: p.stun, boots: p.boots, dunk: !!p.dunk, grounded: p.grounded, swingCd: p.swingCd, apex: p.apex, grabAge: p.grabAge, s: p.s })),
+          ball: { passTo: b.passTo, state: b.state, x: b.x, y: b.y, vx: b.vx, vy: b.vy, r: b.r, holder: b.holder, shooter: b.shooter, t: b.t, giant: b.giant, chick: b.chick, perfect: b.perfect, from: b.from },
+          players: pl.map((p) => ({ i: p.i, t: p.t, dir: p.dir, x: p.x, y: p.y, vx: p.vx, vy: p.vy, hold: p.hold, charging: p.charging, chargeT: p.chargeT, ideal: idealOf(p), sc: p.sc, stun: p.stun, boots: p.boots, dunk: !!p.dunk, grounded: p.grounded, swingCd: p.swingCd, apex: p.apex, grabAge: p.grabAge, s: p.s })),
           item: item ? { id: item.type.id, x: item.x, y: item.y } : null, tramp: trampo ? { x: trampo.x } : null }),
         setScore: (a, c) => { score[0] = a; score[1] = c; refreshHud(); }, setTime: (t) => { G.timeLeft = t; },
         giveBall: (i) => { giveBall(pl[i]); }, setPlayer: (i, x, y) => { pl[i].x = x; pl[i].y = y; pl[i].vx = pl[i].vy = 0; }, setBall: (x, y, vx, vy) => { if (b.state === 'held') { const p = pl[b.holder]; p.hold = false; } b.state = 'free'; b.holder = -1; b.x = x; b.y = y; b.vx = vx; b.vy = vy; },

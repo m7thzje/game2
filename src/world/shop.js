@@ -8,6 +8,7 @@ import { Character, brotherSpec, PLAYER_CSS, PLAYER_COLORS } from '../engine/cha
 import { CATS, CAT_ICON, catLabel, itemsFor, owns, equippedId, equip, buy, cosm } from '../engine/cosmetics.js';
 import { nPlayers, inp, pcol, pcss, pname, klabel } from './players3.js';
 import { GAMEHAL } from '../variant.js';
+import { coin, SHOP_WARN } from '../gamehal/humor.js';
 
 // ============================================================================
 // Hoedenmaker Hettie: winkel voor hoeden en kleuren, twee kolommen (Wes links, Jor rechts), met Juul erbij drie kolommen,
@@ -23,7 +24,7 @@ export function openShop(app, { onClose } = {}) {
     const itemOf = (i) => { const cat = CATS[st[i].cat]; return itemsFor(i, cat)[st[i].sel[st[i].cat]]; };
 
     // ---------- DOM ----------
-    const coinEl = h('div', { class: 'shop-coins' }), warn = h('div', { class: 'shop-warn' }, GAMEHAL ? '💡 Je verdient heitjes met elk spel dat je speelt (20 per spel).' : '💡 Heitjes zijn ook nodig om nieuwe hallen in de Speelhal te laten bouwen!');
+    const coinEl = h('div', { class: 'shop-coins' }), warn = h('div', { class: 'shop-warn' }, GAMEHAL ? '💡 ' + SHOP_WARN : '💡 Heitjes zijn ook nodig om nieuwe hallen in de Speelhal te laten bouwen!');
     const view = h('canvas', { class: 'shop-view', width: 960, height: 210 });
     const caps = IDS.map(() => h('div', { class: 'shop-cap' }));
     const cols = IDS.map((i) => {
@@ -66,13 +67,13 @@ export function openShop(app, { onClose } = {}) {
         else { equip(i, cat, it.id); s.msg = it.price ? 'Aangetrokken! Staat je goed!' : 'Aangetrokken!'; audio.sfx('select'); s.cheer = 0.9; }
       } else {
         const r = buy(i, cat, it.id);
-        if (r.ok) { equip(i, cat, it.id); s.msg = `Gekocht voor ${it.price} heitjes! 🎉`; audio.sfx('coin'); audio.sfx('powerup'); s.cheer = 1.4; if (app?.mode?.onCoinsChanged) { try { app.mode.onCoinsChanged(); } catch (e) { /* hud niet beschikbaar */ } } }
-        else { s.msg = `Te weinig heitjes! Nog ${r.need} nodig.`; audio.sfx('buzz'); }
+        if (r.ok) { equip(i, cat, it.id); s.msg = `Gekocht voor ${it.price} ${coin(it.price)}! 🎉`; audio.sfx('coin'); audio.sfx('powerup'); s.cheer = 1.4; if (app?.mode?.onCoinsChanged) { try { app.mode.onCoinsChanged(); } catch (e) { /* hud niet beschikbaar */ } } }
+        else { s.msg = `Te weinig ${coin()}! Nog ${r.need} nodig.`; audio.sfx('buzz'); }
       }
       s.msgT = 3; persist(); draw();
     };
     const draw = () => {
-      coinEl.innerHTML = `🪙 <b>${S.coins}</b> heitjes`;
+      coinEl.innerHTML = `🪙 <b>${S.coins}</b> ${coin(S.coins)}`;
       for (let i = 0; i < N; i++) {
         const s = st[i], col = cols[i], cat = CATS[s.cat], items = itemsFor(i, cat);
         col.tabs.innerHTML = '';

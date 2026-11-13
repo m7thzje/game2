@@ -45,8 +45,14 @@ export const app = {
   },
 };
 
-// Automatische resolutieregeling: te traag -> iets minder pixels, snel genoeg -> weer scherper
-const perf = { cap: S.settings.quality === 'low' ? 1 : Math.min(devicePixelRatio || 1, 1.5), scale: 1, ema: 16.7, t: 0, cool: 3, noShadow: false };
+// Scherpte (S.settings.sharp: 'scherp' | 'normaal' | 'zacht'): bovengrens van de pixelratio. Gamehal: standaard 'scherp' (tot 2x); gewone versie: 'normaal' (1,5x), zoals altijd.
+// Defensief gelezen: ontbreekt of ongeldig -> standaard. Kwaliteit 'laag' blijft 1x.
+const SHARP = ['scherp', 'normaal', 'zacht'];
+const sharpMode = () => (SHARP.includes(S.settings.sharp) ? S.settings.sharp : (GAMEHAL ? 'scherp' : 'normaal'));
+const sharpCap = () => (S.settings.quality === 'low' ? 1 : Math.min(devicePixelRatio || 1, { scherp: GAMEHAL ? 2 : 1.5, normaal: 1.5, zacht: 1 }[sharpMode()]));
+// Automatische resolutieregeling: te traag -> iets minder pixels, snel genoeg -> weer scherper.
+// Gamehal: pas na langer aanhoudend traag (4 s) en nooit onder 0,75x; gewone versie ongewijzigd (1 s, ondergrens 0,55x).
+const perf = { cap: sharpCap(), scale: 1, ema: 16.7, t: 0, cool: 3, noShadow: false, slow: 0, floor: GAMEHAL ? 0.75 : 0.55 };
 perf.scale = perf.cap;
 function resize() {
   const q = perf.scale;
@@ -55,13 +61,19 @@ function resize() {
   if (app.mode && app.mode.resize) app.mode.resize(innerWidth, innerHeight);
 }
 addEventListener('resize', resize); resize();
+// Scherpte wisselen (lobby-menu): nieuwe bovengrens en meteen toepassen
+app.sharpMode = sharpMode;
+app.setSharp = (m) => { if (!SHARP.includes(m)) return; S.settings.sharp = m; persist(); perf.cap = sharpCap(); perf.scale = perf.cap; perf.slow = 0; perf.cool = 3; resize(); };
+if (GAMEHAL) THREE.Texture.DEFAULT_ANISOTROPY = Math.min(8, renderer.capabilities.getMaxAnisotropy());   // schuin bekeken vloeren en borden minder wazig
 
 let last = performance.now(), fpsT = 0, fpsN = 0;
 function adapt(ft) {
   perf.ema = perf.ema * 0.92 + Math.min(ft, 100) * 0.08; perf.t += ft / 1000; perf.cool -= ft / 1000;
   if (perf.t < 1 || perf.cool > 0) return; perf.t = 0;
-  if (perf.ema > 24 && perf.scale > 0.55) { perf.scale = Math.max(0.55, perf.scale * 0.85); perf.cool = 2; resize(); app.perfInfo = perf; }
-  else if (perf.ema > 30 && perf.scale <= 0.6 && !perf.noShadow) { // nog steeds traag: schaduwen uit
+  perf.slow = perf.ema > 24 ? perf.slow + 1 : 0;
+  const need = GAMEHAL ? 4 : 1, step = GAMEHAL ? 0.9 : 0.85;   // Gamehal: 4 trage seconden achter elkaar
+  if (perf.slow >= need && perf.scale > perf.floor) { perf.scale = Math.max(perf.floor, perf.scale * step); perf.cool = GAMEHAL ? 4 : 2; perf.slow = 0; resize(); app.perfInfo = perf; }
+  else if (perf.ema > 30 && perf.scale <= perf.floor + 0.05 && !perf.noShadow) { // nog steeds traag: schaduwen uit
     perf.noShadow = true; renderer.shadowMap.enabled = false;
     if (app.mode && app.mode.scene) app.mode.scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
     perf.cool = 3;

@@ -1,4 +1,4 @@
-// Gebruik: node tools/test_bowling.mjs [scenario...]   scenario: bots | twists | idle | timeout | sudden | shots
+// Gebruik: node tools/test_bowling.mjs [scenario...]   scenario: bots | twists | idle | timeout | sudden | shots   (achtervoegsel 3/4 of PLAYERS=3|4: bots4, shots4, ...)
 //   TW=<twist-id> kiest een twist. Q=low|high kwaliteit.
 // Draait de echte game in headless chromium
 // met bots die via de virtuele invoer spelen (versneld, zonder renderen) en controleren: finishPvp precies 1x, beide spelers kunnen winnen,
@@ -8,8 +8,10 @@ import { chromePath } from './chrome_path.mjs';
 import http from 'node:http'; import fs from 'node:fs'; import path from 'node:path';
 
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const NP = process.env.PLAYERS === '4' ? 4 : process.env.PLAYERS === '3' ? 3 : 2;   // PLAYERS=3|4: alle spelers doen mee
-const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
+const scen0 = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
+// PLAYERS=3|4 of een scenario-achtervoegsel (bots4, shots4, bots3, ...): alle spelers doen mee
+const NP = process.env.PLAYERS === '4' || scen0.some((a) => /4$/.test(a)) ? 4 : process.env.PLAYERS === '3' || scen0.some((a) => /3$/.test(a)) ? 3 : 2;
+const scen = scen0.map((a) => a.replace(/[34]$/, ''));
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'lowgrav', 'bodyswap', 'deurman'];
 let fails = 0; const FAIL = (m) => { fails++; console.log('FAIL: ' + m); };
 

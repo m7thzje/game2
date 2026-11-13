@@ -8,6 +8,7 @@ import * as party from '../engine/party.js';
 import { S } from '../save.js';
 import { playMode, playerIds, playerCount, listNames, shuffled } from './common.js';
 import { pname, pcss, readResult } from '../world/players3.js';
+import { koLine, koChamp } from './humor.js';
 
 let BR = null;            // { b: Bracket, id, base: extra, twist, log: [{name, pair, winner}], tourney }
 let SUBWAIT = -1;         // 4 spelers + spel voor 3: wie wacht er (wisselt per potje)
@@ -76,6 +77,7 @@ async function step(A, first = false) {
   const [a, b] = rd.pair;
   const body = h('div', { class: 'gh-ko' },
     h('div', { class: 'gh-vs', html: `${tag(a)} <span>VS</span> ${tag(b)}` }),
+    h('div', { class: 'gh-quip' }, koLine(rd.kind)),   // kantoorgrap: halve finale = tweede overleg, finale = eindoverleg
     rd.waiting.length ? h('div', { class: 'gh-watch', html: `👀 ${listNames(rd.waiting)} ${rd.waiting.length > 1 ? 'kijken' : 'kijkt'} toe` }) : null,
     rd.replay ? h('div', { class: 'gh-watch', html: `🤝 Gelijkspel gehad: deze wedstrijd moet beslist worden!` }) : null,
     BR.log.length ? h('div', { class: 'gh-log' }, ...BR.log.map((m) => h('div', { html: `✔ ${m.name}: ${tag(m.winner)} wint van ${tag(m.pair.find((x) => x !== m.winner))}${m.coin ? ' (munt)' : ''}` }))) : null);
@@ -110,6 +112,7 @@ async function finish(A) {
   const b = BR.b, st = b.standings(), ids = b.order.slice(); const medals = ['🥇', '🥈', '🥉', '4️⃣'];
   const def = A.app.games[BR.id];
   const body = h('div', { class: 'gh-podium' }, ...st.map((id, k) => h('div', { class: 'gh-place p' + (k + 1), style: { '--c': pcss(id) }, html: `<span class="m">${medals[k]}</span> <b>${pname(id)}</b>` })),
+    h('div', { class: 'gh-quip' }, koChamp(pname(b.champion))),
     BR.log.length ? h('div', { class: 'gh-log' }, ...BR.log.map((m) => h('div', { html: `${m.name}: ${tag(m.winner)} won van ${tag(m.pair.find((x) => x !== m.winner))}` }))) : null);
   A.players.forEach((p) => { const k = st.indexOf(p.i); p.c.pose = k === 0 ? 'cheer' : k === st.length - 1 ? 'sad' : 'idle'; });
   audio.sfx('win'); A.life && A.life.cheer && A.life.cheer();

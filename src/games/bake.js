@@ -4,6 +4,8 @@ import { makeBrother, makeNPC, PLAYER_COLORS, Animal, Dragon } from '../engine/c
 import { buildStage, KINDS, KIND, ST, itemGeo, layerGeo, sprinkleGeo, drawIcon, labelTex, matVC } from './bake_world.js';
 
 // Taartenbakkers-Battle — duel: twee keukenstations, één bestelbonnetje. Bouw dezelfde taart sneller en mooier dan je broer.
+//  * 4 spelers: twee keukenparen naast elkaar (elk paar deelt een scheidingsbank om te stelen), de klant staat in het midden; iedereen bakt dezelfde taart,
+//    de kip en de draak gaan naar de koploper en een bloemzak gaat naar de koploper onder de tegenstanders
 //  * lopen = richtingen, A = pakken/neerleggen/in de oven/strooien, B = oven leeghalen, BEL (taart klaar) of bloemzak gooien
 //  * bij de scheidingsbank in het midden: A = ingrediënt STELEN (of de gouden ster grijpen), B = BLOEMZAK (scherm wit)
 //  * Koning Klopper geeft sterren (nauwkeurigheid, versiering, bakstand) + tempo. 3 bestellingen, de laatste telt dubbel.
@@ -17,7 +19,7 @@ const WIN_TXT = ['Wat een taart!', 'De jury likt zijn vingers af.', 'Zelfs de ki
 const GAUGE = [[0, 2.0, '#d84a3a'], [2.0, 3.0, '#f0a030'], [3.0, 3.5, '#d8e050'], [3.5, 4.2, '#3ad85a'], [4.2, 4.8, '#d8e050'], [4.8, 5.5, '#f0a030'], [5.5, 6.0, '#2a2a2a']];
 const bakeStars = (t) => (t < 2.0 ? 1 : t < 3.0 ? 2 : t < 3.5 ? 4 : t < 4.2 ? 5 : t < 4.8 ? 3 : t < 5.5 ? 2 : 1);
 const bakeColor = (t) => { const k = clamp(t / BAKE_MAX, 0, 1); const a = new THREE.Color(0xf4e2b0), b = new THREE.Color(0xd8964a), c = new THREE.Color(0x2a1a10); return k < 0.62 ? a.lerp(b, k / 0.62) : b.lerp(c, clamp((k - 0.62) / 0.3, 0, 1)); };
-const _c = new THREE.Color();
+const _c = new THREE.Color(), _v = new THREE.Vector3();
 
 function starPath(g, cx, cy, r, fill) {
   g.beginPath(); for (let k = 0; k < 10; k++) { const rr = k % 2 ? r * 0.45 : r, a = k / 10 * TAU - Math.PI / 2; g[k ? 'lineTo' : 'moveTo'](cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } g.closePath();
@@ -31,9 +33,10 @@ export default {
   giver: 'Koning Klopper',
   icon: '🎂',
   mode: 'pvp',
+  players: [2, 4],
   time: 90,
   music: 'game',
-  blurb: 'Bake Off op de kermis! Jullie krijgen <b>hetzelfde bonnetje</b>: bak de <b>bodem</b>, stapel de lagen in de goede volgorde en <b>bel</b>. De Koning geeft sterren. De laatste bestelling telt <b>dubbel</b>.',
+  blurb: 'Bake Off op de kermis! Jullie (2 of 4 spelers) krijgen <b>hetzelfde bonnetje</b>: bak de <b>bodem</b>, stapel de lagen in de goede volgorde en <b>bel</b>. De Koning geeft sterren. De laatste bestelling telt <b>dubbel</b>.',
   controls: ['{move} lopen', '{a} pakken / leggen / strooien', '{b} oven leeg / BEL / bloemzak'],
   tip: 'Bij de bank in het midden: gouden ster pakken, stelen of bloemzak gooien!',
 
@@ -42,7 +45,8 @@ export default {
     const pv = ctx.pvp; const names = players.map((p) => p.name); const SLIP = pv.slip || 0, GR = pv.gravity || 1;
     const L = ctx.lights('indoor', { shadow: 17, center: [0, 0, 0], fogNear: 60, fogFar: 140 });
     L.sun.position.set(6, 26, 16); L.sun.intensity = 1.5; L.hemi.intensity = 1.5;
-    const W = buildStage(ctx);
+    const NPL = players.length, IDX = players.map((_, i) => i), CO = NPL > 2 ? 14.2 : 0, COS = NPL > 2 ? [-CO, CO] : [0];   // CO = x van het midden van elk keukenpaar
+    const W = buildStage(ctx, COS);
 
     // ---------------- gedeelde modellen ----------------
     const matGold = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.3, metalness: 0.7, emissive: 0x664400, emissiveIntensity: 0.6 });
@@ -60,13 +64,13 @@ export default {
 
     // ---------------- spelers / stations ----------------
     const S = players.map((pp, i) => {
-      const sd = i ? 1 : -1; const c = makeBrother(i); const holder = new THREE.Group(); holder.add(c.group);
+      const sd = i % 2 ? 1 : -1, co = NPL > 2 ? (i < 2 ? -CO : CO) : 0; const c = makeBrother(i); const holder = new THREE.Group(); holder.add(c.group);
       const sc = (3.0 / c.height) * Math.pow(pv.size(i), 0.8); holder.scale.setScalar(sc); scene.add(holder);
       c.faceDir(-sd, 1); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
       const ring = pointer(pp.color); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.05; ring.scale.setScalar(1.3); scene.add(ring);
       const lab = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex(' '), transparent: true, depthTest: false })); lab.scale.set(5.2, 0.65, 1); lab.renderOrder = 15; scene.add(lab);
       const held = new THREE.Mesh(itemGeo('deeg'), matVC); held.visible = false; held.castShadow = true; scene.add(held);
-      const cakeG = new THREE.Group(); cakeG.position.set(sd * ST.plateP, 1.04, ST.plateZ); scene.add(cakeG);
+      const cakeG = new THREE.Group(); cakeG.position.set(co + sd * ST.plateP, 1.04, ST.plateZ); scene.add(cakeG);
       const spr = new THREE.InstancedMesh(sprGeo, new THREE.MeshStandardMaterial({ roughness: 0.6 }), 40); spr.count = 0; spr.frustumCulled = false; spr.userData.dynamic = true; cakeG.add(spr);
       const goldM = new THREE.Mesh(itemGeo('gold'), matGold); goldM.visible = false; goldM.scale.setScalar(1.1); cakeG.add(goldM);
       const doneRing = new THREE.Mesh(new THREE.RingGeometry(1.6, 1.85, 28), new THREE.MeshBasicMaterial({ color: 0x7affb0, transparent: true, opacity: 0.0, depthWrite: false, side: THREE.DoubleSide })); doneRing.rotation.x = -Math.PI / 2; doneRing.position.y = -0.02; cakeG.add(doneRing);
@@ -79,30 +83,30 @@ export default {
       const needle = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.55, 0.05), new THREE.MeshBasicMaterial({ color: 0xffffff })); needle.visible = false; needle.renderOrder = 7; scene.add(needle);
       // bonnetje
       const tCv = document.createElement('canvas'); tCv.width = 640; tCv.height = 250; tCv.getContext('2d'); const tTex = new THREE.CanvasTexture(tCv); tTex.colorSpace = THREE.SRGBColorSpace;
-      const ticket = new THREE.Mesh(new THREE.PlaneGeometry(7.6, 3.0), new THREE.MeshBasicMaterial({ map: tTex })); ticket.position.set(sd * 7.3, 4.0, ST.wallZ + 0.2); scene.add(ticket);
+      const ticket = new THREE.Mesh(new THREE.PlaneGeometry(7.6, 3.0), new THREE.MeshBasicMaterial({ map: tTex })); ticket.position.set(co + sd * 7.3, 4.0, ST.wallZ + 0.2); scene.add(ticket);
       // bloemwolk (scherm wit)
       const fl = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: canvasTex(256, 256, (g, w, h) => { const gr = g.createRadialGradient(128, 128, 20, 128, 128, 128); gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.7, 'rgba(255,255,255,.96)'); gr.addColorStop(1, 'rgba(255,255,255,.0)'); g.fillStyle = gr; g.fillRect(0, 0, w, h); }), transparent: true, opacity: 0, depthTest: false, depthWrite: false })); fl.renderOrder = 30; fl.visible = false; fl.frustumCulled = false; scene.add(fl);
-      return { i, sd, c, holder, ring, lab, held, cakeG, spr, goldM, doneRing, dough, gauge, needle, gCv, ticket, tCv, tTex, tG: tCv.getContext('2d'), fl, ov, sc,
-        x: sd * 7.8, z: 2.0, vx: 0, vz: 0, hold: null, layers: [], meshes: [], sprN: 0, gold: false, served: false, servedFrac: 0, first: false, mistakes: 0,
+      return { i, sd, co, c, holder, ring, lab, held, cakeG, spr, goldM, doneRing, dough, gauge, needle, gCv, ticket, tCv, tTex, tG: tCv.getContext('2d'), fl, ov, sc,
+        x: co + sd * 7.8, z: 2.0, vx: 0, vz: 0, hold: null, layers: [], meshes: [], sprN: 0, gold: false, served: false, servedFrac: 0, first: false, mistakes: 0,
         oven: { st: 'empty', t: 0, heat: 1, heatT: 0, burnt: false, q: 1 }, cdFlour: 0, cdSteal: 0, flour: 0, blocked: false, lastLab: '', spin: 0, tot: 0, res: null, speedSum: 0, acts: 0, fireT: 0 };
     });
 
-    for (const sd of [-1, 1]) for (const k of KINDS) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex(KIND[k].name, '#ffffff', 256, 64, 40), transparent: true, depthTest: false })); sp.scale.set(1.6, 0.4, 1); sp.position.set(sd * ST.crateP[k], 2.95, ST.crateZ + 0.2); sp.renderOrder = 8; scene.add(sp); }
+    for (const co of COS) for (const sd of [-1, 1]) for (const k of KINDS) { const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex(KIND[k].name, '#ffffff', 256, 64, 40), transparent: true, depthTest: false })); sp.scale.set(1.6, 0.4, 1); sp.position.set(co + sd * ST.crateP[k], 2.95, ST.crateZ + 0.2); sp.renderOrder = 8; scene.add(sp); }
     // ---------------- toestand ----------------
     let ph = 'intro', phT = 0, round = 0, roundLeft = R_TIME[0], T = 0, introT = 0, finished = false, started = false, hurry = false, firstServed = -1, over = false;
     let recipe = [], N = 3; let patience = 1, stage = 0, bubT = 0;
-    const gold = { on: false, t: 0, m: new THREE.Mesh(itemGeo('gold'), matGold), taken: false }; gold.m.visible = false; gold.m.scale.setScalar(1.6); scene.add(gold.m);
+    const gold = { on: false, t: 0, co: 0, m: new THREE.Mesh(itemGeo('gold'), matGold), taken: false }; gold.m.visible = false; gold.m.scale.setScalar(1.6); scene.add(gold.m);
     const goldGlow = new THREE.Mesh(new THREE.RingGeometry(0.7, 0.95, 24), new THREE.MeshBasicMaterial({ color: 0xffe14a, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide })); goldGlow.rotation.x = -Math.PI / 2; goldGlow.visible = false; scene.add(goldGlow);
     const chick = { on: false, st: '', t: 0, tgt: 0, a: new Animal('chicken'), x: 0, z: 0, y: 0, vy: 0, fx: 0, fz: 0 }; chick.a.group.scale.setScalar(2.3); chick.a.group.visible = false; scene.add(chick.a.group);
     const drag = { on: false, st: '', t: 0, tgt: 0, d: new Dragon(0x7a2fd4, 0.5) }; drag.d.group.visible = false; scene.add(drag.d.group);
     const bag = { on: false, t: 0, from: new THREE.Vector3(), to: new THREE.Vector3(), tgt: 0, m: mesh(new THREE.SphereGeometry(0.4, 8, 6), mat(0xf4ecd8, { flatShading: false }), { cast: false }) }; bag.m.visible = false; scene.add(bag.m);
     const plan = []; let judgeData = null, judgeT = 0, juryLine = '';
-    const stats = { golds: [0, 0], steals: [0, 0], flours: [0, 0], chickens: 0, dragons: 0, perfects: [0, 0], shoos: [0, 0], pecks: 0, serves: [0, 0] };
+    const stats = { golds: IDX.map(() => 0), steals: IDX.map(() => 0), flours: IDX.map(() => 0), chickens: 0, dragons: 0, perfects: IDX.map(() => 0), shoos: IDX.map(() => 0), pecks: 0, serves: IDX.map(() => 0) };
     const hint = () => hud.setHint(null);
 
     // ---------------- camera ----------------
     const tgt = new THREE.Vector3(0, 1.8, 0.8), PITCH = 0.6, camDir = new THREE.Vector3(0, Math.sin(PITCH), Math.cos(PITCH)); let camD = 24, punch = 0;
-    const fitPts = [[-12.4, 0, 3.4], [12.4, 0, 3.4], [-12.4, 5.5, -4.7], [12.4, 5.5, -4.7], [-2.2, 0, 5.3], [2.2, 0, 5.3], [-12.4, 0, -4.7], [12.4, 0, -4.7]];
+    const EXT = 12.4 + CO, fitPts = [[-EXT, 0, 3.4], [EXT, 0, 3.4], [-EXT, 5.5, -4.7], [EXT, 5.5, -4.7], [-2.2, 0, 5.3], [2.2, 0, 5.3], [-EXT, 0, -4.7], [EXT, 0, -4.7]];
     function fitCamera() {
       const v = new THREE.Vector3(); let lo = 10, hi = 90;
       for (let it = 0; it < 22; it++) {
@@ -191,18 +195,21 @@ export default {
       refreshHud();
     }
     let T0 = 0; const ctxBig = (t, ms, c) => hud.showBig(t, ms, c);
-    function leaderTarget(leader) { const a = S[0].tot, b = S[1].tot; if (a === b) return Math.random() < 0.5 ? 0 : 1; return leader ? (a > b ? 0 : 1) : (a > b ? 1 : 0); }
-    function refreshHud() { hud.setScore(`Bestelling ${Math.min(round + 1, ROUNDS)}/${ROUNDS} · ${names[0]} ${S[0].tot} – ${S[1].tot} ${names[1]}`); }
+    function leaderTarget(leader) { if (NPL > 2) { const m = leader ? Math.max(...S.map((q) => q.tot)) : Math.min(...S.map((q) => q.tot)), t = S.filter((q) => q.tot === m); return t[Math.floor(Math.random() * t.length)].i; } const a = S[0].tot, b = S[1].tot; if (a === b) return Math.random() < 0.5 ? 0 : 1; return leader ? (a > b ? 0 : 1) : (a > b ? 1 : 0); }
+    function refreshHud() { hud.setScore(NPL > 2 ? `Bestelling ${Math.min(round + 1, ROUNDS)}/${ROUNDS}` : `Bestelling ${Math.min(round + 1, ROUNDS)}/${ROUNDS} · ${names[0]} ${S[0].tot} – ${S[1].tot} ${names[1]}`); }
     const HN = { gold: 'gouden ster' }; const hname = (h) => (h ? (HN[h] || KIND[h].name) : '');
 
     // ---------------- gimmicks ----------------
-    function spawnGold() { gold.on = true; gold.t = 9; gold.m.visible = goldGlow.visible = true; gold.m.position.set(0, 1.9, 0.2); goldGlow.position.set(0, 1.5, 0.2); fx.texts.add('GOUDEN STER!', 0, 3.4, 0.4, '#ffe14a', 1.4); audio.sfx('sparkle'); hud.toast('⭐ Een gouden ster op de bank!', 1800); }
-    function startChicken(i) { if (chick.on || ph !== 'cook') return; const s = S[i]; chick.on = true; chick.st = 'run'; chick.t = 0; chick.tgt = i; chick.x = s.sd * 14; chick.z = 3.2; chick.y = 0; chick.a.group.visible = true; stats.chickens++; fx.texts.add('KIP!', s.sd * 9, 3.0, 3, '#fff3a0', 1.5); audio.sfx('boing', { rate: 1.4 }); hud.toast('🐔 Een kip rent naar de taart van ' + names[i] + '!', 1800); }
-    function startDragon(i) { if (drag.on || ph !== 'cook') return; drag.on = true; drag.st = 'in'; drag.t = 0; drag.tgt = i; drag.d.group.visible = true; stats.dragons++; fx.texts.add('DRAAK!', S[i].sd * 8, 5.5, -1, '#ff9a3a', 1.5); audio.sfx('explode', { vol: 0.35, rate: 1.6 }); hud.toast('🐉 De draak stookt de oven van ' + names[i] + ' op!', 2000); }
+    function spawnGold() {
+      // bij 4 spelers komt de ster op de bank van het paar met de minste punten (bij gelijk: willekeurig)
+      gold.co = 0; if (NPL > 2) { const sa = S[0].tot + S[1].tot, sb = S[2].tot + S[3].tot; gold.co = sa === sb ? COS[Math.floor(Math.random() * 2)] : sa < sb ? COS[0] : COS[1]; }
+      gold.on = true; gold.t = 9; gold.m.visible = goldGlow.visible = true; gold.m.position.set(gold.co, 1.9, 0.2); goldGlow.position.set(gold.co, 1.5, 0.2); fx.texts.add('GOUDEN STER!', gold.co, 3.4, 0.4, '#ffe14a', 1.4); audio.sfx('sparkle'); hud.toast('⭐ Een gouden ster op de bank!', 1800); }
+    function startChicken(i) { if (chick.on || ph !== 'cook') return; const s = S[i]; chick.on = true; chick.st = 'run'; chick.t = 0; chick.tgt = i; chick.x = s.co + s.sd * 14; chick.z = 3.2; chick.y = 0; chick.a.group.visible = true; stats.chickens++; fx.texts.add('KIP!', s.co + s.sd * 9, 3.0, 3, '#fff3a0', 1.5); audio.sfx('boing', { rate: 1.4 }); hud.toast('🐔 Een kip rent naar de taart van ' + names[i] + '!', 1800); }
+    function startDragon(i) { if (drag.on || ph !== 'cook') return; drag.on = true; drag.st = 'in'; drag.t = 0; drag.tgt = i; drag.d.group.visible = true; stats.dragons++; fx.texts.add('DRAAK!', S[i].co + S[i].sd * 8, 5.5, -1, '#ff9a3a', 1.5); audio.sfx('explode', { vol: 0.35, rate: 1.6 }); hud.toast('🐉 De draak stookt de oven van ' + names[i] + ' op!', 2000); }
     const face = (a) => { chick.a.targetYaw = a; chick.a.yaw = a; };
     function updateChicken(dt) {
       if (!chick.on) return; const s = S[chick.tgt], g = chick.a.group; chick.t += dt;
-      const px = s.sd * ST.plateP, pz = ST.plateZ, top = 1.05 + layerY(s, s.layers.length);
+      const px = (s.co + s.sd * ST.plateP), pz = ST.plateZ, top = 1.05 + layerY(s, s.layers.length);
       if (chick.st === 'run') {
         const dx = px - chick.x, dz = pz - chick.z, d = Math.hypot(dx, dz); const sp = 8;
         if (d < 1.1) { chick.st = 'jump'; chick.t = 0; chick.vy = 8; chick.fx = px; chick.fz = pz; audio.sfx('boing', { rate: 1.6 }); }
@@ -233,8 +240,10 @@ export default {
       } else { const k = smoothstep(0, 1.0, drag.t); g.position.set(ox + s.sd * k * 8, 4.9 + k * 5, 0.4 - k); if (drag.t > 1.0) { drag.on = false; g.visible = false; } }
       g.rotation.set(0.35, Math.PI, 0); drag.d.update(dt);
     }
+    // bloemzak: bij 2 spelers naar de ander; bij 4 naar de koploper onder de tegenstanders (bij gelijk: de buurman)
+    function bagTarget(s) { if (NPL === 2) return 1 - s.i; const o = S.filter((q) => q !== s), m = Math.max(...o.map((q) => q.tot)), t = o.filter((q) => q.tot === m); return (t.find((q) => q.i === (s.i ^ 1)) || t[Math.floor(Math.random() * t.length)]).i; }
     function throwBag(from, to) {
-      const a = S[from], b = S[to]; bag.on = true; bag.t = 0; bag.tgt = to; bag.from.set(a.x, 2.6, a.z); bag.to.set(b.sd * ST.plateP, 2.2, ST.plateZ); bag.m.visible = true; a.c.swing(); audio.sfx('whoosh');
+      const a = S[from], b = S[to]; bag.on = true; bag.t = 0; bag.tgt = to; bag.from.set(a.x, 2.6, a.z); bag.to.set((b.co + b.sd * ST.plateP), 2.2, ST.plateZ); bag.m.visible = true; a.c.swing(); audio.sfx('whoosh');
     }
     function updateBag(dt) {
       if (!bag.on) return; bag.t += dt / (0.55 / (GR < 1 ? 0.8 : 1)); const k = clamp(bag.t, 0, 1);
@@ -245,13 +254,15 @@ export default {
       const hh = Math.tan(camera.fov * Math.PI / 360) * 3.0, ww = hh * camera.aspect; const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion), fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
       for (const s of S) {
         s.flour = Math.max(0, s.flour - dt); const a = clamp(s.flour / 1.2, 0, 1) * 0.97; s.fl.visible = a > 0.01; if (!s.fl.visible) continue;
-        s.fl.material.opacity = a; s.fl.position.copy(camera.position).addScaledVector(fwd, 3.0).addScaledVector(right, s.sd * ww * 0.5); s.fl.quaternion.copy(camera.quaternion); s.fl.scale.set(ww * 1.35, hh * 2.4, 1);
+        s.fl.material.opacity = a; s.fl.quaternion.copy(camera.quaternion);
+        if (NPL > 2) { const nx = _v.set(s.co + s.sd * 5.6, 1.5, 0).project(camera).x; s.fl.position.copy(camera.position).addScaledVector(fwd, 3.0).addScaledVector(right, nx * ww); s.fl.scale.set(ww * 0.62, hh * 2.4, 1); }   // een kwart van het scherm, boven de eigen keuken
+        else { s.fl.position.copy(camera.position).addScaledVector(fwd, 3.0).addScaledVector(right, s.sd * ww * 0.5); s.fl.scale.set(ww * 1.35, hh * 2.4, 1); }
       }
     }
 
     // ---------------- spelers ----------------
     function zoneOf(s) {
-      const p = Math.abs(s.x);
+      const p = Math.abs(s.x - s.co);
       if (s.z < -1.2) for (const k of KINDS) if (Math.abs(p - ST.crateP[k]) < 0.62) return { t: 'crate', k };
       if (Math.hypot(p - ST.ovenStandP, s.z - ST.ovenStandZ) < 1.8) return { t: 'oven' };
       if (p < 2.5) return { t: 'border' };
@@ -261,27 +272,27 @@ export default {
     function pickUp(s, kind) { s.hold = kind; s.c.jump(); s.acts++; audio.sfx('pop', { vol: 0.5, rate: 1.3 }); fx.particles.burst(s.x, 3.2, s.z, { count: 6, speed: 2, up: 1, life: 0.4, size: 0.2, color: 0xffffff, gravity: 2 }); }
     function place(s, kind, q, t) {
       const idx = s.layers.length; s.layers.push({ k: kind, q: q || 1, t }); if (s.layers[idx].k !== recipe[idx]) s.mistakes++; syncCake(s, true); drawTicket(s);
-      const px = s.sd * ST.plateP, top = 1.05 + layerY(s, s.layers.length);
+      const px = (s.co + s.sd * ST.plateP), top = 1.05 + layerY(s, s.layers.length);
       s.c.swing(); const ok = kind === recipe[idx]; audio.sfx(ok ? 'good' : 'bad', { vol: 0.6 }); fx.particles.burst(px, top, ST.plateZ, { count: 10, speed: 3, up: 1.5, life: 0.6, size: 0.25, colors: [0xffffff, 0xffe9b0], gravity: 5 });
       fx.texts.add(ok ? KIND[kind].name + '!' : 'Oeps, ' + KIND[kind].name + '?', px, top + 1.6, ST.plateZ, ok ? '#7affb0' : '#ff9a9a', 1.0);
     }
     function act(s, A, B) {
-      const z = zoneOf(s); const o = S[1 - s.i];
+      const z = zoneOf(s); const o = S[s.i ^ 1];   // o = de buurman aan dezelfde scheidingsbank
       if (A) {
         if (z.t === 'crate') { if (s.hold !== z.k) pickUp(s, z.k); }
         else if (z.t === 'oven') { if (s.hold === 'deeg' && s.oven.st === 'empty') { s.oven = { ...s.oven, st: 'baking', t: 0, burnt: false }; s.hold = null; s.c.swing(); audio.sfx('door'); s.dough.visible = s.gauge.visible = s.needle.visible = true; fx.particles.burst(s.ov.x, 1.5, s.ov.z + 1, { count: 8, speed: 2, up: 1, life: 0.5, size: 0.3, color: 0xffa040, gravity: 0 }); } else audio.sfx('click2'); }
         else if (z.t === 'plate') {
-          if (s.blocked) { chick.on && flee(); stats.shoos[s.i]++; s.c.swing(); fx.texts.add('HOES! WEG!', s.sd * ST.plateP, 4.0, ST.plateZ, '#ffe14a', 1.4); audio.sfx('hit'); ctx.shake(0.25); fx.particles.burst(s.sd * ST.plateP, 2.5, ST.plateZ, { count: 16, speed: 5, up: 2, life: 1, size: 0.3, colors: [0xffffff, 0xf0e8d0], gravity: 3 }); }
+          if (s.blocked) { chick.on && flee(); stats.shoos[s.i]++; s.c.swing(); fx.texts.add('HOES! WEG!', (s.co + s.sd * ST.plateP), 4.0, ST.plateZ, '#ffe14a', 1.4); audio.sfx('hit'); ctx.shake(0.25); fx.particles.burst((s.co + s.sd * ST.plateP), 2.5, ST.plateZ, { count: 16, speed: 5, up: 2, life: 1, size: 0.3, colors: [0xffffff, 0xf0e8d0], gravity: 3 }); }
           else if (s.served) audio.sfx('click2');
-          else if (s.hold === 'gold') { if (s.layers.length && !s.gold) { s.gold = true; s.hold = null; syncCake(s); s.c.swing(); audio.sfx('sparkle'); fx.texts.add('GOUD OP DE TAART!', s.sd * ST.plateP, 4.0, ST.plateZ, '#ffe14a', 1.3); fx.particles.burst(s.sd * ST.plateP, 3.0, ST.plateZ, { count: 20, speed: 4, up: 2, life: 0.9, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); } else { fx.texts.add('Eerst een bodem!', s.sd * ST.plateP, 3.5, ST.plateZ, '#ffb0b0', 1); audio.sfx('buzz', { vol: 0.2 }); } }
+          else if (s.hold === 'gold') { if (s.layers.length && !s.gold) { s.gold = true; s.hold = null; syncCake(s); s.c.swing(); audio.sfx('sparkle'); fx.texts.add('GOUD OP DE TAART!', (s.co + s.sd * ST.plateP), 4.0, ST.plateZ, '#ffe14a', 1.3); fx.particles.burst((s.co + s.sd * ST.plateP), 3.0, ST.plateZ, { count: 20, speed: 4, up: 2, life: 0.9, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); } else { fx.texts.add('Eerst een bodem!', (s.co + s.sd * ST.plateP), 3.5, ST.plateZ, '#ffb0b0', 1); audio.sfx('buzz', { vol: 0.2 }); } }
           else if (s.hold) {
-            if (s.layers.length >= N) { fx.texts.add('Taart is vol! B = bel', s.sd * ST.plateP, 3.8, ST.plateZ, '#ffe14a', 1); audio.sfx('click2'); }
-            else if (!s.layers.length && s.hold !== 'deeg') { fx.texts.add('Eerst de bodem!', s.sd * ST.plateP, 3.5, ST.plateZ, '#ffb0b0', 1); audio.sfx('buzz', { vol: 0.2 }); }
+            if (s.layers.length >= N) { fx.texts.add('Taart is vol! B = bel', (s.co + s.sd * ST.plateP), 3.8, ST.plateZ, '#ffe14a', 1); audio.sfx('click2'); }
+            else if (!s.layers.length && s.hold !== 'deeg') { fx.texts.add('Eerst de bodem!', (s.co + s.sd * ST.plateP), 3.5, ST.plateZ, '#ffb0b0', 1); audio.sfx('buzz', { vol: 0.2 }); }
             else { if (s.hold === 'deeg') place(s, 'deeg', 1, 0.5); else place(s, s.hold, 1); s.hold = null; }
-          } else if (s.layers.length && s.sprN < 32) { addSprinkles(s); s.c.swing(); audio.sfx('sparkle', { vol: 0.3, rate: 1.4 }); fx.particles.burst(s.sd * ST.plateP, layerY(s, s.layers.length) + 1.8, ST.plateZ, { count: 10, speed: 2, up: 0, life: 0.6, size: 0.18, colors: [0xff3a8a, 0xffe14a, 0x58d6ff, 0x7aff7a], gravity: 6 }); }
+          } else if (s.layers.length && s.sprN < 32) { addSprinkles(s); s.c.swing(); audio.sfx('sparkle', { vol: 0.3, rate: 1.4 }); fx.particles.burst((s.co + s.sd * ST.plateP), layerY(s, s.layers.length) + 1.8, ST.plateZ, { count: 10, speed: 2, up: 0, life: 0.6, size: 0.18, colors: [0xff3a8a, 0xffe14a, 0x58d6ff, 0x7aff7a], gravity: 6 }); }
         } else if (z.t === 'border') {
-          if (gold.on && !gold.taken) { gold.on = false; gold.m.visible = goldGlow.visible = false; s.hold = 'gold'; stats.golds[s.i]++; s.c.jump(); audio.sfx('powerup'); fx.texts.add('GOUD!', s.x, 3.6, s.z, '#ffe14a', 1.4); }
-          else if (s.cdSteal <= 0 && !o.served && Math.abs(o.x) < 5.2) {
+          if (gold.on && !gold.taken && gold.co === s.co) { gold.on = false; gold.m.visible = goldGlow.visible = false; s.hold = 'gold'; stats.golds[s.i]++; s.c.jump(); audio.sfx('powerup'); fx.texts.add('GOUD!', s.x, 3.6, s.z, '#ffe14a', 1.4); }
+          else if (s.cdSteal <= 0 && !o.served && Math.abs(o.x - o.co) < 5.2) {
             if (o.hold) { const it = o.hold; o.hold = null; s.hold = it; s.cdSteal = 6; stats.steals[s.i]++; s.c.swing(); fx.texts.add('DIEF!', o.x, 3.6, o.z, '#ff9a9a', 1.4); audio.sfx('hurt', { vol: 0.5 }); ctx.shake(0.3); o.c.pose = 'scared'; }
             else if (o.layers.length >= 2 && !o.blocked) { const l = o.layers.pop(); syncCake(o); drawTicket(o); s.hold = l.k; s.cdSteal = 6; stats.steals[s.i]++; s.c.swing(); fx.texts.add('TAARTENDIEF!', o.x, 4.0, o.z, '#ff9a9a', 1.4); audio.sfx('hurt', { vol: 0.5 }); ctx.shake(0.4); }
             else { fx.texts.add('Niks te stelen', s.x, 3.4, s.z, '#c8c8d8', 0.9); audio.sfx('click2'); }
@@ -299,12 +310,12 @@ export default {
           } else { fx.texts.add('Oven is leeg', s.ov.x, 3.4, s.ov.z + 1, '#c8c8d8', 0.9); audio.sfx('click2'); }
         } else if (z.t === 'plate') {
           if (s.served) audio.sfx('click2');
-          else if (!s.layers.length) { fx.texts.add('Nog geen taart!', s.sd * ST.plateP, 3.4, ST.plateZ, '#c8c8d8', 0.9); audio.sfx('click2'); }
+          else if (!s.layers.length) { fx.texts.add('Nog geen taart!', (s.co + s.sd * ST.plateP), 3.4, ST.plateZ, '#c8c8d8', 0.9); audio.sfx('click2'); }
           else if (s.layers.length >= N || hurry || roundLeft < 9) serve(s);
-          else { fx.texts.add('Taart is nog niet af!', s.sd * ST.plateP, 3.8, ST.plateZ, '#ffb0b0', 1); audio.sfx('buzz', { vol: 0.25 }); }
+          else { fx.texts.add('Taart is nog niet af!', (s.co + s.sd * ST.plateP), 3.8, ST.plateZ, '#ffb0b0', 1); audio.sfx('buzz', { vol: 0.25 }); }
         } else if (z.t === 'border') {
           if (s.cdFlour > 0) { fx.texts.add(`Zak vult bij: ${Math.ceil(s.cdFlour)}s`, s.x, 3.4, s.z, '#c8c8d8', 0.9); audio.sfx('click2'); }
-          else { s.cdFlour = 8; stats.flours[s.i]++; throwBag(s.i, 1 - s.i); }
+          else { s.cdFlour = 8; stats.flours[s.i]++; throwBag(s.i, bagTarget(s)); }
         }
       }
     }
@@ -312,15 +323,15 @@ export default {
       s.served = true; s.servedFrac = roundLeft / R_TIME[round]; s.speedSum += s.servedFrac; stats.serves[s.i]++; s.blocked && chick.on && chick.tgt === s.i && flee();
       if (firstServed < 0) { firstServed = s.i; s.first = true; hurry = true; roundLeft = Math.min(roundLeft, 9); ctxBig(`${names[s.i]} is klaar!`, 1100, '#ffe14a'); hud.toast('De klant wordt ongeduldig!', 1500); }
       audio.sfx('bell'); audio.sfx('ding', { rate: 1.2 }); s.c.pose = 'cheer'; ctx.shake(0.25); s.doneRing.material.opacity = 0.9;
-      fx.texts.add('KLAAR!', s.sd * ST.plateP, 4.2, ST.plateZ, '#7affb0', 1.6); fx.particles.burst(s.sd * ST.plateP, 3, ST.plateZ, { count: 24, speed: 5, up: 2, life: 1, size: 0.35, colors: [0xffe14a, 0xffffff, 0x7affb0], gravity: 4 });
+      fx.texts.add('KLAAR!', (s.co + s.sd * ST.plateP), 4.2, ST.plateZ, '#7affb0', 1.6); fx.particles.burst((s.co + s.sd * ST.plateP), 3, ST.plateZ, { count: 24, speed: 5, up: 2, life: 1, size: 0.35, colors: [0xffe14a, 0xffffff, 0x7affb0], gravity: 4 });
     }
     function updatePlayer(s, dt) {
       const inp = pv.input(s.i); const tm = clamp(pv.speed(s.i), 0.6, 1.6);
       const lam = lerp(12, 1.6, SLIP); const tx = inp.x * SP * tm, tz = inp.y * SP * tm; const k = 1 - Math.exp(-lam * dt);
       s.vx += (tx - s.vx) * k; s.vz += (tz - s.vz) * k;
-      s.x += s.vx * dt; s.z += s.vz * dt; s.x = s.sd * clamp(s.sd * s.x, ST.pMin, ST.pMax); s.z = clamp(s.z, ST.zMin, ST.zMax);
+      s.x += s.vx * dt; s.z += s.vz * dt; s.x = s.co + s.sd * clamp(s.sd * (s.x - s.co), ST.pMin, ST.pMax); s.z = clamp(s.z, ST.zMin, ST.zMax);
       // taartentafel is een obstakel
-      const px = s.sd * ST.plateP, dx = s.x - px, dz = s.z - ST.plateZ, d = Math.hypot(dx, dz); if (d < 1.75) { const f = 1.75 / Math.max(d, 0.01); s.x = px + dx * f; s.z = ST.plateZ + dz * f; }
+      const px = (s.co + s.sd * ST.plateP), dx = s.x - px, dz = s.z - ST.plateZ, d = Math.hypot(dx, dz); if (d < 1.75) { const f = 1.75 / Math.max(d, 0.01); s.x = px + dx * f; s.z = ST.plateZ + dz * f; }
       s.cdFlour = Math.max(0, s.cdFlour - dt); s.cdSteal = Math.max(0, s.cdSteal - dt);
       if (inp.aP || inp.bP) act(s, inp.aP, inp.bP);
       // oven
@@ -346,7 +357,7 @@ export default {
       if (s.blocked && z.t === 'plate') return 'A: SCHOEI DE KIP WEG!';
       if (z.t === 'crate') return `A: pak ${KIND[z.k].name}`;
       if (z.t === 'oven') return s.oven.st === 'baking' ? 'B: haal eruit!' : s.hold === 'deeg' ? 'A: deeg in de oven' : 'Pak eerst deeg';
-      if (z.t === 'border') return gold.on ? 'A: PAK DE GOUDEN STER' : s.cdFlour > 0 ? `A: steel · B: bloem (${Math.ceil(s.cdFlour)}s)` : 'A: steel · B: BLOEMZAK';
+      if (z.t === 'border') return gold.on && gold.co === s.co ? 'A: PAK DE GOUDEN STER' : s.cdFlour > 0 ? `A: steel · B: bloem (${Math.ceil(s.cdFlour)}s)` : 'A: steel · B: BLOEMZAK';
       if (z.t === 'plate') { if (s.hold === 'gold') return 'A: goud op de taart'; if (s.hold) return `A: leg ${hname(s.hold)} erop`; if (s.layers.length >= N) return 'B: BEL! (klaar) · A: strooi'; return s.layers.length ? 'A: hagelslag · B: bel' : 'Eerst een bodem'; }
       return s.hold ? hname(s.hold) : '';
     }
@@ -364,14 +375,14 @@ export default {
       ph = 'judge'; judgeT = 0; for (const s of S) { s.res = evalCake(s); s.tot += s.res.pts; s.c.pose = 'idle'; s.hold = null; s.blocked = false; s.speedSum += 0; }
       if (chick.on) { chick.on = false; chick.a.group.visible = false; } drag.on = false; drag.d.group.visible = false; gold.on = false; gold.m.visible = goldGlow.visible = false;
       hud.setTimer(null); ctxBig('DE JURY PROEFT!', 1000, '#ffe14a'); audio.sfx('bell'); jury.pose = 'wave';
-      const w = S[0].res.pts === S[1].res.pts ? -1 : S[0].res.pts > S[1].res.pts ? 0 : 1; juryLine = '';
+      const mxp = Math.max(...S.map((q) => q.res.pts)), w = S.filter((q) => q.res.pts === mxp).length > 1 ? -1 : S.findIndex((q) => q.res.pts === mxp); juryLine = '';
       const worst = S.reduce((a, s) => (s.res.pts < a.res.pts ? s : a)); const r = worst.res;
-      juryLine = r.bk <= 1 && worst.layers[0] ? (worst.layers[0].t > 5 ? 'Verbrand! Ik hoest!' : 'Rauw deeg?! Bah!') : r.acc <= 2 ? 'Dit heb ik niet besteld!' : S.every((s) => s.res.pts >= 14) ? 'FANTASTISCH! Allebei!' : w < 0 ? 'Gelijk! Hoe dan?!' : pick(['Mmm, lekker!', 'Smaakt naar feest!', 'Nog een stukje!']);
+      juryLine = r.bk <= 1 && worst.layers[0] ? (worst.layers[0].t > 5 ? 'Verbrand! Ik hoest!' : 'Rauw deeg?! Bah!') : r.acc <= 2 ? 'Dit heb ik niet besteld!' : S.every((s) => s.res.pts >= 14) ? (NPL > 2 ? 'FANTASTISCH! Allemaal!' : 'FANTASTISCH! Allebei!') : w < 0 ? 'Gelijk! Hoe dan?!' : pick(['Mmm, lekker!', 'Smaakt naar feest!', 'Nog een stukje!']);
       for (const s of S) { drawCard(s, 0); }
       for (const s of S) if (s.res.pts >= 14) s.c.pose = 'cheer';
       refreshHud();
     }
-    const cards = S.map((s) => { const cv = document.createElement('canvas'); cv.width = 512; cv.height = 300; const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; const m = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 2.58), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthTest: false })); m.renderOrder = 18; m.visible = false; m.position.set(s.sd * 5.6, 4.6, 2.2); scene.add(m); return { cv, t, m, g: cv.getContext('2d') }; });
+    const cards = S.map((s) => { const cv = document.createElement('canvas'); cv.width = 512; cv.height = 300; const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; const m = new THREE.Mesh(new THREE.PlaneGeometry(4.4, 2.58), new THREE.MeshBasicMaterial({ map: t, transparent: true, depthTest: false })); m.renderOrder = 18; m.visible = false; m.position.set(s.co + s.sd * 5.6, NPL > 2 ? 5.2 : 4.6, 2.2); if (NPL > 2) m.scale.setScalar(1.5); scene.add(m); return { cv, t, m, g: cv.getContext('2d') }; });
     function drawCard(s, step) {
       const c = cards[s.i], g = c.g, r = s.res; c.m.visible = true; g.clearRect(0, 0, 512, 300);
       g.fillStyle = '#fffbe8'; g.strokeStyle = players[s.i].css; g.lineWidth = 10; g.beginPath(); g.roundRect(6, 6, 500, 288, 24); g.fill(); g.stroke();
@@ -390,7 +401,7 @@ export default {
         for (const s of S) drawCard(s, b); const k = b - 1;
         if (b <= 3) for (const s of S) { const v = [s.res.acc, s.res.dec, s.res.bk][k]; for (let q = 0; q < v; q++) setTimeout(() => { try { audio.sfx('star', { rate: 0.8 + q * 0.12, vol: 0.35 }); } catch (e) { /* weg */ } }, q * 70); }
         else audio.sfx('ding', { rate: 1 + b * 0.1 });
-        if (b === 5) { audio.sfx('coin'); fx.texts.add('+' + S[0].res.pts, S[0].sd * 5.6, 6.2, 2.2, '#ffe14a', 1.5); fx.texts.add('+' + S[1].res.pts, S[1].sd * 5.6, 6.2, 2.2, '#ffe14a', 1.5); ctx.shake(0.2); fx.texts.add(juryLine, 0, 4.6, 5.2, '#ffffff', 1.6); }
+        if (b === 5) { audio.sfx('coin'); for (const q of S) fx.texts.add('+' + q.res.pts, q.co + q.sd * 5.6, 6.2, 2.2, '#ffe14a', NPL > 2 ? 2.4 : 1.5); ctx.shake(0.2); fx.texts.add(juryLine, 0, 4.6, 5.2, '#ffffff', 1.6); }
       }
       if (judgeT > 4.4) endJudge();
     }
@@ -402,10 +413,12 @@ export default {
     }
     function endGame() {
       if (finished) return; finished = true; over = true; ph = 'end';
-      const a = S[0], b = S[1]; let winner = a.tot > b.tot ? 0 : b.tot > a.tot ? 1 : a.speedSum > b.speedSum ? 0 : b.speedSum > a.speedSum ? 1 : a.mistakes < b.mistakes ? 0 : b.mistakes < a.mistakes ? 1 : (Math.random() < 0.5 ? 0 : 1);
-      const tie = a.tot === b.tot; hud.showBig(`${names[winner]} wint!`, 1200, '#ffe14a');
-      const bits = []; if (stats.steals[0] + stats.steals[1]) bits.push(`${stats.steals[0] + stats.steals[1]}× gestolen`); if (stats.flours[0] + stats.flours[1]) bits.push(`${stats.flours[0] + stats.flours[1]}× bloemzak`); if (stats.pecks) bits.push('kip pikte een taart kaal'); if (stats.golds[0] + stats.golds[1]) bits.push('gouden ster gepakt');
-      ctx.finishPvp({ winner, score: [a.tot, b.tot], delay: 1100, summary: `${names[winner]} bakt de beste taarten: <b>${S[winner].tot}</b> tegen ${S[1 - winner].tot} punten${tie ? ' (gelijk: het tempo besliste)' : ''}.<br><small>${bits.join(' · ') || 'Schone strijd!'} ${pick(WIN_TXT)}</small>` });
+      // volgorde: totaal, dan tempo, dan minste fouten (daarna loting)
+      const rank = IDX.slice().sort((x, y) => (S[y].tot - S[x].tot) || (S[y].speedSum - S[x].speedSum) || (S[x].mistakes - S[y].mistakes) || (Math.random() - 0.5));
+      const winner = rank[0], tie = S.filter((q) => q.tot === S[winner].tot).length > 1; const a = S[0], b = S[1];
+      hud.showBig(`${names[winner]} wint!`, 1200, '#ffe14a');
+      const bits = []; const sum = (q) => q.reduce((x, y) => x + y, 0); if (sum(stats.steals)) bits.push(`${sum(stats.steals)}× gestolen`); if (sum(stats.flours)) bits.push(`${sum(stats.flours)}× bloemzak`); if (stats.pecks) bits.push('kip pikte een taart kaal'); if (sum(stats.golds)) bits.push('gouden ster gepakt');
+      ctx.finishPvp({ winner, score: S.map((q) => q.tot), place: rank, delay: 1100, summary: `${names[winner]} bakt de beste taarten: <b>${S[winner].tot}</b> ${NPL > 2 ? 'punten (de rest: ' + rank.slice(1).map((k) => S[k].tot).join(', ') + ')' : 'tegen ' + S[1 - winner].tot + ' punten'}${tie ? ' (gelijk: het tempo besliste)' : ''}.<br><small>${bits.join(' · ') || 'Schone strijd!'} ${pick(WIN_TXT)}</small>` });
     }
 
     // ---------------- visuals ----------------
@@ -415,7 +428,7 @@ export default {
         s.holder.position.set(s.x, 0, s.z); s.c.update(dt);
         const hh = 3.0 * Math.pow(pv.size(s.i), 0.8);
         s.ring.position.set(s.x, 0.05, s.z); s.ring.visible = ph === 'cook' && !s.served;
-        const L = labelFor(s); if (L !== s.lastLab) { s.lastLab = L; s.lab.material.map = labelTex(L || ' ', '#ffffff', 512, 64, 34); s.lab.material.needsUpdate = true; } s.lab.visible = !!L; s.lab.position.set(s.x, hh + 1.6, s.z + 0.5);
+        const L = labelFor(s); if (L !== s.lastLab) { s.lastLab = L; s.lab.material.map = labelTex(L || ' ', '#ffffff', 512, 64, 34); s.lab.material.needsUpdate = true; } s.lab.visible = !!L; s.lab.position.set(s.x, hh + 1.6, s.z + 0.5); if (NPL > 2) s.lab.scale.set(7.8, 0.98, 1);
         s.held.visible = !!s.hold; if (s.hold) { s.held.geometry = itemGeo(s.hold); s.held.material = s.hold === 'gold' ? matGold : matVC; s.held.position.set(s.x, hh + 0.55 + Math.sin(tt * 4 + s.i) * 0.08, s.z); s.held.rotation.y = tt * 2; s.held.scale.setScalar(s.hold === 'gold' ? 1.2 : 1.0); }
         // taart: lagen vallen erin, plaat draait
         s.spin += dt * 0.4; s.cakeG.rotation.y = s.spin;
@@ -429,9 +442,9 @@ export default {
       const cu = custs[Math.min(round, ROUNDS - 1)]; cu.c.update(dt);
       jury.update(dt);
       if (ph === 'cook') { const st = patience > 0.66 ? 0 : patience > 0.4 ? 1 : patience > 0.18 ? 2 : 3; cu.c.pose = st === 0 ? 'idle' : st === 1 ? 'point' : st === 2 ? 'push' : 'scared'; }
-      else if (ph === 'judge' && judgeT > 2.5 && S[0].res) { const avg = (S[0].res.pts + S[1].res.pts) / 2 / S[0].res.mult; cu.c.pose = avg >= 10 ? 'cheer' : 'sad'; }
+      else if (ph === 'judge' && judgeT > 2.5 && S[0].res) { const avg = S.reduce((a, q) => a + q.res.pts, 0) / S.length / S[0].res.mult; cu.c.pose = avg >= 10 ? 'cheer' : 'sad'; }
       // gouden ster
-      if (gold.on) { gold.m.rotation.y = tt * 2.5; gold.m.position.y = 1.9 + Math.sin(tt * 4) * 0.15; goldGlow.scale.setScalar(1 + Math.sin(tt * 6) * 0.12); if (Math.random() < dt * 12) fx.particles.emit((Math.random() - 0.5) * 1.2, 2.0 + Math.random() * 1.2, 0.2 + (Math.random() - 0.5), 0, 0.8, 0, { life: 0.6, size: 0.22, color: 0xffe14a, gravity: 0 }); }
+      if (gold.on) { gold.m.rotation.y = tt * 2.5; gold.m.position.y = 1.9 + Math.sin(tt * 4) * 0.15; goldGlow.scale.setScalar(1 + Math.sin(tt * 6) * 0.12); if (Math.random() < dt * 12) fx.particles.emit(gold.co + (Math.random() - 0.5) * 1.2, 2.0 + Math.random() * 1.2, 0.2 + (Math.random() - 0.5), 0, 0.8, 0, { life: 0.6, size: 0.22, color: 0xffe14a, gravity: 0 }); }
       bulbT -= dt; if (bulbT <= 0) { bulbT = 0.16; const ph2 = Math.floor(tt * 6); for (let k = 0; k < W.bulbN; k++) { _c.setHex(BC[(k + (ph2 >> 1)) % 5]); if ((k + ph2) % 3 === 0) _c.multiplyScalar(0.3); W.bulbs.setColorAt(k, _c); } W.bulbs.instanceColor.needsUpdate = true; }
     }
     function updateCamera(dt) { punch = damp(punch, 0, 4, dt); camera.position.copy(tgt).addScaledVector(camDir, camD * (1 - punch * 0.05)); camera.lookAt(tgt); }
@@ -449,7 +462,7 @@ export default {
         if (gold.on) { gold.t -= dt; if (gold.t <= 0) { gold.on = false; gold.m.visible = goldGlow.visible = false; } }
         for (const s of S) updatePlayer(s, dt);
         updateChicken(dt); updateDragon(dt); updateBag(dt);
-        if (roundLeft <= 0 || (S[0].served && S[1].served)) { roundLeft = Math.max(0, roundLeft); beginJudge(); }
+        if (roundLeft <= 0 || S.every((q) => q.served)) { roundLeft = Math.max(0, roundLeft); beginJudge(); }
       } else if (ph === 'judge') { updateJudge(dt); for (const s of S) { s.vx = s.vz = 0; } }
       for (const s of S) hud.setPlayerInfo(s.i, `${s.tot} pnt · ${s.hold ? 'Heeft: ' + hname(s.hold) : s.served ? 'Klaar!' : s.oven.st === 'baking' ? 'Oven bakt...' : ''}`);
       visuals(dt, T + introT); updateCamera(dt); updateFlour(dt);
@@ -464,11 +477,11 @@ export default {
       onStart() { ph = 'intro'; phT = 0; },
       onSwap() { for (const s of S) fx.particles.burst(s.x, 2, s.z, { count: 14, speed: 4, up: 1, life: 0.6, size: 0.3, colors: [0xffe14a, 0xffffff], gravity: 2 }); },
       onDeurman(movers) { movers.forEach((m, i) => { if (m && !finished) { const s = S[i]; s.tot = Math.max(0, s.tot - 2); s.hold = null; fx.texts.add('-2', s.x, 3.6, s.z, '#ff6a6a', 1.5); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); s.c.pose = 'scared'; refreshHud(); } }); },
-      celebrate(w) { S[w].c.pose = 'cheer'; S[1 - w].c.pose = 'sad'; jury.pose = 'cheer'; for (let k = 0; k < 6; k++) setTimeout(() => { try { fx.particles.burst((Math.random() - 0.5) * 18, 6 + Math.random() * 3, 3, { count: 24, speed: 7, up: 1, life: 1.2, size: 0.5, colors: BC, gravity: 4 }); } catch (e) { /* weg */ } }, k * 250); },
+      celebrate(w, winners = [w]) { for (const q of S) q.c.pose = winners.includes(q.i) ? 'cheer' : 'sad'; jury.pose = 'cheer'; for (let k = 0; k < 6; k++) setTimeout(() => { try { fx.particles.burst((Math.random() - 0.5) * (NPL > 2 ? 40 : 18), 6 + Math.random() * 3, 3, { count: 24, speed: 7, up: 1, life: 1.2, size: 0.5, colors: BC, gravity: 4 }); } catch (e) { /* weg */ } }, k * 250); },
       dispose() {},
       dbg: {
-        state: () => ({ T, ph, round, N, recipe: [...recipe], roundLeft, finished, tot: S.map((s) => s.tot), hurry, gold: { on: gold.on }, chick: { on: chick.on, st: chick.st, tgt: chick.tgt }, drag: { on: drag.on }, stats,
-          p: S.map((s) => ({ x: s.x, z: s.z, hold: s.hold, layers: s.layers.map((l) => l.k), served: s.served, oven: { st: s.oven.st, t: s.oven.t, heat: s.oven.heat }, spr: s.sprN, gold: s.gold, blocked: s.blocked, cdFlour: s.cdFlour, cdSteal: s.cdSteal, flour: s.flour, res: s.res })) }),
+        state: () => ({ T, ph, round, N, recipe: [...recipe], roundLeft, finished, tot: S.map((s) => s.tot), hurry, gold: { on: gold.on, co: gold.co }, chick: { on: chick.on, st: chick.st, tgt: chick.tgt }, drag: { on: drag.on }, stats,
+          p: S.map((s) => ({ co: s.co, sd: s.sd, x: s.x, z: s.z, hold: s.hold, layers: s.layers.map((l) => l.k), served: s.served, oven: { st: s.oven.st, t: s.oven.t, heat: s.oven.heat }, spr: s.sprN, gold: s.gold, blocked: s.blocked, cdFlour: s.cdFlour, cdSteal: s.cdSteal, flour: s.flour, res: s.res })) }),
         setTime: (t) => { roundLeft = t; }, spawnGold, startChicken, startDragon, ST, KINDS, setTot: (a, b) => { S[0].tot = a; S[1].tot = b; refreshHud(); }, S, endGame,
       },
     };

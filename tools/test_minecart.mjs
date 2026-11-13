@@ -1,4 +1,5 @@
 // Gebruik: node tools/test_minecart.mjs [scenario...]   (twist kiezen: TWIST=giant node ...)
+//   Scenario's look3 / look4: screenshots met 3 / 4 spelers (/tmp/minecart4_*.png).
 //   Scenario's bots3 / bots4: drie / vier spelers (vrij voor allen, ?players=N): alle spelers krijgen input (goede bots), uitslag en place volgen.
 // Scenario's: look (screenshots), bots (twee goede bots), idle (niemand beweegt), p0 / p1 (alleen die broer speelt), dumb (willekeurig), timeout
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
@@ -19,7 +20,7 @@ const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const twist = process.env.TWIST || 'none';
 
 for (const name of scen) {
-  const NPL = name === 'bots4' ? 4 : name === 'bots3' ? 3 : 2;
+  const NPL = /4$/.test(name) ? 4 : /3$/.test(name) ? 3 : 2;
   const browser = await chromium.launch({ executablePath: chromePath(), args: BROWSER_ARGS });
   const page = await browser.newPage({ viewport: { width: 1000, height: 600 } });
   const errors = [];
@@ -75,8 +76,8 @@ for (const name of scen) {
     };
   }, name === 'idle' ? 'idle' : name === 'p0' ? 'p0' : name === 'p1' ? 'p1' : name === 'dumb' ? 'dumb' : 'bots');   // bots3/bots4 spelen met 'bots'
 
-  if (name === 'look') {
-    const shot = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); await page.screenshot({ path: `/tmp/minecart_${tag}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
+  if (name === 'look' || name === 'look3' || name === 'look4') {
+    const shot = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); await page.screenshot({ path: `/tmp/minecart${NPL > 2 ? NPL : ''}_${tag}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
     const E = (fn, arg) => page.evaluate(fn, arg);
     await E(() => { const D = window.__app.mode.instance.dbg; D.players.forEach((p) => { p.inv = 9999; }); window.__bot(70); }); await shot('a_start');
     await E(() => { const D = window.__app.mode.instance.dbg; D.players[0].d += 80; D.players[1].d += 60; window.__bot(50); }); await shot('b_early');

@@ -41,7 +41,7 @@ export default {
   players: [2, 4], teams: true,   // 1 tegen 1, of met 4 spelers 2 tegen 2 (teamgenoten delen één kant en de 3 slagen)
   time: 90,
   music: 'game_fast',
-  blurb: 'Volleybal met <b>slijmblobs</b> op een kermis-strand! Laat de bal op de grond van je broer vallen: eerste tot <b>11</b>, max <b>3 slagen</b> per kant (met vier spelers: <b>2 tegen 2</b>, jullie delen de 3 slagen!). Pas op voor de <b>bom-bal</b>, de <b>kip</b>, de <b>wind</b> en de <b>spiegel</b>!',
+  blurb: 'Volleybal met <b>slijmblobs</b> op een kermis-strand! Laat de bal op de grond van je broer vallen: eerste tot <b>11</b>, max <b>3 slagen</b> per kant (met vier spelers: <b>2 tegen 2</b>, jullie delen de 3 slagen, en twee keer achter elkaar slaan telt dubbel!). Pas op voor de <b>bom-bal</b>, de <b>kip</b>, de <b>wind</b> en de <b>spiegel</b>!',
   controls: ['{move} lopen, omhoog = springen', '{a} SLAG (smash of lob)', '{b} DUIKSLAG (redding)'],
   tip: 'Spring en sla vlak voor de bal je kop raakt = SMASH! Wie 3 punten achterstaat krijgt een bredere slag.',
 
@@ -238,12 +238,16 @@ export default {
 
     // ---------------- natuurkunde ----------------
     function onTouch(p, kind, info = {}) {
+      const again = ball.last === p.i;   // dezelfde speler slaat twee keer achter elkaar
       p.lastHit = 0; p.hits++; ball.last = p.i; ball.hitT = 0; G.stall = 0;
       if (G.state === 'play') {
         const si = sidx(p);
         if (G.lastSide !== si) { G.cnt[si] = 0; G.lastSide = si; G.cnt[1 - si] = 0; }
-        G.cnt[si]++; G.rally++; audio.sfx('click', { vol: 0.15, rate: 1 + G.cnt[si] * 0.15 });
-        if (G.cnt[si] > 3) { fault(p, `${names[p.i]} sloeg 4 keer! (max 3 slagen)`); }
+        // 2 tegen 2: twee slagen achter elkaar van dezelfde speler tellen dubbel (pas naar je teamgenoot; max 3 slagen per team)
+        const dbl = TM && again && G.cnt[si] > 0;
+        G.cnt[si] += dbl ? 2 : 1; G.rally++;
+        if (dbl && G.cnt[si] <= 3) fx.texts.add('DUBBEL!', p.x, p.y + p.Rc * 2 + 2.2, 0.8, '#ffb347', 1.2); audio.sfx('click', { vol: 0.15, rate: 1 + G.cnt[si] * 0.15 });
+        if (G.cnt[si] > 3) { fault(p, dbl ? `${names[p.i]} sloeg twee keer achter elkaar! (dat telt dubbel, pas naar je teamgenoot)` : `${names[p.i]} sloeg 4 keer! (max 3 slagen)`); }
       }
     }
     function bumpBall(p, n, vn) {
@@ -356,6 +360,10 @@ export default {
       p.x += p.vx * h; p.y += p.vy * h;
       if (p.y <= 0) { if (!p.grounded && p.vy < -6) { audio.sfx('land', { vol: clamp(-p.vy / 25, 0.1, 0.4) }); fx.particles.dust(p.x, 0.1, 0.4, 5, 0xfff0c8); p.sx = 1.2; p.sy = 0.75; } p.y = 0; p.vy = 0; p.grounded = true; } else p.grounded = false;
       const R = p.Rc;
+      if (TM && p.state !== 'dive') {   // teamgenoten schuiven uit elkaar (blijven leesbaar), niet in elkaar
+        const q = pl.find((o) => o !== p && o.t === p.t);
+        if (q && Math.abs(p.y - q.y) < 1.6) { const dx = p.x - q.x, min = (R + q.Rc) * 0.95; if (Math.abs(dx) < min) p.x += (dx !== 0 ? Math.sign(dx) : (p.i < q.i ? -1 : 1)) * (min - Math.abs(dx)) * 0.5; }
+      }
       if (p.side < 0) { p.x = clamp(p.x, -W + R, -NR - R - 0.02); } else { p.x = clamp(p.x, NR + R + 0.02, W - R); }
     }
     function readInput(p, dt) {

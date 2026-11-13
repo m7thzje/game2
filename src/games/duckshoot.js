@@ -509,10 +509,11 @@ export default {
     // ------------------------------------------------------------------ poppetjes aan de kraam
     function updateChars(dt) {
       chars.forEach((o, i) => {
-        const c = ch[i]; const tx = clamp(c.x * 0.8, -9.5, 9.5);
+        const c = ch[i]; const slot = (i - (N - 1) / 2) * 4.8;   // bij 3-4 spelers houdt elk poppetje zijn eigen vak (volgt het vizier maar een stukje): geen overlap
+        const tx = N > 2 ? slot + clamp((c.x * 0.8 - slot) * 0.3, -1.3, 1.3) : clamp(c.x * 0.8, -9.5, 9.5);
         o.x = damp(o.x, tx, 6, dt);
         for (let q = 0; q < N; q++) { if (q === i) continue; const other = chars[q]; const gap = N === 2 ? 2.6 : 2.2; if (Math.abs(o.x - other.x) < gap) o.x += (i < q ? -1 : 1) * (gap - Math.abs(o.x - other.x)) * 0.5; }
-        const S = 1.6; o.holder.scale.setScalar(S); o.holder.position.set(o.x, 0.2, 5.2);
+        const S = N > 2 ? 1.85 : 1.6; o.holder.scale.setScalar(S); o.holder.position.set(o.x, 0.2, 5.2);
         const dx = c.x - o.x, dy = c.y - 2.4;
         o.c.faceDir(dx, -9); o.c.speed = 0;
         o.holder.rotation.x = clamp(dy * 0.035, -0.1, 0.45) + c.recoil * 0.1;

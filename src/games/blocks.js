@@ -5,17 +5,18 @@ import * as L from './blocks_logic.js';
 import { buildArena, bevelTexture, FW, FH, FX } from './blocks_world.js';
 import { glowTex } from './stack_world.js';
 
-// Blokkenstrijd — Tetris-duel in de Neonkelder. Twee velden van 10x16, dezelfde blokkenreeks voor allebei.
+// Blokkenstrijd — Tetris-duel in de Neonkelder. Twee (bij 3-4 spelers: drie of vier) velden van 10x16, dezelfde blokkenreeks voor iedereen.
 //  * links/rechts schuiven, omlaag = sneller vallen, A = draaien, B = meteen laten vallen
 //  * 2+ rijen tegelijk = rommelrijen (met een gat) naar de ander, 4 rijen ook nog een kippenblok erbij
 //  * power-blokken: bom (blaast gaten), bevriezer (ander kan 2 s niets), regenboog (vult de bijna-volle rij)
 //  * comeback: wie achterstaat krijgt een makkelijke I-balk (en in de laatste 20 s anderhalf keer zoveel punten)
 //  * wie als eerste vol zit verliest; na 100 s wint de hoogste score (gelijk = sudden death)
+//  * 3-4 spelers: wie vol zit is eruit, de laatste die overblijft wint (of de hoogste score na de tijd); rommel, bevriezer en kippenblok gaan naar de koploper
 
-const MATCH_TIME = 100, SD_MAX = 30;
+const MATCH_TIME = 100, SD_MAX = 30, MATCH_TIME4 = 110;
 const TCOL = [0, 0x35e6ff, 0xffe14a, 0xb45cff, 0x5cff7a, 0xff4a5a, 0x4a7cff, 0xff9a3a, 0x6c6c8c, 0xffe27a, 0xffffff].map((c) => new THREE.Color(c));
 const PCSS = ['#7dffb0', '#8fb8ff'];
-const NX = [-2.35, 2.35], NY = [10.3, 8.0, 5.8];
+const NX = [-2.35, 2.35], NY = [10.3, 8.0, 5.8], PX = [-0.1, 2.3, 4.5];
 const CAP = 360;
 const POWNAME = { bomb: 'BOM!', freeze: 'BEVRIEZER!', rainbow: 'REGENBOOG!' };
 const _c = new THREE.Color(), _col = new THREE.Color(), _red = new THREE.Color(0xff2a2a), _dc = new THREE.Color(), _w = new THREE.Color(1, 1, 1), _ice = new THREE.Color(0xbdeeff);
@@ -50,10 +51,11 @@ export default {
   giver: 'Neon-Nelly',
   icon: '🧱',
   mode: 'pvp',
+  players: [2, 3, 4],
   time: 100,
   twists: ['invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'slippery', 'lowgrav', 'bodyswap', 'deurman'],
   music: 'game_fast',
-  blurb: 'Blokkenduel in de Neonkelder! Vul rijen: <b>2 of meer tegelijk</b> sturen rommelrijen naar je broer. Pak <b>bom</b>, <b>bevriezer</b> en <b>regenboog</b>, en pas op voor het <b>kippenblok</b>! Wie als eerste vol zit, verliest.',
+  blurb: 'Blokkenduel in de Neonkelder! Vul rijen: <b>2 of meer tegelijk</b> sturen rommelrijen naar je broer (met 3-4 spelers: naar de <b>koploper</b>, en wie vol zit is eruit). Pak <b>bom</b>, <b>bevriezer</b> en <b>regenboog</b>, en pas op voor het <b>kippenblok</b>! Wie als eerste vol zit, verliest.',
   controls: ['{move} schuiven / omlaag = sneller', '{a} draaien', '{b} meteen vallen'],
   tip: 'Wie achterstaat krijgt een makkelijke I-balk!',
 
@@ -61,6 +63,7 @@ export default {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
+    const N = players.length, WIDE = N > 2, IDX = players.map((_, i) => i);
     const tw = ctx.twist.id;
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
     const Lg = ctx.lights('cave', { shadow: 18, center: [0, 8, 0], fogNear: 60, fogFar: 140 });
@@ -82,23 +85,26 @@ export default {
     const dummy = new THREE.Object3D();
 
     // ---------- spelers ----------
-    const pl = [0, 1].map((i) => {
+    const pl = IDX.map((i) => {
       const f = A.fields[i], g = f.g;
       const cellIM = new THREE.InstancedMesh(cellGeo, cellMat, CAP); cellIM.frustumCulled = false; cellIM.count = 0; cellIM.setColorAt(0, _w); g.add(cellIM);
       const glowIM = new THREE.InstancedMesh(glowGeo, glowMat, CAP); glowIM.frustumCulled = false; glowIM.count = 0; glowIM.setColorAt(0, _w); glowIM.position.z = 0.6; glowIM.renderOrder = 6; g.add(glowIM);
       const ghostIM = new THREE.InstancedMesh(cellGeo, ghostMat, 4); ghostIM.frustumCulled = false; ghostIM.count = 0; ghostIM.setColorAt(0, _w); g.add(ghostIM);
       const meterIM = new THREE.InstancedMesh(new THREE.BoxGeometry(0.42, 0.86, 0.5), meterMat, FH); meterIM.frustumCulled = false; meterIM.count = 0; g.add(meterIM);
-      const preIM = new THREE.InstancedMesh(cellGeo, cellMat, 12); preIM.frustumCulled = false; preIM.count = 0; preIM.setColorAt(0, _w); preIM.position.set(NX[i] - FX[i], 0, 0.3); g.add(preIM);
+      const preIM = new THREE.InstancedMesh(cellGeo, cellMat, 12); preIM.frustumCulled = false; preIM.count = 0; preIM.setColorAt(0, _w); preIM.position.set(WIDE ? 0 : NX[i] - FX[i], 0, 0.3); g.add(preIM);
       // ijs-laag voor als de speler bevroren is
       const ice = new THREE.Mesh(new THREE.PlaneGeometry(FW, FH), new THREE.MeshBasicMaterial({ color: 0x9fe8ff, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending })); ice.position.set(0, FH / 2, 0.8); ice.renderOrder = 7; g.add(ice);
       // pictogrammen (bom/ijs/regenboog/kip) voor speciale cellen
       const icons = Array.from({ length: 6 }, () => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: iconTex('bomb'), transparent: true })); s.visible = false; s.renderOrder = 8; g.add(s); return s; });
       // het poppetje in de middenstrook
-      const c = makeBrother(i); const holder = new THREE.Group(); holder.add(c.group); holder.scale.setScalar(3.5 / c.height); holder.position.set(NX[i], 0.25, 1.1); scene.add(holder);
-      c.faceDir(i ? -0.35 : 0.35, 1); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
+      const c = makeBrother(i); const holder = new THREE.Group(); holder.add(c.group); holder.scale.setScalar((WIDE ? 3.3 : 3.5) / c.height); if (WIDE) holder.position.set(FX[i] - 3.9, FH + 0.33, 0.1); else holder.position.set(NX[i], 0.25, 1.1); scene.add(holder);
+      c.faceDir(WIDE ? 0 : i ? -0.35 : 0.35, 1); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
       // volgende-panelen
-      const panel = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 7.4), new THREE.MeshBasicMaterial({ map: canvasTex(128, 240, (cg, w, h) => { cg.fillStyle = 'rgba(8,6,28,.88)'; cg.fillRect(0, 0, w, h); cg.strokeStyle = i ? '#4a8cff' : '#35c46f'; cg.lineWidth = 7; cg.strokeRect(3, 3, w - 6, h - 6); cg.font = 'bold 17px Fredoka, Arial Black, sans-serif'; cg.fillStyle = '#d8d0ff'; cg.textAlign = 'center'; cg.fillText('VOLGENDE', w / 2, 32); }), transparent: true }));
-      panel.position.set(NX[i], 8.0, 0.05); scene.add(panel);
+      const pcss = players[i].css;
+      const panel = WIDE
+        ? new THREE.Mesh(new THREE.PlaneGeometry(7.4, 2.7), new THREE.MeshBasicMaterial({ map: canvasTex(296, 108, (cg, w, h) => { cg.fillStyle = 'rgba(8,6,28,.88)'; cg.fillRect(0, 0, w, h); cg.strokeStyle = pcss; cg.lineWidth = 6; cg.strokeRect(3, 3, w - 6, h - 6); cg.font = 'bold 21px Fredoka, Arial Black, sans-serif'; cg.fillStyle = '#d8d0ff'; cg.textAlign = 'left'; cg.fillText('VOLGENDE', 12, 28); }), transparent: true }))
+        : new THREE.Mesh(new THREE.PlaneGeometry(4.0, 7.4), new THREE.MeshBasicMaterial({ map: canvasTex(128, 240, (cg, w, h) => { cg.fillStyle = 'rgba(8,6,28,.88)'; cg.fillRect(0, 0, w, h); cg.strokeStyle = i ? '#4a8cff' : '#35c46f'; cg.lineWidth = 7; cg.strokeRect(3, 3, w - 6, h - 6); cg.font = 'bold 17px Fredoka, Arial Black, sans-serif'; cg.fillStyle = '#d8d0ff'; cg.textAlign = 'center'; cg.fillText('VOLGENDE', w / 2, 32); }), transparent: true }));
+      if (WIDE) panel.position.set(FX[i] + 1.3, FH + 1.9, 0.05); else panel.position.set(NX[i], 8.0, 0.05); scene.add(panel);
       return {
         i, f, g, cellIM, glowIM, ghostIM, meterIM, preIM, ice, icons, c, holder,
         grid: L.emptyGrid(), piece: null, si: 0, front: [], score: 0, lines: 0, combo: 0, pend: 0, pieces: 0,
@@ -107,14 +113,17 @@ export default {
         pose: 'carry', poseT: 0, lastGift: -99, holeCol: Math.floor(rnd() * FW), boost: 1, danger: 0, lastTxt: '', heightPeak: 0, softCells: 0, specials: 0,
       };
     });
-    const opp = (p) => pl[1 - p.i];
+    // tegenstander van p voor rommel/bevriezer/kip-gift: bij 2 spelers de ander; bij meer de koploper (hoogste score) onder wie nog meedoet
+    const opp = (p) => { if (!WIDE) return pl[1 - p.i]; const o = pl.filter((q) => q !== p && q.state !== 'dead'); if (!o.length) return pl.find((q) => q !== p); return o.reduce((a, q) => (q.score > a.score ? q : a), o[0]); };
+    const othersBest = (p) => { const o = pl.filter((q) => q !== p && q.state !== 'dead'); return o.length ? Math.max(...o.map((q) => q.score)) : p.score; };
+    const alive = () => pl.filter((q) => q.state !== 'dead');
     const cellX = (c) => c - FW / 2 + 0.5, cellY = (r) => FH - 1 - r + 0.5;
     const wx = (p, c) => FX[p.i] + cellX(c);
 
     // ---------- toestand ----------
-    const G = { state: 'play', t: 0, timeLeft: MATCH_TIME, sdT: 0, winner: -1, why: '', chickenAt: 18 + rnd() * 8, sdGar: 0, lastTick: 0 };
+    const G = { state: 'play', t: 0, timeLeft: WIDE ? MATCH_TIME4 : MATCH_TIME, sdSet: IDX.slice(), elim: [], sdT: 0, winner: -1, why: '', chickenAt: 18 + rnd() * 8, sdGar: 0, lastTick: 0 };
     let T = 0, finished = false, slow = 1;
-    const stats = { lines: [0, 0], garbageSent: [0, 0], bombs: 0, freezes: 0, rainbows: 0, chickens: 0, gifts: 0, tetris: 0, topouts: 0 };
+    const stats = { lines: IDX.map(() => 0), garbageSent: IDX.map(() => 0), bombs: 0, freezes: 0, rainbows: 0, chickens: 0, gifts: 0, tetris: 0, topouts: 0 };
     const projs = Array.from({ length: 8 }, () => { const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: gtex, color: 0xff5a3a, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); s.scale.set(2.2, 2.2, 1); s.visible = false; s.renderOrder = 12; scene.add(s); return { s, on: false, t: 0, dur: 0.6, x0: 0, y0: 0, x1: 0, y1: 0, n: 0, to: 0 }; });
     const hen = new Animal('chicken'); hen.group.visible = false; hen.group.scale.setScalar(1.9); scene.add(hen.group); const henS = { on: false, t: 0, to: 0 };
 
@@ -122,9 +131,10 @@ export default {
     const react = (p, pose, secs = 1) => { p.pose = pose; p.poseT = secs; };
     const peek = (p, k) => (k < p.front.length ? p.front[k] : seq.get(p.si + k - p.front.length));
     function refreshHud() {
-      hud.setScore(`${names[0]} ${pl[0].score} – ${pl[1].score} ${names[1]}${G.state === 'sd' ? '  (SUDDEN DEATH)' : ''}`);
+      if (WIDE) { const l = alive().reduce((a, q) => (q.score > a.score ? q : a), pl[0]); hud.setScore(`${G.state === 'sd' ? 'SUDDEN DEATH · ' : ''}Voorop: ${l.state === 'dead' ? '–' : `${names[l.i]} ${l.score}`}`); }
+      else hud.setScore(`${names[0]} ${pl[0].score} – ${pl[1].score} ${names[1]}${G.state === 'sd' ? '  (SUDDEN DEATH)' : ''}`);
       for (const p of pl) {
-        const bits = [`${p.lines} rijen`];
+        const bits = [WIDE ? `${p.score} pnt` : null, `${p.lines} rijen`].filter(Boolean); if (p.state === 'dead') bits.push('eruit!');
         if (p.pend > 0) bits.push(`⚠ ${p.pend} onderweg`);
         if (p.frozenT > 0) bits.push('bevroren!');
         if (p.boost > 1) bits.push('x1,5');
@@ -146,12 +156,13 @@ export default {
     function maybeGift(p) {
       const o = opp(p);
       if (T - p.lastGift < 24 || p.front.length || p.piece.t === 'I') return;
-      const hp = L.maxHeight(p.grid), ho = L.maxHeight(o.grid);
-      if ((o.score - p.score >= 450 && hp >= 5) || (hp >= ho + 5 && hp >= 8)) {
+      const hp = L.maxHeight(p.grid), ho = WIDE ? Math.min(...pl.filter((q) => q !== p && q.state !== 'dead').map((q) => L.maxHeight(q.grid)), 99) : L.maxHeight(o.grid);
+      if ((othersBest(p) - p.score >= 450 && hp >= 5) || (hp >= ho + 5 && hp >= 8)) {
         p.lastGift = T; p.front.push({ t: 'I' }); stats.gifts++;
         hud.toast(`🎁 ${names[p.i]} krijgt een makkelijke I-balk!`, 1800); say('MAKKELIJKE I-BALK!', FX[p.i], 15, '#35e6ff', 1.1); audio.sfx('powerup', { vol: 0.5 });
       }
     }
+    const meterSide = (p) => (WIDE ? 1 : p.i ? 1 : -1);
     const mult = (p) => p.boost;
     function addScore(p, n) { p.score += Math.round(n * mult(p)); }
     function move(p, dx, isSlide = false) {
@@ -258,7 +269,7 @@ export default {
       const o = opp(p); if (o.state === 'dead') return;
       stats.garbageSent[p.i] += n;
       const pr = projs.find((q) => !q.on); if (!pr) { o.pend += n; return; }
-      pr.on = true; pr.t = 0; pr.dur = 0.65; pr.x0 = FX[p.i]; pr.y0 = 8; pr.x1 = FX[o.i] + (o.i ? 6.2 : -6.2); pr.y1 = 2 + o.pend * 0.9; pr.n = n; pr.to = o.i; pr.s.visible = true;
+      pr.on = true; pr.t = 0; pr.dur = 0.65; pr.x0 = FX[p.i]; pr.y0 = 8; pr.x1 = FX[o.i] + meterSide(o) * 6.2; pr.y1 = 2 + o.pend * 0.9; pr.n = n; pr.to = o.i; pr.s.visible = true;
       say(`+${n} RIJEN!`, FX[p.i], 6, '#ff7a6a', 1.2); audio.sfx('whoosh', { vol: 0.5, rate: 0.9 });
     }
     function applyGarbage(p) {
@@ -281,7 +292,7 @@ export default {
       hud.toast(`🐔 Een kippenblok voor ${names[p.i]}!`, 1800);
     }
     function topOut(p) {
-      if (p.state === 'dead') return; p.state = 'dead'; p.piece = null; stats.topouts++;
+      if (p.state === 'dead') return; p.state = 'dead'; p.piece = null; stats.topouts++; p.diedAt = T; G.elim.push(p.i);
       react(p, 'sad', 99); say('VOL!', FX[p.i], 8, '#ff5a5a', 2); audio.sfx('lose', { vol: 0.6 }); ctx.shake(0.8);
       for (let y = 0; y < FH; y++) for (let x = 0; x < FW; x++) if (p.grid[y][x]) flyCell(p, x, y, p.grid[y][x], 9);
       p.heightPeak = FH; for (let y = 0; y < FH; y++) p.grid[y].fill(0);
@@ -290,30 +301,39 @@ export default {
     // ---------- spelverloop ----------
     function decide(winner, why) {
       if (G.state === 'end') return;
-      G.state = 'end'; G.t = 0; G.winner = winner; G.why = why; hud.setTimer(null);
-      react(pl[winner], 'cheer', 99); if (pl[1 - winner].state !== 'dead') react(pl[1 - winner], 'sad', 99);
+      G.state = 'end'; G.t = 0; G.winner = winner; G.why = why; G.snap = pl.map((q) => q.score); hud.setTimer(null);
+      react(pl[winner], 'cheer', 99); for (const q of pl) if (q !== pl[winner] && q.state !== 'dead') react(q, 'sad', 99);
       audio.sfx('win', { vol: 0.6 }); celebrateFx(winner);
     }
     function celebrateFx(w) { for (let k = 0; k < 5; k++) fx.particles.burst(FX[w] + rand(-4, 4), rand(3, 13), 1.5, { count: 30, speed: 7, up: 1.2, life: 1.5, size: 0.5, colors: [0xffe14a, 0xff6fa5, 0x6fd8ff, 0x8dff9a, 0xffffff], gravity: 5 }); }
     function finishMatch() {
       if (finished) return; finished = true;
-      const w = G.winner, wn = names[w], ln = names[1 - w], s = [pl[0].score, pl[1].score];
+      const w = G.winner, wn = names[w], ln = names[1 - w], s = G.snap || pl.map((p) => p.score);
       let summary;
+      // volgorde: winnaar, dan wie nog overeind stond (hoogste score), dan wie het laatst eruit ging
+      const place = IDX.slice().sort((a, b) => (a === w ? -1 : b === w ? 1 : (pl[a].state === 'dead') !== (pl[b].state === 'dead') ? (pl[a].state === 'dead' ? 1 : -1) : pl[a].state === 'dead' ? (pl[b].diedAt - pl[a].diedAt) || (s[b] - s[a]) : (s[b] - s[a]) || (a - b)));
+      if (WIDE) {
+        const out = G.elim.map((k) => names[k]);
+        if (G.why === 'topout') summary = pick([`${wn} blijft als laatste overeind met ${s[w]} punten!${out.length ? ` Eruit: ${out.join(', ')}.` : ''}`, `Iedereen zit vol behalve ${wn}. ${s[w]} punten en de kroon.`]);
+        else if (G.why === 'sd') summary = `Sudden death! ${wn} bleef het laagst en wint.`;
+        else summary = pick([`${wn} had na ${MATCH_TIME4} seconden de meeste punten: ${s[w]}.`, `${wn} wint met ${s[w]} punten. De rest zoekt nog een I-balk.`]);
+        summary += ` Rijen: ${pl.map((p) => p.lines).join(' - ')}.${stats.chickens ? ` Er liepen ${stats.chickens} kip(pen) door de blokken.` : ''}`;
+      } else
       if (G.why === 'topout') summary = pick([`${ln} zit vol tot aan de nok! ${wn} staat nog lekker ruim: ${s[w]} punten.`, `De blokken van ${ln} stapelen zich op tot het plafond. ${wn} wint met ${s[w]} punten.`, `Oeps, ${ln} heeft geen plek meer voor een blokje. ${wn} wint!`]);
       else if (G.why === 'sd') summary = pick([`Sudden death! Het scheelde geen blokje, maar ${wn} bleef het laagst en wint.`, `Na verlenging wint ${wn}: lager gestapeld is slimmer gestapeld.`]);
       else summary = pick([`${wn} had de meeste punten: ${s[w]} tegen ${s[1 - w]}. ${ln} zoekt nog een I-balk.`, `${wn} wint na 100 seconden met ${s[w]} punten. ${ln} heeft alles gegeven (${s[1 - w]}).`]);
-      summary += ` Rijen: ${pl[0].lines} - ${pl[1].lines}.${stats.chickens ? ` Er liepen ${stats.chickens} kip(pen) door de blokken.` : ''}`;
-      ctx.finishPvp({ winner: w, score: s, delay: 900, summary });
+      if (!WIDE) summary += ` Rijen: ${pl[0].lines} - ${pl[1].lines}.${stats.chickens ? ` Er liepen ${stats.chickens} kip(pen) door de blokken.` : ''}`;
+      ctx.finishPvp({ winner: w, score: s, place, delay: 900, summary });
     }
     function timeUp() {
-      const a = pl[0].score, b = pl[1].score;
-      if (a !== b) { hud.showBig('TIJD!', 1100, '#ffe14a'); audio.sfx('bell', { vol: 0.7 }); decide(a > b ? 0 : 1, 'score'); }
-      else { G.state = 'sd'; G.sdT = 0; hud.setTimer(null); hud.showBig('SUDDEN DEATH!', 1500, '#ff7a6a'); hud.toast('Gelijk! Elke 5 seconden komt er rommel bij: wie het laagst blijft wint.', 2800); audio.sfx('bad', { vol: 0.6 }); refreshHud(); }
+      const al = alive(), mx = Math.max(...al.map((p) => p.score)), top = al.filter((p) => p.score === mx);
+      if (top.length === 1) { hud.showBig('TIJD!', 1100, '#ffe14a'); audio.sfx('bell', { vol: 0.7 }); decide(top[0].i, 'score'); }
+      else { G.sdSet = top.map((p) => p.i); G.state = 'sd'; G.sdT = 0; hud.setTimer(null); hud.showBig('SUDDEN DEATH!', 1500, '#ff7a6a'); hud.toast('Gelijk! Elke 5 seconden komt er rommel bij: wie het laagst blijft wint.', 2800); audio.sfx('bad', { vol: 0.6 }); refreshHud(); }
     }
     function sdEnd() {
-      const h = pl.map((p) => L.maxHeight(p.grid)), s = [pl[0].score, pl[1].score];
-      const w = h[0] !== h[1] ? (h[0] < h[1] ? 0 : 1) : s[0] !== s[1] ? (s[0] > s[1] ? 0 : 1) : (rnd() < 0.5 ? 0 : 1);
-      decide(w, 'sd');
+      const cand = G.sdSet.filter((k) => pl[k].state !== 'dead'), h = pl.map((p) => L.maxHeight(p.grid)), s = pl.map((p) => p.score);
+      const hm = Math.min(...cand.map((k) => h[k])), c1 = cand.filter((k) => h[k] === hm), sm = Math.max(...c1.map((k) => s[k])), c2 = c1.filter((k) => s[k] === sm);
+      decide(c2[Math.floor(rnd() * c2.length)], 'sd');
     }
 
     const level = () => Math.min(11, Math.floor(T / 9));
@@ -326,7 +346,7 @@ export default {
       for (let k = p.deb.length - 1; k >= 0; k--) { const d = p.deb[k]; d.life -= dt; d.vy -= 22 * dt; d.x += d.vx * dt; d.y += d.vy * dt; d.r += d.vr * dt; if (d.life <= 0) p.deb.splice(k, 1); }
       const live = p.state === 'play' && G.state !== 'end';
       const hp = L.maxHeight(p.grid); p.danger = hp >= 12 ? 1 : hp >= 10 ? 0.4 : 0;
-      p.boost = G.state === 'play' && G.timeLeft < 20 && pl[1 - p.i].score - p.score >= 100 ? 1.5 : 1;
+      p.boost = G.state === 'play' && G.timeLeft < 20 && othersBest(p) - p.score >= 100 ? 1.5 : 1;
       if (p.state === 'dead') return;
       if (p.state === 'clear') { p.clearT += dt; if (p.clearT >= 0.42) finishClear(p); return; }
       if (p.state === 'wait') { p.spawnDelay -= dt; if (p.spawnDelay <= 0 && G.state !== 'end') spawn(p); return; }
@@ -360,7 +380,7 @@ export default {
         if (G.timeLeft <= 0) { G.timeLeft = 0; timeUp(); }
         // kippengimmick: de koploper krijgt af en toe een kippenblok
         G.chickenAt -= dt;
-        if (G.chickenAt <= 0 && G.timeLeft > 12) { G.chickenAt = 26 + rnd() * 10; const lead = pl[0].score === pl[1].score ? pl[Math.floor(rnd() * 2)] : pl[0].score > pl[1].score ? pl[0] : pl[1]; chickenFor(lead); }
+        if (G.chickenAt <= 0 && G.timeLeft > 12) { G.chickenAt = 26 + rnd() * 10; const al = alive(), mx = Math.max(...al.map((q) => q.score)), tp = al.filter((q) => q.score === mx), lead = tp[Math.floor(rnd() * tp.length)]; chickenFor(lead); }
       } else if (G.state === 'sd') {
         G.sdT += dt; G.sdGar += dt;
         if (G.sdGar >= 5) { G.sdGar = 0; for (const p of pl) if (p.state !== 'dead') { p.pend += 1; } say('RIJ ERBIJ!', 0, 10, '#ff7a6a', 1.2); audio.sfx('bad', { vol: 0.4 }); refreshHud(); }
@@ -376,11 +396,21 @@ export default {
       }
       // einde: wie vol zit verliest
       if (G.state === 'play' || G.state === 'sd') {
-        const d0 = pl[0].state === 'dead', d1 = pl[1].state === 'dead';
-        if (d0 || d1) {
-          let w;
-          if (d0 && d1) w = pl[0].score !== pl[1].score ? (pl[0].score > pl[1].score ? 0 : 1) : (rnd() < 0.5 ? 0 : 1); else w = d0 ? 1 : 0;
-          decide(w, 'topout');
+        if (!WIDE) {
+          const d0 = pl[0].state === 'dead', d1 = pl[1].state === 'dead';
+          if (d0 || d1) {
+            let w;
+            if (d0 && d1) w = pl[0].score !== pl[1].score ? (pl[0].score > pl[1].score ? 0 : 1) : (rnd() < 0.5 ? 0 : 1); else w = d0 ? 1 : 0;
+            decide(w, 'topout');
+          }
+        } else {   // 3-4 spelers: wie vol zit is eruit; de laatste die overblijft wint (in een sudden death telt alleen wie gelijk stond)
+          const pool = G.state === 'sd' ? G.sdSet.map((k) => pl[k]) : pl, left = pool.filter((p) => p.state !== 'dead');
+          if (left.length <= 1) {
+            let w;
+            if (left.length === 1) w = left[0].i;
+            else { const last = G.elim.slice(-pool.length).filter((k) => pool.includes(pl[k])), ts = last.filter((k) => pl[k].diedAt === Math.max(...last.map((q) => pl[q].diedAt))); w = ts.reduce((a, k) => (pl[k].score > pl[a].score ? k : a), ts[0]); }
+            decide(w, 'topout');
+          }
         }
       }
       if (G.state === 'end' && G.t > 1.6) finishMatch();
@@ -440,24 +470,24 @@ export default {
       for (const d of p.deb) { colorOf(d.v || 1, 0, 0, t, col); col.lerp(_w, 0.35); put(p, n++, d.x, d.y, clamp(d.life * 1.3, 0.05, 1), d.r, col, clamp(d.life * 1.4, 0, 1.1)); }
       p.cellIM.count = n; p.glowIM.count = n; p.cellIM.instanceMatrix.needsUpdate = true; p.glowIM.instanceMatrix.needsUpdate = true; p.cellIM.instanceColor.needsUpdate = true; p.glowIM.instanceColor.needsUpdate = true;
       // previews
-      const NC = 0.62; let pn = 0;
+      const NC = WIDE ? 0.5 : 0.62; let pn = 0;
       for (let k = 0; k < 3; k++) {
         const def = peek(p, k), cells = L.ROT[def.t][0];
         let x0 = 9, x1 = -9, y0 = 9, y1 = -9; for (const [cx, cy] of cells) { x0 = Math.min(x0, cx); x1 = Math.max(x1, cx); y0 = Math.min(y0, cy); y1 = Math.max(y1, cy); }
         const bx = (x0 + x1 + 1) / 2, by = (y0 + y1 + 1) / 2;
         const pcol = TCOL[def.chicken ? 9 : L.TYPE_ID[def.t]];
         cells.forEach(([cx, cy], q) => {
-          const x = (cx + 0.5 - bx) * NC, y = NY[k] - (cy + 0.5 - by) * NC;
+          const x = (WIDE ? PX[k] : 0) + (cx + 0.5 - bx) * NC, y = (WIDE ? FH + 1.75 : NY[k]) - (cy + 0.5 - by) * NC;
           dummy.position.set(x, y, 0); dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(NC * 0.96); dummy.updateMatrix(); p.preIM.setMatrixAt(pn, dummy.matrix);
           const special = def.pow && q === def.sp; p.preIM.setColorAt(pn, special ? (def.pow === 'bomb' ? col.set(0x2a1418) : def.pow === 'freeze' ? col.set(0x9fe8ff) : col.setHSL((t * 0.8) % 1, 0.9, 0.6)) : pcol);
-          if (special && ic < p.icons.length) { const s = p.icons[ic++]; s.visible = true; s.position.set(x + NX[p.i] - FX[p.i], y, 0.95); s.scale.setScalar(0.6); if (s.userData.k !== def.pow) { s.userData.k = def.pow; s.material.map = iconTex(def.pow); s.material.needsUpdate = true; } }
+          if (special && ic < p.icons.length) { const s = p.icons[ic++]; s.visible = true; s.position.set(x + (WIDE ? 0 : NX[p.i] - FX[p.i]), y, 0.95); s.scale.setScalar(0.6); if (s.userData.k !== def.pow) { s.userData.k = def.pow; s.material.map = iconTex(def.pow); s.material.needsUpdate = true; } }
           pn++;
         });
       }
       for (let k = ic; k < p.icons.length; k++) p.icons[k].visible = false;
       p.preIM.count = pn; p.preIM.instanceMatrix.needsUpdate = true; if (p.preIM.instanceColor) p.preIM.instanceColor.needsUpdate = true;
       // rommel-meter aan de buitenkant
-      const side = p.i ? 1 : -1; let mn = 0;
+      const side = meterSide(p); let mn = 0;
       for (let k = 0; k < Math.min(p.pend, FH); k++) { dummy.position.set(side * 6.15, 0.5 + k * 0.97, 0); dummy.rotation.set(0, 0, 0); dummy.scale.setScalar(1 + (p.pend >= 8 ? Math.sin(t * 12) * 0.08 : 0)); dummy.updateMatrix(); p.meterIM.setMatrixAt(mn++, dummy.matrix); }
       p.meterIM.count = mn; p.meterIM.instanceMatrix.needsUpdate = true;
       // ijs-laag, schudden, gevaar-flits
@@ -469,19 +499,23 @@ export default {
       // poppetje
       const c = p.c;
       c.pose = p.poseT > 0 ? p.pose : (p.state === 'dead' ? 'sad' : 'carry'); c.speed = 0; c.update(dt);
-      p.holder.position.y = 0.25 + (p.poseT > 0 && p.pose === 'cheer' ? 0 : 0);
+      p.holder.position.y = WIDE ? FH + 0.33 : 0.25;
     }
     function visuals(dt) {
       for (const p of pl) drawField(p, dt, T);
       A.update(T, dt);
       if (henS.on) {
-        henS.t += dt; const tx = NX[henS.to], u = Math.min(1, henS.t / 1.1);
+        henS.t += dt; const tx = WIDE ? FX[henS.to] : NX[henS.to], u = Math.min(1, henS.t / 1.1);
         hen.group.position.set(lerp(0, tx, u), 0.3 + Math.abs(Math.sin(henS.t * 12)) * 0.25, 3 - u * 1.6); hen.speed = 1; hen.targetYaw = Math.atan2(tx, 0.001); hen.update(dt);
         if (henS.t > 1.4) { henS.on = false; hen.group.visible = false; for (let k = 0; k < 14; k++) fx.particles.emit(tx, 1, 1.5, rand(-3, 3), rand(1, 4), 0, { life: 1, size: 0.3, color: 0xfff6d8, gravity: 4 }); }
       }
       if (T - hudT > 0.2) { hudT = T; refreshHud(); }
       // camera
       const tv = Math.tan(camera.fov * Math.PI / 360), asp = camera.aspect;
+      if (WIDE) {   // naast elkaar: breed in beeld; de rij met poppetje + 'volgende' boven de velden blijft onder de HUD
+        const hudPx = N === 3 ? 205 : 155, d = Math.max(325 * 20.4 / (640 - hudPx) / tv, (FX[N - 1] + 6.6) / (tv * asp)), cy = -0.8 + 0.969 * d * tv;
+        camera.position.set(0, cy + 0.6, d + 1.5); camera.lookAt(0, cy, 0); return;
+      }
       const d = Math.max(10.7 / tv, 16.8 / (tv * asp));
       camera.position.set(0, 9.2, d + 1.5); camera.lookAt(0, 8.4, 0);
     }
@@ -491,12 +525,12 @@ export default {
 
     return {
       update, resultUpdate, introUpdate,
-      onSwap() { for (const p of pl) fx.particles.burst(FX[p.i], 8, 1.5, { count: 20, speed: 5, up: 1, life: 0.7, size: 0.35, colors: [0xffe14a, 0xffffff], gravity: 2 }); say('WISSEL!', 0, 10, '#ffe14a', 1.6); },
+      onSwap() { for (const p of pl) fx.particles.burst(FX[p.i], 8, 1.5, { count: 20, speed: 5, up: 1, life: 0.7, size: 0.35, colors: [0xffe14a, 0xffffff], gravity: 2 }); say('WISSEL!', 0, WIDE ? 8 : 10, '#ffe14a', 1.6); },
       onDeurman(movers) {
         movers.forEach((m, i) => { if (!m) return; const p = pl[i]; if (p.state === 'dead') return; p.score = Math.max(0, p.score - 150); p.pend += 1; p.frozenT = 1.0; drawPlaque(p); say('DEURMAN!', FX[i], 10, '#ff9a8a', 1.5); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); react(p, 'scared', 1.5); });
         refreshHud();
       },
-      celebrate(w) { pl[w].pose = 'cheer'; pl[w].poseT = 99; pl[1 - w].pose = 'sad'; pl[1 - w].poseT = 99; celebrateFx(w); },
+      celebrate(w, winners = [w]) { for (const q of pl) { q.pose = winners.includes(q.i) ? 'cheer' : 'sad'; q.poseT = 99; } celebrateFx(w); },
       dispose() {},
       dbg: {
         state: () => ({ T, g: G.state, timeLeft: G.timeLeft, finished, winner: G.winner, why: G.why, stats, sdT: G.sdT, p: pl.map((p) => ({ i: p.i, state: p.state, score: p.score, lines: p.lines, pend: p.pend, combo: p.combo, pieces: p.pieces, frozenT: p.frozenT, h: L.maxHeight(p.grid), piece: p.piece ? { t: p.piece.t, r: p.piece.r, x: p.piece.x, y: p.piece.y, kind: p.piece.kind, chicken: p.piece.chicken } : null, front: p.front.length, specials: p.specials, boost: p.boost })) }),

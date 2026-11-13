@@ -1,7 +1,7 @@
 // Test: Sporthal (dichtgetimmerd -> gebouwd), GEHEIME Deurenhal (vermomd -> ontgrendelen met stickers -> betreden -> terug),
 // Feestbord-tafel (-> BoardMode -> terug), Vriendenboek (standaard + pauzemenu), nieuwe hallen in toernooi/wiel.
 // Gebruik: node tools/hallstest.mjs     Screenshots: /tmp/hallstest_*.png
-// GAMEHAL=1 PLAYERS=2|3|4 node tools/hallstest.mjs: de Impactid Gamehal (gamehal.html): lobby -> hal -> spel via kast (alles samen / teams / knock-out) -> toernooi -> winkel -> lobby (tools/gh_hall.mjs).
+// GAMEHAL=1 PLAYERS=2|3|4 node tools/hallstest.mjs: de impactID Gamehal (gamehal.html): lobby -> hal -> spel via kast (alles samen / teams / knock-out) -> toernooi -> winkel -> lobby (tools/gh_hall.mjs).
 // PLAYERS=3 node tools/hallstest.mjs: met Juul erbij (?players=3) + extra: 3 personages, keuzescherm 'Wie spelen?', winnaar-blijft over 3 duels, scorebord met 3 kolommen, ranglijst.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import { chromePath, BROWSER_ARGS } from './chrome_path.mjs';
@@ -28,7 +28,7 @@ const modeName = () => page.evaluate(() => window.__app.mode && window.__app.mod
 const hallOf = () => page.evaluate(() => window.__app.mode && window.__app.mode.hallId);
 const waitHall = (n) => page.waitForFunction((n) => window.__app.mode && window.__app.mode.constructor.name === 'ArcadeMode' && window.__app.mode.hallId === n && window.__app.mode.cabs && window.__app.mode.life, n, { timeout: 60000 });
 
-if (wantGamehal()) {   // Impactid Gamehal: eigen flow
+if (wantGamehal()) {   // impactID Gamehal: eigen flow
   const { ghHallTest } = await import('./gh_hall.mjs');
   try { await ghHallTest({ page, port, check, shot }); } catch (e) { fails++; console.log('FOUT (uitzondering)', e.message.split('\n')[0]); await shot('crash').catch(() => {}); }
   console.log(errors.length ? 'ERRORS ' + errors.slice(0, 6).join(' || ') : 'NO ERRORS', '| fouten:', fails);

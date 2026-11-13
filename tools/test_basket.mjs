@@ -1,4 +1,5 @@
 // Gebruik: node tools/test_basket.mjs [scenario...]   scenario: bots | twists | idle | timeout | events | physics | shots
+//   PLAYERS=4: 2 tegen 2 (teams [[0,1],[2,3]], pass met B ver van de mand); scenario 'teams' test passen, vangen en teamscore.
 //   TW=<twist-id> kiest een twist (anders "none"). Q=low|high kwaliteit. N=<aantal potjes> voor 'bots'.
 // Bots spelen versneld (zonder renderen) hele potjes; rapporteert winnaar, aantal finishPvp-aanroepen (moet precies 1 zijn), fouten.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
@@ -15,6 +16,7 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
+const NP = +process.env.PLAYERS === 4 ? 4 : 2;
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 let FAILS = 0; const fail = (m) => { FAILS++; console.log('FAIL: ' + m); };
@@ -26,15 +28,15 @@ async function open(twist) {
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=basket&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=basket&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${NP === 4 ? '&players=4' : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 120000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
     window.__fin = { n: 0, last: null }; const orig = mode.ctx.finishPvp; mode.ctx.finishPvp = (r) => { window.__fin.n++; window.__fin.last = r; return orig(r); };
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -43,23 +45,29 @@ async function open(twist) {
 }
 
 // cfg[i] = { skill: 0..1, style: 'play'|'idle' }
-async function installBots(page, cfg) {
+async function installBots(page, cfg0) {
+  const cfg = Array.from({ length: NP }, (_, i) => cfg0[i % cfg0.length]);
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     const clamp = (v, a, b) => Math.max(a, Math.min(b, v)); const HX = 9.6;
-    window.__cfg = cfg; window.__bs = [{ tick: 0 }, { tick: 0 }];
+    window.__cfg = cfg; window.__bs = cfg.map(() => ({ tick: 0 }));
+    const srcOf = (q) => { if (!m.swapped) return q; for (const [x, y] of (m.swapPairs || [[0, 1]])) { if (q === x) return y; if (q === y) return x; } return q; };
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
-        for (const i of [0, 1]) {
-          const v = inp.virtual[i], c = window.__cfg[i], bs = window.__bs[i], me = st.players[i], opp = st.players[1 - i], B = st.ball; v.a = false; v.b = false; v.x = 0; v.y = 0; bs.tick++;
+        for (const q of m.ids) { const v0 = inp.virtual[q]; v0.a = false; v0.b = false; v0.x = 0; v0.y = 0; }
+        for (let i = 0; i < cfg.length; i++) {
+          const v = inp.virtual[m.ids[srcOf(i)]], c = window.__cfg[i], bs = window.__bs[i], me = st.players[i], B = st.ball; bs.tick++;
+          const foes = st.players.filter((q) => q.t !== me.t), mate = st.players.find((q) => q.t === me.t && q !== me), holder = B.holder >= 0 ? st.players[B.holder] : null;
+          const opp = holder && holder.t !== me.t ? holder : foes.reduce((a, q) => (Math.abs(q.x - me.x) < Math.abs(a.x - me.x) ? q : a), foes[0]);
           if (c.style === 'idle') continue;
           const hoop = me.dir * HX, goTo = (x, tol = 0.35) => { const d = x - me.x; v.x = Math.abs(d) > tol ? Math.sign(d) : 0; };
           if (st.gstate === 'tip') { goTo(0, 1.5); continue; }
           if (st.gstate === 'scored') { continue; }
           if (me.hold) {
             if (bs.poss !== B.holder + ':' + (me.sc > 7.5 ? 1 : 0) && me.sc > 7.5) { bs.poss = B.holder + ':1'; bs.dT = Math.random() < 0.3 + 0.3 * c.skill ? 7.0 : 3.2 + Math.random() * 2; bs.dunk = Math.random() < 0.25 * c.skill && !st.ball.giant; bs.rel = 0; bs.pressed = false; bs.jumped = false; }
+            if (mate && !bs.dunk && Math.abs(hoop - me.x) > 4.5 && me.grabAge > 0.4 && Math.random() < 0.012 && !me.charging) { v.b = true; continue; }   // 2 tegen 2: soms een pass
             if (B.giant > 0 || bs.dunk) { const dx = hoop - me.x; goTo(hoop - me.dir * 2.8, 0.3); if (Math.abs(dx) < 3.6) v.b = bs.tick % 3 === 0; continue; }
             const spot = hoop - me.dir * bs.dT; const dx = spot - me.x;
             if (Math.abs(dx) > 0.5 && !me.charging) { v.x = Math.sign(dx); continue; }
@@ -76,6 +84,7 @@ async function installBots(page, cfg) {
             continue;
           }
           bs.pressed = false; bs.jumped = false; if (me.grabAge < 0.5) bs.poss = '';
+          if (B.state === 'held' && holder && holder.t === me.t) { goTo(hoop - me.dir * (4 + 2 * (me.i % 2)), 0.5); continue; }   // teamgenoot heeft de bal: laat je vrijlopen
           if (B.state === 'held') {   // tegenstander heeft de bal: verdedigen / stelen
             const guard = opp.x + opp.dir * 2.0; goTo(guard, 0.5);
             if (Math.abs(opp.x - me.x) < 2.0 && me.swingCd <= 0 && st.ref !== 'look' && st.ref !== 'warn' && Math.random() < 0.05 + 0.25 * c.skill && opp.grabAge > 0.4) v.b = true;
@@ -83,12 +92,14 @@ async function installBots(page, cfg) {
             continue;
           }
           // losse bal / bal in de lucht
+          const mine = st.players.filter((q) => q.t === me.t), closest = mine.reduce((a, q) => (Math.abs(q.x - B.x) < Math.abs(a.x - B.x) ? q : a), mine[0]);
+          if (mine.length > 1 && closest !== me && B.passTo !== me.i) { goTo(hoop - me.dir * 5, 0.8); continue; }
           const tx = B.x + B.vx * 0.15; goTo(tx, 0.3);
           const reach = Math.abs(B.x - me.x) < 1.9 && B.y < me.y + 3.3 && B.y > me.y - 0.3;
           if (reach && bs.tick % 4 < 2) v.a = true;
           if (B.y > 3.2 && Math.abs(B.x - me.x) < 1.6 && me.grounded) v.y = -1;
-          if (B.state === 'flight' && B.shooter === 1 - i && Math.abs(B.x - me.x) < 2.6 && B.t < 0.5 && c.skill > 0.5 && me.grounded) v.y = -1;
-          if (B.state === 'flight' && B.shooter === 1 - i && !me.grounded && me.swingCd <= 0 && Math.abs(B.x - me.x) < 2.6) v.b = true;
+          if (B.state === 'flight' && B.shooter >= 0 && B.shooter !== me.t && Math.abs(B.x - me.x) < 2.6 && B.t < 0.5 && c.skill > 0.5 && me.grounded) v.y = -1;
+          if (B.state === 'flight' && B.shooter >= 0 && B.shooter !== me.t && !me.grounded && me.swingCd <= 0 && Math.abs(B.x - me.x) < 2.6) v.b = true;
         }
         inp.update(); m.update(dt);
       }
@@ -105,8 +116,9 @@ for (const name of scen) {
     const list = name === 'twists' ? TWISTS.map((t) => [t, [M, M]])
       : name === 'idle' ? [['none', [{ style: 'idle' }, { style: 'idle' }]]]
         : name === 'timeout' ? [['none', [{ style: 'idle' }, M]], ['none', [M, { style: 'idle' }]]]
+          : NP === 4 ? [[process.env.TW || 'none', [A, A, Bw, Bw]], [process.env.TW || 'none', [Bw, Bw, A, A]], ...Array.from({ length: N }, () => [process.env.TW || 'none', [M, M, M, M]])]
           : [[process.env.TW || 'none', [A, Bw]], [process.env.TW || 'none', [Bw, A]], ...Array.from({ length: N }, () => [process.env.TW || 'none', [M, M]])];
-    const wins = [0, 0];
+    const wins = Array(NP).fill(0);
     for (const [tw, cfg] of list) {
       const { browser, page, errors } = await open(tw);
       await installBots(page, cfg);
@@ -123,7 +135,7 @@ for (const name of scen) {
       console.log(res.log.length > 26 ? [...res.log.slice(0, 4), '...', ...res.log.slice(-14)].join('\n') : res.log.join('\n'));
       const st = res.st;
       console.log(`end T=${st.T.toFixed(1)} score=${st.score} finished=${res.finished} finishPvp-calls=${res.fin} sd=${st.sd} stats=${JSON.stringify(st.stats)} seen=${JSON.stringify(res.seen)}`);
-      if (res.result) { console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, ' ')}`); if (res.result.winner != null) wins[res.result.winner]++; }
+      if (res.result) { console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, ' ')}`); if (res.result.winner != null) wins[NP === 4 ? (res.result.winner < 2 ? 0 : 1) : res.result.winner]++; if (NP === 4) { const w = res.result.winnerIds.slice().sort().join(); if (!(res.result.scoreArr.length === 4 && (w === '0,1' || w === '2,3') && res.result.place.slice(0, 2).slice().sort().join() === w)) fail(`${name}/${tw}: teamuitslag klopt niet ${w} ${res.result.scoreArr} ${res.result.place}`); else console.log(`OK   teamwinst ${w}, scores ${res.result.scoreArr}, place ${res.result.place}`); } }
       if (!res.finished) fail(`${name}/${tw}: niet afgelopen`);
       if (res.fin !== 1) fail(`${name}/${tw}: finishPvp ${res.fin}x aangeroepen`);
       if (res.result && res.result.winner == null) fail(`${name}/${tw}: geen winnaar`);
@@ -131,8 +143,44 @@ for (const name of scen) {
       await browser.close();
     }
     console.log(`overwinningen (${name}): Wes ${wins[0]} - Jor ${wins[1]}`);
-    if (name === 'bots' && (!wins[0] || !wins[1])) fail('bots: niet beide spelers wonnen minstens één potje');
+    if (name === 'bots' && (!wins[0] || !wins[1])) fail('bots: niet beide spelers/teams wonnen minstens één potje');
     continue;
+  }
+  if (name === 'teams') {   // PLAYERS=4: passen, vangen, onderscheppen, schotklok over een pass heen, teamscore
+    if (NP !== 4) { console.log('teams: alleen met PLAYERS=4'); continue; }
+    const { browser, page, errors } = await open('none');
+    await installBots(page, [{ style: 'idle' }]);
+    const res = await page.evaluate(() => {
+      const m = window.__app.mode, d = m.instance.dbg; const out = {}; m.paused = false; const inp = window.__app.input; const V = (i) => inp.virtual[m.ids[i]];
+      const tick = (n, stop) => { for (let k = 0; k < n && !m.finished; k++) { inp.update(); m.update(1 / 60); if (stop && stop(d.state())) return true; } return false; };
+      const press = (i, k, n = 2) => { V(i)[k] = true; tick(n); V(i)[k] = false; tick(1); };
+      tick(60 * 4, (s) => s.gstate === 'play'); d.ref('away'); d.setTime(80);
+      out.teams = d.state().players.map((p) => p.t).join('');
+      // 1. pass: Wes (slot 0, team 0, mand rechts) heeft de bal ver van de mand, Jor staat vrij
+      d.setPlayer(0, -6, 0); d.setPlayer(1, -1, 0); d.setPlayer(2, 5, 0); d.setPlayer(3, 8, 0); d.giveBall(0); tick(40);
+      const sc0 = d.state().players[0].sc; press(0, 'b', 3); tick(60 * 2, (s) => s.ball.holder === 1);
+      let s = d.state(); out.pass1 = { holder: s.ball.holder, passes: s.stats.passes, catches: s.stats.catches, sc: +s.players[1].sc.toFixed(2), sc0: +sc0.toFixed(2) };
+      // 2. pass terug (Jor -> Wes) en schotklok loopt door (niet opnieuw 8 s)
+      tick(30); const before = d.state().players[1].sc; press(1, 'b', 3); tick(60 * 2, (q) => q.ball.holder === 0); s = d.state(); out.pass2 = { holder: s.ball.holder, scAfter: +s.players[0].sc.toFixed(2), scBefore: +before.toFixed(2) };
+      // 3. onderscheppen: tegenstander (slot 2) staat in de baan van de pass en grijpt met A
+      d.setPlayer(0, -6, 0); d.setPlayer(1, 0, 0); d.setPlayer(2, -3, 0); d.setPlayer(3, 8, 0); d.giveBall(0); tick(40); press(0, 'b', 3); let inter = false; for (let k = 0; k < 40 && !inter; k++) { V(2).a = true; tick(2); V(2).a = false; tick(1); inter = d.state().ball.holder === 2; } out.intercept = inter || d.state().ball.holder === 1 ? { holder: d.state().ball.holder } : { holder: d.state().ball.holder, fail: true };
+      // 4. teamscore: Jor dunkt voor team 0 (hoop rechts); Sam (team 1) scoort links
+      d.setScore(0, 0); d.setPlayer(1, 6, 0); d.setPlayer(0, -6, 0); d.setPlayer(2, -8, 0); d.setPlayer(3, 5, 0); d.giveBall(1); tick(10); press(1, 'b', 2); tick(60 * 2, (q) => q.gstate === 'scored'); out.score1 = d.state().score.slice();
+      d.setTime(70); tick(60 * 3, (q) => q.gstate === 'play'); d.setPlayer(3, -6, 0); d.setPlayer(1, 5, 0); d.setPlayer(0, 3, 0); d.setPlayer(2, 8, 0); d.giveBall(3); tick(10); press(3, 'b', 2); tick(60 * 2, (q) => q.gstate === 'scored'); out.score2 = d.state().score.slice();
+      d.setTime(70); tick(60 * 3, (q) => q.gstate === 'play'); out.state = d.state().gstate;
+      return out;
+    });
+    console.log(JSON.stringify(res));
+    const ok = (c, msg) => { console.log(`${c ? 'OK  ' : 'FAIL'} ${msg}`); if (!c) fail(msg); };
+    ok(res.teams === '0011', `teams per slot ${res.teams}`);
+    ok(res.pass1.holder === 1 && res.pass1.passes >= 1 && res.pass1.catches >= 1, `pass vangen door teamgenoot (${JSON.stringify(res.pass1)})`);
+    ok(res.pass1.sc <= res.pass1.sc0 + 0.01, 'schotklok begint niet opnieuw na een pass');
+    ok(res.pass2.holder === 0 && res.pass2.scAfter <= res.pass2.scBefore + 0.01, `pass terug en schotklok loopt door (${JSON.stringify(res.pass2)})`);
+    ok(!res.intercept.fail, `pass-onderschepping of vangst (${JSON.stringify(res.intercept)})`);
+    ok(res.score1[0] >= 2 && res.score1[1] === 0, `dunk van Jor telt voor team 0 (${res.score1})`);
+    ok(res.score2[1] >= 2, `dunk van Sam telt voor team 1 (${res.score2})`);
+    console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS'); if (errors.length) fail('console-errors');
+    await browser.close(); continue;
   }
   if (name === 'physics') {
     // gerichte tests: perfect schot scoort altijd, slechte kracht mist, dunk, blok, steal, foute Deurman, schotklok, dubbele punten

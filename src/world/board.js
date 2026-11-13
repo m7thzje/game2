@@ -15,9 +15,11 @@ import { BoardWorld, TOKEN_S, numSprite, setSpriteText } from './board_scene.js'
 import { BoardHud, Chooser, injectCss, pids, PI, pcss, klabel, cvar, PNAMES, DARK } from './board_ui.js';
 import { splitTeams } from '../engine/party.js';
 import * as D from './board_data.js';
+import { coin } from '../gamehal/humor.js';
 
 let BOARD = null;                        // lopend potje (blijft bewaard tussen duels)
 export const boardState = () => BOARD;
+let BOARD_HALL = 0;                      // hal waar de Feestbord-tafel stond (opts.hall van goBoard); daar komt het bord weer uit. Overleeft de duels (goBoard({ result }) heeft geen hal).
 const NAMES = PNAMES;   // namen volgen S.names (Wes, Jor, Juul, Sam; in de Gamehal aanpasbaar)
 const pc = () => D.playerCount();
 const CONFETTI = [0xff4a6a, 0xffd23f, 0x3a9aff, 0x4ad86a, 0xb05aff, 0xff8a3a];
@@ -26,7 +28,9 @@ const easeIO = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
 export class BoardMode {
   static async create(app, opts = {}) { return new BoardMode(app, opts); }
   constructor(app, opts) {
-    this.app = app; this.opts = opts || {}; this.t = 0; this.alive = true; this.paused = false; this.leaving = false;
+    this.app = app; this.opts = opts || {};
+    if (this.opts.hall != null) BOARD_HALL = this.opts.hall | 0; else if (this.opts.result === undefined && !this.opts.resume) BOARD_HALL = 0;   // vers bord zonder hal = hal 0; terug uit een duel/hervat = dezelfde hal
+    this.t = 0; this.alive = true; this.paused = false; this.leaving = false;
     this.timers = []; this.pressWait = null; this.chooser = null; this.modal = null; this.wait = null; this.dice = null; this.branch = null; this.active = null;
     this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.5, 700);
     this.fx = new Particles(2200); this.scene.add(this.fx.points); this.fx.setViewportHeight(innerHeight); this.texts = new FloatTexts(this.scene);
@@ -143,7 +147,7 @@ export class BoardMode {
         : `<b>${NAMES[0]}</b> en <b>${NAMES[1]}</b> racen over het feesteiland: dobbel om de beurt, hop over de vakjes en verzamel <b>🏆 Trofeeën</b>. Na elke ronde volgt een <b>MINI-DUEL</b> uit de Speelhal!` }),
       h('div', { class: 'bd-keys' + (N === 3 ? ' k3' : N === 4 ? ' k4' : '') }, ...pids().map((i) => cvar(h('div', { html: `<b>${NAMES[i]}</b>: <kbd>${klabel(i).a}</kbd> stop de dobbelsteen (timing!) · <kbd>${klabel(i).b}</kbd> item gebruiken · <kbd>${klabel(i).move}</kbd> route kiezen` }), pcss(i)))),
       h('div', { class: 'bd-legend', html: this.legendHtml() }),
-      h('p', { class: 'small-note', html: `Winnen: de meeste 🏆 (${D.CFG.trophyPrice} munten, achterstaanders krijgen korting), dan de meeste munten, dan het lot. Beloning: heitjes voor jullie samen!${N >= 3 ? ' Wie achterstaat krijgt hulp van de Feestfee!' : ''} · <kbd>Esc</kbd> = pauze` }));
+      h('p', { class: 'small-note', html: `Winnen: de meeste 🏆 (${D.CFG.trophyPrice} munten, achterstaanders krijgen korting), dan de meeste munten, dan het lot. Beloning: ${coin()} voor jullie samen!${N >= 3 ? ' Wie achterstaat krijgt hulp van de Feestfee!' : ''} · <kbd>Esc</kbd> = pauze` }));
     const ch = new Chooser({ who: -1, options: opts, plain: true, host: card }); this.chooser = ch; this.wait = { kind: 'intro', n: opts.length };
     const el = ui.overlay(card, 'clear'); el.style.background = 'rgba(20,8,40,.35)'; el.style.alignItems = 'flex-start'; el.style.paddingTop = '2vh';
     const i = await ch.promise; this.chooser = null; this.wait = null; el.remove(); const k = keys[i];
@@ -645,15 +649,16 @@ export class BoardMode {
     if (why.startsWith('het lot')) { add(`<p style="text-align:center"><b>🎲 Helemaal gelijk! Het lot beslist...</b></p>`); await this.sleep(1.4); }
     add(`<div class="bd-win"><span>👑</span>${NAMES[win]} wint het Feestbord!</div><p style="text-align:center">Reden: ${why}. ${N >= 4 ? `🥈 ${NAMES[rank[1]]}: "Ik liet hem winnen." 🥉 ${NAMES[rank[2]]}: "Ik ook. Echt." 4️⃣ ${NAMES[rank[3]]}: "Ik deed het expres."` : N === 3 ? `🥈 ${NAMES[rank[1]]}: "Ik liet hem winnen." 🥉 ${NAMES[rank[2]]}: "Ik ook. Echt."` : `${NAMES[rank[1]]}: "Ik liet hem winnen."`}</p>`);
     this.fireworks = true; await this.sleep(1.2);
-    add(`<p class="reward" style="text-align:center;font-size:24px">🪙 +${reward} heitjes voor jullie samen! <small style="font-size:13px;font-weight:400;opacity:.75">(${base} + 10 per Trofee)</small></p>`);
+    add(`<p class="reward" style="text-align:center;font-size:24px">🪙 +${reward} ${coin(reward)} voor jullie samen! <small style="font-size:13px;font-weight:400;opacity:.75">(${base} + 10 per Trofee)</small></p>`);
     await this.sleep(0.6);
     const ch = new Chooser({ who: -1, plain: true, host: el, options: [{ label: '🎉 Nog een potje!' }, { label: '↩ Terug naar de Speelhal' }] }); this.chooser = ch; this.wait = { kind: 'end', n: 2 };
     const i = await ch.promise; this.chooser = null; this.wait = null; BOARD = null; this.leaving = true; this.finale = false;
     await ui.fade(1, 500);
-    if (i === 0) await this.app.goBoard({}); else await this.app.goArcade({});
+    if (i === 0) await this.app.goBoard({ hall: BOARD_HALL }); else await this.app.goArcade(this.hallOpts());
     await new Promise(() => {});
   }
-  async toArcade() { this.leaving = true; await ui.fade(1, 450); persist(); await this.app.goArcade({}); await new Promise(() => {}); }
+  async toArcade() { this.leaving = true; await ui.fade(1, 450); persist(); await this.app.goArcade(this.hallOpts()); await new Promise(() => {}); }
+  hallOpts() { return BOARD_HALL ? { extra: { hall: BOARD_HALL } } : {}; }   // terug naar de hal waar de tafel stond (ArcadeMode valt zelf terug op hal 0 als die niet open is)
 
   // ------------------------------------------------------------------ pauze
   async pauseMenu() {

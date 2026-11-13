@@ -48,7 +48,7 @@ function woodTex() {
 function gingham() {
   return canvasTex(128, 128, (g) => { g.fillStyle = '#fff6e6'; g.fillRect(0, 0, 128, 128); g.fillStyle = 'rgba(214,56,60,.85)'; g.fillRect(0, 0, 64, 64); g.fillRect(64, 64, 64, 64); g.fillStyle = 'rgba(214,56,60,.45)'; g.fillRect(64, 0, 64, 64); g.fillRect(0, 64, 64, 64); }, { repeat: [9, 4] });
 }
-function feltTex() {   // vilt-bodem met gekleurde kuiltjes (Wes groen, Jor blauw) en rode schatkamers
+function feltTex(tc = null) {   // vilt-bodem met gekleurde kuiltjes (Wes groen, Jor blauw; bij teams de teamkleuren) en rode schatkamers
   const PX = 64;
   return canvasTex(Math.round(BW * PX), Math.round(BD * PX), (g, w, h) => {
     g.fillStyle = '#1c0e06'; g.fillRect(0, 0, w, h);
@@ -59,7 +59,7 @@ function feltTex() {   // vilt-bodem met gekleurde kuiltjes (Wes groen, Jor blau
         const gr = g.createLinearGradient(X(p.x), Z(-2.4), X(p.x), Z(2.4)); gr.addColorStop(0, '#5a0f2a'); gr.addColorStop(0.5, '#a01e46'); gr.addColorStop(1, '#5a0f2a');
         g.fillStyle = gr; g.beginPath(); g.roundRect(X(p.x - 1.2), Z(-2.45), 2.4 * PX, 4.9 * PX, 1.05 * PX); g.fill();
       } else {
-        const c0 = i < 6 ? ['#3fd17f', '#0e5a30'] : ['#5b9bff', '#1a3f94'];
+        const c0 = tc ? [tc[i < 6 ? 0 : 1].light, tc[i < 6 ? 0 : 1].dark] : i < 6 ? ['#3fd17f', '#0e5a30'] : ['#5b9bff', '#1a3f94'];
         const gr = g.createRadialGradient(X(p.x), Z(p.z), 4, X(p.x), Z(p.z), PIT_R * PX); gr.addColorStop(0, c0[0]); gr.addColorStop(0.75, c0[1]); gr.addColorStop(1, '#050505');
         g.fillStyle = gr; g.beginPath(); g.arc(X(p.x), Z(p.z), (PIT_R + 0.05) * PX, 0, TAU); g.fill();
       }
@@ -81,7 +81,8 @@ function signTex(text) {
   });
 }
 
-export function buildWorld(ctx, L) {
+// tc (optioneel, bij 2 tegen 2): per kant de teamkleur { hex, light, dark, lite } (anders groen / blauw zoals bij 1 tegen 1)
+export function buildWorld(ctx, L, tc = null) {
   const { scene } = ctx;
   const W = { counts: [], numCache: new Map(), t: 0 };
   const rng = mulberry32(4242);
@@ -115,7 +116,7 @@ export function buildWorld(ctx, L) {
   const bgeo = new THREE.ExtrudeGeometry(sh, { depth: TOP_Y - 0.12, bevelEnabled: true, bevelThickness: 0.06, bevelSize: 0.05, bevelSegments: 1, curveSegments: 18 });
   bgeo.rotateX(-Math.PI / 2); bgeo.translate(0, 0.06, 0);
   const board = new THREE.Mesh(bgeo, wood); board.castShadow = true; board.receiveShadow = true; scene.add(board);
-  const felt = new THREE.Mesh(new THREE.PlaneGeometry(BW, BD), new THREE.MeshStandardMaterial({ map: feltTex(), roughness: 1 }));
+  const felt = new THREE.Mesh(new THREE.PlaneGeometry(BW, BD), new THREE.MeshStandardMaterial({ map: feltTex(tc), roughness: 1 }));
   felt.rotation.x = -Math.PI / 2; felt.position.y = FLOOR_Y; felt.receiveShadow = true; scene.add(felt);
   // gouden randjes + hoekknoppen
   const gold = [];
@@ -130,7 +131,7 @@ export function buildWorld(ctx, L) {
   goldMesh.receiveShadow = true; scene.add(goldMesh);
 
   // ---------------- tellers (sprites met getal) ----------------
-  W.numTex = (n, i) => { const css = (i === 6 || i === 13) ? '#ffe14a' : i < 6 ? '#8dffb5' : '#a9cbff'; const k = n + '|' + css; let t = W.numCache.get(k); if (!t) { t = numTex(n, css); W.numCache.set(k, t); } return t; };
+  W.numTex = (n, i) => { const css = (i === 6 || i === 13) ? '#ffe14a' : i < 6 ? (tc ? tc[0].lite : '#8dffb5') : (tc ? tc[1].lite : '#a9cbff'); const k = n + '|' + css; let t = W.numCache.get(k); if (!t) { t = numTex(n, css); W.numCache.set(k, t); } return t; };
   for (let i = 0; i < 14; i++) {
     const p = pitPos(i); const store = i === 6 || i === 13;
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: W.numTex(4, i), transparent: true, depthTest: false }));
@@ -155,7 +156,7 @@ export function buildWorld(ctx, L) {
 
   // ---------------- handschoenen, cursors ----------------
   W.gloves = [0, 1].map((i) => {
-    const col = i ? 0x4a8cff : 0x35c46f; const it = [[xf(new THREE.SphereGeometry(0.42, 10, 8), 0, 0, 0, 0, 0, 0, [1, 0.85, 1]), 0xffffff]];
+    const col = tc ? tc[i].hex : i ? 0x4a8cff : 0x35c46f; const it = [[xf(new THREE.SphereGeometry(0.42, 10, 8), 0, 0, 0, 0, 0, 0, [1, 0.85, 1]), 0xffffff]];
     for (let k = 0; k < 4; k++) it.push([xf(new THREE.CapsuleGeometry(0.1, 0.34, 3, 6), (k - 1.5) * 0.19, -0.42, 0.04), 0xffffff]);
     it.push([xf(new THREE.CapsuleGeometry(0.1, 0.26, 3, 6), 0.4, -0.12, 0.1, 0, 0, -0.9), 0xffffff]);
     it.push([xf(new THREE.CylinderGeometry(0.4, 0.44, 0.3, 10), 0, 0.42, 0), col]);
@@ -163,14 +164,14 @@ export function buildWorld(ctx, L) {
     m.castShadow = true; const g = new THREE.Group(); g.add(m); g.visible = false; scene.add(g); return g;
   });
   W.cursor = [0, 1].map((i) => {
-    const col = i ? 0x4a8cff : 0x35e27a; const g = new THREE.Group();
+    const col = tc ? tc[i].hex : i ? 0x4a8cff : 0x35e27a; const g = new THREE.Group();
     const ring = new THREE.Mesh(new THREE.RingGeometry(PIT_R + 0.02, PIT_R + 0.28, 32), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = TOP_Y + 0.03; g.add(ring);
     const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.7, 4), new THREE.MeshStandardMaterial({ color: col, emissive: col, emissiveIntensity: 0.7, flatShading: true })); arrow.rotation.x = Math.PI; arrow.position.y = 2.7; g.add(arrow);
     g.userData = { ring, arrow }; g.visible = false; scene.add(g); return g;
   });
   const mk = (color, r0, r1) => { const m = new THREE.Mesh(new THREE.RingGeometry(r0, r1, 28), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.visible = false; scene.add(m); return m; };
   W.landRing = mk(0xffe14a, 0.45, 0.62); W.thiefRing = mk(0xff4a4a, PIT_R + 0.02, PIT_R + 0.14);
-  W.bars = [0, 1].map((i) => { const m = new THREE.Mesh(new THREE.BoxGeometry(1, 0.2, 0.5), new THREE.MeshBasicMaterial({ color: i ? 0x4a8cff : 0x35e27a })); m.position.set(0, 0.1, (i ? -1 : 1) * (BD / 2 + 0.6)); m.visible = false; scene.add(m); return m; });
+  W.bars = [0, 1].map((i) => { const m = new THREE.Mesh(new THREE.BoxGeometry(1, 0.2, 0.5), new THREE.MeshBasicMaterial({ color: tc ? tc[i].hex : i ? 0x4a8cff : 0x35e27a })); m.position.set(0, 0.1, (i ? -1 : 1) * (BD / 2 + 0.6)); m.visible = false; scene.add(m); return m; });
 
   // ---------------- krukjes: krukken/stoelen/kraam-details ----------------
   // krukken voor de broers (x = -12.6 / +12.6)

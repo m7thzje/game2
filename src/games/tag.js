@@ -67,7 +67,7 @@ export default {
     const colorsHex = players.map((p) => HEX_ID[p.id]), colorsCss = players.map((p) => CSS_ID[p.id]);
     const lite = (i) => LITE_ID[players[i].id], liteHex = (i) => LITEHEX_ID[players[i].id];
     // startplekken: 2 spelers links/rechts; 3 spelers een (bijna gelijkzijdige) driehoek
-    const STARTS = NP === 4 ? [[-9, -5.5], [9, -5.5], [-9, 5.5], [9, 5.5]] : NP === 2 ? [[-START_X, 0], [START_X, 0]] : [[-8, 6], [8, 6], [0, -7]];   // 4: de vier hoeken, slot 0/1 achter, 2/3 voor (zoals de HUD-vakken)
+    const STARTS = NP === 4 ? [[-9, -4.5], [9, -4.5], [-9, 5.1], [9, 5.1]] : NP === 2 ? [[-START_X, 0], [START_X, 0]] : [[-8, 6], [8, 6], [0, -7]];   // 4: de vier hoeken, slot 0/1 achter, 2/3 voor (zoals de HUD-vakken)
     const world = buildArena(ctx, colorsCss, colorsHex, STARTS);
 
     // ---------------- spelers ----------------
@@ -160,7 +160,7 @@ export default {
     // ---------------- ronde-flow ----------------
     function placeAtStart(p) { p.x = STARTS[p.i][0]; p.z = STARTS[p.i][1]; p.y = 0; p.vx = p.vz = p.vy = 0; { const l = Math.hypot(p.x, p.z) || 1; p.fx = -p.x / l; p.fz = NP === 2 ? 0 : -p.z / l; } p.dive = p.slide = p.stun = p.slip = p.fly = p.spin = 0; p.safe = 0; p.stam = 1; p.exh = false; p.diveCd = 0; p.holder.rotation.set(0, 0, 0); p.holder.visible = true; p.c.faceDir(p.fx, p.fz); p.c.pose = 'idle'; }
     function startRound(first) {
-      R.count++; R.state = 'ready'; R.t = 0; R.carry = -1; R.fuse0 = R.fuse = FUSE[Math.min(R.count - 1, FUSE.length - 1)] * (R.sd ? 0.65 : 1); R.tickT = 0.5; R.giftT = 4;
+      R.count++; R.state = 'ready'; R.t = 0; R.carry = -1; R.fuse0 = R.fuse = FUSE[Math.min(R.count - 1, FUSE.length - 1)] * (R.sd ? 0.65 : 1) * (NP === 4 ? 0.7 : NP === 3 ? 0.85 : 1); R.tickT = 0.5; R.giftT = 4;   // meer spelers, één bom: kortere lont (zie de factor bij NP), zodat niemand lang toekijkt
       for (const p of pl) { placeAtStart(p); p.hasBomb = false; p.speedT = p.shield = 0; if (p.out) { p.holder.visible = false; p.x = 0; p.z = -AZ - 6; } }
       for (const pe of peels) { pe.on = false; pe.m.visible = false; }
       for (const g of gifts) { g.on = false; g.g.visible = false; }

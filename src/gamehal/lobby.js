@@ -15,10 +15,13 @@ import { cabUpright } from '../world/arcade_cabs.js';
 import { arc } from '../world/arcade_zones.js';
 import { floatLabel } from '../world/build.js';
 import { openOnline } from '../net/online_ui.js';
-import { playerCount, setName, DEF_NAMES, MAX_NAME } from './common.js';
+import { rotateTips, coin, howToExtra } from './humor.js';
+import { playerCount, setName, DEF_NAMES, MAX_NAME, II, FONT, LOGO_URL, brandTex, drawLogo, rrect } from './common.js';
 
 const KEYS = BASE_KEY_LABELS;
 const GEL = ['Aan', 'Zacht', 'Uit'];
+const SHARP = ['scherp', 'normaal', 'zacht'], SHARP_TXT = { scherp: 'Scherp', normaal: 'Normaal', zacht: 'Zacht' };
+const CAB_SCR = [[II.sky, II.navy], [II.sky5, II.navy2], [II.proj5, '#4a0a2a'], [II.fund5, '#5a1500'], [II.field5, '#003a12'], [II.sky3, II.blue]];   // schermen van de kasten: merk- en productkleuren
 const geluidIdx = () => (S.settings.music <= 0 && S.settings.sfx <= 0 ? 2 : S.settings.music <= 0.25 ? 1 : 0);
 
 export class GamehalLobby {
@@ -27,7 +30,7 @@ export class GamehalLobby {
     this.scene = new THREE.Scene(); this.camera = new THREE.PerspectiveCamera(46, innerWidth / innerHeight, 0.1, 400);
     this.fx = new Particles(900, { additive: true }); this.fx.setViewportHeight(innerHeight); this.scene.add(this.fx.points);
     const L = setupLights(this.scene, 'night', { shadows: false, fogNear: 40, fogFar: 150 }); L.sun.intensity = 0.9; L.hemi.intensity = 1.35;
-    this.scene.background = new THREE.Color(0x0a0620); this.scene.fog.color.set(0x0a0620);
+    this.scene.background = new THREE.Color(0x03152e); this.scene.fog.color.set(0x03152e);
     this.buildRoom();
     this.bros = []; this.syncPlayers();
     this.camera.position.set(0, 6.2, 21); this.camera.lookAt(0, 4.2, 0);
@@ -38,48 +41,60 @@ export class GamehalLobby {
   buildRoom() {
     const sc = this.scene, D = new Deco();
     // spiegelende neonvloer
-    const gt = canvasTex(256, 256, (g, w, hh) => { g.fillStyle = '#0a1230'; g.fillRect(0, 0, w, hh); g.strokeStyle = '#00e5ff'; g.lineWidth = 3; g.strokeRect(1, 1, w - 2, hh - 2); g.strokeStyle = 'rgba(255,43,214,.6)'; g.lineWidth = 2; g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, hh); g.moveTo(0, hh / 2); g.lineTo(w, hh / 2); g.stroke(); g.fillStyle = 'rgba(0,229,255,.13)'; g.fillRect(0, 0, w / 2, hh / 2); g.fillRect(w / 2, hh / 2, w / 2, hh / 2); });
+    const gt = canvasTex(256, 256, (g, w, hh) => { g.fillStyle = '#03152e'; g.fillRect(0, 0, w, hh); g.strokeStyle = II.sky5; g.lineWidth = 3; g.strokeRect(1, 1, w - 2, hh - 2); g.strokeStyle = 'rgba(153,204,239,.5)'; g.lineWidth = 2; g.beginPath(); g.moveTo(w / 2, 0); g.lineTo(w / 2, hh); g.moveTo(0, hh / 2); g.lineTo(w, hh / 2); g.stroke(); g.fillStyle = 'rgba(0,127,216,.16)'; g.fillRect(0, 0, w / 2, hh / 2); g.fillRect(w / 2, hh / 2, w / 2, hh / 2); });
     gt.wrapS = gt.wrapT = THREE.RepeatWrapping; gt.repeat.set(12, 8);
-    sc.add(mesh(new THREE.PlaneGeometry(90, 60), new THREE.MeshStandardMaterial({ map: gt, roughness: 0.3, metalness: 0.4, emissive: 0x0a2a4a, emissiveMap: gt, emissiveIntensity: 1.25 }), { cast: false, pos: [0, 0, -8], rot: [-Math.PI / 2, 0, 0] }));
+    sc.add(mesh(new THREE.PlaneGeometry(90, 60), new THREE.MeshStandardMaterial({ map: gt, roughness: 0.3, metalness: 0.4, emissive: 0x0a3a6a, emissiveMap: gt, emissiveIntensity: 1.25 }), { cast: false, pos: [0, 0, -8], rot: [-Math.PI / 2, 0, 0] }));
     // achterwand met groot neonbord
-    sc.add(mesh(new THREE.PlaneGeometry(90, 26), new THREE.MeshStandardMaterial({ color: 0x1a1240, roughness: 0.9, emissive: 0x0c0830, emissiveIntensity: 1 }), { cast: false, pos: [0, 13, -20] }));
-    const sg = canvasTex(1024, 320, (g, w, hh) => {
-      g.fillStyle = '#07041a'; g.fillRect(0, 0, w, hh); g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.font = 'bold 76px Fredoka, Arial Black, sans-serif'; g.shadowColor = '#00e5ff'; g.shadowBlur = 26; g.fillStyle = '#c8fbff'; g.fillText('I M P A C T I D', w / 2, 70);
-      g.font = 'bold 190px Fredoka, Arial Black, sans-serif'; g.shadowColor = '#ff2bd6'; g.shadowBlur = 40; g.fillStyle = '#ffd6f6'; g.fillText('GAMEHAL', w / 2, 205, w - 60);
-      g.shadowBlur = 0; g.strokeStyle = '#ffe14a'; g.lineWidth = 8; g.strokeRect(8, 8, w - 16, hh - 16);
+    sc.add(mesh(new THREE.PlaneGeometry(90, 26), new THREE.MeshStandardMaterial({ color: 0x0a2a5a, roughness: 0.9, emissive: 0x04163a, emissiveIntensity: 1 }), { cast: false, pos: [0, 13, -20] }));
+    // het impactID-bord: logo op wit (het logo staat nooit op donker), GAMEHAL ernaast in Plus Jakarta Sans ExtraBold, zachte blauwe gloed erachter
+    const sg = brandTex(2048, 640, (g, w, hh, logo) => {
+      g.fillStyle = II.navy3; g.fillRect(0, 0, w, hh);
+      g.fillStyle = '#fff'; rrect(g, 36, 36, w - 72, hh - 72, 72); g.fill();
+      g.strokeStyle = II.sky; g.lineWidth = 12; rrect(g, 36, 36, w - 72, hh - 72, 72); g.stroke();
+      drawLogo(g, logo, 96, 70, 900, 500);
+      g.fillStyle = II.line; g.fillRect(1040, 150, 6, hh - 300);
+      g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+      let fs = 200; g.font = `800 ${fs}px ${FONT}`; const mw = g.measureText('GAMEHAL').width; if (mw > 840) { fs = Math.floor(fs * 840 / mw); g.font = `800 ${fs}px ${FONT}`; }
+      g.fillStyle = II.navy; g.fillText('GAMEHAL', 1540, 360);
+      g.fillStyle = II.sky; g.fillRect(1540 - 300, 392, 600, 12);
+      g.font = `700 50px ${FONT}`; g.fillStyle = II.blue; if ('letterSpacing' in g) g.letterSpacing = '4px'; g.fillText('2 TOT 4 SPELERS', 1540, 484); if ('letterSpacing' in g) g.letterSpacing = '0px';
     });
-    this.sign = mesh(new THREE.PlaneGeometry(21, 6.56), new THREE.MeshBasicMaterial({ map: sg }), { cast: false, receive: false, pos: [0, 15.5, -19.6] }); sc.add(this.sign);
-    for (const sx of [-1, 1]) D.box(0.3, 7, 0.3, sx * 11.2, 15.5, -19.5, 0xffe14a, { kind: 'p1' });
-    D.box(22.6, 0.3, 0.3, 0, 19.1, -19.5, 0xffe14a, { kind: 'p1' }); D.box(22.6, 0.3, 0.3, 0, 11.9, -19.5, 0xffe14a, { kind: 'p1' });
+    sg.anisotropy = 8;
+    this.sign = mesh(new THREE.PlaneGeometry(21, 6.56), new THREE.MeshBasicMaterial({ map: sg, toneMapped: false }), { cast: false, receive: false, pos: [0, 15.5, -19.6] }); sc.add(this.sign);
+    const glowT = canvasTex(256, 128, (g, w, hh) => { const gr = g.createRadialGradient(w / 2, hh / 2, 6, w / 2, hh / 2, w / 2); gr.addColorStop(0, 'rgba(0,127,216,.75)'); gr.addColorStop(0.55, 'rgba(0,127,216,.28)'); gr.addColorStop(1, 'rgba(0,127,216,0)'); g.fillStyle = gr; g.fillRect(0, 0, w, hh); });
+    sc.add(mesh(new THREE.PlaneGeometry(40, 17), new THREE.MeshBasicMaterial({ map: glowT, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }), { cast: false, receive: false, pos: [0, 15.5, -19.8] }));
+    for (const sx of [-1, 1]) D.box(0.3, 7, 0.3, sx * 11.2, 15.5, -19.5, 0x99ccef, { kind: 'p1' });
+    D.box(22.6, 0.3, 0.3, 0, 19.1, -19.5, 0x99ccef, { kind: 'p1' }); D.box(22.6, 0.3, 0.3, 0, 11.9, -19.5, 0x99ccef, { kind: 'p1' });
     // neonbuizen langs de muur
-    for (const [y, c, k] of [[2.4, 0x00e5ff, 'p0'], [9.4, 0xff2bd6, 'p2']]) D.box(88, 0.25, 0.25, 0, y, -19.6, c, { kind: k });
+    for (const [y, c, k] of [[2.4, 0x3399e0, 'p0'], [9.4, 0x99ccef, 'p2']]) D.box(88, 0.25, 0.25, 0, y, -19.6, c, { kind: k });
     // arcadekasten: boog achter de spelers, schermen met spel-icoontjes
-    const trims = [0xff5ad8, 0x5ad8ff, 0xffe14a, 0x7bff7b, 0xb05aff, 0xff8a1c];
+    const trims = [0x3399e0, 0x99ccef, 0xd63576, 0x33a755, 0x007fd8, 0xff6133];
     const spots = [...arc(11, 17, 168, -90).map((s) => ({ ...s, z: s.z - 3 })), ...arc(8, 25, 150, -90).map((s) => ({ ...s, z: s.z - 4 }))];
     const ids = Object.keys(this.app.games).filter((i) => this.app.games[i] && this.app.games[i].icon);
     this.cabScr = [];
     spots.forEach((c, k) => {
-      let spec; D.at(c.x, 0, c.z, c.yaw, () => { spec = cabUpright(D, trims[k % 6], [0x2a1a46, 0x1d2a52, 0x3a1a3a, 0x1a3a3a][k % 4]); });
+      let spec; D.at(c.x, 0, c.z, c.yaw, () => { spec = cabUpright(D, trims[k % 6], [0x0a2a5a, 0x00244b, 0x143a6e, 0x0a3a4a][k % 4]); });
       const g = new THREE.Group(); g.position.set(c.x, 0, c.z); g.rotation.y = c.yaw; sc.add(g);
-      const S2 = spec.scr, def = this.app.games[ids[k % Math.max(1, ids.length)]] || {}; const hue = (k * 53) % 360;
-      const tx = canvasTex(256, 192, (gg, w, hh) => { const gr = gg.createLinearGradient(0, 0, w, hh); gr.addColorStop(0, `hsl(${hue},85%,50%)`); gr.addColorStop(1, `hsl(${(hue + 70) % 360},90%,24%)`); gg.fillStyle = gr; gg.fillRect(0, 0, w, hh); gg.fillStyle = 'rgba(255,255,255,.1)'; for (let y = 0; y < hh; y += 6) gg.fillRect(0, y, w, 2); gg.font = '96px serif'; gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillText(def.icon || '🎮', w / 2, hh / 2 + 4); });
+      const S2 = spec.scr, def = this.app.games[ids[k % Math.max(1, ids.length)]] || {}; const [c0, c1] = CAB_SCR[k % CAB_SCR.length];
+      const tx = canvasTex(256, 192, (gg, w, hh) => { const gr = gg.createLinearGradient(0, 0, w, hh); gr.addColorStop(0, c0); gr.addColorStop(1, c1); gg.fillStyle = gr; gg.fillRect(0, 0, w, hh); gg.fillStyle = 'rgba(255,255,255,.1)'; for (let y = 0; y < hh; y += 6) gg.fillRect(0, y, w, 2); gg.font = '96px serif'; gg.textAlign = 'center'; gg.textBaseline = 'middle'; gg.fillText(def.icon || '🎮', w / 2, hh / 2 + 4); });
       const scr = new THREE.Mesh(new THREE.PlaneGeometry(S2.w, S2.h), new THREE.MeshBasicMaterial({ map: tx })); scr.position.set(S2.x, S2.y, S2.z); scr.rotation.x = S2.rx; g.add(scr); this.cabScr.push(scr);
     });
     // podium voor de spelers (gloeiende ringen)
-    D.cyl(11, 11.4, 0.5, 40, 0, 0.25, 3, 0x1a1240); D.tor(11.2, 0.16, 0, 0.55, 3, 0x00e5ff, { kind: 'p0', rx: Math.PI / 2 }, 48); D.tor(8.6, 0.12, 0, 0.55, 3, 0xff2bd6, { kind: 'p1', rx: Math.PI / 2 }, 40);
-    for (let i = 0; i < 28; i++) { const a = i / 28 * TAU; D.sph(0.2, Math.cos(a) * 11.2, 0.7, 3 + Math.sin(a) * 11.2, [0xff2bd6, 0x00e5ff, 0xffe14a][i % 3], { kind: 'p' + (i % 3) }, 6); }
+    D.cyl(11, 11.4, 0.5, 40, 0, 0.25, 3, 0x0a2a5a); D.tor(11.2, 0.16, 0, 0.55, 3, 0x3399e0, { kind: 'p0', rx: Math.PI / 2 }, 48); D.tor(8.6, 0.12, 0, 0.55, 3, 0x99ccef, { kind: 'p1', rx: Math.PI / 2 }, 40);
+    for (let i = 0; i < 28; i++) { const a = i / 28 * TAU; D.sph(0.2, Math.cos(a) * 11.2, 0.7, 3 + Math.sin(a) * 11.2, [0x007fd8, 0x99ccef, 0xffffff][i % 3], { kind: 'p' + (i % 3) }, 6); }
     // truss met lichtbundels
     D.box(40, 0.4, 0.4, 0, 17.6, -2, 0x555566, { kind: 'metal' }); D.box(40, 0.4, 0.4, 0, 16.8, -2, 0x555566, { kind: 'metal' });
     for (const sx of [-1, 1]) D.cyl(0.2, 0.25, 17.8, 6, sx * 20, 8.9, -2, 0x555566, { kind: 'metal' });
-    this.beams = []; [0xff2bd6, 0x00e5ff, 0x7bff00, 0xffe14a, 0xb05aff, 0xff2bd6, 0x00e5ff].forEach((c, i) => {
+    this.beams = []; [0x007fd8, 0x99ccef, 0xffffff, 0x3399e0, 0xd63576, 0x007fd8, 0x99ccef].forEach((c, i) => {
       const bx = -15 + i * 5; D.cyl(0.4, 0.3, 0.55, 8, bx, 16.4, -2, 0x222233); D.sph(0.2, bx, 16.1, -2, c, { kind: 'glow' }, 6);
       const gr = new THREE.Group(); gr.position.set(bx, 16.2, -2); const cone = new THREE.Mesh(new THREE.ConeGeometry(2.4, 16, 12, 1, true), new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: 0.11, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide })); cone.position.y = -8; gr.add(cone); sc.add(gr); this.beams.push({ gr, ph: i * 1.1 });
     });
     this.disco = new THREE.Mesh(new THREE.IcosahedronGeometry(1.1, 1), new THREE.MeshStandardMaterial({ color: 0xdddddd, metalness: 0.95, roughness: 0.1, flatShading: true, emissive: 0x555577, emissiveIntensity: 0.7 })); this.disco.position.set(0, 14.5, 0); sc.add(this.disco);
     sc.add(mesh(new THREE.CylinderGeometry(0.04, 0.04, 6, 4), new THREE.MeshBasicMaterial({ color: 0x999999 }), { cast: false, pos: [0, 17.5, 0] }));
     D.build(sc, { shadow: false });
-    this.lights = [0xff2bd6, 0x00e5ff, 0xffe14a].map((c) => { const l = new THREE.PointLight(c, S.settings.quality === 'low' ? 0 : 110, 38, 1.6); l.position.set(0, 9, 4); sc.add(l); return l; });
+    this.lights = [0x3399e0, 0x99ccef, 0xd63576].map((c) => { const l = new THREE.PointLight(c, S.settings.quality === 'low' ? 0 : 110, 38, 1.6); l.position.set(0, 9, 4); sc.add(l); return l; });
+    // ripples: kringen die vanaf het podium uitdijen en vervagen (het beeldmerk van impactID)
+    this.ripples = [0, 1, 2].map((k) => { const m = mesh(new THREE.RingGeometry(0.97, 1, 64), new THREE.MeshBasicMaterial({ color: 0x99ccef, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }), { cast: false, receive: false, pos: [0, 0.6, 3], rot: [-Math.PI / 2, 0, 0] }); sc.add(m); return { m, k }; });
   }
   // de poppetjes van de actieve spelers
   syncPlayers() {
@@ -105,7 +120,7 @@ export class GamehalLobby {
   enter() {
     S.settings.unlockAll = true; ui.hudEl.innerHTML = ''; this.build(); audio.music('menu'); ui.fade(0, 700);
   }
-  exit() { ui.activeMenus = []; ui.clearScreens(); try { this.fx.dispose(); } catch (e) { /* al weg */ } }
+  exit() { this.stopJoke && this.stopJoke(); ui.activeMenus = []; ui.clearScreens(); try { this.fx.dispose(); } catch (e) { /* al weg */ } }
   setPlayers(n) { S.settings.players = Math.max(2, Math.min(4, n)); persist(); this.syncPlayers(); this.renderRows(); this.menu && this.menu.render(); this.tipEl && this.updateTip(); audio.sfx('click'); }
   build() {
     ui.clearScreens(); ui.activeMenus = [];
@@ -115,6 +130,7 @@ export class GamehalLobby {
       { label: '🌐 Online spelen', onSelect: () => { this.hide(); openOnline(this.app, () => { this.syncPlayers(); this.renderRows(); this.build(); this.show(); }); } },
       { label: () => `🔊 Geluid: ${GEL[geluidIdx()]}`, cycle: true, onSelect: (d) => this.setSound(d) },
       { label: () => `🖥️ Kwaliteit: ${S.settings.quality === 'low' ? 'Laag' : 'Hoog'}`, cycle: true, onSelect: () => { S.settings.quality = S.settings.quality === 'low' ? 'high' : 'low'; persist(); } },
+      { label: () => `🔎 Scherpte: ${SHARP_TXT[this.sharp()]}`, cycle: true, onSelect: (d) => this.setSharp(d) },
       { label: '❓ Hoe werkt het?', onSelect: () => { this.hide(); this.howTo(() => this.show()); } },
     ];
     this.menu = new Menu(items);
@@ -122,15 +138,19 @@ export class GamehalLobby {
     this.rowsEl = h('div', { class: 'gh-players' });
     this.tipEl = h('div', { class: 'gh-tip' });
     this.wrap = h('div', { class: 'gh-lobby' },
-      h('div', { class: 'gh-title' }, h('span', { class: 'a' }, 'Impactid'), h('span', { class: 'b' }, 'Gamehal')),
-      h('div', { class: 'gh-sub' }, 'Duels, teams en knock-outs voor 2 tot 4 spelers'),
+      h('div', { class: 'gh-title' }, h('img', { class: 'gh-logo', src: LOGO_URL, alt: 'impactID, contribute to a fair world', draggable: 'false' }), h('span', { class: 'a' }, 'impactID '), h('span', { class: 'b' }, 'Gamehal')),
+      h('div', { class: 'gh-sub' }, 'Even weg van de spreadsheets: duels, teams en knock-outs voor 2 tot 4 collega\'s.'),
       this.countEl, this.rowsEl, h('div', { class: 'gh-menu' }, this.menu.el), this.tipEl,
-      h('div', { class: 'gh-foot', html: 'Klik op een naam om hem aan te passen · <kbd>M</kbd> geluid · <kbd>Esc</kbd> pauze' }));
+      h('div', { class: 'gh-foot', html: 'Klik op een naam om hem aan te passen · <kbd>M</kbd> geluid · <kbd>Esc</kbd> pauze' }),
+      this.jokeEl = h('div', { class: 'gh-joke' }));   // wisselende kantoorgrap onderin
     ui.screens.append(this.wrap); ui.activeMenus.push(this.menu);
-    this.renderRows(); this.updateTip();
+    this.renderRows(); this.updateTip(); this.stopJoke && this.stopJoke(); this.stopJoke = rotateTips(this.jokeEl);
   }
   hide() { this.wrap.style.display = 'none'; }
   show() { this.wrap.style.display = ''; }
+  // scherpte: scherp = tot 2x pixels, normaal = 1,5x, zacht = 1x (S.settings.sharp, bewaard; de auto-regeling in game.js blijft erboven)
+  sharp() { return this.app.sharpMode ? this.app.sharpMode() : 'scherp'; }
+  setSharp(d) { const i = SHARP.indexOf(this.sharp()); const m = SHARP[(i + (d || 1) + SHARP.length) % SHARP.length]; if (this.app.setSharp) this.app.setSharp(m); else { S.settings.sharp = m; persist(); } audio.sfx('click'); }
   setSound(d) {
     const i = (geluidIdx() + (d || 1) + 3) % 3; const [m, s] = i === 0 ? [0.5, 0.8] : i === 1 ? [0.2, 0.4] : [0, 0];
     S.settings.music = m; S.settings.sfx = s; audio.musicVol = m; audio.sfxVol = s; if (audio.musG) audio.musG.gain.value = m * 0.5; if (audio.sfxG) audio.sfxG.gain.value = s; persist(); audio.sfx('coin');
@@ -173,7 +193,7 @@ export class GamehalLobby {
       h('p', { html: `Loop met je poppetje naar een <b>kast</b> en druk op je actieknop. Een spel met <b>${n} spelers</b> speelt iedereen tegelijk. Is het een duel voor twee? Dan speelt ${n === 2 ? 'het gewoon 1 tegen 1' : n === 3 ? 'er steeds een paar (<b>winnaar blijft</b>, of kies zelf)' : 'een <b>knock-out</b>: twee halve finales en een finale'}.` }),
       h('div', { class: 'ctrl' }, ...ids.map((i) => h('div', { style: { '--c': BASE_CSS[i] } }, h('h4', {}, `${S.names[i]} (speler ${i + 1})`), h('ul', {}, h('li', { html: `<kbd>${KEYS[i].move}</kbd> lopen` }), h('li', { html: `<kbd>${KEYS[i].a}</kbd> praten / springen / actie` }), h('li', { html: `<kbd>${KEYS[i].b}</kbd> tweede actie` }))))),
       h('p', { html: '👥 Op elke kast staat een label: <span class="gh-badge">👥 2-4</span> iedereen mee · <span class="gh-badge">👥 4</span> alleen met vier · <span class="gh-badge ko">🏆 knock-out</span> duel, met 4 spelers via halve finales + finale.' }),
-      h('p', { html: '🌀 Elk spel krijgt een <b>twist</b>. 🎡 Het <b>Wiel van Gekte</b> kiest een spel, een <b>toernooi</b> mixt er meerdere, en elke dag is er een <b>Uitdaging</b>. Het <b>Feestbord</b> is een bordspel met duels erin. 👒 In de hoedenwinkel koop je hoedjes met heitjes.' }),
+      h('p', { html: '🌀 Elk spel krijgt een <b>twist</b>. 🎡 Het <b>Wiel van Gekte</b> kiest een spel, een <b>toernooi</b> mixt er meerdere, en elke dag is er een <b>Uitdaging</b>. Het <b>Feestbord</b> is een bordspel met duels erin. 👒 In de hoedenwinkel koop je hoedjes met ' + coin() + '. ' + howToExtra }),
       h('p', { class: 'small-note' }, 'Druk op een actieknop of klik om te sluiten'));
     const el = ui.overlay(card); let t = 0.3, closed = false;
     const close = () => { if (closed) return; closed = true; ui.activeMenus = ui.activeMenus.filter((m) => m !== drv); el.remove(); onClose && onClose(); };
@@ -204,9 +224,9 @@ export class GamehalLobby {
     this.disco.rotation.y += dt * 0.9;
     this.beams.forEach((b, i) => { b.gr.rotation.z = Math.sin(t * 0.7 + b.ph) * 0.5; b.gr.rotation.x = Math.cos(t * 0.5 + b.ph * 1.3) * 0.35; });
     this.lights.forEach((l, i) => { const a = t * 0.6 + i * TAU / 3; l.position.set(Math.cos(a) * 14, 9, 2 + Math.sin(a) * 7); });
-    this.flickT -= dt; if (this.flickT <= 0) { this.flickT = rand(5, 11); this.sign.material.color.setScalar(0.5); setTimeout(() => this.sign.material.color.setScalar(1), 90); setTimeout(() => this.sign.material.color.setScalar(0.65), 180); setTimeout(() => this.sign.material.color.setScalar(1), 260); }
+    this.ripples.forEach((r) => { const u = ((t / 7 + r.k / 3) % 1); r.m.scale.setScalar(6 + u * 26); r.m.scale.z = r.m.scale.x; r.m.material.opacity = 0.55 * Math.sin(Math.PI * u) * (1 - u); });   // ripples; het logo-bord flikkert bewust niet
     this.cabScr.forEach((s, i) => { s.material.color.setScalar(0.78 + 0.22 * Math.sin(t * 2 + i)); });
-    this.fx.emit(rand(-25, 25), rand(0.5, 12), rand(-15, 12), rand(-.3, .3), rand(0, .4), rand(-.3, .3), { life: 3.5, size: 0.17, color: pick([0xff2bd6, 0x00e5ff, 0xffe14a]), gravity: 0, shrink: false });
+    this.fx.emit(rand(-25, 25), rand(0.5, 12), rand(-15, 12), rand(-.3, .3), rand(0, .4), rand(-.3, .3), { life: 3.5, size: 0.17, color: pick([0x3399e0, 0x99ccef, 0xffffff]), gravity: 0, shrink: false });
     this.fx.update(dt);
     this.camera.position.x = Math.sin(t * 0.17) * 3.2; this.camera.position.y = 6.2 + Math.sin(t * 0.23) * 0.5; this.camera.lookAt(Math.sin(t * 0.11) * 1.4, 4.4, 0);
   }

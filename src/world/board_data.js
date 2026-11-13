@@ -1,6 +1,7 @@
 // FEESTBORD: pure data en spelregels (geen THREE). Bord-graaf, vakjes, items, kaarten, Deurman-gebeurtenissen.
 import { S } from '../save.js';
 import { supports } from '../engine/party.js';
+import { applyBoard } from '../gamehal/humor.js';
 
 export const TILES = {
   blue:   { icon: '🔵', name: 'Blauw vakje', color: 0x3a82f0, desc: '+3 munten' },
@@ -203,3 +204,5 @@ export const PAIRS4 = [[0, 1], [2, 3], [0, 2], [1, 3], [0, 3], [1, 2]];
 export const roundPair4 = (round) => PAIRS4[(Math.max(1, round) - 1) % PAIRS4.length].slice();
 // namenlijst: "A", "A en B", "A, B en C"
 export const joinList = (arr) => (arr.length < 2 ? arr.join('') : `${arr.slice(0, -1).join(', ')} en ${arr[arr.length - 1]}`);
+
+applyBoard({ CARDS, DEUR_EVENTS, WIN_LINES, PARTY_LINES, TEAM_LINES });   // impactID Gamehal: kantoortoon voor kaarten en regels (alleen in de Gamehal; aantallen munten blijven)

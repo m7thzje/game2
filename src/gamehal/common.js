@@ -1,6 +1,7 @@
 // Impactid Gamehal: gedeelde hulpjes (spelers, namen, welk spel past bij hoeveel spelers). Contract: docs/PLAYERS4.md.
 import { S, persist } from '../save.js';
 import * as party from '../engine/party.js';
+import { canvasTex } from '../engine/util.js';
 
 export const DEF_NAMES = ['Wes', 'Jor', 'Juul', 'Sam'];
 export const MAX_NAME = 12;
@@ -58,3 +59,30 @@ export function modeText(def, n = playerCount()) {
 export const listNames = (ids, nameOf = (i) => S.names[i]) => { const a = ids.map(nameOf); return a.length < 2 ? a.join('') : a.slice(0, -1).join(', ') + ' en ' + a[a.length - 1]; };
 
 export function shuffled(arr, rnd = Math.random) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+
+// ---- impactID-huisstijl (docs/IMPACTID_STIJL.md): kleuren, lettertype, logo en canvas-teksturen ----
+export const II = {
+  navy: '#003872', navy2: '#00244b', navy3: '#03152e', blue: '#33608e', sky: '#007fd8', sky5: '#3399e0', sky3: '#99ccef', sky1: '#e0effa', mist: '#f5f7f9', line: '#ccd7e3', white: '#ffffff',
+  fund: '#ff3a00', fund5: '#ff6133', proj: '#cc0254', proj5: '#d63576', field: '#00912b', field5: '#33a755',
+};
+export const IIHEX = (css) => parseInt(css.slice(1), 16);
+export const FONT = '"Plus Jakarta Sans", system-ui, -apple-system, "Segoe UI", sans-serif';
+// kleuren van de badges boven de kasten (HUD/3D): iedereen mee = merkblauw, knock-out = roze, paar/deel = oranje, past niet = grijsblauw
+export const BADGE_COL = { all: II.sky, ko: II.proj, pair: '#c7330a', no: II.blue };
+export const LOGO_URL = 'img/impactid/logo.png';   // 663 x 334, transparant (het enige logobestand dat er is)
+let _logo = null;
+export const logoImage = () => (_logo ||= new Promise((res) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => res(null); im.src = LOGO_URL; }));
+export const fontReady = () => (typeof document !== 'undefined' && document.fonts && document.fonts.load
+  ? Promise.all(['800 64px "Plus Jakarta Sans"', '700 40px "Plus Jakarta Sans"', '600 30px "Plus Jakarta Sans"'].map((f) => document.fonts.load(f))).catch(() => {}) : Promise.resolve());
+// canvastextuur met logo/lettertype: tekent meteen (zonder logo, met terugvalfont) en na het laden nog eens (draw(g, w, h, logoImg|null))
+export function brandTex(w, h, draw, opts) {
+  const t = canvasTex(w, h, (g, ww, hh) => draw(g, ww, hh, null), opts);
+  Promise.all([logoImage(), fontReady()]).then(([img]) => { const c = t.image; const g = c.getContext('2d'); g.clearRect(0, 0, w, h); draw(g, w, h, img); t.needsUpdate = true; });
+  return t;
+}
+export const rrect = (g, x, y, w, h, r) => { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); };
+// logo in een vak tekenen (behoud verhouding, gecentreerd), nooit vervormd
+export function drawLogo(g, img, x, y, w, h) {
+  if (!img) return; const k = Math.min(w / img.naturalWidth, h / img.naturalHeight), lw = img.naturalWidth * k, lh = img.naturalHeight * k;
+  g.imageSmoothingQuality = 'high'; g.drawImage(img, x + (w - lw) / 2, y + (h - lh) / 2, lw, lh);
+}

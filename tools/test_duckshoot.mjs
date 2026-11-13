@@ -139,9 +139,10 @@ for (const name of scen) {
       await page.waitForTimeout(800); await page.screenshot({ path: `/tmp/duck_models_${tag}.png` });
     }
     console.log(errors.length ? 'ERRORS:\n' + errors.join('\n') : 'NO ERRORS');
-  } else if (name === 'shots') {
-    const { page, errors } = await open(browser, process.env.TW || 'none');
-    const shot = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(700); await page.screenshot({ path: `/tmp/duck_${tag}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
+  } else if (name === 'shots' || name === 'shots3' || name === 'shots4') {
+    const NS = +name.slice(5) || 2;
+    const { page, errors } = await open(browser, process.env.TW || 'none', NS);
+    const shot = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(700); await page.screenshot({ path: `/tmp/duck${NS > 2 ? NS : ''}_${tag}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
     await page.evaluate(() => window.__bot(60 * 8)); await shot('early');
     // bom laten ontploffen
     await page.evaluate(() => { const d = window.__app.mode.instance.dbg; const b = d.targets.find((t) => t.kind === 'bomb'); if (b) { d.aimAt(0, b.x, b.y); d.ch[0].cd = 0; d.ch[0].ammo = 6; d.tryFire(0); } window.__bot(8); }); await shot('bomb');

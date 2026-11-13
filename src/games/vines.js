@@ -504,7 +504,7 @@ export default {
       const tdist = clamp(Math.max(needHalfW / (tv * asp), 8.4 / tv), 30, 80) + (N > 2 ? 4 : 0);
       camX = first ? tx : damp(camX, tx, 3.2, dt); camDist = first ? tdist : damp(camDist, tdist, 1.6, dt);
       const cy = 6.0 + Math.max(0, camDist - 30) * 0.06;
-      camera.position.set(camX, cy + 7.0, camDist);
+      camera.position.set(camX, cy + 7.0 + (N - 2) * 3.0, camDist);
       camLook.set(camX, cy + 0.3, 0); camera.lookAt(camLook);
       // zon + schaduw volgt de camera
       L.sun.position.set(camX + 14, 40, 26); L.sun.target.position.set(camX, 3, 0); L.sun.target.updateMatrixWorld();

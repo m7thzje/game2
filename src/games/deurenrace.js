@@ -67,11 +67,12 @@ export default {
     // ---------------- spelers ----------------
     const sandGeo = new THREE.SphereGeometry(0.55, 10, 8), sandM = mat(0xc9a56a, { flatShading: false }), knotG = new THREE.ConeGeometry(0.2, 0.3, 6);
     const P = players.map((pp, p) => {
-      const c = ctx.make.brother(p), sz = pv.size(p); c.group.scale.setScalar(1.5 * sz);
+      const c = ctx.make.brother(p), sz = pv.size(p); const VS = N > 2 ? 1.3 : 1;   // bij 3-4 banen staat de camera verder weg: poppetje, ring en naam iets groter
+      c.group.scale.setScalar(1.5 * sz * VS);
       const holder = new THREE.Group(); holder.add(c.group); scene.add(holder);
       c.faceDir(0, -1); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
-      const ring = new THREE.Mesh(new THREE.CircleGeometry(0.9 * sz, 20), new THREE.MeshBasicMaterial({ color: pp.color, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; scene.add(ring);
-      const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex(pp.name, pp.css), transparent: true, depthTest: false })); tag.scale.set(2.0, 0.75, 1); tag.renderOrder = 15; scene.add(tag);
+      const ring = new THREE.Mesh(new THREE.CircleGeometry(0.9 * sz * VS, 20), new THREE.MeshBasicMaterial({ color: pp.color, transparent: true, opacity: 0.45, blending: THREE.AdditiveBlending, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.06; scene.add(ring);
+      const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex(pp.name, pp.css), transparent: true, depthTest: false })); tag.scale.set(2.0 * (N > 2 ? 1.4 : 1), 0.75 * (N > 2 ? 1.4 : 1), 1); tag.renderOrder = 15; scene.add(tag);
       // taart op het hoofd
       const cream = new THREE.Group(); cream.visible = false; c.head.add(cream);
       cream.add(mesh(new THREE.SphereGeometry(0.34, 10, 8), mat(0xfff6e0, { flatShading: false }), { cast: false, pos: [0, 0.02, 0.1], scale: [1, 0.85, 1] }));
@@ -359,7 +360,7 @@ export default {
         c.update(dt);
         q.holder.position.set(q.x, q.y, q.z); q.holder.rotation.x = lean;
         q.cream.visible = q.creamT > 0; q.ring.position.set(q.x, 0.06, q.z); q.ring.material.opacity = 0.35 + 0.15 * Math.sin(bt * 6);
-        q.tag.position.set(q.x, 3.5 * q.sz + 0.3, q.z);
+        q.tag.position.set(q.x, 3.5 * q.sz * (N > 2 ? 1.3 : 1) + 0.3, q.z);
       }
     }
     function hudInfo() {

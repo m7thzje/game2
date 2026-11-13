@@ -282,7 +282,7 @@ export function buildMine(ctx, rng, NP = 2) {
   const ridgeL = makeStrip(1, 0x7a6aa0, { ...ridgeM, normal: [-0.8, 0.6, 0] }), ridgeR = makeStrip(1, 0x7a6aa0, { ...ridgeM, normal: [-0.8, -0.6, 0] }), ridgeTop = makeStrip(1, 0x8a78c0, { ...ridgeM, cols: 1 });
   scene.add(ridgeL, ridgeR, ridgeTop); if (NP !== 2) { ridgeL.visible = ridgeR.visible = ridgeTop.visible = false; }
   // ---- geïnstantieerd decor ----
-  const N_CRY = 110, N_BOUL = 70, N_STAL = 70, N_BEAM = 9;
+  const N_CRY = NP > 2 ? 60 : 110, N_BOUL = NP > 2 ? 40 : 70, N_STAL = NP > 2 ? 40 : 70, N_BEAM = 9;   // minder decor bij 3-4 spelers: rustiger beeld
   const mkInst = (geo, material, n) => { const im = new THREE.InstancedMesh(geo, material, n); im.frustumCulled = false; im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); scene.add(im); return im; };
   const cryGeo = new THREE.ConeGeometry(0.5, 2.4, 5); cryGeo.translate(0, 1.2, 0);
   const cry = mkInst(cryGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), N_CRY);

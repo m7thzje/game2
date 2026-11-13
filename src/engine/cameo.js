@@ -23,6 +23,8 @@ import { KEY_LABELS } from './input.js';
 import { addSticker, stickers, DEUR_HALL_STICKERS } from './progress.js';
 import { drawDeurFace } from './chars.js';
 import { h, rand, pick } from './util.js';
+import { GAMEHAL } from '../variant.js';
+import { applyCameo, ALBUM } from '../gamehal/humor.js';
 
 // ---------- SVG-Deurman ----------
 const SUIT = '#14141a', SKIN = '#efefea';
@@ -102,6 +104,7 @@ const K = {
   kleurenruil: { name: 'Kleuren ruilen', icon: '🎨', text: 'Ik ruil even de kleuren.', anim: 'peekS', pose: 'down', dur: 4000, sfx: [[0, 'swap']], fx: 'colorswap', where: ['duel', 'hall', 'village'], bg: '#ff8ad8' },
   confetti: { name: 'Confetti', icon: '🎉', text: 'Confetti!', anim: 'top', pose: 'up', hat: 'party', dur: 3800, sfx: [[0, 'party'], [400, 'cheer']], fx: 'confetti', where: ['duel', 'result', 'hall', 'village'], bg: '#ffa04a' },
 };
+applyCameo(K);   // impactID Gamehal: de Deurman is de man van vergaderzaal 3.14 (alleen namen en teksten)
 export const CAMEO_KINDS = Object.keys(K);
 export const cameoDuration = (kind) => (K[kind] ? K[kind].dur : 0);
 export const cameoWhere = (kind) => (K[kind] ? K[kind].where : []);
@@ -118,7 +121,7 @@ export function giveSticker(id, { silent = false } = {}) {
   const isNew = addSticker(id);
   if (isNew && !silent) {
     const n = stickerCount(); const left = DEUR_HALL_STICKERS - n;
-    try { ui.hud.toast('📒 Nieuwe Deurman-sticker!' + (n === DEUR_HALL_STICKERS ? ' De geheime Deurenhal is open!' : left > 0 && left <= 2 ? ` (nog ${left} voor de Deurenhal)` : ''), 2800); } catch (e) { /* geen hud */ }
+    try { ui.hud.toast(GAMEHAL ? ALBUM.toast(n, left) : '📒 Nieuwe Deurman-sticker!' + (n === DEUR_HALL_STICKERS ? ' De geheime Deurenhal is open!' : left > 0 && left <= 2 ? ` (nog ${left} voor de Deurenhal)` : ''), 2800); } catch (e) { /* geen hud */ }
     audio.sfx('star');
   }
   return isNew;
@@ -229,10 +232,10 @@ export function openAlbum(onClose) {
     const got = have.includes(st.id);
     return h('div', { class: 'album-cell' + (got ? ' found' : ''), title: got ? st.text : 'Nog niet gevonden' }, got ? stickerCanvas(st.id, 120) : h('div', { class: 'q' }, '?'), h('span', {}, got ? st.name : '???'));
   });
-  const hallTxt = n >= DEUR_HALL_STICKERS ? '🚪 Genoeg stickers: de geheime Deurenhal staat open!' : `Nog ${DEUR_HALL_STICKERS - n} sticker${DEUR_HALL_STICKERS - n === 1 ? '' : 's'} voor de geheime Deurenhal.`;
-  const card = h('div', { class: 'card album' }, h('h2', {}, '📒 Deurman-vriendenboek'), h('div', { class: 'album-count' }, `${n} / ${N} stickers`),
+  const hallTxt = GAMEHAL ? ALBUM.hall(n, DEUR_HALL_STICKERS) : n >= DEUR_HALL_STICKERS ? '🚪 Genoeg stickers: de geheime Deurenhal staat open!' : `Nog ${DEUR_HALL_STICKERS - n} sticker${DEUR_HALL_STICKERS - n === 1 ? '' : 's'} voor de geheime Deurenhal.`;
+  const card = h('div', { class: 'card album' }, h('h2', {}, GAMEHAL ? ALBUM.title : '📒 Deurman-vriendenboek'), h('div', { class: 'album-count' }, `${n} / ${N} stickers`),
     h('div', { class: 'album-grid' }, ...cells), h('p', { class: 'album-hall' }, hallTxt),
-    h('div', { class: 'small-note' }, `De Deurman duikt overal op. Elke nieuwe grap is een sticker! · Sluiten: ${KEY_LABELS[0].a} of ${KEY_LABELS[1].a}`));
+    h('div', { class: 'small-note' }, `${GAMEHAL ? ALBUM.note : 'De Deurman duikt overal op. Elke nieuwe grap is een sticker!'} · Sluiten: ${KEY_LABELS[0].a} of ${KEY_LABELS[1].a}`));
   const el = ui.overlay(card);
   let done; const promise = new Promise((r) => { done = r; });
   const t0 = performance.now();

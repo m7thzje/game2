@@ -12,6 +12,8 @@ import { setupLights } from './lights.js';
 import { h, clamp, mulberry32, disposeObject, rand, pick } from './util.js';
 import { pickTwist, applyTwist, blankIn, TWISTS } from './twist.js';
 import { dailyDone, dailyBonus, completeDaily } from './daily.js';
+import { GAMEHAL } from '../variant.js';
+import { coin, resultQuip } from '../gamehal/humor.js';
 
 // Revanche-reeks: opeenvolgende potjes van hetzelfde duel tussen dezelfde deelnemers (wordt gewist bij een ander spel of ander paar)
 // wins = winsten per SLOT (zoals in het laatste potje), winsById = per spelers-id
@@ -100,6 +102,7 @@ export class MinigameMode {
     this.ctx.teams = this.teams;
     this.ctx.teamOf = this.teams ? this.ids.map((_, slot) => this.teams.findIndex((t) => t.includes(slot))) : null;
     this.ctx.teamInfo = this.teams ? this.teams.map((t, index) => ({ index, slots: t.slice(), color: this.ctx.players[t[0]].color, css: this.ctx.players[t[0]].css, name: t.map((k) => this.ctx.players[k].name).join(' & ') })) : null;
+    ui.hud.setTeams(this.ctx.teamInfo);   // HUD: teamgenoten in één kolom met teamlabel (de HUD wordt pas bij ui.hud.reset() opgebouwd)
     // duel-API
     const T = this.twist; const me = this;
     this.ctx.twist = T;
@@ -260,8 +263,8 @@ export class MinigameMode {
       return;
     }
     if (res.caught) { ui.hud.toast('Je bewoog! BOEM! De Deurman lacht zich slap.', 2600); }
-    else if (lunge) { await scare.jumpscare(); this.bonus += 5; ui.hud.toast('Hij sprong toch! (+5 heitjes durfal-bonus)', 2600); }
-    else { this.bonus += 5; ui.hud.toast('Stil gebleven! +5 heitjes durfal-bonus', 2200); }
+    else if (lunge) { await scare.jumpscare(); this.bonus += 5; ui.hud.toast(`Hij sprong toch! (+5 ${coin(5)} durfal-bonus)`, 2600); }
+    else { this.bonus += 5; ui.hud.toast(`Stil gebleven! +5 ${coin(5)} durfal-bonus`, 2200); }
   }
 
   pause() {
@@ -338,9 +341,10 @@ export class MinigameMode {
       h('h2', {}, title),
       vs,
       places,
+      GAMEHAL ? h('p', { class: 'gh-quip' }, resultQuip({ names, winners: W, teams: !!this.teams, order: r.placeSlots, series: SERIES.n })) : null,   // impactID Gamehal: kantoorgrap onder de uitslag
       h('p', { style: { textAlign: 'center' }, html: r.summary || '' }),
       h('p', { class: 'small-note' }, `${this.twist.icon || ''} Twist: ${this.twist.name}`),
-      h('div', { class: 'reward', html: this.practice ? '' : `🪙 +${r.total} heitjes voor jullie samen` + (r.daily ? `<div style="font-size:16px;font-weight:400">🌟 Dagduel-bonus: +${r.daily}</div>` : '') }),
+      h('div', { class: 'reward', html: this.practice ? '' : `🪙 +${r.total} ${coin(r.total)} voor jullie samen` + (r.daily ? `<div style="font-size:16px;font-weight:400">🌟 Dagduel-bonus: +${r.daily}</div>` : '') }),
       SERIES.n >= 2 ? h('p', { class: 'small-note', style: { fontSize: '17px' } }, `🔁 Reeks: ${names.map((nm, i) => (i ? `${SERIES.wins[i]} ${nm}` : `${nm} ${SERIES.wins[i]}`)).join(' – ')}`) : null,
       (this.canRematch = !(this.extra && (this.extra.tourney || this.extra.daily || this.extra.spooky))) ? (this.resOpts = h('div', { class: 'btnrow', style: { flexDirection: 'row', justifyContent: 'center', gap: '14px' } })) : h('div', { class: 'small-note' }, `Doorgaan: ${this.keysA()}`));
     if (this.canRematch) { this.resSel = 0; this.drawResOpts(); }
@@ -359,10 +363,10 @@ export class MinigameMode {
     const r = this.result;
     const stars = h('div', { class: 'stars' }, ...[0, 1, 2].map(() => h('span', {}, '⭐')));
     const lines = [h('p', { style: { textAlign: 'center' }, html: r.summary || (r.stars >= 3 ? 'Geweldig werk!' : r.stars >= 1 ? 'Goed gedaan!' : 'Volgende keer beter...') })];
-    if (this.practice) lines.push(h('p', { class: 'small-note' }, 'Oefenmodus: geen heitjes'));
+    if (this.practice) lines.push(h('p', { class: 'small-note' }, `Oefenmodus: geen ${coin()}`));
     const rows = [`Betaling: <b>${r.base}</b>`]; if (r.bonus) rows.push(`Bonus: <b>+${r.bonus}</b>`); if (r.penalty) rows.push(`Deurman-boete: <b>-${r.penalty}</b>`);
     const card = h('div', { class: 'card' }, h('h2', {}, r.stars > 0 ? 'Klus gedaan!' : 'Mislukt...'), stars, ...lines,
-      h('div', { class: 'reward', html: this.practice ? '' : `🪙 ${r.total} heitjes<div style="font-size:16px;font-weight:400;opacity:.75">${rows.join(' · ')}</div>` }),
+      h('div', { class: 'reward', html: this.practice ? '' : `🪙 ${r.total} ${coin(r.total)}<div style="font-size:16px;font-weight:400;opacity:.75">${rows.join(' · ')}</div>` }),
       h('div', { class: 'small-note' }, `Doorgaan: ${this.keysA()}`));
     this.resEl = ui.overlay(card);
     [...stars.children].forEach((s, i) => { if (i < r.stars) setTimeout(() => { s.classList.add('on'); audio.sfx('star', { rate: 1 + i * 0.2 }); }, 400 + i * 450); });

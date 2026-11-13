@@ -360,7 +360,7 @@ if (booted) {
   await gq.goto(`${base}gamehal.html?join=${code4}&${PEER}`);
   await gq.waitForSelector('#gas', { timeout: 60000 }).catch(() => {});
   const opts = await gq.evaluate(() => [...document.querySelectorAll('#gas option')].map((o) => o.textContent));
-  check('gast-pagina (gamehal.html) biedt Jor, Juul én Sam aan, titel Impactid Gamehal', opts.length === 4 && opts.some((t) => t.includes('Sam')) && (await gq.evaluate(() => document.body.innerText.includes('Impactid Gamehal'))), JSON.stringify(opts));
+  check('gast-pagina (gamehal.html) biedt Jor, Juul én Sam aan, titel impactID Gamehal', opts.length === 4 && opts.some((t) => t.includes('Sam')) && (await gq.evaluate(() => document.body.innerText.includes('impactID Gamehal'))), JSON.stringify(opts));
   await gq.selectOption('#gas', '3'); await gq.click('#gjoin');
   const g4J = await guestCtx.newPage(); hook('gast4-jor', g4J); await g4J.goto(l4[0]); await g4J.click('#gjoin');
   const g4U = await guestCtx.newPage(); hook('gast4-juul', g4U); await g4U.goto(l4[1]); await g4U.click('#gjoin');

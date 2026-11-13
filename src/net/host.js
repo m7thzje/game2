@@ -40,7 +40,7 @@ export class Host {
     this.comp = document.createElement('canvas'); this.g = this.comp.getContext('2d');
     this.lastSnap = ''; this.snapT = 0; this.stream = null;
     this.badge = document.createElement('div');
-    this.badge.style.cssText = 'position:fixed;right:10px;top:10px;z-index:99;padding:3px 12px;border-radius:12px;background:rgba(20,12,30,.75);border:2px solid #35c46f;font:600 14px Fredoka,system-ui,sans-serif;color:#fff;display:none;pointer-events:none';
+    this.badge.style.cssText = 'position:fixed;right:8px;top:8px;z-index:99;max-width:min(300px,34vw);padding:1px 9px;border-radius:10px;background:rgba(20,12,30,.7);border:2px solid #35c46f;font:600 11px/1.35 Fredoka,system-ui,sans-serif;color:#fff;opacity:.9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:none;pointer-events:none';   // rechtsboven, klein; placeBadge() zet hem onder de HUD-vakken zodat hij er nooit overheen valt
     document.body.append(this.badge);
   }
   // aantal gasten dat meedoet: volgt S.settings.players (2 spelers = 1 gast, 3 = 2 gasten, 4 = 3 gasten); de gewone versie stopt bij 2 gasten
@@ -69,11 +69,21 @@ export class Host {
     for (const g of this.guests.slice(this.maxGuests)) if (g.status === 'connected') { this.sendTo(g, { t: 'reject', reason: 'kicked', msg: 'De host speelt nu met minder spelers. Jouw plek is vervallen.' }); this.drop(g, 'waiting'); }
     this.emit();
   }
+  // Statuspil rechtsboven maar onder de HUD-vakken die er horizontaal onder vallen (bij 2, 3 en 4 spelers, ook met teamkolommen); ~4x per seconde bijgewerkt
+  placeBadge(dt) {
+    const b = this.badge; this._bt = (this._bt || 0) - dt;
+    if (this._bt > 0 || b.style.display === 'none') return;
+    this._bt = 0.25;
+    const left = innerWidth - 8 - b.offsetWidth; let y = 8;
+    for (const e of document.querySelectorAll('#hud .pbox, #hud .hud-col, #hud .hud-mid')) { const r = e.getBoundingClientRect(); if (r.height > 0 && r.right > left - 4 && r.left < innerWidth && r.top < 300) y = Math.max(y, r.bottom + 6); }
+    const t = Math.round(y) + 'px'; if (b.style.top !== t) b.style.top = t;
+  }
   updateBadge() {
     const b = this.badge, a = this.active();
     if (this.base !== 'ready' || !a.length) { b.style.display = 'none'; return; }
-    const parts = a.map((g) => (g.status === 'connected' ? `${g.name} online${g.pingMs ? ' ' + Math.round(g.pingMs) + ' ms' : ''}` : g.status === 'waiting' ? `wachten op ${g.name}…` : `${g.name} is weg`));
     const lost = a.some((g) => g.status === 'lost' || g.status === 'error'), all = this.allConnected;
+    // compact (staat rechtsboven, klein): iedereen verbonden = '3/3 online · 54 ms', anders per gast een korte status
+    const parts = all ? [`${a.length}/${a.length} online${this.pingMs ? ' · ' + Math.round(this.pingMs) + ' ms' : ''}`] : a.map((g) => (g.status === 'connected' ? `${g.name} ✓` : g.status === 'waiting' ? `${g.name} …` : `${g.name} ⚠`));
     if (!this.connected && !lost) parts.push(`code ${this.code}`);
     b.style.display = 'block'; b.style.borderColor = lost ? '#e5484d' : all ? '#35c46f' : '#ffcf3a';
     b.textContent = '🌐 ' + parts.join(' · ');
@@ -232,6 +242,7 @@ export class Host {
   }
   // Elke frame, na het renderen: beeld samenstellen + (af en toe) de HTML-laag doorsturen naar alle gasten
   afterRender(dt) {
+    this.placeBadge(dt);
     if (!this.connected) return;
     this.resizeComp();
     const { g, comp } = this; const gl = this.app.renderer.domElement;

@@ -1,5 +1,5 @@
 // Gebruik: node tools/test_stack.mjs [scenario...]   scenario: bots | twists | idle | timeout | collapse | shots
-//   TW=<twist-id> kiest een twist. Q=low|high kwaliteit.
+//   TW=<twist-id> kiest een twist. Q=low|high kwaliteit. PLAYERS=3|4: drie/vier kranen (bots voor elke toren).
 // Bots spelen versneld (zonder renderen) hele potjes. Controleert: finishPvp precies 1x, beide spelers kunnen winnen, geen console-errors, elke twist werkt.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
 import { chromePath } from './chrome_path.mjs';
@@ -15,6 +15,7 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
+const N = +process.env.PLAYERS || 2;
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 const fails = [];
@@ -26,14 +27,14 @@ async function open(twist) {
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=stack&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=stack&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${N >= 3 ? '&players=' + N : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
     mode.paused = false;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -44,11 +45,12 @@ async function open(twist) {
 }
 
 // cfg[i] = { err: dropfout in blokken (0 = perfect), power: kans per frame dat een power-up wordt gebruikt, idle }
-async function installBots(page, cfg) {
+async function installBots(page, cfg0) {
+  const cfg = Array.from({ length: N }, (_, i) => cfg0[i % cfg0.length]);
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input;
     let s = 4242; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    const B = [0, 1].map(() => ({ aim: 0, prev: null, lastSpawn: -1 }));
+    const B = cfg.map(() => ({ aim: 0, prev: null, lastSpawn: -1 }));
     window.__cfg = cfg;
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false;
@@ -56,9 +58,9 @@ async function installBots(page, cfg) {
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
         for (const v of inp.virtual) { v.a = false; v.b = false; v.x = 0; v.y = 0; }
-        for (const j of [0, 1]) {       // j = speler wiens kraan we sturen
+        for (let j = 0; j < cfg.length; j++) {       // j = speler wiens kraan we sturen
           const c = window.__cfg[j], p = st.p[j], b = B[j]; if (c.idle) continue;
-          const vi = m.swapped ? 1 - j : j; const v = inp.virtual[vi];
+          const src = (q) => { if (!m.swapped) return q; for (const [x, y] of (m.swapPairs || [[0, 1]])) { if (q === x) return y; if (q === y) return x; } return q; }; const v = inp.virtual[m.ids[src(j)]];
           const A = tid === 'swapab' ? 'b' : 'a', Bk = tid === 'swapab' ? 'a' : 'b';
           if (p.state === 'swing' && p.spawnT > 0.2) {
             if (b.lastSpawn !== p.floors + ':' + p.hw.toFixed(2)) { b.lastSpawn = p.floors + ':' + p.hw.toFixed(2); b.aim = (rnd() - 0.5) * 2 * c.err; b.prev = null; }
@@ -78,12 +80,17 @@ const BOT = (err, power = 0.03, extra = {}) => ({ err, power, ...extra });
 
 for (const name of scen) {
   if (['bots', 'twists', 'timeout', 'idle', 'collapse', 'sd'].includes(name)) {
+    const I = { idle: true }, G = BOT(0.25), W = BOT(1.4);
     const list = name === 'twists' ? TWISTS.map((t) => [t, [BOT(0.5), BOT(0.7)], null])
-      : name === 'idle' ? [['none', [{ idle: true }, { idle: true }], 'idle']]
-        : name === 'collapse' ? [['none', [BOT(0.3), { idle: true }], 'p0'], ['none', [{ idle: true }, BOT(0.3)], 'p1']]
+      : name === 'idle' ? [['none', [I, I], 'idle']]
+        : name === 'collapse' ? (N > 2 ? [['none', [BOT(0.3), I, I, I], 'p0'], ['none', [I, I, BOT(0.3), I], 'p2']] : [['none', [BOT(0.3), { idle: true }], 'p0'], ['none', [{ idle: true }, BOT(0.3)], 'p1']])
           : name === 'sd' ? [['none', [BOT(0.0), BOT(0.0)], 'sd']]
             : name === 'timeout' ? [['none', [BOT(0.6), BOT(0.6)], 'timeout']]
-              : [
+              : N > 2 ? [
+                [process.env.TW || 'none', [G, W, W, W], 'p0'],
+                [process.env.TW || 'none', Array.from({ length: N }, (_, i) => (i === N - 1 ? G : W)), 'p' + (N - 1)],
+                [process.env.TW || 'none', [BOT(0.6), BOT(0.6), BOT(0.6), BOT(0.6)], null],
+              ] : [
                 [process.env.TW || 'none', [BOT(0.25), BOT(1.4)], 'p0'],
                 [process.env.TW || 'none', [BOT(1.4), BOT(0.25)], 'p1'],
                 [process.env.TW || 'none', [BOT(0.6), BOT(0.6)], null],
@@ -94,10 +101,10 @@ for (const name of scen) {
       if (name === 'timeout') await page.evaluate(() => { window.__app.mode.instance.dbg.setTime(6); });
       if (name === 'sd') await page.evaluate(() => { window.__app.mode.instance.dbg.setTime(5); });
       const res = await page.evaluate(() => {
-        const m = window.__app.mode, inst = m.instance; const log = []; let last = ''; let g = 0; let maxF = [0, 0];
+        const m = window.__app.mode, inst = m.instance; const log = []; let last = ''; let g = 0; let maxF = window.__cfg.map(() => 0);
         while (!m.finished && g++ < 60 * 400) {
           window.__bot(1);
-          const st = inst.dbg.state(); maxF = [Math.max(maxF[0], st.p[0].floors), Math.max(maxF[1], st.p[1].floors)];
+          const st = inst.dbg.state(); maxF = maxF.map((q, i) => Math.max(q, st.p[i].floors));
           const key = st.g + ':' + st.p.map((p) => p.floors + p.state).join('/');
           if (st.g !== last) { log.push(`T=${st.T.toFixed(1)} ${st.g} floors=${st.p.map((p) => p.floors)} loser=${st.loser}`); last = st.g; }
         }
@@ -110,9 +117,9 @@ for (const name of scen) {
       console.log(`end T=${st.T.toFixed(1)} floors=${st.p.map((p) => p.floors)} max=${res.maxF} perfects=${st.p.map((p) => p.perfects)} gulls=${st.stats.gulls} sabs=${st.stats.sabs} powers=${st.stats.powers} sands=${st.stats.sands} collapses=${st.stats.collapses} sdRound=${st.sdRound}`);
       if (res.result) console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, ' ')}`);
       check(res.finished && res.fin === 1, `finishPvp precies 1x (aantal=${res.fin}) [${name}/${tw}]`);
-      check(res.result && (res.result.winner === 0 || res.result.winner === 1), `er is een winnaar [${name}/${tw}]`);
-      if (expect === 'p0') check(res.result.winner === 0, 'goede bot 0 wint');
-      if (expect === 'p1') check(res.result.winner === 1, 'goede bot 1 wint');
+      check(res.result && res.result.winner >= 0 && res.result.winner < N, `er is een winnaar [${name}/${tw}]`);
+      if (N > 2 && res.result) check(res.result.scoreArr.length === N && res.result.place.length === N && new Set(res.result.place).size === N && res.result.place[0] === res.result.winnerId && res.result.winnerIds.length === 1, `resultaat: ${N} scores, place = ${res.result.place}, één winnaar`);
+      if (/^p\d$/.test(expect || '')) check(res.result.winner === +expect[1], `goede bot ${expect[1]} wint`);
       check(errors.length === 0, `geen console-errors [${name}/${tw}]${errors.length ? '\n' + errors.slice(0, 6).join('\n') : ''}`);
       await browser.close();
     }
@@ -121,7 +128,7 @@ for (const name of scen) {
   if (name === 'shots') {
     const { browser, page, errors } = await open(process.env.TW || 'none');
     await installBots(page, [BOT(0.2, 0.0), BOT(0.2, 0.0)]);
-    const snap = async (tag) => { await page.waitForTimeout(700); await page.screenshot({ path: `/tmp/stack_${tag}.png` }); console.log('shot', tag, JSON.stringify(await page.evaluate(() => { const s = window.__app.mode.instance.dbg.state(); return { g: s.g, f: s.p.map((p) => p.floors), c: s.p.map((p) => p.combo), pw: s.p.map((p) => p.power) }; }))); };
+    const snap = async (tag) => { await page.waitForTimeout(700); await page.screenshot({ path: `/tmp/stack${N > 2 ? N : ""}_${tag}.png` }); console.log('shot', tag, JSON.stringify(await page.evaluate(() => { const s = window.__app.mode.instance.dbg.state(); return { g: s.g, f: s.p.map((p) => p.floors), c: s.p.map((p) => p.combo), pw: s.p.map((p) => p.power) }; }))); };
     const go = (cond, max = 60 * 60) => page.evaluate(([c, mx]) => window.__bot(mx, new Function('s', 'return ' + c)), [cond, max]);
     await page.evaluate(() => window.__bot(240)); await snap('play');
     await go('s.p[0].combo>=3||s.p[1].combo>=3'); await page.evaluate(() => window.__bot(12)); await snap('combo');

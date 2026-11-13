@@ -37,7 +37,7 @@ export default {
     // ---------------- draken ----------------
     const D = players.map((_, i) => {
       const m = makeDragon(i); scene.add(m.root); const size = pv.size(i);
-      const tag = canvasTex(256, 96, () => {}); const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tag, transparent: true, depthTest: false })); spr.scale.set(3.4 * Math.sqrt(FL.DZ / 28), 1.275 * Math.sqrt(FL.DZ / 28), 1); spr.renderOrder = 15; scene.add(spr);
+      const tag = canvasTex(256, 96, () => {}); const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tag, transparent: true, depthTest: false })); spr.scale.set(3.4 * Math.sqrt(FL.DZ / 28) * (N > 2 ? 1.3 : 1), 1.275 * Math.sqrt(FL.DZ / 28) * (N > 2 ? 1.3 : 1), 1); spr.renderOrder = 15; scene.add(spr);
       const fire = new THREE.Group(); const fo = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 10, 1, true), new THREE.MeshBasicMaterial({ color: 0xff7a1a, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide })); const fi = new THREE.Mesh(new THREE.ConeGeometry(1, 1, 10, 1, true), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide }));
       fo.rotation.z = fi.rotation.z = Math.PI / 2; fire.add(fo, fi); fire.visible = false; scene.add(fire);
       // stormwolkje boven de draak (bliksem-effect)
@@ -66,7 +66,7 @@ export default {
     const barC = document.createElement('canvas'); barC.width = 1100; barC.height = 56; const bg2 = barC.getContext('2d');
     const barTex = new THREE.CanvasTexture(barC); barTex.colorSpace = THREE.SRGBColorSpace;
     const bar = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: barTex, transparent: true, depthWrite: false, fog: false })); bar.renderOrder = 30; scene.add(bar);
-    function placeBar() { const z = 2.0, k = (FL.DZ - z) / FL.DZ; const th = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)); const w = 2 * th * (FL.DZ - z) * (camera.aspect || 1.7); bar.scale.set(w, (N === 2 ? 1.25 : 1.55) * k, 1); bar.position.set(0, 0, z); }
+    function placeBar() { const z = 2.0, k = (FL.DZ - z) / FL.DZ; const th = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)); const w = 2 * th * (FL.DZ - z) * (camera.aspect || 1.7); bar.scale.set(w, (N === 2 ? 1.25 : 2.0) * k, 1); bar.position.set(0, 0, z); }
     let barT = 0;
     function drawBar() {
       const W2 = 1100, Hh = 56; bg2.clearRect(0, 0, W2, Hh);
@@ -74,7 +74,7 @@ export default {
       bg2.fillStyle = 'rgba(20,12,40,.55)'; bg2.fillRect(0, 4, W2, 48);
       const x0 = 70, x1 = 1030, y = 28; bg2.lineCap = 'round'; bg2.strokeStyle = 'rgba(255,255,255,.8)'; bg2.lineWidth = 5; bg2.beginPath(); bg2.moveTo(x0, y); bg2.lineTo(x1, y); bg2.stroke();
       for (let r = 0; r < 4; r++) for (let c = 0; c < 2; c++) { bg2.fillStyle = (r + c) % 2 ? '#111' : '#fff'; bg2.fillRect(x1 + 8 + c * 9, y - 18 + r * 9, 9, 9); }
-      D.forEach((d) => { const u = clamp(d.progress / L, 0, 1), cx = x0 + u * (x1 - x0), dy = N === 2 ? (d.i ? 5 : -5) : (d.i - (N - 1) / 2) * 4; bg2.fillStyle = pcss[d.i]; bg2.strokeStyle = '#fff'; bg2.lineWidth = 3; bg2.beginPath(); bg2.arc(cx, y + dy, 12, 0, TAU); bg2.fill(); bg2.stroke(); bg2.fillStyle = '#fff'; bg2.font = 'bold 15px Fredoka, Arial, sans-serif'; bg2.textAlign = 'center'; bg2.textBaseline = 'middle'; bg2.fillText(names[d.i][0], cx, y + dy + 1); });
+      D.forEach((d) => { const u = clamp(d.progress / L, 0, 1), cx = x0 + u * (x1 - x0), dy = N === 2 ? (d.i ? 5 : -5) : (d.i - (N - 1) / 2) * 4; bg2.fillStyle = pcss[d.i]; bg2.strokeStyle = '#fff'; bg2.lineWidth = 3; bg2.beginPath(); bg2.arc(cx, y + dy, N > 2 ? 14 : 12, 0, TAU); bg2.fill(); bg2.stroke(); bg2.fillStyle = '#fff'; bg2.font = 'bold 15px Fredoka, Arial, sans-serif'; bg2.textAlign = 'center'; bg2.textBaseline = 'middle'; bg2.fillText(names[d.i][0], cx, y + dy + 1); });
       if (N === 2) { bg2.font = 'bold 20px Fredoka, Arial, sans-serif'; bg2.textBaseline = 'middle'; bg2.textAlign = 'left'; bg2.fillStyle = pcss[0]; bg2.fillText(`${pts(D[0])}`, 12, y - 1); bg2.textAlign = 'right'; bg2.fillStyle = pcss[1]; bg2.fillText(`${pts(D[1])}`, W2 - 12, y - 1); }
       barTex.needsUpdate = true;
     }

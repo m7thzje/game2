@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { clamp, damp, pick, rand } from '../engine/util.js';
-import { PLAYER_CSS } from '../engine/chars.js';
+import { PLAYER_CSS, PLAYER_COLORS } from '../engine/chars.js';
 import { buildVault, CRYS, ROWS, COLS, slotPos, pegPos, hintPos, BOARD_X, BOARD_Y } from './code_world.js';
 import { feedback, randomCode, quality } from './code_logic.js';
 
-// Kristal-Code — duel: Mastermind met kristallen. Beide broers raden TEGELIJK dezelfde geheime code (4 kristallen, 6 soorten, dubbele mogen).
+// Kristal-Code — duel (2-4 spelers naast elkaar): Mastermind met kristallen. Alle spelers raden TEGELIJK dezelfde geheime code (4 kristallen, 6 soorten, dubbele mogen).
 //  * links/rechts = plek kiezen, omhoog/omlaag = kristal kiezen, A = gok indienen, B = wissen (vasthouden = POWER: spook-kristal of zandloper)
 //  * wie de code eerst kraakt wint de ronde; eerste tot 2 rondes (max 4 rondes, 112 s totaal). Mislukt iedereen: de beste gok telt.
 //  * comeback: wie de vorige ronde verloor mag één kristal onthullen. Gimmick: de slot-golem verandert (met waarschuwing) de code.
@@ -13,33 +13,34 @@ const GHOST_T = 3.2, SAND_T = 2.6, WARN_T = 3.0, HOLD_POWER = 0.5;
 const NAMEC = CRYS.map((c) => c.name);
 
 export default {
-  id: 'code', name: 'Kristal-Code', giver: 'Koning Klopper', icon: '💎', mode: 'pvp', time: 100,
+  id: 'code', name: 'Kristal-Code', giver: 'Koning Klopper', icon: '💎', mode: 'pvp', players: [2, 3, 4], time: 100,
   twists: ['invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'bodyswap', 'deurman'],
   music: 'tense',
-  blurb: 'Kraak de <b>geheime kluis-code</b> van 4 kristallen! Jullie raden <b>tegelijk</b>: elke gok geeft pinnetjes (<b>goud</b> = goede plek, <b>wit</b> = goede kleur op een andere plek). Wie eerst kraakt wint de ronde, eerste tot <b>2 rondes</b>. Pas op voor de <b>slot-golem</b> en de spook-kristallen!',
+  blurb: 'Kraak de <b>geheime kluis-code</b> van 4 kristallen! Jullie raden (met 2 tot 4 spelers) <b>tegelijk</b>: elke gok geeft pinnetjes (<b>goud</b> = goede plek, <b>wit</b> = goede kleur op een andere plek). Wie eerst kraakt wint de ronde, eerste tot <b>2 rondes</b>. Pas op voor de <b>slot-golem</b> en de spook-kristallen!',
   controls: ['{move} ◀▶ plek · ▲▼ kristal', '{a} gok indienen', '{b} wissen · vasthouden = POWER'],
   tip: 'Een kristal telt 1x per plek: dubbele kleuren mogen. Elke 2 gokken verdien je een POWER om je broer te hinderen!',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
-    const pv = ctx.pvp; const names = players.map((p) => p.name);
+    const pv = ctx.pvp; const names = players.map((p) => p.name); const N = players.length, IDX = players.map((_, i) => i);
     const TS = clamp(pv.speed(0), 0.6, 1.7);                       // turbo / slakkentempo: de lont brandt sneller of trager
     const L = ctx.lights('cave', { shadow: 12 });
     L.hemi.intensity = 2.3; L.sun.intensity = 1.5; L.sun.position.set(0, 14, 22);
-    const V = buildVault(ctx, L);
+    const V = buildVault(ctx, L, N);
     camera.fov = 50; V.fitCamera(camera);
 
     const mkP = (i) => ({ i, rows: [], cur: [-1, -1, -1, -1], cursor: 0, status: 'play', power: 0, subs: 0, bHold: 0, bUsed: false, bDown: false, sab: { ghost: 0, sand: 0 }, hint: null, dirPrev: -1, holdT: 0, repT: 0, bestQ: 0, totalQ: 0, pose: 0, msg: '', msgT: 0, wrongT: 0 });
-    const PS = [mkP(0), mkP(1)];
-    const R = { n: -1, phase: 'wait', t: 0, code: [0, 0, 0, 0], timeLeft: ROUND_T, limit: ROUND_T, wins: [0, 0], draws: 0, winner: -1, reason: '', golemAt: -1, golemState: 'idle', golemT: 0, golemDone: false, reveal: false, elapsed: 0, matchWinner: -1, finished: false, lastLoser: -1, coin: false, changedPos: -1 };
+    const PS = IDX.map(mkP);
+    const R = { n: -1, phase: 'wait', t: 0, code: [0, 0, 0, 0], timeLeft: ROUND_T, limit: ROUND_T, wins: IDX.map(() => 0), draws: 0, winner: -1, reason: '', golemAt: -1, golemState: 'idle', golemT: 0, golemDone: false, reveal: false, elapsed: 0, matchWinner: -1, finished: false, lastLosers: [], coin: false, changedPos: -1 };
     const proj = { on: false, t: 0, from: 0, to: 0, type: 'ghost' };
     let T = 0, introT = 0;
 
     // ---------------- helpers ----------------
-    const lead = (i) => R.wins[i] - R.wins[1 - i];
+    // uniek hoogste getal in een lijst (index) of -1 bij gelijk
+    const uniqMax = (a) => { const m = Math.max(...a), k = a.map((v, i) => (v === m ? i : -1)).filter((i) => i >= 0); return k.length === 1 ? k[0] : -1; };
     function refreshHud() {
-      hud.setScore(`Ronde ${Math.max(1, R.n + 1)} · ${names[0]} ${R.wins[0]} – ${R.wins[1]} ${names[1]}`);
-      for (const p of PS) hud.setPlayerInfo(p.i, `Poging ${p.rows.length}/${MAX_TRIES} · power: ${p.power}`);
+      hud.setScore(N === 2 ? `Ronde ${Math.max(1, R.n + 1)} · ${names[0]} ${R.wins[0]} – ${R.wins[1]} ${names[1]}` : `Ronde ${Math.max(1, R.n + 1)} · ${R.wins.join(' – ')}`);
+      for (const p of PS) hud.setPlayerInfo(p.i, `${N > 2 && R.wins[p.i] ? '⭐'.repeat(R.wins[p.i]) + ' ' : ''}Poging ${p.rows.length}/${MAX_TRIES} · power: ${p.power}`);
     }
     function say(p, text, col = '#ffe14a') { const x = BOARD_X[p.i]; fx.texts.add(text, x, BOARD_Y + 3.2, 1.5, col, 1.5); }
     function refreshPlates(p) {
@@ -64,17 +65,17 @@ export default {
       // golem: ronde 1 altijd, daarna soms; niet bij de beslissende ronde
       R.golemAt = sd ? -1 : R.n === 0 ? rand(13, 18) : Math.random() < 0.5 ? rand(11, 20) : -1;
       // comeback: de verliezer van de vorige ronde mag één kristal onthullen
-      if (R.lastLoser >= 0) { const p = PS[R.lastLoser]; const pos = Math.floor(Math.random() * 4); p.hint = { pos, color: R.code[pos] }; }
+      for (const li of R.lastLosers) { const p = PS[li]; const pos = Math.floor(Math.random() * 4); p.hint = { pos, color: R.code[pos] }; }
       V.setChest(0); V.drawCodePanel('', false); V.golemMode = 'idle'; V.setFuse(1);
       for (const c of V.chars) c.pose = 'idle';
       audio.sfx('select', { rate: 0.8 }); refreshHud();
-      if (R.lastLoser >= 0) hud.toast(`${names[R.lastLoser]} mag een kristal onthullen! (comeback-hint)`, 2200);
+      if (R.lastLosers.length) hud.toast(R.lastLosers.length === N ? 'Iedereen mag een kristal onthullen! (comeback-hint)' : `${R.lastLosers.map((k) => names[k]).join(' & ')} ${R.lastLosers.length > 1 ? 'mogen' : 'mag'} een kristal onthullen! (comeback-hint)`, 2200);
     }
     function beginPlay() { R.phase = 'play'; R.t = 0; for (const p of PS) refreshPlates(p); audio.sfx('go', { vol: 0.6 }); hud.showBig(R.n >= 3 ? 'BESLISSENDE RONDE!' : `RONDE ${R.n + 1}!`, 900, '#ffe14a'); }
     function endRound(winner, reason) {
       if (R.phase === 'end') return;
       R.phase = 'end'; R.t = 0; R.winner = winner; R.reason = reason; R.reveal = true; hud.setTimer(null);
-      if (winner >= 0) { R.wins[winner]++; R.lastLoser = 1 - winner; } else R.lastLoser = -1;
+      if (winner >= 0) { R.wins[winner]++; const mx = Math.max(...R.wins); R.lastLosers = IDX.filter((k) => k !== winner && (N === 2 || R.wins[k] < mx)); } else R.lastLosers = [];
       for (const p of PS) { p.totalQ += p.bestQ; p.status = p.status === 'play' ? 'idle' : p.status; refreshPlates(p); }
       V.setChest(0.01); V.drawCodePanel('', true); V.golemMode = 'idle';
       audio.sfx(winner >= 0 ? 'win' : 'lose', { vol: 0.7 }); audio.sfx('door', { vol: 0.7 });
@@ -84,10 +85,14 @@ export default {
       refreshHud();
     }
     function matchWinner() {
-      if (R.wins[0] >= WIN_ROUNDS) return 0; if (R.wins[1] >= WIN_ROUNDS) return 1;
-      const played = R.n + 1, over = played >= MAX_ROUNDS || R.elapsed >= GAME_CAP - 1;
-      if (played >= 3 && R.wins[0] !== R.wins[1]) return R.wins[0] > R.wins[1] ? 0 : 1;
-      if (over) { if (R.wins[0] !== R.wins[1]) return R.wins[0] > R.wins[1] ? 0 : 1; if (PS[0].totalQ !== PS[1].totalQ) return PS[0].totalQ > PS[1].totalQ ? 0 : 1; R.coin = true; return Math.random() < 0.5 ? 0 : 1; }
+      const ge = IDX.filter((k) => R.wins[k] >= WIN_ROUNDS); if (ge.length) { if (ge.length === 1) return ge[0]; const m = uniqMax(R.wins); if (m >= 0) return m; }
+      const played = R.n + 1, over = played >= MAX_ROUNDS || R.elapsed >= GAME_CAP - 1, um = uniqMax(R.wins);
+      if (played >= 3 && um >= 0) return um;
+      if (over) {
+        if (um >= 0) return um;
+        const top = IDX.filter((k) => R.wins[k] === Math.max(...R.wins)), uq = uniqMax(top.map((k) => PS[k].totalQ)); if (uq >= 0) return top[uq];
+        const mq = Math.max(...top.map((k) => PS[k].totalQ)), tied = top.filter((k) => PS[k].totalQ === mq); R.coin = true; return tied[Math.floor(Math.random() * tied.length)];
+      }
       return -1;
     }
     function finalize(w) {
@@ -96,9 +101,10 @@ export default {
     }
     function finish() {
       if (R.finished) return; R.finished = true;
-      const w = R.matchWinner >= 0 ? R.matchWinner : (R.wins[0] >= R.wins[1] ? 0 : 1);
+      const w = R.matchWinner >= 0 ? R.matchWinner : Math.max(0, R.wins.indexOf(Math.max(...R.wins)));
       const how = R.coin ? 'Alles gelijk, dus de golem gooide een muntje.' : R.wins[w] >= WIN_ROUNDS ? 'Twee kluizen gekraakt!' : 'De tijd was op, de beste kraker won.';
-      ctx.finishPvp({ winner: w, score: [R.wins[0], R.wins[1]], delay: 700, summary: `${names[w]} is de <b>Kristal-Kraker</b>! ${how} (Gokken: ${names[0]} ${PS[0].subs}, ${names[1]} ${PS[1].subs}.)` });
+      const place = IDX.slice().sort((a, b) => (a === w ? -1 : b === w ? 1 : (R.wins[b] - R.wins[a]) || (PS[b].totalQ - PS[a].totalQ) || (a - b)));
+      ctx.finishPvp({ winner: w, score: R.wins.slice(), place, delay: 700, summary: `${names[w]} is de <b>Kristal-Kraker</b>! ${how} (Gokken: ${IDX.map((k) => `${names[k]} ${PS[k].subs}`).join(', ')}.)` });
     }
 
     // ---------------- spelers: invoer ----------------
@@ -149,10 +155,12 @@ export default {
     }
     const NP = COLS;
     function usePower(p) {
-      const o = PS[1 - p.i];
+      // sabotage richt zich op de beste tegenstander van deze ronde (bij 2 spelers: de ander)
+      const cands = PS.filter((q) => q !== p && q.status === 'play' && !(q.sab.ghost > 0 || q.sab.sand > 0));
+      const o = cands.length ? cands.reduce((a, q) => (q.bestQ > a.bestQ ? q : a), cands[0]) : PS.filter((q) => q !== p).reduce((a, q) => (q.bestQ > a.bestQ ? q : a));
       if (p.power <= 0) { say(p, 'Geen power', '#ff9a8a'); audio.sfx('miss'); return; }
-      if (o.status !== 'play') { say(p, 'Die is al klaar', '#ff9a8a'); return; }
-      if (o.sab.ghost > 0 || o.sab.sand > 0 || proj.on) { say(p, 'Hij zit al vast!', '#ff9a8a'); return; }
+      if (o.status !== 'play') { say(p, N === 2 ? 'Die is al klaar' : 'Iedereen is al klaar', '#ff9a8a'); return; }
+      if (o.sab.ghost > 0 || o.sab.sand > 0 || proj.on) { say(p, N === 2 ? 'Hij zit al vast!' : 'Ze zitten al vast!', '#ff9a8a'); return; }
       p.power--; refreshHud();
       proj.on = true; proj.t = 0; proj.from = p.i; proj.to = o.i; proj.type = Math.random() < 0.6 ? 'ghost' : 'sand';
       V.chars[p.i].swing(); audio.sfx('throw'); audio.sfx('whoosh', { vol: 0.5 });
@@ -192,7 +200,7 @@ export default {
         R.elapsed += dt; R.timeLeft -= dq;
         hud.setTimer(R.timeLeft, 8); V.setFuse(R.timeLeft / R.limit);
         if (Math.random() < dt * 30) fx.particles.emit(V.fuseTip, BOARD_Y + 7.4, 0.6, (Math.random() - 0.5) * 2, 1 + Math.random() * 2, 0, { life: 0.5, size: 0.22, color: Math.random() < 0.5 ? 0xffd23f : 0xff7a1a, gravity: 2 });
-        const order = Math.random() < 0.5 ? [0, 1] : [1, 0];
+        const order = IDX.slice().sort(() => Math.random() - 0.5);
         for (const i of order) { handlePlayer(PS[i], dt); if (R.phase !== 'play') break; }
         // golem
         if (R.phase === 'play') {
@@ -201,11 +209,11 @@ export default {
           // einde: iedereen klaar of tijd op
           const allDone = PS.every((p) => p.status !== 'play');
           if (R.timeLeft <= 0 || allDone) {
-            const q = PS.map((p) => p.bestQ);
-            if (q[0] === q[1]) endRound(-1, R.timeLeft <= 0 ? 'time' : 'tie'); else endRound(q[0] > q[1] ? 0 : 1, R.timeLeft <= 0 ? 'time' : 'quality');
+            const bw = uniqMax(PS.map((p) => p.bestQ));
+            if (bw < 0) endRound(-1, R.timeLeft <= 0 ? 'time' : 'tie'); else endRound(bw, R.timeLeft <= 0 ? 'time' : 'quality');
           }
         }
-        if (R.elapsed >= GAME_CAP && R.phase === 'play') { const q = PS.map((p) => p.bestQ); endRound(q[0] === q[1] ? -1 : q[0] > q[1] ? 0 : 1, 'time'); }
+        if (R.elapsed >= GAME_CAP && R.phase === 'play') { endRound(uniqMax(PS.map((p) => p.bestQ)), 'time'); }
       } else if (R.phase === 'end') {
         for (const p of PS) dirEdge(p);
         V.setChest(Math.min(1, V.chestU + dt * 1.6));
@@ -238,7 +246,7 @@ export default {
             const s = slotPos(b, rcur, c); const v = p.cur[c]; const sel = playing && c === p.cursor;
             if (v >= 0) V.crystal(v, s.x, s.y + Math.sin(t * 3 + c) * 0.04, fogged ? 1.3 : 0.4, sel ? 1.0 + Math.sin(t * 8) * 0.05 : 0.84, t * (sel ? 2.2 : 0.8) + c, 0);
           }
-          const cs = slotPos(b, rcur, p.cursor); const cu = V.cursor[b]; cu.visible = playing; cu.position.set(cs.x, cs.y, 0.05); cu.scale.setScalar(1 + Math.sin(t * 8) * 0.05 + (p.wrongT > 0 ? 0.15 : 0)); cu.material.color.setHex(p.wrongT > 0 ? 0xff4a4a : p.sab.sand > 0 ? 0xffd86b : [0x4aff9a, 0x4a8cff][b]);
+          const cs = slotPos(b, rcur, p.cursor); const cu = V.cursor[b]; cu.visible = playing; cu.position.set(cs.x, cs.y, 0.05); cu.scale.setScalar(1 + Math.sin(t * 8) * 0.05 + (p.wrongT > 0 ? 0.15 : 0)); cu.material.color.setHex(p.wrongT > 0 ? 0xff4a4a : p.sab.sand > 0 ? 0xffd86b : PLAYER_COLORS[b]);
         } else V.cursor[b].visible = false;
         // hint-rij
         if (p.hint) { const hp = hintPos(b, p.hint.pos); V.crystal(p.hint.color, hp.x, hp.y, 0.3, 0.55, t * 0.7, 0); }
@@ -263,7 +271,7 @@ export default {
         V.drawHeader(p.i, { name: names[p.i], wins: R.wins[p.i], line1: p.status === 'cracked' ? 'GEKRAAKT!' : p.status === 'out' ? 'Pogingen op' : `Poging ${Math.min(p.rows.length + 1, MAX_TRIES)} / ${MAX_TRIES}`, line2: p.power > 0 ? `POWER x${p.power}: houd B` : hintTxt, line2Col: p.power > 0 ? '#d8b8ff' : '#ffd23f' });
       }
       let bn;
-      if (R.phase === 'final') bn = { title: `${names[R.matchWinner]} WINT!`, sub: `${R.wins[0]} – ${R.wins[1]} in rondes` };
+      if (R.phase === 'final') bn = { title: `${names[R.matchWinner]} WINT!`, sub: `${R.wins.join(' – ')} in rondes` };
       else if (R.phase === 'end') bn = { title: R.winner >= 0 ? `${names[R.winner]} kraakt de code!` : 'Niemand kraakte hem', sub: R.winner >= 0 ? (R.reason === 'crack' ? 'De kluis springt open!' : 'Beste gok wint de ronde') : 'Gelijkspel in deze ronde' };
       else if (R.golemState === 'warn') bn = { title: 'PAS OP!', sub: `De golem verandert de code over ${Math.max(1, Math.ceil(WARN_T - R.golemT))}...`, warn: true };
       else if (R.phase === 'wait') bn = { title: 'KRISTAL-CODE', sub: 'Kraak de kluis voor je broer!' };
@@ -283,8 +291,8 @@ export default {
       onDeurman(movers) {
         movers.forEach((m, i) => { if (m) { const p = PS[i]; p.sab.sand = Math.max(p.sab.sand, 2.0); say(p, 'BEWOOG! Zandloper!', '#ff6a6a'); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.3); } });
       },
-      celebrate(w) { V.chars[w].pose = 'cheer'; V.chars[1 - w].pose = 'sad'; },
-      onStart() { hud.setHint('◀▶ plek · ▲▼ kristal · A gok · B wis (vasthouden = POWER)'); },
+      celebrate(w, winners = [w]) { V.chars.forEach((c, i) => { c.pose = winners.includes(i) ? 'cheer' : 'sad'; }); },
+      onStart() { hud.setHint('◀▶ plek · ▲▼ kristal · A gok · B wis (vasthouden = POWER)'); if (N > 2) hud.toast('Pinnetjes: goud = goede plek, wit = goede kleur op een andere plek', 4500); },
       onResize() { V.fitCamera(camera); },
       dispose() {},
       dbg: {

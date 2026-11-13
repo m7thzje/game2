@@ -7,6 +7,9 @@ import { boxGeo, glowTex } from './stack_world.js';
 // Omgeving van "Blokkenstrijd": de Neonkelder — een donkere kasteelkelder vol neonbuizen, een gloeiende rasters-vloer,
 // zwevende blokjes, fakkels en twee gloeiende speelvelden met een voetstuk en een scoreplaatje.
 export const FW = 10, FH = 16, FX = [-9.5, 9.5];
+// Bij 3-4 spelers staan de velden naast elkaar (poppetje + 'volgende'-rij boven elk veld); setFieldLayout(n) vult FX opnieuw.
+export const FSPACE = 12.9;
+export function setFieldLayout(n) { FX.length = 0; if (n <= 2) FX.push(-9.5, 9.5); else for (let i = 0; i < n; i++) FX.push((i - (n - 1) / 2) * FSPACE); }
 const NEON = ['#35e6ff', '#ff5ad8', '#ffe14a', '#8dff6a', '#b45cff'];
 
 // Afgeschuinde, glanzende blok-textuur (wit zodat instance-kleuren hem inkleuren)
@@ -44,7 +47,8 @@ export function neonText(text, color, w = 640, h = 160, size = 110) {
 }
 
 export function buildArena(ctx, names, colors) {
-  const { scene } = ctx;
+  const { scene } = ctx; const NF = names.length, WIDE = NF > 2; setFieldLayout(NF);
+  const pillarX = WIDE ? FX[NF - 1] + 8.4 : 18.4;
   const rng = mulberry32(2024);
   const idx0 = scene.children.length;
   const A = { fields: [] };
@@ -68,11 +72,11 @@ export function buildArena(ctx, names, colors) {
   const pillarM = new THREE.MeshStandardMaterial({ map: tex.stone(1, 4), color: 0x6a5c9a, roughness: 0.9, flatShading: true });
   A.torches = [];
   for (const sx of [-1, 1]) {
-    scene.add(mesh(new THREE.BoxGeometry(2.4, 26, 2.4), pillarM, { cast: false, pos: [sx * 18.4, 13, -2.5] }));
+    scene.add(mesh(new THREE.BoxGeometry(2.4, 26, 2.4), pillarM, { cast: false, pos: [sx * pillarX, 13, -2.5] }));
     for (const dy of [0, 1]) {
-      const fl = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.9, 6), new THREE.MeshBasicMaterial({ color: 0xffa030 })); fl.position.set(sx * 17.1, 6 + dy * 7.5, -1.2);
+      const fl = new THREE.Mesh(new THREE.ConeGeometry(0.34, 0.9, 6), new THREE.MeshBasicMaterial({ color: 0xffa030 })); fl.position.set(sx * (pillarX - 1.3), 6 + dy * 7.5, -1.2);
       const gl = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex(), color: 0xffa040, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending })); gl.scale.set(5, 5, 1); gl.position.copy(fl.position);
-      scene.add(mesh(new THREE.CylinderGeometry(0.1, 0.14, 0.9, 6), mat(0x3a2a1e), { cast: false, pos: [sx * 17.1, 5.6 + dy * 7.5, -1.2] }));
+      scene.add(mesh(new THREE.CylinderGeometry(0.1, 0.14, 0.9, 6), mat(0x3a2a1e), { cast: false, pos: [sx * (pillarX - 1.3), 5.6 + dy * 7.5, -1.2] }));
       scene.add(fl, gl); A.torches.push({ fl, gl, ph: rng() * 6 });
     }
   }
@@ -80,10 +84,10 @@ export function buildArena(ctx, names, colors) {
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.6, 2.0), new THREE.MeshBasicMaterial({ map: neonText('BLOKKEN', '#ffe14a', 512, 140, 100), transparent: true, depthWrite: false, toneMapped: false }));
   sign.position.set(0, 14.8, -0.8); scene.add(sign);
   const sign2 = new THREE.Mesh(new THREE.PlaneGeometry(7.6, 2.0), new THREE.MeshBasicMaterial({ map: neonText('STRIJD', '#ff5ad8', 512, 140, 100), transparent: true, depthWrite: false, toneMapped: false }));
-  sign2.position.set(0, 13.15, -0.8); scene.add(sign2); A.signs = [sign, sign2];
+  sign2.position.set(0, 13.15, -0.8); scene.add(sign2); A.signs = [sign, sign2]; if (WIDE) { sign.visible = sign2.visible = false; }
 
   // speelvelden: achtergrondvlak, neon-lijst, voetstuk
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < NF; i++) {
     const cx = FX[i], col = colors[i];
     const g = new THREE.Group(); g.position.set(cx, 0, 0); scene.add(g);
     const gt = gridTexture(FW, FH);
@@ -110,7 +114,7 @@ export function buildArena(ctx, names, colors) {
     };
     drawPlaque(0, 0);
     // pedestal voor het poppetje in de middenstrook
-    scene.add(mesh(new THREE.CylinderGeometry(1.7, 1.9, 0.9, 14), dark, { cast: false, pos: [i ? 2.35 : -2.35, -0.2, 1.1] }));
+    if (!WIDE) scene.add(mesh(new THREE.CylinderGeometry(1.7, 1.9, 0.9, 14), dark, { cast: false, pos: [i ? 2.35 : -2.35, -0.2, 1.1] }));
     A.fields.push({ g, frameMat: fm, panel, drawPlaque, col });
   }
   // zwevende blokjes op de achtergrond
@@ -130,7 +134,7 @@ export function buildArena(ctx, names, colors) {
     for (const tc of A.torches) { const f = 0.85 + Math.sin(t * 11 + tc.ph) * 0.15 + Math.sin(t * 23 + tc.ph * 2) * 0.08; tc.fl.scale.set(f, f * (1 + Math.sin(t * 9 + tc.ph) * 0.1), f); tc.gl.material.opacity = 0.5 + f * 0.25; }
     A.signs[0].material.opacity = 0.85 + Math.sin(t * 3) * 0.1; A.signs[1].material.opacity = Math.sin(t * 2.2 + 1) > 0.92 ? 0.35 : 0.95;
   };
-  A.lights = [new THREE.PointLight(0x35e6ff, 1.4, 34, 1.4), new THREE.PointLight(0xff5ad8, 1.4, 34, 1.4)];
-  A.lights[0].position.set(-9.5, 9, 6); A.lights[1].position.set(9.5, 9, 6); scene.add(...A.lights);
+  A.lights = [new THREE.PointLight(0x35e6ff, 1.4, WIDE ? 44 : 34, 1.4), new THREE.PointLight(0xff5ad8, 1.4, WIDE ? 44 : 34, 1.4)];
+  A.lights[0].position.set(WIDE ? -FX[NF - 1] * 0.5 : -9.5, 9, 6); A.lights[1].position.set(WIDE ? FX[NF - 1] * 0.5 : 9.5, 9, 6); scene.add(...A.lights);
   return A;
 }

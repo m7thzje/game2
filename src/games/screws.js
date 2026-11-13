@@ -55,7 +55,7 @@ export default {
       const cage = buildCage(Y0 + 4.2, BLOCK_H); cage.position.x = COL_X[i]; scene.add(cage);
       cage.traverse((o) => { if (o.isMesh) o.castShadow = o.castShadow && false; });
       // poppetje
-      const c = ctx.make.brother(i); const sz = ctx.pvp.size(i); const base = 2.7 / c.height;
+      const c = ctx.make.brother(i); const sz = ctx.pvp.size(i); const base = (N === 2 ? 2.7 : N === 3 ? 3.2 : 3.6) / c.height;   // bij 3-4 kolommen staan de poppetjes verder weg: iets groter
       c.group.scale.setScalar(base * sz); scene.add(c.group); c.faceDir(0, 1);
       // markeringen op de kop
       const mk = (col) => { const m = new THREE.Mesh(new THREE.RingGeometry(0.75, 1.0, 28), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); m.rotation.x = -Math.PI / 2; m.visible = false; sc.group.add(m); return m; };

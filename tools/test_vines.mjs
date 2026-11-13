@@ -1,4 +1,4 @@
-// Gebruik: node tools/test_vines.mjs [bots|twists|idle|oneside|shots] [twist-id]
+// Gebruik: node tools/test_vines.mjs [bots|twists|idle|oneside|shots|shots3|shots4] [twist-id]
 //   bots3 / bots4 = drie / vier spelers (vrij voor allen, ?players=N): alle spelers krijgen input, uitslag volgt, place klopt.
 // Versneld (zonder renderen) potjes Lianen-Zwaaien laten spelen door bots; rapporteert winnaars, duur, fouten.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
@@ -171,11 +171,11 @@ if (scen === 'bots3' || scen === 'bots4') {
   console.log(out.join(' | '));
   console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 6).join('\n') : 'NO ERRORS');
   await browser.close();
-} else if (scen === 'shots') {
-  const tw = args[1] || 'none';
-  const { browser, page, errors } = await open(tw);
-  const O = { skill: [0.55, 0.5] };
-  const shot = async (name) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); await page.screenshot({ path: `/tmp/vines_${name}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', name); };
+} else if (/^shots[34]?$/.test(scen)) {
+  const tw = args[1] || 'none', NS = +scen.slice(5) || 2;
+  const { browser, page, errors } = await open(tw, '', NS);
+  const O = { skill: [0.55, 0.5, 0.6, 0.5].slice(0, NS) };
+  const shot = async (name) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(900); await page.screenshot({ path: `/tmp/vines${NS > 2 ? NS : ''}_${name}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', name); };
   await shot('start');
   await page.evaluate((O) => window.__bot(60 * 6, O), O);
   await shot('play1');
@@ -191,7 +191,7 @@ if (scen === 'bots3' || scen === 'bots4') {
   await shot('yell');
   await page.evaluate((O) => window.__bot(60 * 80, O, (s) => window.__app.mode.instance.dbg.world.dragonState.on && window.__app.mode.instance.dbg.world.dragonState.t > 3.5), O);
   await shot('dragon');
-  await page.evaluate((O) => window.__bot(60 * 200, { skill: [0.95, 0.9] }), O);
+  await page.evaluate((O) => window.__bot(60 * 200, { skill: [0.95, 0.9, 0.9, 0.9].slice(0, O.skill.length) }), O);
   await page.evaluate(() => { for (let k = 0; k < 40; k++) { window.__app.input.update(); window.__app.mode.update(1 / 30); } });
   await shot('end');
   console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 6).join('\n') : 'NO ERRORS');

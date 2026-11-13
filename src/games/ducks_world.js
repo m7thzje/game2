@@ -48,25 +48,35 @@ const GEO = {
 const PAL = [0xff4d6d, 0xffd23f, 0x3bd16f, 0x4aa8ff, 0xff8a3a, 0xb06bff, 0xff7ad9, 0x35d8d0];
 
 // ---------------- parcours (gespiegeld voor beide banen) ----------------
-export function makeCourse(rng) {
+export function makeCourse(rng, lanes = null) {
   const obs = [], whirls = [], pads = [];
   const mirror = (fn) => { fn(1); fn(-1); };
+  // 3-4 spelers (lanes = z van elke baan): in elke baan hetzelfde patroon, zodat binnen- en buitenbanen even moeilijk zijn.
+  // Aangrenzende banen krijgen een obstakel niet op dezelfde plek maar 6 m verschoven (anders staat er een muur van rotsen
+  // dwars over de vaart: bij 4 banen is de afstand tussen twee banen maar 3,4).
+  // put(zz, r, fn): bij 2 spelers gespiegeld op z = +-zz (zoals altijd, dx = 0); anders eenmaal per baan met dx = 0 / 6 (om en om).
+  const spc = lanes ? Math.abs(lanes[0] - lanes[1]) : 0;
+  const put = (zz, r, fn) => {
+    if (!lanes) { mirror((s) => fn(s * zz, s, 0)); return; }
+    lanes.forEach((lz, k) => { const sd = lz < -0.01 ? -1 : 1; fn(clamp(lz + sd * (zz - 4.3) * 0.55, -(W - r - 0.3), W - r - 0.3), sd, (k % 2) * 6); });
+  };
   const inCasc = (x) => TRK.CASC.some((c) => x > c.x - 22 && x < c.x + 18);
   const nearBr = (x) => TRK.BRIDGES.some((b) => Math.abs(x - b) < 10);
-  // bruggen: pilaren
+  // bruggen: pilaren (staan tussen de banen)
   for (const b of TRK.BRIDGES) mirror((s) => obs.push({ x: b, z: s * 3.3, r: 0.85, kind: 'pillar', e: 0.55 }));
-  // trappen: stenen na de val (ruim genoeg om langs te komen: gat >= 2 eendbreedtes)
-  for (const k of TRK.CASC) mirror((s) => { obs.push({ x: k.x + 7, z: s * 3.5, r: 1.1, kind: 'rock', e: 0.55 }); obs.push({ x: k.x + 12, z: s * 4.0, r: 0.9, kind: 'rock', e: 0.55 }); });
+  // trappen: stenen na de val (ruim genoeg om langs te komen: gat >= 2 eendbreedtes); bij 3-4 banen weggelaten (de stroming na de val is daar al hindernis genoeg)
+  if (!lanes) for (const k of TRK.CASC) { put(3.5, 1.1, (z, s, dx) => obs.push({ x: k.x + 7 + dx, z, r: 1.1, kind: 'rock', e: 0.55 })); put(4.0, 0.9, (z, s, dx) => obs.push({ x: k.x + 12 + dx, z, r: 0.9, kind: 'rock', e: 0.55 })); }
   let x = 26; let last = '';
   while (x < L - 26) {
     if (inCasc(x) || nearBr(x)) { x += 6; continue; }
     let r = rng(); let kind = r < 0.34 ? 'rock' : r < 0.54 ? 'pad' : r < 0.74 ? 'whirl' : r < 0.9 ? 'buoy' : 'center';
     if (kind === last && rng() < 0.6) kind = 'rock';
     last = kind;
-    if (kind === 'rock') { const rr = 0.8 + rng() * 0.7, zz = rr + 1.8 + rng() * Math.max(0, W - rr - 1.9 - rr - 1.8); mirror((s) => obs.push({ x, z: s * zz, r: rr, kind: 'rock', e: 0.55 })); if (rng() < 0.4) { const z2 = 2.5 + rng() * 1.9; mirror((s) => obs.push({ x: x + 4.5, z: s * z2, r: 0.7, kind: 'rock', e: 0.55 })); } }
-    else if (kind === 'pad') { const zz = 2 + rng() * 3.4; mirror((s) => { pads.push({ x, z: s * zz, r: 1.7 + rng() * 0.5 }); pads.push({ x: x + 3, z: s * (zz + (rng() - 0.5) * 2.4), r: 1.3 + rng() * 0.4 }); }); }
-    else if (kind === 'whirl') { const zz = 2.6 + rng() * 2.4; mirror((s) => whirls.push({ x, z: s * zz, r: 3.2, dir: s })); }
-    else if (kind === 'buoy') { const zz = 2.5 + rng() * 1.9; mirror((s) => { obs.push({ x, z: s * zz, r: 0.65, kind: 'buoy', e: 1.05 }); obs.push({ x: x + 2.4, z: s * Math.min(4.4, zz + 1.2), r: 0.65, kind: 'buoy', e: 1.05 }); }); }
+    if (kind === 'rock') { const rr0 = 0.8 + rng() * 0.7, zz = rr0 + 1.8 + rng() * Math.max(0, W - rr0 - 1.9 - rr0 - 1.8), rr = lanes ? Math.min(rr0, 1.2) : rr0; put(zz, rr, (z, s, dx) => obs.push({ x: x + dx, z, r: rr, kind: 'rock', e: 0.55 })); if (rng() < 0.4) { const z2 = 2.5 + rng() * 1.9; put(z2, 0.7, (z, s, dx) => obs.push({ x: x + 4.5 + dx, z, r: 0.7, kind: 'rock', e: 0.55 })); } }
+    else if (kind === 'pad') { const zz = 2 + rng() * 3.4, ps = lanes ? 0.8 : 1; put(zz, 2, (z, s, dx) => { pads.push({ x: x + dx, z, r: (1.7 + rng() * 0.5) * ps }); pads.push({ x: x + dx + 3, z: z + s * (rng() - 0.5) * 2.4 * ps, r: (1.3 + rng() * 0.4) * ps }); }); }
+    else if (kind === 'whirl') { const zz = 2.6 + rng() * 2.4, wr = lanes ? Math.min(3.2, spc * 0.6) : 3.2; put(zz, wr * 0.5, (z, s, dx) => whirls.push({ x: x + dx, z, r: wr, dir: s })); }
+    else if (kind === 'buoy') { const zz = 2.5 + rng() * 1.9; put(zz, 0.65, (z, s, dx) => obs.push({ x: x + dx, z, r: 0.65, kind: 'buoy', e: 1.05 })); put(Math.min(4.4, zz + 1.2), 0.65, (z, s, dx) => obs.push({ x: x + 2.4 + dx, z, r: 0.65, kind: 'buoy', e: 1.05 })); }
+    else if (lanes) put(3.4, 0.9, (z, s, dx) => obs.push({ x: x + dx, z, r: 0.9, kind: 'rock', e: 0.55 }));
     else obs.push({ x, z: 0, r: 1.15, kind: 'rock', e: 0.55 });
     x += 12 + rng() * 6;
   }

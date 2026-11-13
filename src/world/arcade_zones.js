@@ -1,6 +1,8 @@
 // Zones (thema-eilanden) per speelhal: data + opstellingen. De spel-ids komen uit ARCADE_HALLS (src/games/index.js);
 // ids die in geen enkele zone staan worden automatisch aan de laatste zone toegevoegd, zodat er nooit een spel kwijtraakt.
 import { ARCADE_HALLS } from '../games/index.js';
+import { GAMEHAL } from '../variant.js';
+import { applyZones } from '../gamehal/humor.js';
 
 export const HALL_SIZE = { w: 56, d: 40 };   // x: -28..28, z: -20..20
 
@@ -69,6 +71,8 @@ export const ZONES = [
       ids: ['deurdisco'], at: [{ x: 0, z: -3.6, yaw: 0 }], tableIds: [] },
   ],
 ];
+
+if (GAMEHAL) applyZones(ZONES);   // impactID Gamehal: kantoornamen voor de zones (ids blijven)
 
 // Geeft per hal de zones terug met geplaatste kasten: zone.cabs = [{ id, x, z, yaw, zone }]. Ids die ontbreken in de data komen in de laatste zone.
 export function layoutHall(hallId) {

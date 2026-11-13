@@ -1,4 +1,5 @@
-// Gebruik: node tools/test_blocks.mjs [scenario...]   scenario: logic | bots | twists | idle | timeout | sd | features | shots
+// Gebruik: node tools/test_blocks.mjs [scenario...]   scenario: logic | bots | twists | idle | timeout | sd | features | multi | shots
+//   PLAYERS=3|4: drie/vier velden naast elkaar (bots voor elk veld; 'multi' test de eliminatie en de rommel naar de koploper).
 //   TW=<twist-id> kiest een twist. Q=low|high kwaliteit.
 // Bots (met een simpele blok-AI) spelen versneld (zonder renderen) hele potjes. Controleert: finishPvp precies 1x,
 // beide spelers kunnen winnen, geen console-errors, elke twist werkt, en de power-blokken / rommelrijen / kip / I-balk doen wat ze moeten.
@@ -16,6 +17,7 @@ const server = http.createServer((req, res) => {
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
+const N = +process.env.PLAYERS || 2;
 const scen = process.argv.slice(2).length ? process.argv.slice(2) : ['bots'];
 const TWISTS = ['none', 'invert', 'swapab', 'drunk', 'turbo', 'slowmo', 'slippery', 'lowgrav', 'bodyswap', 'deurman'];
 const fails = [];
@@ -27,15 +29,15 @@ async function open(twist) {
   const errors = [];
   page.on('console', (m) => { if (m.type() === 'error' && !/404|CERT_AUTHORITY|Failed to load resource/.test(m.text())) errors.push(`[${m.type()}] ${m.text()}`); });
   page.on('pageerror', (e) => errors.push('[pageerror] ' + e.message + '\n' + (e.stack || '')));
-  await page.goto(`http://localhost:${port}/?game=blocks&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0`);
+  await page.goto(`http://localhost:${port}/?game=blocks&quality=${process.env.Q || 'low'}&twist=${twist || 'none'}&scare=0${N >= 3 ? '&players=' + N : ''}`);
   await page.waitForFunction(() => window.__app && window.__app.mode, null, { timeout: 60000 });
   await page.waitForTimeout(800);
   await page.evaluate(async () => {
     const app = window.__app, mode = app.mode, inp = app.input;
     window.__L = await import('/src/games/blocks_logic.js');
     mode.paused = false;
-    inp.virtual[0].a = true; inp.virtual[1].a = true; inp.update(); mode.update(0.016);
-    inp.virtual[0].a = false; inp.virtual[1].a = false; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = true; inp.update(); mode.update(0.016);
+    for (const q of mode.ids) inp.virtual[q].a = false; inp.update(); mode.update(0.016);
     await new Promise((r) => setTimeout(r, 600));
     let g = 0; while (mode.state !== 'play' && g++ < 2000) { inp.update(); mode.update(0.016); }
     mode.paused = true;
@@ -45,18 +47,19 @@ async function open(twist) {
 }
 
 // cfg[j] = { skill 0..1 (kans op slechte plaatsing), think: frames wachten per stuk, idle }
-async function installBots(page, cfg) {
+async function installBots(page, cfg0) {
+  const cfg = Array.from({ length: N }, (_, i) => cfg0[i % cfg0.length]);
   await page.evaluate((cfg) => {
     const app = window.__app, m = app.mode, inst = m.instance, inp = app.input, L = window.__L;
     let s = 777; const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return s / 4294967296; };
-    const B = [0, 1].map(() => ({ piece: -1, plan: null, wait: 0, tog: 0 }));
+    const B = cfg.map(() => ({ piece: -1, plan: null, wait: 0, tog: 0 }));
     window.__cfg = cfg; window.__rnd = rnd;
     window.__bot = (n, stop) => {
       const dt = 1 / 60; m.paused = false; const tid = m.twist.id;
       for (let k = 0; k < n && !m.finished; k++) {
         if (stop && stop(inst.dbg.state())) { m.paused = true; return true; }
         for (const v of inp.virtual) { v.a = false; v.b = false; v.x = 0; v.y = 0; }
-        for (const j of [0, 1]) {
+        for (let j = 0; j < cfg.length; j++) {
           const c = window.__cfg[j], pj = inst.dbg.pl[j], b = B[j]; if (c.idle) continue;
           if (!pj.piece || pj.state !== 'play') { b.piece = -1; continue; }
           if (b.piece !== pj.pieces) { b.piece = pj.pieces; b.plan = L.aiPlan(pj.grid, pj.piece, c.skill, rnd); b.wait = c.think ?? 6; }
@@ -64,7 +67,7 @@ async function installBots(page, cfg) {
           const pc = pj.piece, plan = b.plan; if (!plan) continue;
           let x = 0, a = false, bb = false;
           if (pc.r !== plan.r) { b.tog ^= 1; a = !!b.tog; } else if (pc.x !== plan.x) x = pc.x < plan.x ? 1 : -1; else bb = true;
-          const vi = m.swapped ? 1 - j : j, v = inp.virtual[vi];
+          const src = (q) => { if (!m.swapped) return q; for (const [x, y] of (m.swapPairs || [[0, 1]])) { if (q === x) return y; if (q === y) return x; } return q; }, v = inp.virtual[m.ids[src(j)]];
           let vx = x, vy = 0;
           if (tid === 'invert') vx = -x;
           if (tid === 'drunk') { const ang = Math.sin(m.t * 1.9 + j * 2) * 0.95 + Math.sin(m.t * 5.3) * 0.25, cs = Math.cos(ang), sn = Math.sin(ang); vx = x * cs; vy = -x * sn; }
@@ -101,11 +104,17 @@ for (const name of scen) {
     continue;
   }
   if (['bots', 'twists', 'timeout', 'idle', 'sd'].includes(name)) {
+    const I = { idle: true };
     const list = name === 'twists' ? TWISTS.map((t) => [t, [BOT(0.85), BOT(0.7)], null])
-      : name === 'idle' ? [['none', [{ idle: true }, { idle: true }], 'idle']]
-        : name === 'sd' ? [['none', [{ idle: true }, { idle: true }], 'sd']]
+      : name === 'idle' ? [['none', [I, I], 'idle']]
+        : name === 'sd' ? [['none', [I, I], 'sd']]
           : name === 'timeout' ? [['none', [BOT(0.8), BOT(0.8)], 'timeout']]
-            : [
+            : N > 2 ? [
+              [process.env.TW || 'none', [BOT(1.0, 2), I, I, I], 'p0'],
+              [process.env.TW || 'none', [I, I, BOT(1.0, 2), I], 'p2'],
+              [process.env.TW || 'none', Array.from({ length: N }, (_, i) => (i === N - 1 ? BOT(0.95, 3) : BOT(0.6, 10))), 'good' + (N - 1)],
+              [process.env.TW || 'none', [BOT(0.95, 3), BOT(0.6, 10), BOT(0.6, 10), BOT(0.6, 10)], 'good0'],
+            ] : [
               [process.env.TW || 'none', [BOT(1.0, 2), { idle: true }], 'p0'],
               [process.env.TW || 'none', [{ idle: true }, BOT(1.0, 2)], 'p1'],
               [process.env.TW || 'none', [BOT(0.95, 3), BOT(0.6, 10)], 'good0'],
@@ -132,14 +141,46 @@ for (const name of scen) {
       console.log(`end T=${st.T.toFixed(1)} score=${st.p.map((p) => p.score)} lines=${st.p.map((p) => p.lines)} sent=${st.stats.garbageSent} bombs=${st.stats.bombs} freezes=${st.stats.freezes} rainbows=${st.stats.rainbows} chickens=${st.stats.chickens} gifts=${st.stats.gifts} tetris=${st.stats.tetris} why=${st.why}`);
       if (res.result) console.log(`RESULT winner=${res.result.winner} score=${res.result.scoreArr} :: ${res.result.summary.replace(/<[^>]+>/g, ' ')}`);
       check(res.finished && res.fin === 1, `finishPvp precies 1x (aantal=${res.fin}) [${name}/${tw}]`);
-      check(res.result && (res.result.winner === 0 || res.result.winner === 1), `er is een winnaar [${name}/${tw}]`);
-      if (expect === 'p0') check(res.result.winner === 0, 'bot 0 wint van niets-doen');
-      if (expect === 'p1') check(res.result.winner === 1, 'bot 1 wint van niets-doen');
+      check(res.result && res.result.winner >= 0 && res.result.winner < N, `er is een winnaar [${name}/${tw}]`);
+      if (N > 2 && res.result) check(res.result.scoreArr.length === N && res.result.place.length === N && new Set(res.result.place).size === N && res.result.place[0] === res.result.winnerId && res.result.winnerIds.length === 1, `resultaat: ${N} scores, place = ${res.result.place}, één winnaar`);
+      if (/^p\d$/.test(expect || '')) check(res.result.winner === +expect[1], `bot ${expect[1]} wint van niets-doen`);
       if (expect === 'sd') check(st.why === 'sd' || st.why === 'topout', `sudden death beslist (${st.why})`);
       check(errors.length === 0, `geen console-errors [${name}/${tw}]${errors.length ? '\n' + errors.slice(0, 6).join('\n') : ''}`);
       await browser.close();
     }
     continue;
+  }
+  if (name === 'features' && N > 2) { console.log('features: alleen voor 2 spelers (zie multi)'); continue; }
+  if (name === 'multi') {
+    const { browser, page, errors } = await open('none'); await installBots(page, [{ idle: true }]);
+    const R = await page.evaluate(() => {
+      const m = window.__app.mode, inst = m.instance, d = inst.dbg, inp = window.__app.input; const out = {};
+      const step = (n) => { m.paused = false; for (let k = 0; k < n && !m.finished; k++) { for (const v of inp.virtual) { v.a = false; v.b = false; v.x = 0; v.y = 0; } inp.update(); m.update(1 / 60); } m.paused = true; };
+      const waitPiece = (i) => { let g = 0; while ((!d.pl[i].piece || d.pl[i].state !== 'play') && g++ < 600) step(1); };
+      const hard = (i) => { const v = inp.virtual[m.ids[i]]; m.paused = false; v.b = true; inp.update(); m.update(1 / 60); v.b = false; inp.update(); m.update(1 / 60); m.paused = true; };
+      const clearBoard = (i) => { for (const r of d.pl[i].grid) r.fill(0); };
+      step(60); const n = d.pl.length; out.n = n;
+      // 1. rommel gaat naar de koploper (hoogste score), niet naar de ander
+      for (let i = 0; i < n; i++) { clearBoard(i); d.pl[i].pend = 0; d.setScore(i, 0); } d.setScore(2, 900); d.setScore(1, 400);
+      for (let r = 14; r < 16; r++) for (let c = 0; c < 10; c++) d.pl[0].grid[r][c] = (c === 4 || c === 5) ? 0 : 2;
+      waitPiece(0); d.setPiece(0, { t: 'O' }); hard(0); step(90);
+      out.pend = d.pl.map((p) => p.pend); out.sent = d.state().stats.garbageSent[0];
+      // 2. een veld dat vol zit: die speler is eruit, het spel gaat door
+      d.topOut(1); step(30); out.afterOne = { fin: window.__fin, states: d.pl.map((p) => p.state), g: d.state().g };
+      // 3. gaat de rommel nu naar een levende speler?
+      // 4. alle anderen eruit: de laatste wint
+      for (let i = 0; i < n; i++) if (i !== 3 % n && d.pl[i].state !== 'dead') d.topOut(i); step(120);
+      out.fin = window.__fin; out.result = m.result ? { winner: m.result.winner, place: m.result.place, winnerIds: m.result.winnerIds } : null; out.finished = m.finished;
+      return out;
+    });
+    console.log(JSON.stringify(R));
+    const lead = 2 % R.n;
+    check(R.pend[lead] >= 1 && R.pend.filter((_, i) => i !== lead).every((v) => v === 0) && R.sent >= 1, `rommel gaat naar de koploper (speler ${lead}): pend=${R.pend}`);
+    check(R.afterOne.fin === 0 && R.afterOne.states[1] === 'dead' && R.afterOne.g === 'play', 'één speler eruit: spel gaat door');
+    check(R.finished && R.fin === 1 && R.result && R.result.winner === 3 % R.n && R.result.place[0] === R.result.winnerIds[0], `laatste die overblijft wint (winnaar ${R.result && R.result.winner}, place ${R.result && R.result.place})`);
+    check(R.result && R.result.place[R.n - 1] === 1, 'eerst uitgeschakelde speler is laatste in place');
+    check(errors.length === 0, `geen console-errors [multi]${errors.length ? '\n' + errors.slice(0, 6).join('\n') : ''}`);
+    await browser.close(); continue;
   }
   if (name === 'features') {
     const { browser, page, errors } = await open('none');

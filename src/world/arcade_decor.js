@@ -2,6 +2,8 @@
 // Alles gaat via Deco (samengevoegd). Functies krijgen de ArcadeMode (a) zodat ze colliders / levende onderdelen kunnen registreren.
 import * as THREE from 'three';
 import { canvasTex, TAU, mulberry32 } from '../engine/util.js';
+import { GAMEHAL } from '../variant.js';
+import { II, FONT, brandTex, drawLogo, rrect } from '../gamehal/common.js';
 
 const PI = Math.PI;
 const hex = (c) => '#' + c.toString(16).padStart(6, '0');
@@ -217,6 +219,39 @@ export const ZONE_PROPS = {
   },
 };
 
+// ---------------------------------------------------------------- impactID-reclamezuilen (alleen Gamehal)
+// Merkpalet voor confetti en vlaggetjes: blauw, lichtblauw, wit, en een tikje productroze/oranje (docs/IMPACTID_STIJL.md)
+const BRAND_PAL = [0x007fd8, 0x99ccef, 0xffffff, 0x3399e0, 0xd63576, 0xff6133];
+let SIGN_TEX = null;
+// Zuil met het impactID-logo op een witte plaat (het logo staat nooit op donker), GAMEHAL eronder en vier stippen in de spelerskleuren.
+// Staat bij de voorhoeken van elke hal, kijkt naar het midden. Eigen textuur (1x gebouwd, door alle zuilen gedeeld).
+export function impactidSign(a, D) {
+  const W = a.W, Dp = a.Dp;
+  SIGN_TEX ||= brandTex(768, 1152, (g, w, hh, logo) => {
+    g.fillStyle = II.navy3; g.fillRect(0, 0, w, hh);
+    g.fillStyle = '#fff'; rrect(g, 24, 24, w - 48, hh - 48, 60); g.fill(); g.strokeStyle = II.sky; g.lineWidth = 12; rrect(g, 24, 24, w - 48, hh - 48, 60); g.stroke();
+    drawLogo(g, logo, 70, 90, w - 140, 400);
+    g.fillStyle = II.line; g.fillRect(150, 540, w - 300, 6);
+    g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+    let fs = 150; g.font = `800 ${fs}px ${FONT}`; const mw = g.measureText('GAMEHAL').width; if (mw > 600) { fs = Math.floor(fs * 600 / mw); g.font = `800 ${fs}px ${FONT}`; }
+    g.fillStyle = II.navy; g.fillText('GAMEHAL', w / 2, 720); g.fillStyle = II.sky; g.fillRect(w / 2 - 220, 752, 440, 12);
+    g.font = `700 40px ${FONT}`; g.fillStyle = II.blue; if ('letterSpacing' in g) g.letterSpacing = '4px'; g.fillText('2 TOT 4 SPELERS', w / 2, 850); if ('letterSpacing' in g) g.letterSpacing = '0px';
+    ['#35c46f', '#4a8cff', '#ff9a3c', '#d45cf0'].forEach((c, i) => { g.fillStyle = c; g.beginPath(); g.arc(w / 2 + (i - 1.5) * 96, 960, 30, 0, TAU); g.fill(); });
+  });
+  for (const sx of [-1, 1]) {
+    const x = sx * (W / 2 - 3.4), z = Dp / 2 - 5.2, yaw = Math.atan2(-x, 44 - z);   // kijkt naar de camera (voorkant van de hal), een beetje naar het midden
+    D.at(x, 0, z, yaw, () => {
+      D.box(4.4, 0.9, 1.7, 0, 0.45, 0, 0x003872); D.box(4.0, 0.14, 1.3, 0, 0.97, 0, 0x007fd8, { kind: 'p1' });
+      D.box(3.9, 5.7, 0.5, 0, 3.9, 0, 0x003872);
+      for (const ex of [-1, 1]) D.box(0.12, 5.7, 0.12, ex * 1.98, 3.9, 0.28, 0x99ccef, { kind: 'p0' });
+      D.box(4.08, 0.12, 0.12, 0, 6.78, 0.28, 0x99ccef, { kind: 'p0' }); D.box(4.08, 0.12, 0.12, 0, 1.02, 0.28, 0x99ccef, { kind: 'p0' });
+    });
+    const pl = new THREE.Mesh(new THREE.PlaneGeometry(3.7, 5.55), new THREE.MeshBasicMaterial({ map: SIGN_TEX, toneMapped: false }));
+    pl.position.set(x + Math.sin(yaw) * 0.27, 3.9, z + Math.cos(yaw) * 0.27); pl.rotation.y = yaw; a.scene.add(pl);
+    col(a, x, z, 2.1); col(a, x + Math.cos(yaw) * 1.4, z - Math.sin(yaw) * 1.4, 1.0); col(a, x - Math.cos(yaw) * 1.4, z + Math.sin(yaw) * 1.4, 1.0);
+  }
+}
+
 // ---------------------------------------------------------------- hal-schil
 export function shell(a, D) {
   const W = a.W, Dp = a.Dp, id = a.hallId, T = a.theme; const rnd = mulberry32(100 + id);
@@ -229,10 +264,11 @@ export function shell(a, D) {
     });
   }
   // lichtjes op vloer: confetti-restjes
-  for (let i = 0; i < 160; i++) { const x = (rnd() - 0.5) * (W - 4), zz = (rnd() - 0.5) * (Dp - 3); D.disc(0.07 + rnd() * 0.12, x, 0.045, zz, [0xff5ad8, 0xffe14a, 0x5ad8ff, 0x7bff7b, 0xff8a1c][i % 5], { ry: rnd() * 6 }, 5); }
+  for (let i = 0; i < 160; i++) { const x = (rnd() - 0.5) * (W - 4), zz = (rnd() - 0.5) * (Dp - 3); D.disc(0.07 + rnd() * 0.12, x, 0.045, zz, (GAMEHAL ? BRAND_PAL : [0xff5ad8, 0xffe14a, 0x5ad8ff, 0x7bff7b, 0xff8a1c])[i % 5], { ry: rnd() * 6 }, 5); }
   // vlaggetjes en lichtsnoeren over de hal
-  const bc = [0xff5ad8, 0xffe14a, 0x5ad8ff, 0x7bff7b, 0xff8a1c, 0xb05aff];
+  const bc = GAMEHAL ? [...BRAND_PAL, 0xffffff] : [0xff5ad8, 0xffe14a, 0x5ad8ff, 0x7bff7b, 0xff8a1c, 0xb05aff];
   if (id !== 1 && id !== 4) for (const zz of [-6, 6, 16]) bunting(D, -W / 2 + 0.5, 11.5, zz, W / 2 - 0.5, 11.5, zz, bc, 26, 1.8, 0.9);
   else for (const zz of [-8, 15]) lampString(D, -W / 2 + 0.5, 11.2, zz, W / 2 - 0.5, 11.2, zz, 30, 1.4);
   if (id === 2) for (const zz of [0, 11]) lampString(D, -W / 2 + 0.5, 12, zz, W / 2 - 0.5, 12, zz, 30, 1.2);
+  if (GAMEHAL) impactidSign(a, D);
 }

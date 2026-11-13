@@ -1,62 +1,152 @@
-/* ---------- Impactid Gamehal: lobby, badges en tussenschermen (alleen geladen door gamehal.html) ---------- */
-:root{--p3:#ff9a3c;--p4:#d45cf0;--neon-a:#ff2bd6;--neon-b:#00e5ff;--neon-c:#ffe14a}
+/* ---------- impactID Gamehal: huisstijl, lobby, badges en tussenschermen (alleen geladen door gamehal.html; alles gescoped met body.gamehal) ----------
+   Bron en regels: docs/IMPACTID_STIJL.md. Spelerskleuren (--p1..--p4, --c per speler) blijven zoals ze zijn. */
+@font-face{font-family:'Plus Jakarta Sans';src:local('Plus Jakarta Sans'),url(fonts/PlusJakartaSans-Variable.ttf) format('truetype');font-weight:200 800;font-style:normal;font-display:swap}
+:root{--p3:#ff9a3c;--p4:#d45cf0;
+  --ii-navy:#003872;--ii-navy-2:#00244b;--ii-navy-3:#03152e;--ii-blue:#33608e;--ii-sky:#007fd8;--ii-sky-5:#3399e0;--ii-sky-3:#99ccef;--ii-sky-2:#cce5f7;--ii-sky-1:#e0effa;--ii-mist:#f5f7f9;--ii-line:#ccd7e3;--ii-body:#26313f;
+  --ii-fund:#ff3a00;--ii-fund-5:#ff6133;--ii-proj:#cc0254;--ii-proj-5:#d63576;--ii-field:#00912b;--ii-field-5:#33a755;
+  --ii-r-md:10px;--ii-r-lg:16px;--ii-r-xl:24px;
+  --ii-sh-md:0 8px 24px rgba(0,56,114,.10);--ii-sh-lg:0 18px 48px rgba(0,20,60,.45);--ii-ring:0 0 0 4px rgba(0,127,216,.35);
+  --ii-font:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --ii-display:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --ii-caps:.08em}
 
-/* lobby */
-.gh-lobby{position:absolute;left:0;top:0;bottom:0;width:min(430px,100vw);display:flex;flex-direction:column;align-items:center;padding:1.6vh 18px 1.2vh;pointer-events:none;
-  background:linear-gradient(90deg,rgba(8,3,24,.88),rgba(8,3,24,.66) 78%,rgba(8,3,24,0));overflow:hidden}
-.gh-lobby>*{pointer-events:auto;width:100%}
-.gh-title{font-family:'Fredoka',system-ui,sans-serif;font-weight:700;text-align:center;line-height:.92;letter-spacing:2px;text-transform:uppercase;margin:0 0 2px;pointer-events:none}
-.gh-title .a{display:block;font-size:min(5vw,26px);letter-spacing:9px;color:var(--neon-b);text-shadow:0 0 6px var(--neon-b),0 0 18px rgba(0,229,255,.75);margin-bottom:2px}
-.gh-title .b{display:block;font-size:min(13vw,66px);color:#ffd6f6;-webkit-text-stroke:2px #5a0f58;text-shadow:0 0 8px var(--neon-a),0 0 22px var(--neon-a),0 0 46px rgba(255,43,214,.7),0 5px 0 #5a0f58;animation:ghflick 6s infinite}
-@keyframes ghflick{0%,18%,22%,62%,64%,100%{opacity:1}20%{opacity:.55}63%{opacity:.75}}
-.gh-sub{text-align:center;font-size:15px;opacity:.92;text-shadow:0 2px 0 #000;margin:4px 0 8px;pointer-events:none;color:#e8dcff}
+/* ===== basis: oude houten/perkament-variabelen worden merkblauw/wit; lettertype overal Plus Jakarta Sans ===== */
+body.gamehal{--wood:var(--ii-navy);--wood-d:var(--ii-navy-2);--parch:#fff;--parch-d:var(--ii-mist);--gold:var(--ii-sky-3);--ink:var(--ii-body);font-family:var(--ii-font);background:var(--ii-navy-3)}
+body.gamehal button,body.gamehal input,body.gamehal select,body.gamehal textarea{font-family:var(--ii-font)}
+body.gamehal #boot{background:#fff;color:var(--ii-navy);flex-direction:column;gap:18px;font-family:var(--ii-font);font-weight:700;font-size:18px;letter-spacing:var(--ii-caps);text-transform:uppercase}
+body.gamehal #boot img{width:min(300px,58vw);height:auto;display:block}
+body.gamehal #fade{background:var(--ii-navy-3)}
+body.gamehal .overlay{background:rgba(0,28,64,.58)}
+
+/* ===== kaarten, knoppen, menu ===== */
+body.gamehal .card{background:#fff;color:var(--ii-body);border:0;border-radius:var(--ii-r-xl);box-shadow:var(--ii-sh-lg),0 0 0 3px var(--ii-sky-3)}
+body.gamehal .card h1,body.gamehal .card h2,body.gamehal .card h3{font-family:var(--ii-display);font-weight:800;color:var(--ii-navy);letter-spacing:-.01em;line-height:1.1}
+body.gamehal .card h2{font-size:32px}
+body.gamehal .card .giver{color:var(--ii-blue);opacity:1}
+body.gamehal .card p{line-height:1.45}
+body.gamehal .tag{background:var(--ii-navy);color:#fff;border-radius:999px;padding:2px 12px;font-weight:600;letter-spacing:.02em}
+body.gamehal .tag.coop{background:var(--ii-field)}body.gamehal .tag.versus{background:var(--ii-proj)}body.gamehal .tag.puzzle{background:var(--ii-sky)}
+body.gamehal .ctrl>div{background:var(--ii-mist);border-radius:var(--ii-r-lg)}
+body.gamehal kbd{border:2px solid var(--ii-line);border-bottom-width:4px;border-radius:8px;color:var(--ii-navy);background:#fff}
+body.gamehal .ready>div{background:var(--ii-mist);border-width:3px}
+body.gamehal .ready>div.on{background:var(--c);color:#fff}
+body.gamehal .btn{width:min(380px,92%);padding:10px 22px;border-radius:999px;border:2px solid var(--ii-navy);background:var(--ii-navy);color:#fff;font-family:var(--ii-display);font-weight:800;font-size:21px;letter-spacing:-.005em;box-shadow:0 4px 0 var(--ii-navy-2);transition:transform .14s var(--ii-ease,ease),background-color .2s,box-shadow .2s}
+body.gamehal .btn:hover,body.gamehal .btn.sel{background:var(--ii-sky);color:#fff;border-color:#fff;transform:translateY(-1px);box-shadow:0 4px 0 var(--ii-navy-2),var(--ii-ring)}
+body.gamehal .btn:active{transform:scale(.97)}
+body.gamehal .btn small{font-family:var(--ii-font);font-weight:600;opacity:.85}
+body.gamehal .title{font-family:var(--ii-display);font-weight:800;color:#fff;text-shadow:0 4px 0 var(--ii-navy-2),0 0 30px rgba(0,127,216,.6)}
+body.gamehal .subtitle{text-shadow:0 2px 0 var(--ii-navy-2)}
+body.gamehal .twist{background:linear-gradient(90deg,var(--ii-sky-1),var(--ii-sky-2));color:var(--ii-navy);border:3px solid var(--ii-sky);border-radius:var(--ii-r-lg)}
+body.gamehal .card.pvp .vs{font-family:var(--ii-display);font-weight:800;color:var(--ii-navy)}
+body.gamehal .mini{background:var(--ii-mist);border:2px solid var(--ii-line);border-radius:var(--ii-r-lg)}
+body.gamehal .mini.done{background:var(--ii-sky-1);border-color:var(--ii-sky)}
+body.gamehal .small-note{color:var(--ii-blue);opacity:1}
+body.gamehal .ranktbl{font-family:var(--ii-font)}
+body.gamehal .ranktbl th{background:var(--ii-navy);color:#fff;letter-spacing:var(--ii-caps);text-transform:uppercase;font-size:.8em}
+body.gamehal .ranktbl td{border-bottom:1px solid var(--ii-line)}
+body.gamehal .pick{border:2px solid var(--ii-navy);border-radius:var(--ii-r-md);background:var(--ii-navy);color:#fff;font-family:var(--ii-font);font-weight:600}
+body.gamehal .pick.ctl{background:var(--ii-blue);border-color:var(--ii-blue)}
+body.gamehal .pick.sel{background:var(--ii-sky);border-color:#fff;color:#fff;box-shadow:var(--ii-ring)}
+body.gamehal .field input{border-radius:var(--ii-r-md)}
+
+/* ===== HUD ===== */
+body.gamehal .pbox{background:rgba(0,36,75,.78);border-radius:var(--ii-r-lg);box-shadow:0 4px 0 rgba(0,0,0,.3)}
+body.gamehal .hud-timer{font-family:var(--ii-display);font-weight:800;background:rgba(0,36,75,.78);border:3px solid var(--ii-sky-3);border-radius:var(--ii-r-lg);letter-spacing:-.01em}
+body.gamehal .hud-timer.low{color:#ff8a66}
+body.gamehal .hud-score{background:rgba(0,36,75,.78);border-radius:999px}
+body.gamehal .hud-coins{background:rgba(0,36,75,.8);border:3px solid var(--ii-sky-3)}
+body.gamehal .hud-coins .bar{background:var(--ii-navy-2);border:2px solid var(--ii-navy-3)}
+body.gamehal .hud-coins .bar>i{background:linear-gradient(90deg,var(--ii-sky),var(--ii-sky-3))}
+body.gamehal .hud-big{font-family:var(--ii-display);font-weight:800;text-shadow:0 6px 0 var(--ii-navy-2),0 0 30px rgba(0,127,216,.7)}
+body.gamehal .hud-hint span{background:rgba(0,36,75,.78);border:2px solid rgba(153,204,239,.4);border-radius:999px;padding:5px 16px}
+body.gamehal .hud-prompt{background:var(--ii-navy);border:3px solid var(--ii-sky-3);border-radius:999px;box-shadow:0 4px 0 var(--ii-navy-2);font-weight:700}
+body.gamehal .hud-prompt b{border-radius:8px}
+body.gamehal .hud-toast{background:rgba(0,36,75,.92);border:2px solid var(--ii-sky-3);border-radius:999px}
+body.gamehal .hud-quest{background:rgba(0,36,75,.78);border:2px solid rgba(153,204,239,.45);border-radius:var(--ii-r-lg)}
+body.gamehal .hud-quest h4{font-family:var(--ii-display);font-weight:800;color:var(--ii-sky-3);letter-spacing:var(--ii-caps);text-transform:uppercase;font-size:14px}
+body.gamehal .hud-mini{border-color:var(--ii-sky-3);background:rgba(0,36,75,.6)}
+body.gamehal .hud-arcade{background:rgba(0,36,75,.9);border-color:var(--ii-sky-3);box-shadow:0 0 18px var(--ii-sky)}
+body.gamehal .hud-arcade .ar{color:var(--ii-sky-3)}
+body.gamehal .dialog{background:linear-gradient(180deg,#fff,var(--ii-sky-1));color:var(--ii-body);border:0;border-radius:var(--ii-r-xl);box-shadow:var(--ii-sh-lg),0 0 0 3px var(--ii-sky-3)}
+body.gamehal .dialog .who{background:var(--ii-navy);color:#fff;border:3px solid var(--ii-sky-3);font-family:var(--ii-display);font-weight:800;border-radius:999px;font-size:19px}
+body.gamehal .dialog.creepy{background:linear-gradient(180deg,#14101a,#06040a);color:#d8d8e8}
+body.gamehal .dialog.creepy .who{font-family:'MedievalSharp',serif;font-weight:400}
+
+/* ===== winkel ===== */
+body.gamehal .shop-view{background:radial-gradient(ellipse at 50% 120%,var(--ii-sky),var(--ii-navy-2) 70%)}
+body.gamehal .shop-tab{border:2px solid var(--ii-navy);background:var(--ii-navy);color:#fff;border-radius:999px}
+body.gamehal .shop-tab.sel{background:var(--ii-sky);color:#fff}
+body.gamehal .shop-row{background:var(--ii-mist)}
+body.gamehal .shop-row.sel{background:var(--ii-sky-1)}
+body.gamehal .shop-row.wear{background:#e0f2e6}
+body.gamehal .shop-col h3{font-family:var(--ii-display);font-weight:800}
+body.gamehal .shop-warn{background:var(--ii-sky-1);border-color:var(--ii-sky);color:var(--ii-navy)}
+
+/* ===== lobby: witte kaart links (het logo staat altijd op wit), 3D-hal rechts ===== */
+.gh-lobby{position:absolute;left:14px;top:14px;bottom:14px;width:min(420px,calc(100vw - 28px));display:flex;flex-direction:column;align-items:stretch;padding:12px 16px 10px;pointer-events:none;
+  background:rgba(255,255,255,.97);border-radius:var(--ii-r-xl);box-shadow:0 18px 48px rgba(0,10,40,.55),0 0 0 3px var(--ii-sky-3);overflow:hidden auto;color:var(--ii-body)}
+.gh-lobby>*{pointer-events:auto}
+.gh-title{text-align:center;margin:0 0 2px;pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:2px}
+.gh-logo{display:block;height:min(15vh,118px);width:auto;max-width:100%;image-rendering:auto}
+.gh-title .a{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.gh-title .b{display:block;font-family:var(--ii-display);font-weight:800;font-size:min(9vw,44px);line-height:1;letter-spacing:.08em;text-transform:uppercase;color:var(--ii-navy);padding-bottom:5px;border-bottom:4px solid var(--ii-sky);margin-top:2px}
+.gh-sub{text-align:center;font-size:14px;line-height:1.35;margin:6px 0 8px;pointer-events:none;color:var(--ii-blue);font-weight:500;text-shadow:none}
 .gh-count{display:flex;gap:6px;margin:2px 0 8px}
-.gh-count button{flex:1;font-family:inherit;font-weight:700;font-size:17px;padding:6px 4px;border-radius:12px;border:3px solid #3a2412;background:linear-gradient(180deg,#5a3e86,#3d2a62);color:#e9dcff;cursor:pointer;box-shadow:0 3px 0 #1a0f30}
-.gh-count button:hover{filter:brightness(1.15)}
-.gh-count button.on{background:linear-gradient(180deg,#ffd45a,#e0a020);color:#3a2412;border-color:#fff;transform:translateY(-1px)}
+.gh-count button{flex:1;font-weight:700;font-size:16px;padding:6px 4px;border-radius:999px;border:2px solid var(--ii-navy);background:#fff;color:var(--ii-navy);cursor:pointer;transition:background-color .2s,transform .14s}
+.gh-count button:hover{background:var(--ii-sky-1)}
+.gh-count button.on{background:var(--ii-navy);color:#fff;box-shadow:0 3px 0 var(--ii-navy-2);transform:translateY(-1px)}
 .gh-players{display:flex;flex-direction:column;gap:5px;margin-bottom:8px}
-.gh-prow{display:flex;align-items:center;gap:8px;padding:3px 10px;border-radius:12px;background:rgba(18,8,40,.78);border:3px solid var(--c);box-shadow:0 0 12px -2px var(--c);transition:.15s;min-height:34px}
-.gh-prow.off{opacity:.38;filter:grayscale(.6);border-style:dashed;box-shadow:none;cursor:pointer}
-.gh-prow .dot{width:16px;height:16px;border-radius:50%;background:var(--c);box-shadow:0 0 8px var(--c);flex:none}
-.gh-prow .nm{font-weight:700;font-size:18px;color:var(--c);filter:brightness(1.25);cursor:text;border-bottom:2px dotted rgba(255,255,255,.35);min-width:56px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.gh-prow .nm:hover{border-bottom-color:#fff}
-.gh-prow .ed{font-size:13px;opacity:.6;margin-left:-3px;cursor:pointer}
-.gh-prow input{font-family:inherit;font-weight:700;font-size:18px;width:132px;padding:1px 6px;border-radius:8px;border:2px solid var(--c);background:#fff;color:#1a1030;outline:none}
-.gh-prow .keys{margin-left:auto;font-size:12px;line-height:1.2;text-align:right;color:#d8caf5;white-space:nowrap}
+.gh-prow{display:flex;align-items:center;gap:8px;padding:3px 12px;border-radius:999px;background:#fff;border:3px solid var(--c);transition:.15s;min-height:34px}
+.gh-prow.off{opacity:.55;filter:grayscale(.7);border-style:dashed;cursor:pointer}
+.gh-prow .dot{width:14px;height:14px;border-radius:50%;background:var(--c);flex:none}
+.gh-prow .nm{font-weight:700;font-size:17px;color:var(--ii-navy);cursor:text;border-bottom:2px dotted var(--ii-sky-3);min-width:56px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gh-prow .nm:hover{border-bottom-color:var(--ii-sky)}
+.gh-prow .ed{font-size:12px;opacity:.6;margin-left:-3px;cursor:pointer}
+.gh-prow input{font-weight:700;font-size:17px;width:132px;padding:1px 8px;border-radius:999px;border:2px solid var(--c);background:#fff;color:var(--ii-navy);outline:none}
+.gh-prow .keys{margin-left:auto;font-size:12px;line-height:1.2;text-align:right;color:var(--ii-blue);white-space:nowrap}
 .gh-prow .keys kbd{font-size:11px;min-width:18px;padding:0 4px;border-bottom-width:3px}
 .gh-prow .pad{font-size:12px;margin-left:4px}
 .gh-menu .btnrow{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:0;width:100%}
-.gh-menu .btn{width:auto;font-size:19px;padding:5px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gh-menu .btn:nth-child(1),.gh-menu .btn:nth-child(6){grid-column:1/-1}
-.gh-menu .btn:nth-child(1){font-size:23px;padding:8px 10px}
-.gh-menu .btn small{font-size:12px}
-.gh-tip{margin-top:8px;padding:7px 11px;border-radius:12px;background:rgba(255,225,74,.14);border:2px solid rgba(255,225,74,.55);font-size:13px;line-height:1.3;color:#fff3c0;text-shadow:0 1px 0 #000}
-.gh-foot{margin-top:6px;font-size:12px;opacity:.78;text-align:center;text-shadow:0 2px 0 #000;pointer-events:none}
-.gh-foot kbd{font-size:11px}
-@media (max-height:700px){.gh-title .b{font-size:min(11vw,50px)}.gh-sub{display:none}.gh-prow{min-height:30px;padding:2px 10px}.gh-tip{font-size:12px;padding:4px 9px;margin-top:5px}.gh-count{margin-bottom:5px}.gh-players{margin-bottom:5px}}
-@media (max-width:520px){.gh-lobby{width:100vw;background:rgba(8,3,24,.8)}.gh-prow .keys{font-size:11px}}
+body.gamehal .gh-menu .btn{width:auto;font-size:15px;padding:6px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#fff;color:var(--ii-navy);border:2px solid var(--ii-navy);box-shadow:none;font-weight:700}
+body.gamehal .gh-menu .btn:hover,body.gamehal .gh-menu .btn.sel{background:var(--ii-sky);color:#fff;border-color:var(--ii-sky);box-shadow:var(--ii-ring);transform:none}
+body.gamehal .gh-menu .btn:nth-child(1){grid-column:1/-1;font-size:20px;padding:9px 10px;background:var(--ii-navy);color:#fff;box-shadow:0 4px 0 var(--ii-navy-2)}
+body.gamehal .gh-menu .btn:nth-child(1):hover,body.gamehal .gh-menu .btn:nth-child(1).sel{background:var(--ii-sky);border-color:var(--ii-sky);box-shadow:0 4px 0 var(--ii-navy-2),var(--ii-ring)}
+body.gamehal .gh-menu .btn small{font-size:12px}
+.gh-tip{margin-top:8px;padding:7px 12px;border-radius:var(--ii-r-lg);background:var(--ii-sky-1);border:2px solid var(--ii-sky-3);font-size:12.5px;line-height:1.35;color:var(--ii-navy)}
+.gh-foot{margin-top:6px;font-size:11.5px;color:var(--ii-blue);text-align:center;pointer-events:none}
+.gh-foot kbd{font-size:10.5px}
+@media (max-height:760px){.gh-logo{height:min(12vh,84px)}.gh-title .b{font-size:min(7vw,34px)}.gh-sub{display:none}.gh-prow{min-height:30px;padding:2px 12px}.gh-tip{font-size:11.5px;padding:4px 10px;margin-top:5px}.gh-count{margin-bottom:5px}.gh-players{margin-bottom:5px}.gh-menu .btn{padding:4px 8px!important}.gh-menu .btn:nth-child(1){padding:6px 10px!important}}
+@media (max-height:640px){.gh-lobby{padding:8px 14px 6px}.gh-foot{display:none}.gh-prow{min-height:28px}}
+@media (max-width:520px){.gh-lobby{left:6px;right:6px;top:6px;bottom:6px;width:auto}.gh-prow .keys{font-size:11px}}
 
-/* tussenschermen (knock-out, teams, eindstand) */
+/* ===== tussenschermen (knock-out, teams, eindstand) ===== */
 .card.gh-card{padding:20px 28px}
 .gh-sub{pointer-events:none}
-.card .gh-sub{font-size:17px;text-align:center;margin:2px 0 6px;opacity:1;text-shadow:none;color:inherit}
-.gh-vs{display:flex;justify-content:center;align-items:center;gap:16px;font-size:34px;margin:8px 0 6px}
-.gh-vs span{font-family:'MedievalSharp',serif;font-size:26px;color:#7a2f14}
-.gh-watch{text-align:center;font-size:18px;margin:4px 0;color:#4a3320}
-.gh-log{margin:10px 0 4px;padding:8px 12px;border-radius:12px;background:rgba(255,255,255,.4);font-size:15px;line-height:1.5}
+.card .gh-sub{font-size:17px;text-align:center;margin:2px 0 6px;opacity:1;text-shadow:none;color:var(--ii-blue)}
+.gh-vs{display:flex;justify-content:center;align-items:center;gap:16px;font-size:34px;margin:8px 0 6px;font-weight:800;color:var(--ii-navy)}
+.gh-vs span{font-family:var(--ii-display);font-weight:800;font-size:24px;color:var(--ii-sky);letter-spacing:var(--ii-caps)}
+.gh-watch{text-align:center;font-size:18px;margin:4px 0;color:var(--ii-blue)}
+.gh-log{margin:10px 0 4px;padding:8px 12px;border-radius:var(--ii-r-lg);background:var(--ii-mist);font-size:15px;line-height:1.5}
 .gh-podium{display:flex;flex-direction:column;gap:6px;margin:8px 0}
-.gh-place{display:flex;align-items:center;gap:10px;padding:6px 14px;border-radius:14px;border:4px solid var(--c);background:rgba(255,255,255,.5);font-size:24px}
+.gh-place{display:flex;align-items:center;gap:10px;padding:6px 14px;border-radius:999px;border:4px solid var(--c);background:#fff;font-size:24px;font-weight:700;color:var(--ii-navy)}
 .gh-place .m{font-size:30px}
-.gh-place.p1{font-size:30px;background:#fff6d0;transform:scale(1.03)}
+.gh-place.p1{font-size:30px;background:var(--ii-sky-1);transform:scale(1.03)}
 .gh-place small{margin-left:auto;font-size:16px;opacity:.7}
 
-/* badges (HUD en teksten) */
-.gh-badge{display:inline-block;padding:0 8px;border-radius:10px;background:#2f6fe0;color:#fff;font-size:.8em;font-weight:700}
-.gh-badge.ko{background:#c0392b}.gh-badge.pair{background:#8a5a00}.gh-badge.no{background:#555}
+/* ===== badges (HUD en teksten) ===== */
+.gh-badge{display:inline-block;padding:0 9px;border-radius:999px;background:var(--ii-sky);color:#fff;font-size:.8em;font-weight:700}
+.gh-badge.ko{background:var(--ii-proj)}.gh-badge.pair{background:#c7330a}.gh-badge.no{background:var(--ii-blue)}
 
-/* prompts voor 4 spelers: 2 kolommen */
-.hud-prompt.gh-grid{display:grid;grid-template-columns:auto auto;gap:2px 26px;font-size:19px;padding:6px 18px}
+/* ===== prompts voor 4 spelers: 2 kolommen ===== */
+.hud-prompt.gh-grid{display:grid;grid-template-columns:auto auto;gap:2px 26px;font-size:19px;padding:6px 18px;border-radius:var(--ii-r-xl)}
 .hud-prompt.gh-grid div{white-space:nowrap}
 
-/* Gamehal-HUD linksonder: rang + heitjes */
+/* ===== Gamehal-HUD linksonder: rang + heitjes ===== */
 .hud-quest.gh-rank{max-width:260px}
+
+/* ===== humor: kantoorgrap onder de uitslag, knock-outkaart, lobby ===== */
+body.gamehal .gh-quip{margin:6px 0 4px;text-align:center;font-size:15px;font-weight:600;line-height:1.35;color:var(--ii-blue,#33608e);font-style:italic}
+body.gamehal .gh-quip:empty{display:none}
+body.gamehal .card.pvp .gh-quip{font-size:16px;margin:2px 0 6px}
+body.gamehal .gh-joke{margin-top:6px;min-height:2.6em;text-align:center;font-size:12.5px;font-style:italic;line-height:1.3;color:var(--ii-sky-3,#99ccef);text-shadow:0 1px 0 #000;pointer-events:none}
+@media (max-height:700px){body.gamehal .gh-joke{font-size:12px;margin-top:3px;min-height:2.4em}}

@@ -100,7 +100,7 @@ export default {
     const memberIdx = [0, 0];
     const pads = players.map((pp, i) => {
       const team = teamOf(i), kIn = memberIdx[team]++, colr = tHex[team]; const dir = team ? -1 : 1;   // pad-kleur = teamkleur; het poppetje achter het doel is de speler zelf
-      const zBase = TM ? (kIn ? 3.4 : -3.4) : 0;
+      const zBase = TM ? (kIn ? 2.8 : -2.8) : 0;
       const g = new THREE.Group();
       const baseM = new THREE.MeshStandardMaterial({ color: colr, roughness: 0.3, metalness: 0.35 });
       const goldM = new THREE.MeshStandardMaterial({ color: 0xffd23f, roughness: 0.25, metalness: 0.85, emissive: 0xff9a10, emissiveIntensity: 0.35 });
@@ -540,7 +540,7 @@ export default {
     let camX = 0;
     function updateCamera(dt) {
       const asp = camera.aspect || 1.7, tanH = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2));
-      const dist0 = clamp(22.5 / (tanH * asp), 26, 50);
+      const dist0 = clamp((TM ? 25.2 : 22.5) / (tanH * asp), 26, 54);   // 2 tegen 2: iets verder weg, zodat de poppetjes achter de doelen in beeld blijven
       let zoom = 1, lx = 0;
       if (G.state === 'goal') { G.camPunch = Math.max(0, G.camPunch - dt * 0.55); zoom = 1 - 0.12 * Math.sin(Math.min(1, G.t / 0.5) * Math.PI * 0.5) * (G.t < 2 ? 1 : 0); lx = (G.lastScorerSide ? 1 : -1) * 3.5; }
       const puckX = pucks.find((q) => q.on && !q.falling); const fol = puckX ? puckX.x * 0.06 : 0;

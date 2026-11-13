@@ -8,6 +8,7 @@ import { buildBoard, buildHall, coinFaceTex, CELL, BOARD_CY, cx, ry, TOP_Y, COL_
 //  * links/rechts = kolom, A = munt laten vallen, omhoog/omlaag = kies je kracht, B = kracht aan/uit (dan A om te gebruiken)
 //  * krachten (1 per ronde): BOM (ruimt 8 buurvakken), DUBBEL (twee zetten), DRAAI (bord 180 graden), DIEF (jat een munt)
 //  * best-of-3 ronden binnen 90 s totaal; daarna speelt de autopilot de ronde af; gelijkspel -> sudden death op een mini-bord
+//  * 4 spelers = 2 tegen 2 (ctx.teams): de teams zetten om en om en binnen een team wisselen de teamgenoten per beurt; een team deelt de ene kracht per ronde
 //  * gimmicks: gouden tovervakken (extra zet), een kip die een munt steelt, de Deurman die een kolom sluit
 
 const TOTAL_T = 90, TURN_T = 8, SD_TURN_T = 5, HARD_MAX = 230;
@@ -20,7 +21,7 @@ const POWERS = [
   { id: 'draai', name: 'DRAAI', col: '#6fd8ff' },
   { id: 'dief', name: 'DIEF', col: '#d98aff' },
 ];
-const COIN_COL = [0x35c46f, 0x4a8cff, 0x6a6678];
+const COIN_COL0 = [0x35c46f, 0x4a8cff, 0x6a6678];
 
 // ---- iconen (vector, geen emoji nodig) ----
 function drawIcon(g, id, x, y, s, col) {
@@ -53,19 +54,27 @@ export default {
   giver: 'Draak Duizendgoud',
   icon: '🐉',
   mode: 'pvp',
+  players: [2, 4],
+  teams: true,
   time: 90,
   music: 'game_minor',
   blurb: 'Vier op een rij in de schatkamer van een <b>draak</b>! Laat om en om munten vallen: wie eerst <b>vier op een rij</b> heeft wint de ronde (best-of-3, samen 90 s). Elke ronde heb je <b>één kracht</b>: bom, dubbele zet, bord draaien of een munt jatten. Pas op voor de <b>kip</b> en de <b>Deurman</b>!',
   controls: ['{move} kolom kiezen (omhoog/omlaag: kracht)', '{a} munt laten vallen', '{b} kracht aan, dan {a} gebruiken'],
-  tip: 'Je beurt duurt 8 seconden, daarna valt je munt zomaar! Een gouden vak geeft een extra zet.',
+  tip: 'Je beurt duurt 8 seconden, daarna valt je munt zomaar! Een gouden vak geeft een extra zet. Met 4 spelers: 2 tegen 2, teamgenoten wisselen om de beurt (en delen de kracht).',
 
   create(ctx) {
     const { scene, camera, fx, players, audio, hud } = ctx;
     const pv = ctx.pvp, names = players.map((p) => p.name), tid = ctx.twist.id;
+    // zijden (0/1): bij 2 spelers = de spelers zelf; bij 4 spelers = de twee teams (ctx.teams), teamgenoten wisselen per beurt
+    const N = players.length, TEAMS = N === 4 && ctx.teams ? ctx.teams : null;
+    const sideSlots = (sd) => (TEAMS ? TEAMS[sd] : [sd]), sideOf = (slot) => (TEAMS ? ctx.teamOf[slot] : slot);
+    const sname = (sd) => (TEAMS ? ctx.teamInfo[sd].name : names[sd]), scss = (sd) => (TEAMS ? ctx.teamInfo[sd].css : players[sd].css);
+    const HEXC = TEAMS ? [ctx.teamInfo[0].color, ctx.teamInfo[1].color] : COL_HEX, COIN_COL = TEAMS ? [HEXC[0], HEXC[1], 0x6a6678] : COIN_COL0;
+    const actI = [0, 0], lastAct = [-1, -1], activeSlot = (sd) => sideSlots(sd)[actI[sd] % sideSlots(sd).length];   // wie van het team nu aan de beurt is
     const GRAV = pv.gravity || 1, SLIP = pv.slip || 0;
     const tempo = tid === 'turbo' ? 1.25 : tid === 'slowmo' ? 0.8 : 1;
     const G = 46 * GRAV * tempo * tempo;
-    const tscale = (i) => Math.pow(pv.speed(i) || 1, 0.8);
+    const tscale = (sd) => Math.pow(pv.speed(activeSlot(sd)) || 1, 0.8);
 
     const L = ctx.lights('indoor', { shadow: 16, center: [0, 3, 0], fogNear: 34, fogFar: 95 });
     L.hemi.intensity = 1.0; L.hemi.color.set(0xd8c8ff); L.hemi.groundColor.set(0x5a3a6a);
@@ -145,21 +154,26 @@ export default {
     // ---------------- spelers: poppetjes, naamlabels, krachtpaneel ----------------
     const chars = [], tags = [], panels = [], panelCtx = [], panelTex = [], arrows = [];
     const SIDE_X = 6.9;
+    const slotX = (i) => { if (!TEAMS) return (i ? 1 : -1) * SIDE_X; const sd = sideOf(i), kk = TEAMS[sd].indexOf(i); return (sd ? 1 : -1) * (SIDE_X - 0.1 + kk * 2.6); };
+    const PX = TEAMS ? 8.2 : SIDE_X;   // x van het krachtpaneel (midden boven het team)
     players.forEach((pp, i) => {
-      const c = ctx.make.brother(i); const k = 1.9 * pv.size(i); c.group.scale.setScalar(k);
-      const holder = new THREE.Group(); holder.add(c.group); holder.position.set((i ? 1 : -1) * SIDE_X, 0.55, 0.6); scene.add(holder);
-      c.faceDir((i ? -1 : 1) * 0.75, 1); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
-      scene.add(mesh(new THREE.CylinderGeometry(1.3, 1.5, 0.6, 16), new THREE.MeshStandardMaterial({ color: 0x6a5a98, roughness: 0.8, flatShading: true }), { cast: false, pos: [(i ? 1 : -1) * SIDE_X, 0.27, 0.6] }));
-      const ring = new THREE.Mesh(new THREE.TorusGeometry(1.35, 0.07, 6, 28), new THREE.MeshBasicMaterial({ color: COL_HEX[i] })); ring.rotation.x = Math.PI / 2; ring.position.set((i ? 1 : -1) * SIDE_X, 0.6, 0.6); scene.add(ring);
+      const sd = sideOf(i), px = slotX(i), pr = TEAMS ? 0.78 : 1;
+      const c = ctx.make.brother(i); const k = (TEAMS ? 1.6 : 1.9) * pv.size(i); c.group.scale.setScalar(k);
+      const holder = new THREE.Group(); holder.add(c.group); holder.position.set(px, 0.55, 0.6); scene.add(holder);
+      c.faceDir((sd ? -1 : 1) * 0.75, 1); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
+      scene.add(mesh(new THREE.CylinderGeometry(1.3 * pr, 1.5 * pr, 0.6, 16), new THREE.MeshStandardMaterial({ color: 0x6a5a98, roughness: 0.8, flatShading: true }), { cast: false, pos: [px, 0.27, 0.6] }));
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(1.35 * pr, 0.07, 6, 28), new THREE.MeshBasicMaterial({ color: HEXC[sd] })); ring.rotation.x = Math.PI / 2; ring.position.set(px, 0.6, 0.6); scene.add(ring);
       const tagTex = canvasTex(256, 96, (g, w, hh) => { g.font = 'bold 58px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(10,10,30,.9)'; g.lineJoin = 'round'; g.strokeText(pp.name, w / 2, hh / 2); g.fillStyle = pp.css; g.fillText(pp.name, w / 2, hh / 2); });
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false })); tag.scale.set(2.8, 1.05, 1); tag.renderOrder = 15; scene.add(tag);
-      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.8, 4), new THREE.MeshBasicMaterial({ color: COL_HEX[i] })); cone.rotation.x = Math.PI; scene.add(cone);
-      // krachtpaneel
+      const cone = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.8, 4), new THREE.MeshBasicMaterial({ color: HEXC[sd] })); cone.rotation.x = Math.PI; scene.add(cone);
+      chars.push({ c, holder, k, tag, cone, ring, sd, px });
+    });
+    for (let sd = 0; sd < 2; sd++) {   // krachtpaneel per zijde (bij teams: één per team)
       const cv = document.createElement('canvas'); cv.width = 512; cv.height = 150; const pc = cv.getContext('2d');
       const pt = new THREE.CanvasTexture(cv); pt.colorSpace = THREE.SRGBColorSpace;
-      const pn = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 1.11), new THREE.MeshBasicMaterial({ map: pt, transparent: true, depthTest: false })); pn.renderOrder = 14; pn.position.set((i ? 1 : -1) * SIDE_X, 5.8, 1.2); scene.add(pn);
-      chars.push({ c, holder, k, tag, cone, ring }); panels.push(pn); panelCtx.push(pc); panelTex.push(pt);
-    });
+      const pn = new THREE.Mesh(new THREE.PlaneGeometry(3.8, 1.11), new THREE.MeshBasicMaterial({ map: pt, transparent: true, depthTest: false })); pn.renderOrder = 14; pn.position.set((sd ? 1 : -1) * PX, 5.8, 1.2); scene.add(pn);
+      panels.push(pn); panelCtx.push(pc); panelTex.push(pt);
+    }
     const icons = POWERS.map((p) => iconTex(p.id, p.col));
     const armIcon = new THREE.Sprite(new THREE.SpriteMaterial({ map: icons[0], transparent: true, depthTest: false })); armIcon.scale.set(1.3, 1.3, 1); armIcon.renderOrder = 16; armIcon.visible = false; scene.add(armIcon);
     const beamM = new THREE.MeshBasicMaterial({ color: 0xffe680, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false });
@@ -171,9 +185,9 @@ export default {
     let board = new Board(), turn = 0, extra = 0, round = 0, roundsPlayed = 0, clock = TOTAL_T, auto = false, sd = false, sdTries = 0, starter = 0;
     let timer = TURN_T, timerMax = TURN_T, autoT = 0.4, drop = null, ev = null, evT = 14, evAlt = Math.random() < 0.5, closed = null, pendingDeur = null;
     let col = 3, curX = cx(3), curV = 0, doubleFlag = false, lastWinner = -1;
-    const lastCol = [3, 3], hold = [{ d: 0, n: 0 }, { d: 0, n: 0 }], vHold = [0, 0], react = [{ t: 0, pose: 'idle' }, { t: 0, pose: 'idle' }], pj = [{}, {}];
+    const lastCol = [3, 3], hold = [{ d: 0, n: 0 }, { d: 0, n: 0 }], vHold = [0, 0], react = players.map(() => ({ t: 0, pose: 'idle' })), pj = players.map(() => ({}));
     const uses = [1, 1], used = [new Set(), new Set()], sel = [0, 0], armed = [null, null];
-    let magic = []; let winCoins = [], winRun = null, camPunch = 0, thinkT = [2, 3.5], intro = true;
+    let magic = []; let winCoins = [], winRun = null, camPunch = 0, thinkT = [2, 3.5, 4.5, 2.8], intro = true;
     const stats = { drops: 0, bombs: 0, flips: 0, steals: 0, doubles: 0, magic: 0, chickens: 0, doors: 0, timeouts: 0, autos: 0, rounds: [], sd: false, kipRuns: 0 };
     let panelDirty = true, turnNo = 0;
 
@@ -181,20 +195,20 @@ export default {
     const isOpen = (c) => board.canDrop(c) && !(closed && closed.col === c);
     const say = (txt, x, y, z, color = '#ffe14a', s = 1.4) => fx.texts.add(txt, x, y, z, color, s);
     function refreshHud() {
-      hud.setScore(`${names[0]} ${score[0]} – ${score[1]} ${names[1]}${sd ? '  ·  SUDDEN DEATH' : ''}`);
+      hud.setScore(TEAMS ? `${names[TEAMS[0][0]]}+${names[TEAMS[0][1]]} ${score[0]} – ${score[1]} ${names[TEAMS[1][0]]}+${names[TEAMS[1][1]]}${sd ? '  ·  SUDDEN DEATH' : ''}` : `${names[0]} ${score[0]} – ${score[1]} ${names[1]}${sd ? '  ·  SUDDEN DEATH' : ''}`);
       for (let i = 0; i < 2; i++) {
         const w = score[i];
         const kr = sd ? 'geen krachten' : uses[i] > 0 ? `kracht: ${POWERS[sel[i]].name}${armed[i] ? ' (klaar!)' : ''}${uses[i] > 1 ? ' x2' : ''}` : 'kracht gebruikt';
-        hud.setPlayerInfo(i, `${'⭐'.repeat(w)}${w ? ' · ' : ''}${kr}`);
+        for (const q of sideSlots(i)) hud.setPlayerInfo(q, `${'⭐'.repeat(w)}${w ? ' · ' : ''}${TEAMS && i === turn && q === activeSlot(i) && state === 'turn' ? 'AAN ZET · ' : ''}${kr}`);
       }
     }
     function drawPanel(i) {
       const g = panelCtx[i]; g.clearRect(0, 0, 512, 150);
       g.fillStyle = 'rgba(14,8,34,.82)'; g.beginPath(); g.roundRect(4, 4, 504, 142, 22); g.fill();
-      g.lineWidth = 6; g.strokeStyle = players[i].css; g.stroke();
+      g.lineWidth = 6; g.strokeStyle = scss(i); g.stroke();
       POWERS.forEach((p, k) => {
         const x = 70 + k * 124, isUsed = used[i].has(p.id) || sd || uses[i] <= 0, isSel = sel[i] === k && !isUsed;
-        if (isSel) { g.fillStyle = armed[i] ? 'rgba(255,230,120,.5)' : 'rgba(255,255,255,.2)'; g.beginPath(); g.roundRect(x - 54, 14, 108, 122, 16); g.fill(); g.lineWidth = armed[i] ? 7 : 4; g.strokeStyle = armed[i] ? '#ffe680' : players[i].css; g.stroke(); }
+        if (isSel) { g.fillStyle = armed[i] ? 'rgba(255,230,120,.5)' : 'rgba(255,255,255,.2)'; g.beginPath(); g.roundRect(x - 54, 14, 108, 122, 16); g.fill(); g.lineWidth = armed[i] ? 7 : 4; g.strokeStyle = armed[i] ? '#ffe680' : scss(i); g.stroke(); }
         g.globalAlpha = isUsed ? 0.25 : 1; drawIcon(g, p.id, x, 62, 86, p.col); g.globalAlpha = 1;
         g.font = 'bold 20px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.fillStyle = isUsed ? '#777' : '#fff'; g.fillText(p.name, x, 130);
       });
@@ -208,10 +222,10 @@ export default {
     }
     const isMagic = (c, r) => magic.findIndex((m) => m[0] === c && m[1] === r);
     function setGlow(p) {
-      const hex = COL_HEX[p]; B.edgeMat.color.setHex(hex); B.orbMat.color.setHex(hex); B.beam.material.color.setHex(hex); B.timerMat.color.setHex(hex);
+      const hex = HEXC[p]; B.edgeMat.color.setHex(hex); B.orbMat.color.setHex(hex); B.beam.material.color.setHex(hex); B.timerMat.color.setHex(hex);
       B.lamps.forEach((l) => l.material.color.setHex(hex));
     }
-    function react1(i, pose, secs) { if (react[i].t <= 0) pj[i] = {}; react[i].pose = pose; react[i].t = secs; }
+    function react1(sd, pose, secs) { for (const i of sideSlots(sd)) { if (react[i].t <= 0) pj[i] = {}; react[i].pose = pose; react[i].t = secs; } }   // zijde (bij teams: beide teamgenoten)
     function nextSel(p, dir) {
       const n = POWERS.length;
       for (let k = 1; k <= n; k++) { const j = ((sel[p] + dir * k) % n + n) % n; if (!used[p].has(POWERS[j].id)) return j; }
@@ -227,7 +241,8 @@ export default {
       if (sd) {   // stenen buiten het mini-bord
         for (let c = 0; c < 7; c++) for (let r = 0; r < 6; r++) if (board.cap[c] === 0 || r >= 4) { const v = makeVis(2, cx(c), ry(r)); if (v) { v.sc = 0.92; stones.push(v); } }
       }
-      round++; turn = starter = first; col = lastCol[turn] = 3; curX = cx(3);
+      round++; turn = starter = first; if (TEAMS) for (let q = 0; q < 2; q++) if (lastAct[q] === activeSlot(q)) actI[q] = (actI[q] + 1) % 2;   // ook over een rondegrens wisselen teamgenoten (wie de ronde besliste, wisselde nog niet)
+      col = lastCol[turn] = 3; curX = cx(3);
       for (let i = 0; i < 2; i++) {
         used[i].clear(); armed[i] = null; uses[i] = sd ? 0 : 1 + (score[1 - i] > score[i] ? 1 : 0);
         sel[i] = 0;
@@ -235,11 +250,11 @@ export default {
       setupMagic(); panelDirty = true; refreshHud();
       const title = sd ? 'SUDDEN DEATH!' : `RONDE ${round}`;
       hud.showBig(title, 1500, sd ? '#ff6a4a' : '#ffe14a');
-      hud.toast(sd ? `3 op een rij op een mini-bord. Muntworp: ${names[first]} begint!` : `${names[first]} mag beginnen${uses[0] + uses[1] > 2 ? ' (de achterblijver krijgt een extra kracht!)' : ''}`, 2200);
+      hud.toast(sd ? `3 op een rij op een mini-bord. Muntworp: ${sname(first)} begint!` : `${sname(first)} mag beginnen${uses[0] + uses[1] > 2 ? ' (de achterblijver krijgt een extra kracht!)' : ''}`, 2200);
       audio.sfx(sd ? 'explode' : 'bell', { vol: 0.5 }); st = 0; state = 'toss'; setGlow(turn);
     }
     function beginTurn() {
-      state = 'turn'; st = 0; turnNo++;
+      state = 'turn'; st = 0; turnNo++; lastAct[turn] = activeSlot(turn);
       timerMax = timer = (sd ? SD_TURN_T : TURN_T) / tscale(turn);
       autoT = 0.4; hold[0].d = hold[1].d = 0; vHold[0] = vHold[1] = 0; armed[turn] = null; armed[1 - turn] = null;
       col = lastCol[turn]; if (!board.legal().includes(col)) col = board.legal()[0] ?? 3;
@@ -249,7 +264,7 @@ export default {
     }
     function nextTurn() {
       if (extra > 0) { extra--; say('NOG EEN ZET!', cx(col), TOP_Y + 2.2, 1, '#ffd23f', 1.5); }
-      else turn = 1 - turn;
+      else { actI[turn] = (actI[turn] + 1) % 2; turn = 1 - turn; }   // teamgenoten wisselen elke beurt
       if (closed && --closed.turns <= 0) { closed = null; doorTarget = TOP_Y + 6; audio.sfx('door', { vol: 0.5 }); }
       beginTurn();
     }
@@ -262,11 +277,11 @@ export default {
       const a = winRun[0], b = winRun[winRun.length - 1], x1 = cx(a.c), y1 = ry(a.r), x2 = cx(b.c), y2 = ry(b.r);
       const len = Math.hypot(x2 - x1, y2 - y1) + CELL * 0.9;
       winBeam.position.set((x1 + x2) / 2, (y1 + y2) / 2, 0.7); winBeam.rotation.z = Math.atan2(y2 - y1, x2 - x1) - Math.PI / 2; winBeam.scale.set(1, len, 1); winBeam.visible = true;
-      beamM.color.setHex(COL_HEX[w] === 0x35c46f ? 0xbfffd0 : 0xbfd8ff);
-      hud.showBig(sd ? `${names[w]} wint!` : `${names[w]} wint ronde ${round}!`, 2300, players[w].css);
+      beamM.color.setHex(TEAMS ? new THREE.Color(HEXC[w]).lerp(new THREE.Color(0xffffff), 0.65).getHex() : COL_HEX[w] === 0x35c46f ? 0xbfffd0 : 0xbfd8ff);
+      hud.showBig(sd ? `${sname(w)} wint!` : `${sname(w)} wint ronde ${round}!`, 2300, scss(w));
       audio.sfx('win', { vol: 0.8 }); audio.sfx('bell', { vol: 0.6 }); ctx.shake(0.7); camPunch = 1; Hl.cheer(3);
       react1(w, 'cheer', 3); react1(1 - w, 'sad', 3);
-      const cc = [COL_HEX[w], 0xffe14a, 0xffffff, 0xff6fa5];
+      const cc = [HEXC[w], 0xffe14a, 0xffffff, 0xff6fa5];
       for (let i = 0; i < 4; i++) setTimeout(() => { if (!finished && state === 'win') fx.particles.burst(rand(-4, 4), TOP_Y + 1, 1.5, { count: 44, speed: 8, up: 1.4, life: 1.4, size: 0.5, colors: cc, gravity: 7 }); }, i * 380);
       refreshHud(); panelDirty = true;
     }
@@ -297,14 +312,14 @@ export default {
       if (finished) return; finished = true; state = 'end'; st = 0; if (stats.sd) score[w]++;
       hud.setTimer(null); hud.setHint(null); winBeam.visible = false;
       react1(w, 'cheer', 99); react1(1 - w, 'sad', 99); Hl.cheer(6);
-      const L2 = [`${names[w]} is de nieuwe Drakenmeester! ${names[1 - w]} moet de goudberg afstoffen.`, `De draak knikt goedkeurend naar ${names[w]}. ${names[1 - w]} krijgt een troostmunt.`, `${names[w]} dacht drie zetten vooruit. ${names[1 - w]} dacht aan taart.`, `De kip is onder de indruk van ${names[w]}.`];
+      const L2 = TEAMS ? [`${sname(w)} zijn de nieuwe Drakenmeesters! ${sname(1 - w)} mogen de goudberg afstoffen.`, `De draak knikt goedkeurend naar ${sname(w)}. ${sname(1 - w)} krijgen een troostmunt.`, `${sname(w)} dachten samen drie zetten vooruit. ${sname(1 - w)} dachten aan taart.`, 'De kip is onder de indruk van het winnende team.'] : [`${names[w]} is de nieuwe Drakenmeester! ${names[1 - w]} moet de goudberg afstoffen.`, `De draak knikt goedkeurend naar ${names[w]}. ${names[1 - w]} krijgt een troostmunt.`, `${names[w]} dacht drie zetten vooruit. ${names[1 - w]} dacht aan taart.`, `De kip is onder de indruk van ${names[w]}.`];
       const bits = [];
       if (stats.bombs) bits.push(`${stats.bombs} bom${stats.bombs > 1 ? 'men' : ''}`);
       if (stats.flips) bits.push('het bord werd omgedraaid');
       if (stats.steals) bits.push(`${stats.steals} muntendief${stats.steals > 1 ? 'stallen' : 'stal'}`);
       if (stats.chickens) bits.push('de kip stal een munt');
       if (stats.doors) bits.push('de Deurman sloot een kolom');
-      ctx.finishPvp({ winner: w, score: [score[0], score[1]], delay: 900, summary: `${pick(L2)}${note ? ' ' + note : ''}${stats.sd ? ' (Beslist in een sudden death.)' : ''}${bits.length ? ` Onderweg: ${bits.join(', ')}.` : ''}` });
+      ctx.finishPvp({ ...(TEAMS ? { winners: TEAMS[w].slice() } : { winner: w }), score: TEAMS ? players.map((_, q) => score[sideOf(q)]) : [score[0], score[1]], delay: 900, summary: `${pick(L2)}${note ? ' ' + note : ''}${stats.sd ? ' (Beslist in een sudden death.)' : ''}${bits.length ? ` Onderweg: ${bits.join(', ')}.` : ''}` });
     }
 
     // ---------------- zetten ----------------
@@ -428,7 +443,7 @@ export default {
         }
         if (e.done && e.t > 2.0) { ev = null; resolve(e.p); }
       } else if (e.kind === 'steal') {
-        const v = e.v, u = clamp(e.t / 0.8, 0, 1), th = chars[e.p].holder.position;
+        const v = e.v, u = clamp(e.t / 0.8, 0, 1), th = chars[activeSlot(e.p)].holder.position;
         v.x = lerp(v.x0, th.x, u); v.y = lerp(v.y0, th.y + 3.1, u) + Math.sin(u * Math.PI) * 2.5; v.z = lerp(0.2, 1.4, u); v.sc = 1 - u * 0.6; v.rot += dt * 10; v.onBoard = false;
         if (e.t >= 0.8) { killVis(v); const k = loose.indexOf(v); if (k >= 0) loose.splice(k, 1); audio.sfx('coin', { vol: 0.8 }); fx.particles.burst(th.x, th.y + 3, 1.4, { count: 18, speed: 3, up: 1, life: 0.8, size: 0.3, colors: [0xffd23f, 0xd98aff], gravity: 3 }); react1(e.p, 'cheer', 1.2); react1(1 - e.p, 'scared', 1.2); ev = null; nextTurn(); }
       }
@@ -467,7 +482,7 @@ export default {
 
     // ---------------- invoer ----------------
     function readInput(dt) {
-      const inp = pv.input(turn);
+      const inp = pv.input(activeSlot(turn));
       // links/rechts met herhaling (op de analoge as, dus ook goed met omkeren/dronken)
       const dx = inp.x > 0.45 ? 1 : inp.x < -0.45 ? -1 : 0, h = hold[turn];
       if (dx !== h.d) { h.d = dx; if (dx) { stepCol(dx); h.n = 0.3; } }
@@ -523,10 +538,10 @@ export default {
     }
     function runDeurman() {
       const m = pendingDeur; pendingDeur = null;
-      m.forEach((moved, i) => {
+      m.forEach((moved, slot) => {
         if (!moved) return;
-        const tops = []; for (let c = 0; c < 7; c++) { const t = board.top(c); if (t && t.o === i) tops.push(c); }
-        say('DEURMAN!', chars[i].holder.position.x, 5.6, 1.4, '#ff6a4a', 1.4); react1(i, 'scared', 1.4);
+        const i = sideOf(slot), tops = []; for (let c = 0; c < 7; c++) { const t = board.top(c); if (t && t.o === i) tops.push(c); }
+        say('DEURMAN!', chars[slot].holder.position.x, 5.6, 1.4, '#ff6a4a', 1.4); react1(i, 'scared', 1.4);
         if (tops.length) { const c = pick(tops), t = board.top(c); board.g[c].pop(); const v = visById.get(t.id); visById.delete(t.id); if (v) { v.mode = 'burst'; v.t = 0; v.z = 0.75; v.vx = rand(-2, 2); v.vy = rand(5, 8); v.vz = rand(4, 7); v.spin = rand(-9, 9); loose.push(v); } }
         else if (uses[i] > 0) { uses[i] = 0; panelDirty = true; refreshHud(); }
         audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4);
@@ -555,14 +570,14 @@ export default {
       armIcon.visible = !!a && on; if (a) { const idx = POWERS.findIndex((p) => p.id === a); if (armIcon.material.map !== icons[idx]) armIcon.material.map = icons[idx]; armIcon.position.set(curX + 1.0, CUR_Y + 0.35 + Math.sin(T * 6) * 0.1, 1); }
       B.beam.visible = state === 'turn' && !auto; B.beam.position.x = curX; B.beam.material.opacity = 0.12 + Math.sin(T * 6) * 0.04;
       const frac = state === 'turn' ? clamp(timer / timerMax, 0, 1) : 0;
-      B.timer.scale.x = Math.max(0.001, frac); if (state === 'turn') B.timerMat.color.setHex(frac < 0.3 ? 0xff4a3a : COL_HEX[turn]);
-      if (state === 'turn' && frac < 0.3) B.edgeMat.color.setHex(Math.sin(T * 14) > 0 ? 0xff4a3a : COL_HEX[turn]);
+      B.timer.scale.x = Math.max(0.001, frac); if (state === 'turn') B.timerMat.color.setHex(frac < 0.3 ? 0xff4a3a : HEXC[turn]);
+      if (state === 'turn' && frac < 0.3) B.edgeMat.color.setHex(Math.sin(T * 14) > 0 ? 0xff4a3a : HEXC[turn]);
     }
     function poseChars(dt) {
       const inGame = state === 'turn' || state === 'dropping' || state === 'power' || state === 'toss';
-      for (let i = 0; i < 2; i++) {
-        const o = chars[i], c = o.c, r = react[i], s = pj[i], side = i ? -1 : 1;
-        r.t -= dt; const active = inGame && i === turn;
+      for (let i = 0; i < chars.length; i++) {
+        const o = chars[i], c = o.c, r = react[i], s = pj[i], side = o.sd ? -1 : 1;
+        r.t -= dt; const active = inGame && o.sd === turn && i === activeSlot(turn);
         c.pose = r.t > 0 ? r.pose : 'idle'; c.speed = 0; c.update(dt);
         if (r.t <= 0 && inGame && !finished) {
           const J = (key, obj, ax, tgt, k = 10) => { s[key] = s[key] === undefined ? obj[ax] : damp(s[key], tgt, k, dt); obj[ax] = s[key]; };
@@ -607,7 +622,8 @@ export default {
     }
     // ---------------- camera ----------------
     const camBase = new THREE.Vector3(), camTgt = new THREE.Vector3(0, 4.6, 0), pitch = 0.2;
-    const fitPts = [[-5.9, 0, 1.4], [5.9, 0, 1.4], [-SIDE_X - 1.5, 0.2, 1.2], [SIDE_X + 1.5, 0.2, 1.2], [0, TOP_Y + 2.1, 0], [-SIDE_X - 1.9, 6.5, 1.2], [SIDE_X + 1.9, 6.5, 1.2]];
+    const EX = TEAMS ? SIDE_X + 2.5 : SIDE_X;   // buitenste poppetje
+    const fitPts = [[-5.9, 0, 1.4], [5.9, 0, 1.4], [-EX - 1.5, 0.2, 1.2], [EX + 1.5, 0.2, 1.2], [0, TOP_Y + 2.1, 0], [-EX - 1.9, 6.5, 1.2], [EX + 1.9, 6.5, 1.2]];
     function fitCamera() {
       const dir = new THREE.Vector3(0, Math.sin(pitch), Math.cos(pitch)), v = new THREE.Vector3(); let lo = 8, hi = 60;
       for (let it = 0; it < 22; it++) {
@@ -626,7 +642,7 @@ export default {
     fitCamera();
 
     function resultUpdate(dt) { T += dt; st += dt; for (const v of visById.values()) stepVis(v, dt); for (const v of loose) stepVis(v, dt); visuals(dt); }
-    function introUpdate(dt) { introT += dt; T += dt; for (let i = 0; i < 2; i++) react[i].t = 0; visuals(dt); }
+    function introUpdate(dt) { introT += dt; T += dt; for (let i = 0; i < react.length; i++) react[i].t = 0; visuals(dt); }
     panelDirty = true; refreshHud(); visuals(0.016);
 
     return {
@@ -634,12 +650,12 @@ export default {
       resultUpdate, introUpdate,
       onStart() { try { audio.music('game_minor'); } catch (e) { /* geen audio */ } if (!started) { started = true; st = 0; round = 0; starter = Math.random() < 0.5 ? 0 : 1; startRound(starter); } },
       onResize() { camera.updateProjectionMatrix(); fitCamera(); },
-      onSwap(sw) { for (let i = 0; i < 2; i++) fx.particles.burst(chars[i].holder.position.x, 3, 1.2, { count: 24, speed: 4, up: 1, life: 0.8, size: 0.4, colors: [0xffe14a, 0xffffff], gravity: 2 }); hud.toast(sw ? '🔄 Wissel! Wes bestuurt Jor en Jor bestuurt Wes' : '🔄 Terug naar je eigen vingers!', 2200); },
+      onSwap(sw) { for (let i = 0; i < chars.length; i++) fx.particles.burst(chars[i].holder.position.x, 3, 1.2, { count: 24, speed: 4, up: 1, life: 0.8, size: 0.4, colors: [0xffe14a, 0xffffff], gravity: 2 }); hud.toast(sw ? '🔄 Wissel! Wes bestuurt Jor en Jor bestuurt Wes' : '🔄 Terug naar je eigen vingers!', 2200); },
       onDeurman(movers) { pendingDeur = movers.slice(); },
-      celebrate(w) { react1(w, 'cheer', 99); react1(1 - w, 'sad', 99); Hl.cheer(6); },
+      celebrate(w, winners = [w]) { for (let i = 0; i < react.length; i++) { if (react[i].t <= 0) pj[i] = {}; react[i].pose = winners.includes(i) ? 'cheer' : 'sad'; react[i].t = 99; } Hl.cheer(6); },
       dispose() {},
       dbg: {
-        state: () => ({ T, state, clock, score: [...score], round, roundsPlayed, turn, turnNo, sel: [...sel], auto, sd, sdTries, finished, extra, closed: closed && { ...closed }, uses: [...uses], usedTypes: used.map((s) => [...s]), armed: [...armed], magic: magic.map((m) => [...m]), grid: board.g.map((s) => s.map((k) => k.o).join('')), count: board.count(), stats: { ...stats, rounds: [...stats.rounds] }, col, timer: +timer.toFixed(2), drawn: stats.drops, legal: board.legal() }),
+        state: () => ({ T, state, clock, score: [...score], round, roundsPlayed, turn, turnNo, sel: [...sel], auto, sd, sdTries, finished, extra, closed: closed && { ...closed }, uses: [...uses], usedTypes: used.map((s) => [...s]), armed: [...armed], magic: magic.map((m) => [...m]), grid: board.g.map((s) => s.map((k) => k.o).join('')), count: board.count(), stats: { ...stats, rounds: [...stats.rounds] }, col, timer: +timer.toFixed(2), drawn: stats.drops, legal: board.legal(), active: activeSlot(turn), teams: TEAMS }),
         board: () => board, setClock: (t) => { clock = t; }, pending: () => !!pendingDeur,
         startEvent: (k) => { evAlt = k === 'deur'; startEvent(); }, giveUses: (i, n) => { uses[i] = n; used[i].clear(); panelDirty = true; },
         // bijna volle borden voor de gelijkspel-test: vult alle vakken behalve één, zonder rij van vier

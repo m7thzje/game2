@@ -6,6 +6,7 @@ import { audio } from '../engine/audio.js';
 import { ui } from '../engine/ui.js';
 import { S, persist } from '../save.js';
 import { Deco } from './arcade_deco.js';
+import { coin } from '../gamehal/humor.js';
 import { clamp, damp, dampAngle, rand, pick, TAU, lerp, canvasTex } from '../engine/util.js';
 
 const SKIN = [0xf4c9a0, 0xe2b08a, 0xc98e63, 0x8d5a3a, 0xf7d2ae, 0xffe0c0];
@@ -222,7 +223,7 @@ export class ArcadeLife {
     const o = D.build(this.sc); for (const k of [0, 1, 2]) if (o['p' + k]) this.pm[k].push(o['p' + k].material);
   }
   reward(key, n, text) {
-    const k = 'egg_' + this.hall + '_' + key; if (S.flags[k]) return false; S.flags[k] = true; S.coins += n; S.totalEarned += n; persist(); ui.hud.toast(`${text} +${n} heitjes!`, 3200); audio.sfx('coin'); this.a.refreshHud && this.a.refreshHud(); return true;
+    const k = 'egg_' + this.hall + '_' + key; if (S.flags[k]) return false; S.flags[k] = true; S.coins += n; S.totalEarned += n; persist(); ui.hud.toast(`${text} +${n} ${coin(n)}!`, 3200); audio.sfx('coin'); this.a.refreshHud && this.a.refreshHud(); return true;
   }
   doEgg(it) {
     const a = this.a; const h = this.hall;

@@ -13,7 +13,7 @@ export async function ghHallTest({ page, port, check, shot: shot0 }) {
   await page.waitForFunction(() => window.__app && window.__app.mode && window.__app.mode.menu, null, { timeout: 120000 });
   await page.waitForTimeout(1500);
   check((await modeName()) === 'GamehalLobby', 'gamehal.html start in de lobby (GamehalLobby)');
-  check(await page.evaluate(() => document.title === 'Impactid Gamehal' && /Impactid/i.test(document.querySelector('.gh-title').textContent) && /Gamehal/i.test(document.querySelector('.gh-title').textContent)), 'titel Impactid Gamehal (document.title + lobby-kop)');
+  check(await page.evaluate(() => /^impactid gamehal$/i.test(document.title) && /Impactid/i.test(document.querySelector('.gh-title').textContent) && /Gamehal/i.test(document.querySelector('.gh-title').textContent)), 'titel Impactid Gamehal (document.title + lobby-kop)');
   check(await page.evaluate((n) => window.__app.S.settings.players === n && window.__app.S.settings.unlockAll === true, N), `lobby: ${N} spelers, unlockAll aan`);
   await shot('1_lobby');
 
@@ -144,7 +144,7 @@ export async function ghHallTest({ page, port, check, shot: shot0 }) {
     const mode = await modeName();
     if (mode === 'MinigameMode') { const ready = await page.evaluate(() => !!(window.__app.mode.ctx && window.__app.mode.ids)); if (ready) { await playMatch({ winner: 0, score: [1, 0] }); await page.waitForFunction(() => window.__app.mode && window.__app.mode.cabs && window.__app.mode.life, null, { timeout: 60000 }); await page.waitForTimeout(800); } continue; }
     if (mode !== 'ArcadeMode') continue;
-    const s = await page.evaluate(() => { const m = window.__app.mode; return { menu: !!m.menu, dlg: !!document.querySelector('.dialog'), tour: m.hasTourney(), busy: m.busy, card: (document.querySelector('.card') || {}).innerText || '' }; });
+    const s = await page.evaluate(() => { const m = window.__app.mode; return { menu: !!m.menu, dlg: !!document.querySelector('.dialog'), tour: m.hasTourney ? m.hasTourney() : true, busy: m.busy,   /* modus kan tussen twee evaluaties wisselen */ card: (document.querySelector('.card') || {}).innerText || '' }; });
     if (s.menu) { if (/Eindstand|wint de knock-out/.test(s.card)) await choose(0); else if (/Wie spelen/.test(s.card)) await choose(0); else if (/Toernooi/.test(s.card) || /Spelen!|Volgend/.test(s.card)) await choose(0); else await choose(0); }
     else if (s.dlg) await press(0, 'a');
     else if (!s.tour && !s.busy) break;

@@ -1,7 +1,7 @@
 // Volledige flow-test v2: titelscherm -> Nieuw spel -> opening (overslaan, of OPENING_FULL=1 helemaal) -> Speelhal met uitleg ->
 // dichtgetimmerde deur + bouwanimatie -> rang-feestje -> Bouwplan -> pauzemenu. Screenshots in /tmp/e2e_*.png (Read ze om te kijken).
 // Gebruik: node tools/e2e.mjs   (OPENING_FULL=1 speelt de hele opening af met screenshots per scène)
-// GAMEHAL=1 PLAYERS=2|3|4 node tools/e2e.mjs: de Impactid Gamehal (gamehal.html): start in de lobby, namen/aantal bewaard, ?arcade, pauze -> instellingen, ?game -> lobby (tools/gh_e2e.mjs).
+// GAMEHAL=1 PLAYERS=2|3|4 node tools/e2e.mjs: de impactID Gamehal (gamehal.html): start in de lobby, namen/aantal bewaard, ?arcade, pauze -> instellingen, ?game -> lobby (tools/gh_e2e.mjs).
 // PLAYERS=3 node tools/e2e.mjs: dezelfde flow met Juul (?players=3) + extra: Juul-instelling, 3 poppetjes op het titelscherm, dorp met 3 spelers,
 // karweitje met 2 van de 3 ('Wie doen mee?'), winkel met 3 kolommen. Screenshots /tmp/e2e_p3_*.png.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
@@ -34,7 +34,7 @@ const quiet = () => page.evaluate(() => { const m = window.__app.mode; m.players
 const isIdle = () => page.evaluate(() => { const m = window.__app.mode; return !!(m && m.interact && !m.busy && !m.menu); });
 const idle = async () => { const r = await clickUntil(isIdle, 60); await quiet(); return r; };
 
-if (wantGamehal()) {   // Impactid Gamehal: eigen flow
+if (wantGamehal()) {   // impactID Gamehal: eigen flow
   const { ghE2E } = await import('./gh_e2e.mjs');
   try { await ghE2E({ page, port, check, shot }); } catch (e) { fails++; log('FOUT (uitzondering)', e.message.split('\n')[0]); await shot('gh_crash').catch(() => {}); }
   console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 12).join('\n') : 'NO ERRORS', '| fouten:', fails);

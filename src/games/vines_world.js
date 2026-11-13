@@ -20,7 +20,7 @@ export const C = {
 };
 export const vineX = (k) => C.X0 + k * C.DX;
 // banen per aantal spelers (in place, zodat C.LZ / C.OFF overal kloppen): z van elke baan en de x-verschuiving (de lianen van de banen staan verspreid over de liaan-afstand)
-const LANESET = { 2: { LZ: [3.0, -3.0], OFF: [0, 4.0] }, 3: { LZ: [5.0, 0.0, -5.0], OFF: [0, 3.0, 6.0] }, 4: { LZ: [6.0, 2.0, -2.0, -6.0], OFF: [0, 2.25, 4.5, 6.75] } };
+const LANESET = { 2: { LZ: [3.0, -3.0], OFF: [0, 4.0] }, 3: { LZ: [6.5, 0.0, -6.5], OFF: [0, 3.0, 6.0] }, 4: { LZ: [9.0, 3.0, -3.0, -9.0], OFF: [0, 2.25, 4.5, 6.75] } };
 export function setLanes(n) { const q = LANESET[n] || LANESET[2]; C.LZ.length = 0; C.LZ.push(...q.LZ); C.OFF.length = 0; C.OFF.push(...q.OFF); }
 
 const rngW = mulberry32(777);
@@ -183,6 +183,8 @@ export function buildJungle(ctx, NP = 2) {
   // takken waaraan de lianen hangen + reuzenbomen op de achtergrond
   const bark = mat(0x5a4230), bark2 = mat(0x6b5038);
   const x0 = -8, x1 = GX + 8;
+  // bij 3-4 spelers staat elke baan achter de vorige: dunne takken zonder bladerdak (anders verdwijnen de lianen erachter) en de middentak met apen achter alle banen
+  const MZ = NP > 2 ? L[NP - 1] - 3.4 : -0.4, brad = NP > 2 ? 0.7 : 1;
   for (let lane = 0; lane < NP; lane++) {
     const z = L[lane], off = OFF[lane];
     let px = x0 + off, py = C.PY + 0.35;
@@ -190,9 +192,10 @@ export function buildJungle(ctx, NP = 2) {
     for (let k = 1; k <= segs; k++) {
       const nx = x0 + off + (x1 - x0) * k / segs, ny = C.PY + 0.35 + Math.sin(k * 1.3 + lane) * 0.25;
       const len = Math.hypot(nx - px, ny - py);
-      const seg = mesh(new THREE.CylinderGeometry(0.34, 0.4, len + 0.2, 7), k % 2 ? bark : bark2, { cast: false, pos: [(px + nx) / 2, (py + ny) / 2, z] });
+      const seg = mesh(new THREE.CylinderGeometry(0.34 * brad, 0.4 * brad, len + 0.2, 7), k % 2 ? bark : bark2, { cast: false, pos: [(px + nx) / 2, (py + ny) / 2, z] });
       seg.rotation.z = Math.atan2(-(nx - px), ny - py);
       root.add(seg);
+      if (NP > 2 && lane < NP - 1) { px = nx; py = ny; continue; }
       for (let j = 0; j < 2; j++) leaf(px + (nx - px) * (0.3 + j * 0.45), py + (ny - py) * 0.5 + 0.7 + rngW() * 0.5, z + (rngW() - 0.5) * 1.4, r(0.7, 1.25));
       if (k % 2 === 0) leaf(px + (nx - px) * 0.5, py + (ny - py) * 0.5 - 0.4, z + (rngW() - 0.5) * 1.2, r(0.5, 0.8));
       px = nx; py = ny;
@@ -201,10 +204,10 @@ export function buildJungle(ctx, NP = 2) {
   // middentak (voor de apen) + steunen
   for (let k = 0; k < 9; k++) {
     const x = x0 + 2 + k * ((x1 - x0 - 4) / 8);
-    add(mesh(new THREE.CylinderGeometry(0.5, 0.6, 7, 7), bark, { cast: false, pos: [x, C.PY + 2.0, -0.4], rot: [0.0, 0, 0] }));
+    add(mesh(new THREE.CylinderGeometry(0.5, 0.6, 7, 7), bark, { cast: false, pos: [x, C.PY + 2.0, MZ], rot: [0.0, 0, 0] }));
   }
-  add(mesh(new THREE.CylinderGeometry(0.6, 0.6, x1 - x0, 8), bark2, { cast: false, pos: [(x0 + x1) / 2, C.PY + 1.0, -0.4], rot: [0, 0, Math.PI / 2] }));
-  for (let k = 0; k < 26; k++) leaf(x0 + k * ((x1 - x0) / 25) + r(-1, 1), C.PY + 1.9 + r(-0.4, 1.2), r(-3.4, -1.2), r(1.1, 1.8));
+  add(mesh(new THREE.CylinderGeometry(0.6, 0.6, x1 - x0, 8), bark2, { cast: false, pos: [(x0 + x1) / 2, C.PY + 1.0, MZ], rot: [0, 0, Math.PI / 2] }));
+  for (let k = 0; k < 26; k++) leaf(x0 + k * ((x1 - x0) / 25) + r(-1, 1), C.PY + 1.9 + r(-0.4, 1.2), r(-3.4, -1.2) + (MZ + 0.4), r(1.1, 1.8));
   // reuzenbomen
   for (let k = 0; k < 11; k++) {
     const x = -14 + k * 9.2 + r(-2, 2), z = -17 - r(0, 6), h = 30 + r(0, 8), rad = r(1.5, 2.4);
@@ -266,7 +269,7 @@ export function buildJungle(ctx, NP = 2) {
   // apen
   const monkeys = [];
   [14, 32, 50].forEach((x, k) => {
-    const m = makeMonkey(); m.position.set(x, C.PY + 1.6, -0.4); m.rotation.y = 0; m.scale.setScalar(1.05); root.add(m);
+    const m = makeMonkey(); m.position.set(x, C.PY + 1.6, MZ); m.rotation.y = 0; m.scale.setScalar(1.05); root.add(m);
     monkeys.push({ g: m, x, state: 'idle', t: 0, cool: 0 });
   });
   // bananen

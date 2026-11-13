@@ -1,6 +1,8 @@
 // Voortgang van de Speelhal: hallen ontgrendelen, rang en Deurman-stickers (contract voor alle onderdelen)
 import { S, persist } from '../save.js';
 import { ARCADE_HALLS } from '../games/index.js';
+import { GAMEHAL } from '../variant.js';
+import { applyHallNames, applyRanks } from '../gamehal/humor.js';
 
 // Kosten (heitjes) om een hal te laten bouwen. 4 = geheime Deurenhal: opent na Deurman-stickers.
 export const HALL_COST = { 0: 0, 1: 150, 2: 300, 3: 450, 4: 0 };
@@ -28,6 +30,7 @@ export const RANKS = [
   { name: 'Nieuwkomer', at: 0, icon: '🌱' }, { name: 'Speler', at: 8, icon: '🎮' }, { name: 'Duelist', at: 25, icon: '⚔️' }, { name: 'Kampioen', at: 60, icon: '🏅' },
   { name: 'Meester', at: 120, icon: '🏆' }, { name: 'Speelhal-Legende', at: 220, icon: '👑' },
 ];
+if (GAMEHAL) { applyHallNames(HALL_NAMES, ARCADE_HALLS); applyRanks(RANKS); }   // impactID Gamehal: kantoornamen voor hallen en rangen (ids en drempels van de hallen blijven)
 export function points() {
   const a = A(); return a.plays + sum(a.wins) + sum(a.tourneys) * 8 + ((S.daily && S.daily.total) || 0) * 3 + (S.banished || 0) * 3 + Object.keys(S.jobs || {}).length;
 }

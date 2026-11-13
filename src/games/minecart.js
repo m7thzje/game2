@@ -357,7 +357,7 @@ export default {
 
     // ---------------- wereld bijwerken ----------------
     function world(dt, mode) {
-      const dAvg = pl.reduce((a, q) => a + q.d, 0) / NP, ZK = NP === 2 ? 0.22 : 0.16, ZM = NP === 2 ? 5 : NP === 3 ? 3.5 : 2.5;
+      const dAvg = pl.reduce((a, q) => a + q.d, 0) / NP, ZK = NP === 2 ? 0.22 : 0.16, ZM = NP === 2 ? 5 : NP === 3 ? 3.0 : 1.7;   // ZM: hoe ver de achterligger naar voren komt (bij 4 beperkt: anders dicht tegen de rand)
       const intensity = mode === 'play' ? smoothstep(2, 9, T) : 0;
       B.update(T * 0.9 + 3, intensity);
       for (const p of pl) {

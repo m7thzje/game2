@@ -103,7 +103,7 @@ export function h(tag, props = {}, ...kids) {
   for (const k in props) {
     if (k === 'class') el.className = props[k];
     else if (k === 'html') el.innerHTML = props[k];
-    else if (k === 'style' && typeof props[k] === 'object') Object.assign(el.style, props[k]);
+    else if (k === 'style' && typeof props[k] === 'object') { for (const sk in props[k]) { if (sk.startsWith('--')) el.style.setProperty(sk, props[k][sk]); else el.style[sk] = props[k][sk]; } }   // CSS-variabelen (--c) werken niet via Object.assign
     else if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), props[k]);
     else el.setAttribute(k, props[k]);
   }

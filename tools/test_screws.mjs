@@ -1,4 +1,4 @@
-// Gebruik: node tools/test_screws.mjs [scenario...]   scenario: bots (standaard), twists, shots, edge
+// Gebruik: node tools/test_screws.mjs [scenario...]   scenario: bots (standaard), twists, shots, shots3, shots4, edge
 //   bots3 / bots4 = drie / vier spelers (vrij voor allen, ?players=N): alle spelers krijgen input, uitslag volgt, place klopt.
 // Laat Schroef-Duel versneld (zonder renderen) door bots spelen: bewijst dat finishPvp altijd komt en dat beide spelers kunnen winnen.
 import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs';
@@ -149,6 +149,16 @@ for (const name of scen) {
     await page.evaluate(() => { window.__prof = ['kid', 'kid']; const F = window.__app.mode.instance.dbg.force; F.setUnits(0, 150); F.setUnits(1, 40); F.gnome(1); window.__bot(60 * 3, (s) => s.gnome[1] > 0); window.__bot(90); });
     await page.evaluate(() => { const m = window.__app.mode; m.paused = true; const E = m.instance.dbg.E; const g = E.gnome[1]; const cam = m.camera; cam.position.set(g.position.x - 5, g.position.y + 3, 9); cam.lookAt(g.position.x - 2, g.position.y + 1, 0); });
     await page.waitForTimeout(600); await page.screenshot({ path: '/tmp/screws_gnomecam.png' });
+    console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS');
+    await browser.close();
+  } else if (name === 'shots3' || name === 'shots4') {
+    const NS = +name.slice(5);
+    const { browser, page, errors } = await open('none', '', NS);
+    const shot = async (tag) => { await page.evaluate(() => { window.__app.mode.paused = true; }); await page.waitForTimeout(500); await page.screenshot({ path: `/tmp/screws${NS}_${tag}.png` }); await page.evaluate(() => { window.__app.mode.paused = false; }); console.log('shot', tag); };
+    await page.evaluate(() => { window.__prof = ['pro', 'kid', 'slow', 'pro']; });
+    await page.evaluate(() => window.__bot(60 * 4)); await shot('play1');
+    await page.evaluate(() => window.__bot(60 * 12)); await shot('play2');
+    await page.evaluate(() => { window.__app.mode.instance.dbg.force.raven(); }); await page.evaluate(() => window.__bot(60 * 1.4, (s) => s.blob)); await page.evaluate(() => window.__bot(8)); await shot('raven');
     console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS');
     await browser.close();
   } else if (name === 'shots') {

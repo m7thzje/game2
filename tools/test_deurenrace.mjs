@@ -200,6 +200,19 @@ for (const name of scen) {
     check(!errors.length, 'geen console-fouten' + (errors.length ? '\n' + errors.slice(0, 6).join('\n') : ''));
     await browser.close(); continue;
   }
+  if (name === 'shots4') {
+    const { browser, page, errors } = await open(process.env.TW || 'none', 4);
+    const bs = (a) => ({ skill: a, copy: 0.0, style: 'run', dive: 0.3 });
+    await installBots(page, [bs(0.8), bs(0.65), bs(0.55), bs(0.7)]);
+    const snap = async (tag) => { await page.waitForTimeout(900); await page.screenshot({ path: `/tmp/dr4_${tag}.png` }); };
+    const go = (cond, max = 60 * 60) => page.evaluate(([c, mx]) => window.__bot(mx, new Function('s', 'return ' + c)), [cond, max]);
+    await page.evaluate(() => window.__bot(30)); await snap('start');
+    await go('s.P[0].row>=1 && s.P[0].z<-12', 60 * 40); await snap('row1');
+    await page.evaluate(() => { const d = window.__app.mode.instance.dbg; d.give(0, 'kijk'); d.give(1, 'turbo'); d.give(2, 'zand'); }); await page.evaluate(() => window.__bot(25)); await snap('items');
+    await go('s.P[0].row>=5', 60 * 120); await snap('mid');
+    console.log(errors.length ? 'ERRORS:\n' + errors.slice(0, 8).join('\n') : 'NO ERRORS');
+    await browser.close(); continue;
+  }
   if (name === 'shots') {
     const { browser, page, errors } = await open(process.env.TW || 'none');
     await installBots(page, [{ skill: 0.75, copy: 0.5, style: 'run', dive: 0.3 }, { skill: 0.6, copy: 0.5, style: 'run', dive: 0.3 }]);

@@ -4,9 +4,10 @@ import { makeBrother, PLAYER_COLORS } from '../engine/chars.js';
 import * as P from '../engine/props.js';
 import { SX, buildWorld, boxGeo, blockTexture, glowTex, mastSegGeo, jibGeo, makeGull, JIB } from './stack_world.js';
 
-// Torenbouw-Duel — twee kranen laten bouwblokken zwaaien, A = laten vallen. Alleen wat op de toren past blijft liggen (Stack-stijl),
+// Torenbouw-Duel — (2 tot 4 spelers) twee kranen laten bouwblokken zwaaien, A = laten vallen. Alleen wat op de toren past blijft liggen (Stack-stijl),
 // het uitstekende stuk breekt af. Perfect = het blok groeit + combo. Combo 3 = sabotage voor de ander. B = opgespaarde power-up.
 // Mis je de toren (bijna) helemaal, dan stort hij in en verlies je. Anders wint de hoogste toren na 80 s (daarna sudden death).
+// 3-4 spelers: vier kranen naast elkaar (om en om een rij naar achteren); wie instort is eruit, de laatste toren wint (of de hoogste na de tijd); sabotage, zandzak en meeuw gaan naar de koploper.
 
 const { TX, BH, DZ } = SX;
 const MATCH_TIME = 80, AMP = 5.0, W0 = 4.0, WMAX = 4.8, MINW = 0.42, PERF = 0.25, HG = 3.6, CABLE = 2.2;
@@ -47,10 +48,11 @@ export default {
   giver: 'Bouwbaas Bas',
   icon: '🏗️',
   mode: 'pvp',
+  players: [2, 3, 4],
   time: 80,
   twists: ['swapab', 'drunk', 'turbo', 'slowmo', 'giant', 'slippery', 'lowgrav', 'bodyswap', 'deurman'],
   music: 'game',
-  blurb: 'Bouw de <b>hoogste kasteeltoren</b>! Laat je blok op het juiste moment vallen: wat <b>buiten de toren</b> hangt breekt af. Mis je alles, dan <b>stort je toren in</b>! Perfect stapelen = <b>combo</b>, en bij 3 in een rij krijgt je broer een gemene verrassing.',
+  blurb: 'Bouw de <b>hoogste kasteeltoren</b>! Laat je blok op het juiste moment vallen: wat <b>buiten de toren</b> hangt breekt af. Mis je alles, dan <b>stort je toren in</b>! Perfect stapelen = <b>combo</b>, en bij 3 in een rij krijgt je broer (bij 3-4 spelers: de koploper) een gemene verrassing.',
   controls: ['{a} blok laten vallen', '{b} power-up gebruiken'],
   tip: 'Laat het blok vallen tussen de twee lijntjes. Pas op voor de meeuw: die hapt van de koploper!',
 
@@ -59,8 +61,9 @@ export default {
     const pv = ctx.pvp;
     const names = players.map((p) => p.name);
     const tw = ctx.twist.id;
+    const N = players.length, IDX = players.map((_, i) => i), SPC = 12;   // SPC = onderlinge afstand van de torens bij 3-4 spelers
     const SLIP = pv.slip || 0, GRAV = pv.gravity || 1;
-    const L = ctx.lights('day', { shadow: 30, center: [0, 8, 0], fogNear: 140, fogFar: 420 });
+    const L = ctx.lights('day', { shadow: N > 2 ? 48 : 30, center: [0, 8, 0], fogNear: 140, fogFar: 420 });
     L.sun.position.set(24, 40, 30);
     camera.fov = 50; camera.updateProjectionMatrix();
     const WORLD = buildWorld(ctx);
@@ -76,12 +79,12 @@ export default {
 
     // ---------- spelers (torens + kranen) ----------
     const mkTag = (name, color) => { const t = canvasTex(256, 96, (c, w, hh) => { c.font = 'bold 58px Fredoka, Arial Black, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle'; c.lineWidth = 12; c.strokeStyle = 'rgba(10,10,30,.9)'; c.lineJoin = 'round'; c.strokeText(name, w / 2, hh / 2); c.fillStyle = color; c.fillText(name, w / 2, hh / 2); }); const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: t, transparent: true, depthTest: false })); s.scale.set(2.8, 1.05, 1); s.renderOrder = 15; return s; };
-    const pl = [0, 1].map((i) => {
-      const side = i ? 1 : -1, tx = side * TX, mx = side * (TX + 6.8);
+    const pl = IDX.map((i) => {
+      const tx = N === 2 ? (i ? 1 : -1) * TX : (i - (N - 1) / 2) * SPC, side = N === 2 ? (i ? 1 : -1) : (tx < 0 ? -1 : 1), mx = tx + side * 6.8, zo = N > 2 && i % 2 ? -3.6 : 0;   // zo: om en om een rij naar achteren
       const sz = pv.size(i), w0 = W0 * Math.pow(sz, 0.55), wmax = WMAX * Math.pow(sz, 0.55);
-      const im = new THREE.InstancedMesh(unitBox, blockMat, MAXB); im.frustumCulled = false; im.castShadow = true; im.receiveShadow = true; im.count = 0; scene.add(im);
+      const im = new THREE.InstancedMesh(unitBox, blockMat, MAXB); im.frustumCulled = false; im.castShadow = true; im.receiveShadow = true; im.count = 0; im.position.z = zo; scene.add(im);
       im.setColorAt(0, new THREE.Color(0x9a9488));
-      const mast = new THREE.InstancedMesh(segG, craneMat, 70); mast.frustumCulled = false; mast.castShadow = true; mast.position.set(mx, 0, -0.9); scene.add(mast);
+      const mast = new THREE.InstancedMesh(segG, craneMat, 70); mast.frustumCulled = false; mast.castShadow = true; mast.position.set(mx, 0, -0.9 + zo); scene.add(mast);
       const crane = new THREE.Group(); crane.userData.dynamic = true; scene.add(crane);
       const jib = mesh(jibG, craneMat, { pos: [0, 0, -0.9] }); jib.scale.x = -side; crane.add(jib);
       // contragewicht, cabine, dakje
@@ -96,7 +99,7 @@ export default {
       const helm = new THREE.Group(); helm.add(mesh(new THREE.SphereGeometry(0.33, 12, 8, 0, TAU, 0, 1.5), mat(0xffd21f, { flatShading: false }), { pos: [0, 0.1, 0], cast: false }), mesh(new THREE.BoxGeometry(0.7, 0.04, 0.5), mat(0xffd21f), { pos: [0, 0.06, 0.3], cast: false })); helm.position.y = 0.1; c.head.add(helm);
       c.faceDir(0, 1); c.yaw = c.targetYaw; c.group.rotation.y = c.yaw;
       const banner = P.banner(PLAYER_COLORS[i], 2.4, 1.0); banner.position.set(-side * 0.3, 2.9, 0); banner.userData.dynamic = true; cab.add(banner);
-      const tag = mkTag(names[i], i ? '#8fb8ff' : '#7dffb0'); scene.add(tag);
+      const tag = mkTag(names[i], N === 2 ? (i ? '#8fb8ff' : '#7dffb0') : players[i].css); scene.add(tag);
       // kabels, trolley en richtlijntjes
       const trolley = mesh(new THREE.BoxGeometry(1.1, 0.5, 0.8), darkMat, { cast: false }); trolley.userData.dynamic = true; scene.add(trolley);
       const cableM = new THREE.MeshBasicMaterial({ color: 0x2a2a34 });
@@ -106,9 +109,9 @@ export default {
       const hcv = document.createElement('canvas'); hcv.width = 192; hcv.height = 96; const hcx = hcv.getContext('2d'); const htex = new THREE.CanvasTexture(hcv); htex.colorSpace = THREE.SRGBColorSpace;
       const htag = new THREE.Sprite(new THREE.SpriteMaterial({ map: htex, transparent: true, depthTest: false })); htag.scale.set(2.6, 1.3, 1); htag.renderOrder = 14; scene.add(htag);
       return {
-        i, side, tx, mx, w0, wmax, im, mast, crane, jib, cab, c, holder, banner, tag, trolley, cables, aims, ico, htag, hcx, htex, helm,
+        i, side, tx, mx, zo, w0, wmax, im, mast, crane, jib, cab, c, holder, banner, tag, trolley, cables, aims, ico, htag, hcx, htex, helm,
         blocks: [{ x: tx, w: FOUND_W, col: new THREE.Color(0x9a9488) }],
-        state: 'swing', ph: i ? Math.PI : 0, ccx: tx, cx: tx, cvx: 0, jy: HG + 3 + CABLE, hw: w0, hcol: new THREE.Color(1, 1, 1), hcolBase: new THREE.Color(1, 1, 1), spawnT: 9, idleT: 0, waitT: 0,
+        state: 'swing', ph: N === 2 ? (i ? Math.PI : 0) : [0, Math.PI, Math.PI / 2, Math.PI * 1.5][i], ccx: tx, cx: tx, cvx: 0, jy: HG + 3 + CABLE, hw: w0, hcol: new THREE.Color(1, 1, 1), hcolBase: new THREE.Color(1, 1, 1), spawnT: 9, idleT: 0, waitT: 0,
         fall: null, nextWide: false, combo: 0, maxCombo: 0, perfects: 0, trims: 0, power: null, pwPts: 0, sentSab: 0,
         slowN: 0, snelN: 0, zwaaiN: 0, glue: false, smal: false, windT: 0, windDir: 1, cspd: 1, zig: false, wideMark: false,
         wob: 0.1, wobPh: rand(0, 6), poseT: 0, pose: 'carry', collapseT: -1, tilt: 0, sdW: 0, sdDone: false, kick: 0, lastTag: -1,
@@ -125,16 +128,16 @@ export default {
     debIM.setColorAt(0, new THREE.Color(1, 1, 1));
     let debN = 0;
     dummy.position.set(0, -50, 0); dummy.scale.set(0.0001, 0.0001, 0.0001); dummy.updateMatrix(); for (let i = 0; i < NDEB; i++) debIM.setMatrixAt(i, dummy.matrix);
-    function addDebris(x, y, w, h, col, vx, vy, vr) {
+    function addDebris(x, y, w, h, col, vx, vy, vr, z = 0) {
       const d = deb[debN]; debN = (debN + 1) % NDEB;
-      d.on = true; d.x = x; d.y = y; d.w = w; d.h = h; d.vx = vx; d.vy = vy; d.rz = 0; d.vr = vr; d.rest = false; d.age = 0; d.col.copy(col);
+      d.on = true; d.z = z; d.x = x; d.y = y; d.w = w; d.h = h; d.vx = vx; d.vy = vy; d.rz = 0; d.vr = vr; d.rest = false; d.age = 0; d.col.copy(col);
       debIM.setColorAt(debN === 0 ? NDEB - 1 : debN - 1, d.col);
     }
 
     // ---------- toestand ----------
-    const G = { state: 'play', t: 0, timeLeft: MATCH_TIME, loser: -1, winner: -1, slow: 1, slowT: 0, sdRound: 0, gullT: 16 + Math.random() * 6, why: '', note: '' };
+    const G = { state: 'play', t: 0, timeLeft: MATCH_TIME, loser: -1, winner: -1, elim: [], sdSet: IDX.slice(), slow: 1, slowT: 0, sdRound: 0, gullT: 16 + Math.random() * 6, why: '', note: '' };
     let T = 0, finished = false;
-    const stats = { gulls: 0, sabs: 0, powers: 0, sands: 0, collapses: 0, perfects: [0, 0] };
+    const stats = { gulls: 0, sabs: 0, powers: 0, sands: 0, collapses: 0, perfects: IDX.map(() => 0) };
     const camS = { d: 24, cy: 6 };
     const sands = Array.from({ length: 3 }, () => { const g = P.sack(2.2); g.visible = false; g.userData.dynamic = true; scene.add(g); return { g, on: false, t: 0, dur: 0.9, x0: 0, y0: 0, x1: 0, y1: 0, from: 0, to: 0 }; });
     const gull = { on: false, t: 0, side: 1, tgt: 0, bit: false, g: makeGull(), pos: new THREE.Vector3(), from: new THREE.Vector3() };
@@ -142,12 +145,18 @@ export default {
     const windPuffs = [0, 0];
 
     const lead = () => floors(pl[0]) - floors(pl[1]);
-    const behind = (p) => (p.i === 0 ? -lead() : lead());           // >0: p staat zoveel verdiepingen achter
+    const maxOthers = (p) => Math.max(...pl.filter((q) => q !== p).map((q) => (q.state === 'dead' ? -1 : floors(q))));
+    const behind = (p) => (N === 2 ? (p.i === 0 ? -lead() : lead()) : maxOthers(p) - floors(p));   // >0: p staat zoveel verdiepingen achter (bij 3-4: achter de hoogste levende tegenstander)
+    const aliveP = () => pl.filter((q) => q.state !== 'dead');
+    // tegenstander voor sabotage/zandzak: bij 2 spelers de ander; bij meer de koploper onder de anderen die nog staan (bij gelijk: willekeurig)
+    const foe = (p) => { if (N === 2) return pl[1 - p.i]; const o = pl.filter((q) => q !== p && q.state !== 'dead'); if (!o.length) return pl.find((q) => q !== p); const m = Math.max(...o.map(floors)), t = o.filter((q) => floors(q) === m); return t[Math.floor(Math.random() * t.length)]; };
+    const leaderOf = () => { const a = aliveP(), m = Math.max(...a.map(floors)), t = a.filter((q) => floors(q) === m); return t[Math.floor(Math.random() * t.length)]; };
 
     function refreshHud() {
-      hud.setScore(`${names[0]} ${floors(pl[0])} – ${floors(pl[1])} ${names[1]}${G.state === 'sd' ? '  (SUDDEN DEATH)' : ''}`);
+      if (N === 2) hud.setScore(`${names[0]} ${floors(pl[0])} – ${floors(pl[1])} ${names[1]}${G.state === 'sd' ? '  (SUDDEN DEATH)' : ''}`);
+      else { const l = aliveP().reduce((a, q) => (floors(q) > floors(a) ? q : a), aliveP()[0] || pl[0]); hud.setScore(`${G.state === 'sd' ? 'SUDDEN DEATH · ' : ''}Hoogst: ${names[l.i]} ${floors(l)} m`); }
       for (const p of pl) {
-        const bits = [`${floors(p)} hoog`];
+        const bits = [`${floors(p)} hoog`]; if (p.state === 'dead') bits.push('ingestort');
         if (p.combo >= 2) bits.push(`combo ${p.combo}`);
         if (p.power) bits.push(`${POW[p.power].name}!`);
         if (p.glue) bits.push('lijm aan');
@@ -159,7 +168,7 @@ export default {
       const f = floors(p); if (f === p.lastTag) return; p.lastTag = f;
       const g = p.hcx; g.clearRect(0, 0, 192, 96);
       g.fillStyle = 'rgba(20,12,40,.82)'; g.beginPath(); g.roundRect(6, 10, 180, 76, 20); g.fill();
-      g.lineWidth = 6; g.strokeStyle = p.i ? '#8fb8ff' : '#7dffb0'; g.stroke();
+      g.lineWidth = 6; g.strokeStyle = N === 2 ? (p.i ? '#8fb8ff' : '#7dffb0') : players[p.i].css; g.stroke();
       g.font = 'bold 54px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillStyle = '#fff'; g.fillText(`${f}`, 80, 50);
       g.font = 'bold 26px Fredoka, Arial Black, sans-serif'; g.fillStyle = '#ffe14a'; g.fillText('m', 148, 58);
       p.htex.needsUpdate = true;
@@ -168,7 +177,7 @@ export default {
     const say = (text, x, y, col, s = 1.4) => fx.texts.add(text, x, y, 1.8, col, s);
 
     // ---------- bloktoestand ----------
-    const blockColor = (p, k) => hsl((p.i ? 0.56 : 0.3) + k * 0.026, 0.58, 0.64);
+    const blockColor = (p, k) => hsl((N === 2 ? (p.i ? 0.56 : 0.3) : [0.3, 0.56, 0.08, 0.82][p.i]) + k * 0.026, 0.58, 0.64);
     function spawnBlock(p, opts = {}) {
       const top = topOf(p);
       let w = top.w;
@@ -202,8 +211,8 @@ export default {
       const cutCol = fb.col;
       if (!perfect && !glued) {
         const cl = (top.x - top.w / 2) - (fb.x - fb.w / 2), cr = (fb.x + fb.w / 2) - (top.x + top.w / 2);
-        if (cl > 0.03) addDebris(fb.x - fb.w / 2 + cl / 2, ty + BH / 2, cl, BH, cutCol, -rand(1.2, 2.6), 0.5, -rand(1, 3));
-        if (cr > 0.03) addDebris(fb.x + fb.w / 2 - cr / 2, ty + BH / 2, cr, BH, cutCol, rand(1.2, 2.6), 0.5, rand(1, 3));
+        if (cl > 0.03) addDebris(fb.x - fb.w / 2 + cl / 2, ty + BH / 2, cl, BH, cutCol, -rand(1.2, 2.6), 0.5, -rand(1, 3), p.zo);
+        if (cr > 0.03) addDebris(fb.x + fb.w / 2 - cr / 2, ty + BH / 2, cr, BH, cutCol, rand(1.2, 2.6), 0.5, rand(1, 3), p.zo);
         audio.sfx('wood', { vol: 0.35, rate: 0.9 }); audio.sfx('scrape', { vol: 0.25, rate: 1.3 });
       }
       p.fall = null;
@@ -247,7 +256,7 @@ export default {
     }
 
     function sabotage(p) {
-      const q = pl[1 - p.i]; if (q.state === 'dead') return;
+      const q = foe(p); if (q.state === 'dead') return;
       const s = pick(SAB); stats.sabs++;
       if (s.id === 'smal') q.smal = true; else if (s.id === 'snel') q.snelN = 2; else if (s.id === 'zwaai') q.zwaaiN = 2;
       else { q.windT = 6; q.windDir = Math.random() < 0.5 ? -1 : 1; }
@@ -264,22 +273,24 @@ export default {
     function missed(p, fb) {
       // geen overlap: het blok valt voorbij en de toren stort in
       p.fall = null;
-      addDebris(fb.x, topY(p) - 0.4, fb.w, BH, fb.col, (fb.x > topOf(p).x ? 1 : -1) * 2, -1, rand(-3, 3));
+      addDebris(fb.x, topY(p) - 0.4, fb.w, BH, fb.col, (fb.x > topOf(p).x ? 1 : -1) * 2, -1, rand(-3, 3), p.zo);
       startCollapse(p);
     }
     function startCollapse(p) {
       if (p.state === 'dead') return;
-      p.state = 'dead'; p.collapseT = 0; p.peak = floors(p); stats.collapses++;
-      if (G.loser < 0 && G.state !== 'end') { G.loser = p.i; G.state = 'collapse'; G.t = 0; G.slow = 0.4; G.why = 'collapse'; hud.setTimer(null); }
+      p.state = 'dead'; p.collapseT = 0; p.peak = floors(p); stats.collapses++; p.diedAt = T; G.elim.push(p.i);
+      // 2 spelers: de ander wint meteen; 3-4: pas als er nog maar één toren staat
+      const left = pl.filter((q) => q !== p && q.state !== 'dead').length;
+      if (G.loser < 0 && G.state !== 'end' && left <= 1 && G.state !== 'collapse') { G.loser = p.i; G.state = 'collapse'; G.t = 0; G.slow = 0.4; G.why = 'collapse'; hud.setTimer(null); }
       audio.sfx('creak', { vol: 0.8 }); audio.sfx('buzz', { vol: 0.4 });
       react(p, 'scared', 3); say('OEEEI...', p.tx, topY(p) + 3, '#ff8a6a', 1.8); hud.showBig('INGESTORT!', 1500, '#ff7a6a');
-      const o = pl[1 - p.i]; if (o.state !== 'dead') react(o, 'cheer', 3);
+      for (const o of pl) if (o !== p && o.state !== 'dead' && N === 2) react(o, 'cheer', 3);
     }
     function burstTower(p) {
       const n = p.blocks.length, dir = p.tx > 0 ? -1 : 1;
       for (let k = 1; k < n; k++) {
         const b = p.blocks[k], q = tiltPos(p, b.x, (k + 0.5) * BH);
-        addDebris(q[0], Math.max(q[1], 0.5), b.w, BH, b.col, dir * (1.5 + k * 0.12) + rand(-1.5, 1.5), rand(0, 3), rand(-4, 4));
+        addDebris(q[0], Math.max(q[1], 0.5), b.w, BH, b.col, dir * (1.5 + k * 0.12) + rand(-1.5, 1.5), rand(0, 3), rand(-4, 4), p.zo);
         if (k % 3 === 0) fx.particles.dust(q[0], Math.max(0.3, q[1] * 0.5), 1.8, 3, 0xd8ccb0);
       }
       p.blocks.length = 1;
@@ -298,7 +309,7 @@ export default {
     // ---------- power-ups ----------
     function usePower(p) {
       if (!p.power) { audio.sfx('buzz', { vol: 0.2 }); return; }
-      const id = p.power; p.power = null; const q = pl[1 - p.i];
+      const id = p.power; p.power = null; const q = foe(p);
       say(POW[id].say, p.tx, topY(p) + 5, POW[id].css, 1.5); audio.sfx('powerup', { vol: 0.7, rate: 1.2 }); react(p, 'cheer', 0.8);
       fx.particles.burst(p.cx, p.jy - CABLE, 1.8, { count: 22, speed: 4, up: 1, life: 0.7, size: 0.3, colors: [POW[id].col, 0xffffff], gravity: 3 });
       if (id === 'slow') { p.slowN = 3; if (p.state === 'swing') { p.cspd *= 0.5; p.slowN--; p.hcolBase.multiply(new THREE.Color(0.7, 0.9, 1)); } }
@@ -315,22 +326,21 @@ export default {
     function sandHit(s) {
       const q = pl[s.to]; s.on = false; s.g.visible = false;
       if (q.state === 'dead') return;
-      const top = topOf(q), ty = topY(q) - BH / 2; const from = s.from === 1 ? 1 : -1;
+      const top = topOf(q), ty = topY(q) - BH / 2; const from = N === 2 ? (s.from === 1 ? 1 : -1) : (s.x0 > top.x ? 1 : -1);
       const cut = clamp(top.w - 1.0, 0, 0.7);
       say('ZANDZAK!', top.x, topY(q) + 2.5, '#d2a86a', 1.5); ctx.shake(0.5); audio.sfx('thud', { vol: 0.8, rate: 0.7 }); audio.sfx('hurt', { vol: 0.4 });
       fx.particles.burst(top.x, topY(q), 1.8, { count: 30, speed: 5, up: 1.3, life: 0.9, size: 0.4, colors: [0xd2a86a, 0xe8c88a, 0xffffff], gravity: 8 });
       q.wob = Math.min(2.4, q.wob + 1.2); react(q, 'scared', 1.4);
       if (cut > 0.15 && q.blocks.length > 1) {
         const lo = top.x - top.w / 2, hi = top.x + top.w / 2;
-        if (from > 0) { addDebris(hi - cut / 2, ty + BH / 2, cut, BH, top.col, 2.2, 1.5, 3); top.w -= cut; top.x = (lo + hi - cut) / 2; }
-        else { addDebris(lo + cut / 2, ty + BH / 2, cut, BH, top.col, -2.2, 1.5, -3); top.w -= cut; top.x = (lo + cut + hi) / 2; }
+        if (from > 0) { addDebris(hi - cut / 2, ty + BH / 2, cut, BH, top.col, 2.2, 1.5, 3, q.zo); top.w -= cut; top.x = (lo + hi - cut) / 2; }
+        else { addDebris(lo + cut / 2, ty + BH / 2, cut, BH, top.col, -2.2, 1.5, -3, q.zo); top.w -= cut; top.x = (lo + cut + hi) / 2; }
       }
     }
 
     // ---------- meeuw (gimmick): hapt een stuk van het blok van de koploper ----------
     function startGull() {
-      const a = floors(pl[0]), b = floors(pl[1]);
-      const t = a === b ? (Math.random() < 0.5 ? 0 : 1) : (a > b ? 0 : 1);
+      const t = N === 2 ? (floors(pl[0]) === floors(pl[1]) ? (Math.random() < 0.5 ? 0 : 1) : (floors(pl[0]) > floors(pl[1]) ? 0 : 1)) : leaderOf().i;
       gull.on = true; gull.t = 0; gull.tgt = t; gull.bit = false; gull.side = Math.random() < 0.5 ? -1 : 1; stats.gulls++;
       gull.g.visible = true; gull.from.set(gull.side * 36, topY(pl[t]) + 14, 3);
       hud.toast(`🐦 Een meeuw! Hij heeft zin in het blok van ${names[t]}!`, 2000); audio.sfx('pop', { vol: 0.5, rate: 1.6 });
@@ -347,7 +357,7 @@ export default {
             const cut = Math.min(p.hw * 0.2, p.hw - 0.9); p.hw -= cut;
             say('MEEUW HAPT!', tx, ty + 2, '#ffffff', 1.5); audio.sfx('boing', { vol: 0.6 }); audio.sfx('pop', { vol: 0.6, rate: 0.7 }); ctx.shake(0.25);
             fx.particles.burst(tx, ty, 1.8, { count: 20, speed: 4, up: 1.5, life: 0.9, size: 0.28, colors: [0xffffff, 0xf0f4ff], gravity: 2 });
-            addDebris(tx + p.hw / 2, ty - 1, cut, BH * 0.9, p.hcolBase, 2, 2, 4); react(p, 'scared', 1);
+            addDebris(tx + p.hw / 2, ty - 1, cut, BH * 0.9, p.hcolBase, 2, 2, 4, p.zo); react(p, 'scared', 1);
           } else say('MEEUW MIST!', tx, ty + 2, '#ffffff', 1.2);
           gull.from.copy(g.position);
         }
@@ -422,15 +432,15 @@ export default {
       G.state = 'sd'; G.sdRound++; G.t = 0;
       if (G.sdRound === 1) { hud.showBig('SUDDEN DEATH!', 1500, '#ff7a6a'); hud.toast('Gelijk! Ieder 1 blok: wie het breedst blijft staan, wint!', 2600); audio.sfx('bad', { vol: 0.5 }); }
       else hud.toast('Nog steeds gelijk... nog een blok!', 1600);
-      for (const p of pl) { p.sdDone = false; p.sdW = 0; p.cspd = 1; p.zig = false; spawnBlock(p, { plain: true }); }
-      pl[0].ph = 0; pl[1].ph = Math.PI;
+      pl.forEach((p) => { if (!G.sdSet.includes(p.i) || p.state === 'dead') { p.sdDone = true; p.sdW = -1; if (p.state !== 'dead') p.state = 'idle'; return; } p.sdDone = false; p.sdW = 0; p.cspd = 1; p.zig = false; spawnBlock(p, { plain: true }); });
+      G.sdSet.forEach((k, n) => { pl[k].ph = n * Math.PI * 2 / G.sdSet.length; });
       refreshHud();
     }
     function decide(winner, why) {
       if (G.state === 'end') return;
       G.state = 'end'; G.t = 0; G.slow = 1; G.winner = winner; G.why = why; hud.setTimer(null);
-      const w = pl[winner], l = pl[1 - winner];
-      react(w, 'cheer', 99); if (l.state !== 'dead') react(l, 'sad', 99);
+      const w = pl[winner];
+      react(w, 'cheer', 99); for (const l of pl) if (l !== w && l.state !== 'dead') react(l, 'sad', 99);
       audio.sfx('win', { vol: 0.6 }); celebrateFx(winner);
     }
     function celebrateFx(w) {
@@ -439,26 +449,34 @@ export default {
     }
     function finishMatch() {
       if (finished) return; finished = true;
-      const w = G.winner, f = pl.map((p) => (p.state === 'dead' ? p.peak : floors(p))); const wn = names[w], ln = names[1 - w], lns = /s$/i.test(ln) ? ln + "'" : ln + 's';
+      const w = G.winner, f = pl.map((p) => (p.state === 'dead' ? p.peak : floors(p))); const wn = names[w], ln = names[1 - w] || '', lns = /s$/i.test(ln) ? ln + "'" : ln + 's';
+      // volgorde: winnaar, dan wie nog stond (hoogste toren), dan wie het laatst instortte
+      const place = IDX.slice().sort((a, b) => (a === w ? -1 : b === w ? 1 : (pl[a].state === 'dead') !== (pl[b].state === 'dead') ? (pl[a].state === 'dead' ? 1 : -1) : pl[a].state === 'dead' ? (pl[b].diedAt - pl[a].diedAt) || (f[b] - f[a]) : (f[b] - f[a]) || (a - b)));
       let summary;
+      if (N > 2) {
+        const out = G.elim.filter((k) => k !== w).map((k) => names[k]);
+        if (G.why === 'collapse') summary = pick([`${out.join(', ')} ${out.length > 1 ? 'zijn' : 'is'} ingestort; ${wn} bouwt als laatste door: ${f[w]} verdiepingen.`, `KABOEM! ${out.length ? `De torens van ${out.join(', ')} liggen in de modder.` : ''} ${wn} staat nog fier overeind (${f[w]} hoog).`]);
+        else if (G.why === 'sd') summary = `Sudden death! ${wn} stapelde het breedste blok en wint.`;
+        else summary = pick([`${wn} bouwde het hoogst: ${f[w]} verdiepingen!${out.length ? ` Ingestort: ${out.join(', ')}.` : ''}`, `${wn} is de Bouwbaas van de dag met ${f[w]} verdiepingen!`]);
+      } else
       if (G.why === 'collapse') summary = pick([`De toren van ${ln} stort in als een bord pudding! ${wn} bouwt vrolijk door: ${f[w]} verdiepingen.`, `KABOEM! ${ln} miste het hele blok en de toren ligt in de modder. ${wn} wint met ${f[w]} verdiepingen.`, `${lns} toren deed een dansje en viel om. ${wn} staat nog fier overeind (${f[w]} hoog).`]);
       else if (G.why === 'sd') summary = pick([`Sudden death! ${wn} stapelde het breedste blok en ${ln} wiebelt nog na.`, `Precies gelijk, dus nog één blok. ${wn} zette hem het beste neer!`]);
       else summary = pick([`${wn} bouwde het hoogst: ${f[w]} verdiepingen tegen ${f[1 - w]}. ${ln} bewondert het uitzicht van beneden.`, `${wn} is de Bouwbaas van de dag met ${f[w]} verdiepingen!`, `De meeuw koos de koploper, maar ${wn} bleef toch bovenaan (${f[w]} tegen ${f[1 - w]}).`]);
-      const extra = ` Perfecte blokken: ${stats.perfects[0]} - ${stats.perfects[1]}.`;
-      ctx.finishPvp({ winner: w, score: f, delay: 900, summary: summary + extra });
+      const extra = ` Perfecte blokken: ${stats.perfects.join(' - ')}.`;
+      ctx.finishPvp({ winner: w, score: f, place, delay: 900, summary: summary + extra });
     }
     function checkEnd() {
       if (G.state === 'timeup') {
         if (pl.every((p) => p.state !== 'fall' && p.state !== 'wait')) {
-          const a = floors(pl[0]), b = floors(pl[1]);
-          if (a !== b) decide(a > b ? 0 : 1, 'height'); else startSD();
+          const al = aliveP(), mx = Math.max(...al.map(floors)), top = al.filter((q) => floors(q) === mx);
+          if (top.length === 1) decide(top[0].i, 'height'); else { G.sdSet = top.map((q) => q.i); startSD(); }
         }
       } else if (G.state === 'sd') {
         if (pl.every((p) => p.sdDone)) {
-          const d = pl[0].sdW - pl[1].sdW;
-          if (Math.abs(d) > 0.03) decide(d > 0 ? 0 : 1, 'sd');
-          else if (G.sdRound >= 5) decide(Math.random() < 0.5 ? 0 : 1, 'sd');
-          else { G.state = 'sdwait'; G.t = 0; }
+          const cs = G.sdSet.map((k) => pl[k]).sort((a, b) => b.sdW - a.sdW), d = cs[0].sdW - cs[1].sdW;
+          if (d > 0.03) decide(cs[0].i, 'sd');
+          else if (G.sdRound >= 5) decide(cs.filter((q) => cs[0].sdW - q.sdW <= 0.03)[Math.floor(Math.random() * cs.filter((q) => cs[0].sdW - q.sdW <= 0.03).length)].i, 'sd');
+          else { G.sdSet = cs.filter((q) => cs[0].sdW - q.sdW <= 0.03).map((q) => q.i); G.state = 'sdwait'; G.t = 0; }
         }
       } else if (G.state === 'sdwait') { if (G.t > 1.3) startSD(); }
     }
@@ -499,21 +517,21 @@ export default {
         const segs = Math.min(70, Math.ceil(mh / 2) + 1);
         for (let k = 0; k < segs; k++) { dummy.position.set(0, k * 2, 0); dummy.rotation.set(0, 0, 0); dummy.scale.set(1, 1, 1); dummy.updateMatrix(); p.mast.setMatrixAt(k, dummy.matrix); }
         p.mast.count = segs; p.mast.instanceMatrix.needsUpdate = true;
-        p.crane.position.set(p.mx, jy, 0);
+        p.crane.position.set(p.mx, jy, p.zo);
         p.cab.position.y = 0.6;
         const lean = p.tilt > 0 ? 0 : 0;
-        const tr = p.trolley; tr.position.set(p.cx, jy + 0.1, -0.9); tr.visible = p.state !== 'dead';
+        const tr = p.trolley; tr.position.set(p.cx, jy + 0.1, -0.9 + p.zo); tr.visible = p.state !== 'dead';
         const by = jy - CABLE + 0.5;
         const bw = Math.min(p.hw, 4) * 0.4;
         if (showHang) { setCable(p.cables[0], p.cx, jy - 0.15, p.cx - bw, by); setCable(p.cables[1], p.cx, jy - 0.15, p.cx + bw, by); for (const c of p.cables) c.visible = true; }
         else for (const c of p.cables) c.visible = false;
-        p.cables.forEach((c) => { c.position.z = -0.4; });
+        p.cables.forEach((c) => { c.position.z = -0.4 + p.zo; });
         // richtlijntjes
         const top = topOf(p), ty = topY(p);
         const showAim = p.state === 'swing' || p.state === 'wait';
         for (let s = 0; s < 2; s++) {
           const a = p.aims[s]; a.visible = showAim; const ex = top.x + (s ? 1 : -1) * top.w / 2 + swayOf(p, p.blocks.length - 1, t);
-          a.position.set(ex, ty + HG * 0.5 + 0.2, DZ / 2 + 0.05); a.scale.set(0.13, HG + 0.4, 0.02);
+          a.position.set(ex, ty + HG * 0.5 + 0.2, DZ / 2 + 0.05 + p.zo); a.scale.set(0.13, HG + 0.4, 0.02);
         }
         // poppetje
         const c = p.c;
@@ -539,7 +557,7 @@ export default {
         } else d.age += dt;
         if (d.age > 14) { d.on = false; continue; }
         const sc = d.age > 12.5 ? (14 - d.age) / 1.5 : 1;
-        dummy.position.set(d.x, d.y, 0); dummy.rotation.set(0, 0, d.rz); dummy.scale.set(d.w * sc, d.h * sc, DZ * sc); dummy.updateMatrix(); debIM.setMatrixAt(i, dummy.matrix);
+        dummy.position.set(d.x, d.y, d.z || 0); dummy.rotation.set(0, 0, d.rz); dummy.scale.set(d.w * sc, d.h * sc, DZ * sc); dummy.updateMatrix(); debIM.setMatrixAt(i, dummy.matrix);
       }
       debIM.instanceMatrix.needsUpdate = true; if (debIM.instanceColor) debIM.instanceColor.needsUpdate = true;
       // zandzakken
@@ -556,7 +574,7 @@ export default {
       let hi = 0, lo = 1e9;
       for (const p of pl) { const ty = p.state === 'dead' && p.blocks.length <= 1 ? 1 : topY(p); hi = Math.max(hi, ty + HG + 10.5); lo = Math.min(lo, ty); }
       lo = lo < 8 ? -1.2 : lo - 5;
-      const needH = Math.max(hi - lo, 14), needW = 36;
+      const needH = Math.max(hi - lo, 14), needW = N === 2 ? 36 : 2 * (Math.max(...pl.map((q) => Math.abs(q.mx))) + 3.8);
       const d = Math.max(needH / 2 / tv, needW / 2 / (tv * asp));
       const vis = 2 * d * tv; const cy = Math.max(lo + vis / 2, (hi + lo) / 2 - 0);
       const k = snap ? 1 : 1 - Math.exp(-2.4 * dt);
@@ -577,11 +595,11 @@ export default {
         if (Math.ceil(G.timeLeft) !== G.lastTick && G.timeLeft <= 5 && G.timeLeft > 0) { G.lastTick = Math.ceil(G.timeLeft); audio.sfx('tick', { vol: 0.5 }); }
         if (G.timeLeft <= 0) { G.timeLeft = 0; timeUp(); }
         G.gullT -= dt; if (G.gullT <= 0 && !gull.on && G.timeLeft > 8) { startGull(); G.gullT = 16 + Math.random() * 8; }
-        if (G.timeLeft < 15 && !G.lastWide) { G.lastWide = true; const w = pl[behind(pl[0]) > 0 ? 0 : 1]; if (Math.abs(lead()) >= 2 && w.state !== 'dead') { w.nextWide = w.state !== 'swing'; if (w.state === 'swing') { w.hw = Math.min(w.wmax * 1.35, w.hw * 1.5 + 0.2); w.hcolBase.set(0xffe27a); } say('GOUDEN BLOK!', w.tx, topY(w) + 5, '#ffd23f', 1.5); hud.toast(`✨ ${names[w.i]} krijgt een gouden breed blok (inhaalkans)!`, 2200); audio.sfx('sparkle', { vol: 0.6 }); } }
+        if (G.timeLeft < 15 && !G.lastWide) { G.lastWide = true; const w = N === 2 ? pl[behind(pl[0]) > 0 ? 0 : 1] : aliveP().reduce((a, q) => (floors(q) < floors(a) ? q : a), aliveP()[0]); if ((N === 2 ? Math.abs(lead()) >= 2 : behind(w) >= 2) && w.state !== 'dead') { w.nextWide = w.state !== 'swing'; if (w.state === 'swing') { w.hw = Math.min(w.wmax * 1.35, w.hw * 1.5 + 0.2); w.hcolBase.set(0xffe27a); } say('GOUDEN BLOK!', w.tx, topY(w) + 5, '#ffd23f', 1.5); hud.toast(`✨ ${names[w.i]} krijgt een gouden breed blok (inhaalkans)!`, 2200); audio.sfx('sparkle', { vol: 0.6 }); } }
       }
-      const order = Math.random() < 0.5 ? [pl[0], pl[1]] : [pl[1], pl[0]];
+      const order = pl.slice().sort(() => Math.random() - 0.5);
       for (const p of order) updatePlayer(p, dt);
-      if (G.state === 'collapse' && G.t > 2.9) { decide(1 - G.loser, 'collapse'); }
+      if (G.state === 'collapse' && G.t > 2.9) { const al = aliveP(); decide(N === 2 ? 1 - G.loser : (al.length ? al[0].i : G.elim.filter((k) => k !== G.loser).slice(-1)[0] ?? 0), 'collapse'); }
       checkEnd();
       if (G.state === 'end' && !finished && G.t > 1.5) finishMatch();
       refreshHudMaybe();
@@ -608,7 +626,7 @@ export default {
           say('DEURMAN!', p.tx, topY(p) + 3, '#ff9a8a', 1.5); audio.sfx('static', { vol: 0.4 }); ctx.shake(0.4); react(p, 'scared', 1.5);
         }); refreshHud();
       },
-      celebrate(w) { pl[w].pose = 'cheer'; pl[w].poseT = 99; pl[1 - w].pose = 'sad'; pl[1 - w].poseT = 99; celebrateFx(w); },
+      celebrate(w, winners = [w]) { for (const q of pl) { q.pose = winners.includes(q.i) ? 'cheer' : 'sad'; q.poseT = 99; } celebrateFx(w); },
       dispose() {},
       dbg: {
         state: () => ({

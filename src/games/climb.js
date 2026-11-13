@@ -45,11 +45,12 @@ export default {
     const pl = players.map((pp, i) => {
       const ch = makeBrother(i), holder = new THREE.Group(); holder.add(ch.group); scene.add(holder);
       const size = ctx.pvp.size(i), sp = ctx.pvp.speed(i);
-      ch.group.scale.setScalar(2.05 / ch.height * size);
+      const VS = N > 2 ? 1.25 : 1;   // 3-4 spelers: poppetje en naam iets groter getekend (vier klimmers op twee torens)
+      ch.group.scale.setScalar(2.05 / ch.height * size * VS);
       const s = ch.s, boots = [ch.legL, ch.legR].map((lg) => { const b = mesh(new THREE.BoxGeometry(0.27 * s, 0.22 * s, 0.4 * s), GOLD, { pos: [0, -ch.legLen + 0.09 * s, 0.05 * s] }); b.visible = false; lg.add(b); return b; });
       const aura = new THREE.Mesh(new THREE.SphereGeometry(1.5, 14, 10), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.18, depthWrite: false, blending: THREE.AdditiveBlending })); aura.position.y = 1.0 * size; aura.visible = false; holder.add(aura);
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: canvasTex(256, 96, (g, w, hh) => { g.font = 'bold 56px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(10,10,30,.9)'; g.lineJoin = 'round'; g.strokeText(pp.name, w / 2, hh / 2); g.fillStyle = pp.css; g.fillText(pp.name, w / 2, hh / 2); }), transparent: true, depthTest: false }));
-      tag.scale.set(2.4, 0.9, 1); tag.renderOrder = 15; scene.add(tag);
+      tag.scale.set(2.4 * (N > 2 ? 1.3 : 1), 0.9 * (N > 2 ? 1.3 : 1), 1); tag.renderOrder = 15; scene.add(tag);
       const tower = i % 2, st = LY.newPlayer(tower);
       return { i, tower, xoff: N > 2 ? (i < 2 ? -1.6 : 1.6) : 0, name: pp.name, css: pp.css, color: PLAYER_COLORS[i], pl: st, ch, holder, boots, aura, tag, size, sp, z: N === 2 ? (i ? -0.15 : 0.3) : ZS[i], pushT: 0, pushCd: 0, inv: 0, knockInv: 0, dead: false, deadT: 0, falls: 0, pushes: 0, hits: 0, blink: 0, burnT: 0, squash: 0, spawnT: 0, maxY: 0, height: 0, hFloor: 0, lastTX: 0, win: false };
     });
@@ -369,7 +370,7 @@ export default {
         for (const b of p.boots) b.visible = q.shoe > 0;
         p.aura.visible = q.shoe > 0; if (q.shoe > 0) { p.aura.scale.setScalar(1 + Math.sin(T * 9) * 0.06); p.aura.material.opacity = q.shoe < 2 ? (Math.sin(T * 26) > 0 ? 0.2 : 0.04) : 0.18; if (Math.random() < dt * 20) fx.particles.emit(q.x + rand(-0.4, 0.4), q.y + 0.1, p.z, 0, 0.5, 0, { life: 0.5, size: 0.3, color: 0xffe14a, gravity: -0.5 }); }
         if (p.burnT > 0 && Math.random() < dt * 40) fx.particles.emit(q.x + rand(-0.4, 0.4), q.y + rand(0.2, 2), p.z, 0, 2, 0, { life: 0.5, size: 0.4, color: Math.random() < 0.5 ? 0xff8a1a : 0xffd23f, gravity: -2 });
-        p.tag.visible = !p.dead; p.tag.position.set(q.x, q.y + 2.05 * p.size + 0.9, p.z + 0.4);
+        p.tag.visible = !p.dead; p.tag.position.set(q.x, q.y + 2.05 * p.size * (N > 2 ? 1.25 : 1) + 0.9, p.z + 0.4);
         if (q.ground && Math.abs(q.vx) > 3 && Math.random() < dt * 6) fx.particles.dust(q.x - q.face * 0.3, q.y, p.z, 1, 0xe8e0d0);
       }
       for (const b of barrels) { /* positie in barrelStep */ }

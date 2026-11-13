@@ -35,7 +35,7 @@ export default {
 
     ctx.lights('day', { shadows: false, fogNear: 110, fogFar: 300 });
     camera.fov = 50; camera.updateProjectionMatrix(); scene.add(camera);
-    const course = makeCourse(rng); const world = buildWorld(ctx, course, rng);
+    const course = makeCourse(rng, N > 2 ? LANE : null); const world = buildWorld(ctx, course, rng);
 
     // ---------------- eenden ----------------
     const D = players.map((_, i) => {

@@ -6,9 +6,9 @@ import { mat, mesh, canvasTex, clamp, lerp, TAU, mulberry32 } from '../engine/ut
 export const FL = { L: 760, H: 10.5, X0: -9, Y0: [0.6, -11.1], HW: 24, DZ: 28, AHEAD: 28, BEHIND: 26, CY: 0, DS: 1 };   // CY: hoogte van de camera; DS: weergaveschaal draken
 // Banen boven elkaar voor 2, 3 of 4 spelers: de camera gaat verder weg zodat alles in beeld past (FL wordt in place aangepast; elke create() roept dit aan).
 export function setLayout(n) {
-  const H = FL.H, pitch = H + (n === 2 ? 1.2 : 1.9); FL.Y0.length = 0;
+  const H = FL.H, pitch = H + (n === 2 ? 1.2 : 1.35); FL.Y0.length = 0;
   for (let i = 0; i < n; i++) FL.Y0.push(n === 2 ? [0.6, -11.1][i] : ((n - 1) / 2 - i) * pitch - H / 2);
-  FL.DZ = n === 2 ? 28 : n === 3 ? 42 : 59; FL.CY = n === 2 ? 0 : n === 3 ? 1.0 : 1.6; FL.DS = n === 2 ? 1 : n === 3 ? 1.12 : 1.28;
+  FL.DZ = n === 2 ? 28 : n === 3 ? 40 : 55; FL.CY = n === 2 ? 0 : n === 3 ? 1.0 : 1.6; FL.DS = n === 2 ? 1 : n === 3 ? 1.4 : 1.75;
   FL.HW = n === 2 ? 24 : n === 3 ? 28 : 40;
   FL.AHEAD = n === 2 ? 28 : n === 3 ? 38 : 56; FL.BEHIND = n === 2 ? 26 : n === 3 ? 30 : 40;
 }

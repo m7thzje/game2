@@ -200,7 +200,7 @@ const RUN = `
 async function runDuel(id, ids, { winnerSlot = 0, score = null, twist = null, shot = null, teams = null } = {}) {
   const app = window.__app, { S } = await import('/src/save.js'), { MinigameMode, SERIES } = await import('/src/engine/harness.js');
   const { input, KEY_LABELS } = await import('/src/engine/input.js'); const chars = await import('/src/engine/chars.js');
-  const def = id === '_tri_test' ? (await import('/src/games/_tri_test.js')).default : id === '_quad_test' ? (await import('/src/games/_quad_test.js')).default : id === '_quad_ffa' ? { ...(await import('/src/games/_quad_test.js')).default, teams: false, id: 'quad_ffa' } : app.games[id];
+  const def = id === '_tri_test' ? (await import('/src/games/_tri_test.js')).default : id === '_quad_test' ? (await import('/src/games/_quad_test.js')).default : id === '_quad_ffa' ? { ...(await import('/src/games/_quad_test.js')).default, teams: false, id: 'quad_ffa' } : id === '_quad_duo' ? { ...(await import('/src/games/_quad_test.js')).default, teams: false, players: [2], id: 'quad_duo' } : app.games[id];
   const before = { plays: S.arcade.plays, wins: S.arcade.wins.slice(), draws: S.arcade.draws, g: JSON.parse(JSON.stringify(S.arcade.byGame[def.id] || { plays: 0, wins: [0, 0, 0] })), pairs: JSON.stringify(S.arcade.pairs) };
   app.setMode(null);   // zoals app.playGame: eerst het vorige mode weg
   let done = null; const m = new MinigameMode(app, def, { extra: ids || teams ? { ...(ids ? { players: ids } : {}), ...(teams ? { teams } : {}) } : null, twist, onDone: (r) => { done = r; app.setMode(null); } });
@@ -612,13 +612,16 @@ if (PL === 4) {
 
     // 4 deelnemers, def.teams (standaardteams), alle slots
     const o4 = await page.evaluate(() => runDuel('_quad_test', null, { twist: 'none' }));
-    const lay = await page.evaluate(() => {
+    // HUD bij 4: zonder teams staan slot 0,2 links en 1,3 rechts (2 hoeken + 2 eronder); met teams (def.teams: o4) staan teamgenoten in één kolom met teamlabel (links team 0, rechts team 1)
+    const layJs = () => {
       const B = (s) => document.querySelector(`#hud .pbox[data-slot="${s}"]`).getBoundingClientRect(); const T = document.querySelector('#hud .hud-timer').getBoundingClientRect();
-      const b = [0, 1, 2, 3].map(B);
-      return { top: !!document.querySelector('#hud .hud-top.four'), n: document.querySelectorAll('#hud .pbox').length, below: b[2].top >= b[0].bottom - 1 && b[3].top >= b[1].bottom - 1 && Math.abs(b[2].left - b[0].left) < 3 && Math.abs(b[3].right - b[1].right) < 3, corners: b[0].left < 40 && b[1].right > innerWidth - 40 && b[0].top < 30, mid: T.left > b[0].right && T.right < b[1].left, vis: T.width > 0 };
-    });
+      const b = [0, 1, 2, 3].map(B), teams = !!document.querySelector('#hud .hud-top.teams');
+      const L = teams ? [0, 1] : [0, 2], R = teams ? [2, 3] : [1, 3];   // slots links/rechts
+      return { top: !!document.querySelector('#hud .hud-top.four'), teams, labels: [...document.querySelectorAll('#hud .hud-team')].map((e) => e.textContent).join('|'), n: document.querySelectorAll('#hud .pbox').length, below: b[L[1]].top >= b[L[0]].bottom - 1 && b[R[1]].top >= b[R[0]].bottom - 1 && Math.abs(b[L[1]].left - b[L[0]].left) < 3 && Math.abs(b[R[1]].right - b[R[0]].right) < 3, corners: b[L[0]].left < 40 && b[R[0]].right > innerWidth - 40 && b[L[0]].top < 40, mid: T.left > b[L[0]].right && T.right < b[R[0]].left, vis: T.width > 0 };
+    };
+    const lay = await page.evaluate(layJs);
     check('harness(4): zonder extra.players spelen alle 4 (def.players [2,3,4], players=4), ctx.players/HUD/labels/kleuren', o4.n === 4 && o4.ids.join() === '0,1,2,3' && o4.pMap && o4.state === 'play' && o4.hud === 'Wes,Jor,Juul,Sam' && o4.labels === 'WASD,Pijltjes,IJKL,Numpad 8456' && o4.pcol === '2f9e5b,3a78e0,f08a2a,c844e8' && o4.intro.split('|').length === 4 && o4.ctxPlayers[3].startsWith('3:3:Sam:'), JSON.stringify(o4));
-    check('harness(4): HUD 4 vakken (2 hoeken + 2 eronder), timer in het midden', lay.top && lay.n === 4 && lay.below && lay.corners && lay.mid && lay.vis, JSON.stringify(lay));
+    check('harness(4): teamspel-HUD: teamgenoten in één kolom (0,1 links | 2,3 rechts) met teamlabels, timer in het midden', lay.top && lay.teams && lay.labels === 'Wes & Jor|Juul & Sam' && lay.n === 4 && lay.below && lay.corners && lay.mid && lay.vis, JSON.stringify(lay));
     check('harness(4): standaard teams [[0,1],[2,3]], teamOf, teamInfo (kleur eerste lid)', JSON.stringify(o4.teams) === '[[0,1],[2,3]]' && o4.teamOf.join() === '0,0,1,1' && o4.teamInfo.join() === 'Wes & Jor:2f9e5b,Juul & Sam:f08a2a', JSON.stringify([o4.teams, o4.teamOf, o4.teamInfo]));
     // alle vier de A's tellen mee in hun eigen slot
     const s4 = await page.evaluate(async () => { const { input } = await import('/src/engine/input.js'); const m = window.__m; const I = m.instance;
@@ -661,6 +664,8 @@ if (PL === 4) {
     // FFA met 4 (spel zonder teams), plaatsen op score, gelijkspel, expliciete place
     const o8 = await page.evaluate(() => runDuel('_quad_ffa', null, { twist: 'none' }));
     check('harness(4) FFA: def.teams niet gezet -> ctx.teams null', o8.n === 4 && o8.teams === null && o8.teamOf === null && o8.teamInfo === null, JSON.stringify(o8.teams));
+    const lay8 = await page.evaluate(layJs);
+    check('harness(4) FFA: HUD 4 vakken (2 hoeken + 2 eronder: 0,2 links | 1,3 rechts), geen teamlabels, timer in het midden', lay8.top && !lay8.teams && lay8.labels === '' && lay8.n === 4 && lay8.below && lay8.corners && lay8.mid && lay8.vis, JSON.stringify(lay8));
     const f8 = await page.evaluate(() => finishDuel(3, [1, 0, 2, 4]));
     check('finishPvp({winner:3}) FFA: winnerId 3, place op score [3,2,0,1], kaart "Sam wint!"', f8.res.winnerId === 3 && JSON.stringify(f8.res.winnerIds) === '[3]' && JSON.stringify(f8.res.place) === '[3,2,0,1]' && f8.res.teams === null && f8.card.includes('Sam wint!') && f8.card.includes('👑 Sam 4') && !f8.card.includes('👑 Juul') && f8.card.includes('🥇 Sam') && f8.card.includes('4️⃣ Jor'), f8.card + JSON.stringify(f8.res));
     await shot('result_four_ffa');
@@ -686,7 +691,7 @@ if (PL === 4) {
     const o13 = await page.evaluate(() => runDuel('airhockey', [3, 2]));
     check('harness(4): bestaand 1-tegen-1-duel met Sam (airhockey [3,2])', o13.n === 2 && o13.hud === 'Sam,Juul' && o13.labels === 'Numpad 8456,IJKL' && o13.pcol === 'c844e8,f08a2a' && o13.brother === 3, JSON.stringify(o13));
     await dispose();
-    const o14 = await page.evaluate(() => runDuel('basket', [0, 1, 2, 3]));
+    const o14 = await page.evaluate(() => runDuel('_quad_duo', [0, 1, 2, 3]));
     check('1-tegen-1-duel met 4 ids: alleen eerste twee spelen', o14.n === 2 && o14.ids.join() === '0,1', JSON.stringify(o14)); await dispose();
     // twists met 4 deelnemers
     await page.evaluate(() => runDuel('_quad_ffa', [0, 1, 2, 3], { twist: 'bodyswap' }));

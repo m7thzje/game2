@@ -160,14 +160,14 @@ export function buildWorld(ctx, N = 2) {
   // gordijn + clown-boog
   const curt = new THREE.Mesh(new THREE.PlaneGeometry(36, 14), new THREE.MeshStandardMaterial({ map: curtainTex(), roughness: 1 })); curt.position.set(0, 7, -20.5); scene.add(curt);
   const sign = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.75), new THREE.MeshBasicMaterial({ map: bannerTex('REUZEN-BOWLING', '#2f6fe0', '#1a3a94'), transparent: true, fog: false })); sign.position.set(0, 8.6, -20.3); scene.add(sign);
-  // marquee: lampjes boven elke baan
+  // marquee: lampjes boven elke baan (bij 3-4 banen kleinere bogen, niet over het scorebord)
   const bulbs = [];
-  for (const cx of CX) for (let k = 0; k <= 20; k++) { const a = Math.PI * k / 20; bulbs.push([cx + Math.cos(a) * 3.4, 1.0 + Math.sin(a) * 3.6, -19.7]); }
+  for (const cx of CX) for (let k = 0; k <= 20; k++) { const a = Math.PI * k / 20; bulbs.push(N > 2 ? [cx + Math.cos(a) * 2.5, 0.8 + Math.sin(a) * 1.2, -19.7] : [cx + Math.cos(a) * 3.4, 1.0 + Math.sin(a) * 3.6, -19.7]); }
   W.bulbMesh = new THREE.InstancedMesh(new THREE.SphereGeometry(0.17, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false }), bulbs.length); W.bulbMesh.frustumCulled = false;
   const dm = new THREE.Object3D(); const bc = [0xffe08a, 0xff8ab0, 0x8ae0ff, 0xb8ff8a, 0xffb060]; W.bulbBase = bulbs.map((_, k) => new THREE.Color(bc[k % 5]));
   bulbs.forEach((p, k) => { dm.position.set(...p); dm.updateMatrix(); W.bulbMesh.setMatrixAt(k, dm.matrix); W.bulbMesh.setColorAt(k, W.bulbBase[k]); }); scene.add(W.bulbMesh);
   // vlaggetjes tussen palen boven de banen
-  const flags = []; for (let row = 0; row < 3; row++) { const z = -2 - row * 7; for (let k = 0; k < 26; k++) { const u = k / 25; const x = lerp(-13, 13, u); flags.push([x, 8.3 - Math.sin(u * Math.PI) * 1.4 - row * 0.2, z]); } }
+  const flags = []; for (let row = N > 2 ? 2 : 0; row < 3; row++) { const z = -2 - row * 7; for (let k = 0; k < 26; k++) { const u = k / 25; const x = lerp(-13, 13, u); flags.push([x, 8.3 - Math.sin(u * Math.PI) * 1.4 - row * 0.2, z]); } }
   const fg = new THREE.BufferGeometry(); fg.setAttribute('position', new THREE.Float32BufferAttribute([-0.34, 0, 0, 0.34, 0, 0, 0, -0.7, 0], 3)); fg.computeVertexNormals();
   const fm = new THREE.InstancedMesh(fg, new THREE.MeshStandardMaterial({ color: 0xffffff, side: THREE.DoubleSide, roughness: 1 }), flags.length); const fc = [0xe8412c, 0xffd23f, 0x3a9ae8, 0x58c96a, 0xff6fb5];
   flags.forEach((p, k) => { dm.position.set(...p); dm.rotation.set(0, 0, Math.sin(k) * 0.1); dm.updateMatrix(); fm.setMatrixAt(k, dm.matrix); fm.setColorAt(k, new THREE.Color(fc[k % 5])); }); scene.add(fm);
@@ -175,13 +175,24 @@ export function buildWorld(ctx, N = 2) {
   const bal = new THREE.InstancedMesh(new THREE.SphereGeometry(0.7, 8, 7), new THREE.MeshStandardMaterial({ roughness: 0.4 }), 18);
   for (let k = 0; k < 18; k++) { const side = k % 2 ? 1 : -1; dm.position.set(side * (9.5 + rng() * 5), 3 + rng() * 5, -4 - rng() * 14); dm.rotation.set(0, 0, 0); dm.scale.set(1, 1.2, 1); dm.updateMatrix(); bal.setMatrixAt(k, dm.matrix); bal.setColorAt(k, new THREE.Color(fc[k % 5])); } scene.add(bal); dm.scale.set(1, 1, 1);
 
-  // scorebord boven het midden
-  const SBH = 84 + 118 * N;   // 320 bij 2 spelers; meer rijen bij 3-4
-  W.sbCanvas = document.createElement('canvas'); W.sbCanvas.width = 1024; W.sbCanvas.height = SBH;
-  W.sbTex = new THREE.CanvasTexture(W.sbCanvas); W.sbTex.colorSpace = THREE.SRGBColorSpace;
-  const sbw = N === 2 ? 9.6 : 9.4, sbh = sbw * SBH / 1024, sby = N === 2 ? 5.7 : 3.4;
-  const sb = new THREE.Mesh(new THREE.PlaneGeometry(sbw, sbh), new THREE.MeshBasicMaterial({ map: W.sbTex, fog: false })); sb.position.set(0, sby, -19.9); scene.add(sb);
-  scene.add(mesh(new THREE.BoxGeometry(sbw + 0.4, sbh + 0.4, 0.2), mat(0x2a1a10), { cast: false, pos: [0, sby, -20.05] }));
+  // scorebord boven het midden (2 spelers); bij 3-4 spelers een eigen bordje boven elke baan (leesbaar, niet onder de HUD)
+  if (N === 2) {
+    const SBH = 84 + 118 * N;   // 320 bij 2 spelers
+    W.sbCanvas = document.createElement('canvas'); W.sbCanvas.width = 1024; W.sbCanvas.height = SBH;
+    W.sbTex = new THREE.CanvasTexture(W.sbCanvas); W.sbTex.colorSpace = THREE.SRGBColorSpace;
+    const sbw = 9.6, sbh = sbw * SBH / 1024, sby = 5.7;
+    const sb = new THREE.Mesh(new THREE.PlaneGeometry(sbw, sbh), new THREE.MeshBasicMaterial({ map: W.sbTex, fog: false })); sb.position.set(0, sby, -19.9); scene.add(sb);
+    scene.add(mesh(new THREE.BoxGeometry(sbw + 0.4, sbh + 0.4, 0.2), mat(0x2a1a10), { cast: false, pos: [0, sby, -20.05] }));
+  } else {
+    W.laneBoards = CX.map((cx) => {
+      const canvas = document.createElement('canvas'); canvas.width = 640; canvas.height = 200;
+      const tex = new THREE.CanvasTexture(canvas); tex.colorSpace = THREE.SRGBColorSpace;
+      const bw = 5.1, bh = bw * 200 / 640, by = 2.25 + bh / 2;
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh), new THREE.MeshBasicMaterial({ map: tex, fog: false })); m.position.set(cx, by, -19.85); scene.add(m);
+      scene.add(mesh(new THREE.BoxGeometry(bw + 0.25, bh + 0.25, 0.2), mat(0x2a1a10), { cast: false, pos: [cx, by, -20.0] }));
+      return { canvas, tex };
+    });
+  }
 
   W.update = (t, dt) => {
     W.t = t;

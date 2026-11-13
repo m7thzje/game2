@@ -12,7 +12,7 @@ export const ui = {
 // Extra stijl voor de 3- en 4-spelers-HUD (css/style.css blijft ongemoeid): bij 3 staat het middelste vak onder de timer, bij 4 staan twee vakken onder de bovenhoeken (compact)
 {
   const st = document.createElement('style');
-  st.textContent = '.hud-top.three .pbox{min-width:150px;padding:6px 12px}.hud-top.three .hud-mid .pbox{min-width:140px;text-align:center;margin-top:2px}.card .ctrl.three{grid-template-columns:1fr 1fr 1fr}.card .ctrl.three>div{padding:8px 10px}.card .ctrl.three li{font-size:14px}.card.pvp .vs.three{gap:14px;font-size:28px;flex-wrap:wrap}@media (max-width:760px){.card .ctrl.three{grid-template-columns:1fr}}'
+  st.textContent = '.hud-top.three .pbox{min-width:150px;padding:6px 12px}.hud-top.three .hud-mid{flex-direction:row;flex-wrap:wrap;justify-content:center;align-items:center;max-width:min(760px,66vw);gap:0 8px}.hud-top.three .hud-mid::after{content:\'\';flex:0 0 100%;height:0;order:2}.hud-top.three .hud-mid .hud-timer{order:1}.hud-top.three .hud-mid .hud-score,.hud-top.three .hud-mid .pbox{order:3;margin-top:6px}.hud-top.three .hud-mid .pbox{min-width:0;display:flex;align-items:baseline;justify-content:center;gap:8px;padding:2px 12px;border-width:2px;border-radius:12px;box-shadow:none}.hud-top.three .hud-mid .pbox .n{font-size:15px}.hud-top.three .hud-mid .pbox .i{font-size:13px;min-height:0}.hud-top.three .hud-mid .pbox .k{display:none}.card .ctrl.three{grid-template-columns:1fr 1fr 1fr}.card .ctrl.three>div{padding:8px 10px}.card .ctrl.three li{font-size:14px}.card.pvp .vs.three{gap:14px;font-size:28px;flex-wrap:wrap}@media (max-width:760px){.card .ctrl.three{grid-template-columns:1fr}}'
     + '.hud-top.four{align-items:flex-start}.hud-top.four .hud-col{display:flex;flex-direction:column;gap:6px}.hud-top.four .hud-col.r{align-items:flex-end}.hud-top.four .pbox{min-width:150px;padding:4px 10px;border-width:2px;border-radius:12px}.hud-top.four .pbox .n{font-size:16px}.hud-top.four .pbox .i{font-size:13px;min-height:16px}.hud-top.four .pbox .k{font-size:10px;margin-top:0}'
     + '.card .ctrl.four{grid-template-columns:repeat(4,1fr);gap:8px}.card .ctrl.four>div{padding:6px 8px}.card .ctrl.four h4{font-size:17px}.card .ctrl.four li{font-size:13px}.card .ready.four{flex-wrap:wrap;gap:8px}.card .ready.four>div{padding:5px 12px;font-size:16px}.card.pvp .places{display:flex;justify-content:center;flex-wrap:wrap;gap:12px;font-size:24px;font-weight:700;margin:2px 0 8px}'
     + '@media (max-width:760px){.card .ctrl.four{grid-template-columns:1fr 1fr}.hud-top.four .pbox{min-width:105px}}';
@@ -42,7 +42,9 @@ const hud = {
   root: null, timerEl: null, scoreEl: null, pinfo: [null, null, null, null], hintEl: null, bigEl: null, promptEl: null, toastEl: null,
   slotIds: null,   // spelers-id per HUD-vak (null = alle actieve spelers: 2, 3 of 4 volgens S.settings.players)
   // De harness zet hier de deelnemers van het duel (bijv. [2, 0]); setSlots(null) herstelt de standaard
-  setSlots(ids) { this.slotIds = ids ? ids.slice() : null; },
+  teams: null,     // optioneel: teamindeling voor de HUD [{ slots: [slot, ...], name, css }, ...] (door de harness gezet bij teamspellen; setSlots wist het)
+  setSlots(ids) { this.slotIds = ids ? ids.slice() : null; this.teams = null; },
+  setTeams(teams) { this.teams = Array.isArray(teams) && teams.length ? teams.map((t) => ({ slots: t.slots.slice(), name: t.name, css: t.css })) : null; },
   ids() { return this.slotIds || activeIds(); },
   reset() {
     ui.hudEl.innerHTML = '';
@@ -55,12 +57,18 @@ const hud = {
       const k = KEY_LABELS[slot];
       const b = h('div', { class: 'pbox', 'data-slot': String(slot), style: { '--c': PLAYER_CSS[slot] } },
         h('div', { class: 'n' }, ui.names[ids[slot]]), h('div', { class: 'i' }), h('div', { class: 'k', html: `<kbd>${k.move}</kbd> <kbd>${k.a}</kbd> <kbd>${k.b}</kbd>` }));
+      b.style.setProperty('--c', PLAYER_CSS[slot]);   // h() zet style via Object.assign: een CSS-variabele (--c) komt er zo niet door, dus expliciet
       this.pinfo[slot] = b.querySelector('.i');
       return b;
     };
-    const three = ids.length === 3, four = ids.length >= 4;
+    // teamspel met 2 teams (bij 3 of 4 spelers): teamgenoten in één kolom met een dun teamlabel en een kleurbalk (links team 0, rechts team 1)
+    const T = this.teams && this.teams.length === 2 && ids.length >= 3 && this.teams.every((t) => t.slots.length && t.slots.every((k) => k >= 0 && k < ids.length)) ? this.teams : null;
+    const three = !T && ids.length === 3, four = !T && ids.length >= 4;
     const mid = h('div', { class: 'hud-mid' }, this.timerEl, this.scoreEl, three ? mk(1) : null);
-    if (four) {   // slot 0 en 2 links boven elkaar, slot 1 en 3 rechts; timer in het midden
+    if (T) {
+      const col = (t, r) => { const c = h('div', { class: 'hud-col team' + (r ? ' r' : '') }, h('div', { class: 'hud-team' }, t.name), ...t.slots.slice().sort((a, b) => a - b).map(mk)); c.style.setProperty('--tc', t.css); return c; };
+      ui.hudEl.append(h('div', { class: 'hud-top four teams' }, col(T[0], false), mid, col(T[1], true)));
+    } else if (four) {   // slot 0 en 2 links boven elkaar, slot 1 en 3 rechts; timer in het midden
       const L = h('div', { class: 'hud-col' }, mk(0), mk(2)), R = h('div', { class: 'hud-col r' }, mk(1), mk(3));
       ui.hudEl.append(h('div', { class: 'hud-top four' }, L, mid, R));
     } else ui.hudEl.append(h('div', { class: 'hud-top' + (three ? ' three' : '') }, mk(0), mid, mk(three ? 2 : 1)));
@@ -89,6 +97,8 @@ const hud = {
   toast(text, ms = 1800) {
     if (this.toastEl) this.toastEl.remove();
     const el = h('div', { class: 'hud-toast' }, text); ui.hudEl.append(el); this.toastEl = el;
+    const mid = ui.hudEl.querySelector('.hud-top .hud-mid'), top = mid && mid.offsetParent ? mid.offsetParent.offsetTop + mid.offsetTop + mid.offsetHeight : 0;
+    if (top) el.style.top = Math.max(92, Math.round(top) + 8) + 'px';   // onder het middenstuk van de HUD (timer, stand, bij 3 spelers het middelste vak), nooit eroverheen
     clearTimeout(this._toastT); this._toastT = setTimeout(() => { el.remove(); if (this.toastEl === el) this.toastEl = null; }, ms);
   },
   setPrompt(html) {

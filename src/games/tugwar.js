@@ -106,13 +106,16 @@ export default {
       const fl = [];
       for (let k = 0; k < 3; k++) { const f = new THREE.Mesh(new THREE.ConeGeometry(0.17 * c.s * (1 - k * 0.15), 0.55 * c.s, 6), new THREE.MeshBasicMaterial({ color: [0xff6a10, 0xffb020, 0xffe680][k], transparent: true, opacity: 0.95, depthWrite: false })); f.position.set((k - 1) * 0.14 * c.s, 0.2 * c.s, -0.02 * c.s * k); flames.add(f); fl.push(f); }
       const blob = P.shadowBlob(1.3 * sizeOf(i)); blob.position.y = 0.02; scene.add(blob);
+      // 2 tegen 2: gekleurde ring onder je voeten in de kleur van je team (teamgenoten direct herkenbaar)
+      let teamRing = null;
+      if (TM) { teamRing = new THREE.Mesh(new THREE.RingGeometry(0.95, 1.5, 28), new THREE.MeshBasicMaterial({ color: tHex[t], transparent: true, opacity: 0.8, depthWrite: false, side: THREE.DoubleSide })); teamRing.rotation.x = -Math.PI / 2; teamRing.scale.setScalar(sizeOf(i)); scene.add(teamRing); }
       const tagTex = canvasTex(256, 96, (g, w, hh) => { g.font = 'bold 58px Fredoka, Arial Black, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.lineWidth = 12; g.strokeStyle = 'rgba(10,10,30,.9)'; g.lineJoin = 'round'; g.strokeText(pp.name, w / 2, hh / 2); g.fillStyle = pp.css; g.fillText(pp.name, w / 2, hh / 2); });
       const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTex, transparent: true, depthTest: false })); tag.scale.set(2.3, 0.86, 1); tag.renderOrder = 15; scene.add(tag);
       // verkool-materialen (per mesh een gedimde kloon)
       const burnList = [];
       c.group.traverse((o) => { if (o.isMesh && o.material && !o.material.isMeshBasicMaterial && !Array.isArray(o.material)) { const b = o.material.clone(); b.color.multiplyScalar(0.3); burnList.push({ o, orig: o.material, burnt: b }); } });
       return {
-        i, t, kIn, dir, c, holder, kS, aura, flames, fl, blob, tag, burnList, burned: false, fs: 'none', ft: 0, bt: 0, tx: 0, hitX: 0,
+        i, t, kIn, dir, c, holder, kS, aura, flames, fl, blob, teamRing, tag, burnList, burned: false, fs: 'none', ft: 0, bt: 0, tx: 0, hitX: 0,
         x: (t ? S0 : -S0) - dir * kIn * ROW, y: 0, vy: 0, vx: 0, st: 'stand', hidden: false,
         pw: 0, rm: 0, lastBtn: null, lastT: -9, lastIv: 0, boostT: 0, jerk: 0, eff: 0, dragged: 0, spin: 0, fallT: 0,
         powMul: 1 + (sizeOf(i) - 1) * 0.2, rmGain: sizeOf(i) < 1 ? 1.4 : 1, frozen: 0, presses: 0, surges: 0, bestRm: 0,
@@ -432,7 +435,7 @@ export default {
         lead = clamp(lead + leadV * dt, -1, 1);
         // spanning
         const mn = Math.min(teamEff(0), teamEff(1));
-        const thr = 9 + R.snaps * 3;   // na een knap wordt het touw sterker
+        const thr = (9 + R.snaps * 3) * (TM ? 2 * TEAMMUL : 1);   // na een knap wordt het touw sterker; bij 2 tegen 2 schaalt de drempel mee met de teamkracht (anders knapt het touw bij een lager tempo)
         if (mn > thr && !R.timeUp && R.snaps < 3) tension = Math.min(1.05, tension + (mn - thr) * 0.04 * dt); else tension = Math.max(0, tension - 0.25 * dt);
         if (tension > 0.72) { creakT -= dt; if (creakT <= 0) { creakT = 0.55; audio.sfx('creak', { vol: 0.35 + tension * 0.3, rate: 1 + tension * 0.5 }); const rp = ropeAt(0.5, _v1); fx.particles.burst(rp.x, rp.y, 0, { count: 6, speed: 2, up: 1, life: 0.5, size: 0.18, colors: [0xcaa25e, 0xffd24a], gravity: 6 }); } }
         if (tension >= 1 && Math.abs(lead) < 0.95 && !R.timeUp) triggerSnap();
@@ -635,6 +638,7 @@ export default {
         c.update(dt);
         p.blob.visible = !p.hidden && p.st !== 'fly' && p.st !== 'fly2';
         p.blob.position.set(p.x, 0.04, 0);
+        if (p.teamRing) { p.teamRing.visible = p.blob.visible; p.teamRing.position.set(p.x, 0.06, 0); }
         p.tag.visible = !p.hidden;
         p.tag.position.set(p.x, p.y + p.c.height * p.kS * 1.12 + 0.9, 0.5);
       }

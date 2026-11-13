@@ -119,6 +119,7 @@ export default {
     const lead = (p) => score[p] - Math.max(...score.filter((_, k) => k !== p));
     const leaderLane = () => { const m = Math.max(...score), top = score.map((v, i) => (v === m ? i : -1)).filter((i) => i >= 0); return top[Math.floor(rng() * top.length)]; };
     function drawBoard() {
+      if (N > 2) { drawLaneBoards(); return; }
       const g = W.sbCanvas.getContext('2d'), w = 1024, h = 84 + 118 * N;
       g.fillStyle = '#120c26'; g.fillRect(0, 0, w, h); g.fillStyle = '#2a1a4a'; g.fillRect(8, 8, w - 16, h - 16);
       g.textBaseline = 'middle'; g.textAlign = 'center';
@@ -136,8 +137,26 @@ export default {
       }
       W.sbTex.needsUpdate = true;
     }
+    // 3-4 spelers: een bordje per baan (naam in spelerskleur, totaal, de 5 rondes; gele rand = huidige ronde)
+    function drawLaneBoards() {
+      const w = 640, h = 200;
+      for (let p = 0; p < N; p++) {
+        const g = W.laneBoards[p].canvas.getContext('2d');
+        g.fillStyle = '#120c26'; g.fillRect(0, 0, w, h); g.fillStyle = '#2a1a4a'; g.fillRect(6, 6, w - 12, h - 12);
+        g.textBaseline = 'middle'; g.textAlign = 'left'; g.font = 'bold 64px Fredoka, Arial Black, sans-serif'; g.fillStyle = colorsCss[p][0]; g.fillText(names[p], 26, 52);
+        g.textAlign = 'right'; g.font = 'bold 104px Fredoka, Arial Black, sans-serif'; g.fillStyle = '#ffffff'; g.fillText(String(score[p]), w - 26, 58);
+        for (let f = 0; f < FRAMES; f++) {
+          const x = 20 + f * 120, cur = f === G.frame && G.st === 'play';
+          g.fillStyle = 'rgba(255,255,255,.07)'; g.fillRect(x, 108, 112, 82); g.strokeStyle = cur ? '#ffe14a' : 'rgba(255,255,255,.28)'; g.lineWidth = cur ? 6 : 2; g.strokeRect(x + 2, 110, 108, 78);
+          const v = lanes[p].fscore[f]; g.textAlign = 'center'; g.font = 'bold 54px Fredoka, Arial Black, sans-serif'; g.fillStyle = '#fff';
+          if (v != null) g.fillText(String(v), x + 56, 152);
+          else if (f === FRAMES - 1) { g.font = 'bold 34px Fredoka, Arial Black, sans-serif'; g.fillStyle = '#ffd24a'; g.fillText('x2', x + 56, 152); }
+        }
+        W.laneBoards[p].tex.needsUpdate = true;
+      }
+    }
     const refreshHud = () => {
-      hud.setScore(N === 2 ? `${names[0]} ${score[0]} – ${score[1]} ${names[1]}` : (G.st === 'sudden' ? 'Beslissende worp' : `Ronde ${Math.max(1, G.frame + 1)} / ${FRAMES}`));
+      hud.setScore(N === 2 ? `${names[0]} ${score[0]} – ${score[1]} ${names[1]}` : (G.st === 'sudden' ? 'Beslissende worp' : ''));   // 3-4: de ronde staat op het scorebord (geel kader), niets onder de timer
       for (let i = 0; i < N; i++) { const L = lanes[i]; hud.setPlayerInfo(i, G.st === 'sudden' ? 'Beslissende worp!' : N > 2 ? `${score[i]} pt · worp ${L.throwNo + 1} · Bom: ${L.bombs}${L.armed ? '!' : ''}` : `Ronde ${Math.max(1, G.frame + 1)}/${FRAMES} · worp ${L.throwNo + 1} · Bom: ${L.bombs}${L.armed ? ' (AAN!)' : ''}`); }
     };
 

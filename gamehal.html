@@ -3,17 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Impactid Gamehal</title>
+<title>impactID Gamehal</title>
+<meta name="theme-color" content="#003872">
+<link rel="icon" type="image/png" href="img/impactid/icon.png">
+<link rel="apple-touch-icon" href="img/impactid/icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=MedievalSharp&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fredoka:wght@400;600;700&family=MedievalSharp&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/style.css">
 <link rel="stylesheet" href="css/gamehal.css">
 <script type="importmap">
 { "imports": { "three": "./lib/three.module.js" } }
 </script>
 <script>window.GAMEHAL = true;</script>
+<script type="module">import('./src/gamehal/humor.js').then((m) => m.bootRotate()).catch(() => {});</script>
 </head>
-<body>
+<body class="gamehal">
 <div id="app">
   <canvas id="gl"></canvas>
   <div id="hud"></div>
@@ -21,7 +25,7 @@
   <canvas id="scare"></canvas>
   <div id="vignette"></div>
   <div id="fade"></div>
-  <div id="boot">Impactid Gamehal laden…</div>
+  <div id="boot"><img src="img/impactid/logo.png" alt="impactID" width="663" height="334"><span>De Gamehal wordt opgebouwd…</span></div>
 </div>
 <script type="module" src="src/main.js"></script>
 </body>

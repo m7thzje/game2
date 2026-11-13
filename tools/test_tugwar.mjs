@@ -1,4 +1,4 @@
-// Gebruik: node tools/test_tugwar.mjs [scenario...]   scenario: bots | twists | shots | idle | timeout
+// Gebruik: node tools/test_tugwar.mjs [scenario...]   scenario: bots | twists | shots | shots4 | balance4 | idle | timeout
 //   PLAYERS=4 = vier spelers (Sam doet mee; teams [[0,1],[2,3]] bij teamspellen); zonder PLAYERS twee spelers.
 //   TW=<twist-id> (optioneel) kiest een twist; Q=low|high kwaliteit.
 // Bots drukken A/B op een instelbaar tempo (zonder renderen, versneld) en spelen hele potjes; rapporteert tijden, winnaars, fouten.
@@ -55,7 +55,7 @@ async function installBots(page, cfg) {
       for (let k = 0; k < n && !m.finished; k++) {
         const st = inst.dbg.state(); if (stop && stop(st)) { m.paused = true; return true; }
         for (let i = 0; i < m.ids.length; i++) {
-          const v = inp.virtual[m.ids[i]], b = B[i], c = window.__cfg[i % 2]; v.a = false; v.b = false; v.x = 0; v.y = 0;
+          const v = inp.virtual[m.ids[i]], b = B[i], c = window.__cfg[i % window.__cfg.length]; v.a = false; v.b = false; v.x = 0; v.y = 0;
           b.t += dt;
           if (c.rate > 0 && b.t >= b.next) {
             let btn = c.style === 'alt' ? (b.alt++ % 2 ? 'b' : 'a') : 'a';
@@ -72,6 +72,25 @@ async function installBots(page, cfg) {
 }
 
 for (const name of scen) {
+  if (name === 'balance4') {
+    // Balans 2 tegen 2 (PLAYERS=4): per speler een bot-tempo (rate/s) en stijl; teams zijn [[0,1],[2,3]]. Draait elke opstelling REPS keer (standaard 3) en telt teamwinsten, duur en touw-knappen.
+    const REPS = +process.env.REPS || 3;
+    const setups = [['gelijk 7/7 - 7/7', [7, 7, 7, 7]], ['sterk+zwak 10/3 - 6/6', [10, 3, 6, 6]], ['zwak team 5/5 - 8/8', [5, 5, 8, 8]], ['beste+zwakste 9/4 - 7/6', [9, 4, 7, 6]], ['snel 11/11 - 11/11', [11, 11, 11, 11]]];
+    for (const [label, rates] of setups) {
+      const tally = [0, 0], durs = [], snaps = [];
+      for (let rep = 0; rep < REPS; rep++) {
+        const { browser, page, errors } = await open('none');
+        await installBots(page, rates.map((r, k) => ({ rate: r, style: 'alt', surge: k % 2 })));
+        const res = await page.evaluate(() => { const m = window.__app.mode, inst = m.instance; let g = 0; while (!m.finished && g++ < 60 * 400) window.__bot(1); const st = inst.dbg.state(); return { T: st.T, result: m.result, snaps: st.stats.snaps }; });
+        const w = res.result ? res.result.winner : -1; tally[w === 0 || w === 1 ? 0 : 1] += (w === 0 || w === 1) ? 1 : 0; if (w === 2 || w === 3) tally[1]++;
+        durs.push(Math.round(res.T)); snaps.push(res.snaps);
+        if (errors.length) console.log('ERRORS:', errors.slice(0, 3).join('|'));
+        await browser.close();
+      }
+      console.log(`${label.padEnd(26)} wins team0/team1 = ${tally.join('/')}  duur(s)=${durs.join(',')} snaps=${snaps.join(',')}`);
+    }
+    continue;
+  }
   if (name === 'bots' || name === 'twists' || name === 'idle' || name === 'timeout' || name === 'jor') {
     const list = name === 'twists' ? TWISTS.map((t) => [t, [{ rate: 7, style: 'alt', surge: 1 }, { rate: 5, style: 'mash', surge: 0 }]])
       : name === 'jor' ? [['none', [{ rate: 4, style: 'mash' }, { rate: 7, style: 'alt', surge: 1 }]], ['slippery', [{ rate: 3, style: 'alt', surge: 0 }, { rate: 3, style: 'alt', surge: 1 }]]]

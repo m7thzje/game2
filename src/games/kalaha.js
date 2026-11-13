@@ -47,7 +47,9 @@ export default {
     L.hemi.intensity = 1.5; L.hemi.color.set(0xd8d0ff); L.hemi.groundColor.set(0x5a4060);
     L.sun.color.set(0xffe6c0); L.sun.intensity = 2.0; L.sun.position.set(-8, 30, 18);
     camera.fov = 48; camera.updateProjectionMatrix();
-    const W = buildWorld(ctx, L);
+    // 2 tegen 2: elke kant in de kleur van zijn team (eerste lid), niet vast groen/blauw (de kant van Juul & Sam was anders blauw)
+    const tc = N > 2 ? [0, 1].map((t) => { const col = new THREE.Color(ctx.teamInfo[t].color); return { hex: ctx.teamInfo[t].color, css: ctx.teamInfo[t].css, light: '#' + col.clone().lerp(new THREE.Color(0xffffff), 0.12).getHexString(), dark: '#' + col.clone().multiplyScalar(0.3).getHexString(), lite: '#' + col.clone().lerp(new THREE.Color(0xffffff), 0.5).getHexString() }; }) : null;
+    const W = buildWorld(ctx, L, tc);
 
     // ---------------- toestand ----------------
     let st = { pits: R.newPits(STONES), turn: 0 };              // logische stand (wordt bij het begin van een zet bijgewerkt)
@@ -341,7 +343,7 @@ export default {
         const w = decideWinner();
         if (E.tie) startChicken(w);        // de kip beslist: een gouden ei in de schatkamer van de winnaar
         phase = 'end'; ph = { t: 0 };
-        hud.showBig(N > 2 ? `Team ${sideName(w)} WINT!` : `${names[w]} WINT!`, 1800, w ? '#7fb2ff' : '#7dffa8'); audio.sfx('win', { vol: 0.8 }); ctx.shake(0.3);
+        hud.showBig(N > 2 ? `Team ${sideName(w)} WINT!` : `${names[w]} WINT!`, 1800, tc ? tc[w].css : w ? '#7fb2ff' : '#7dffa8'); audio.sfx('win', { vol: 0.8 }); ctx.shake(0.3);
         refreshHud();
       } }
     }
